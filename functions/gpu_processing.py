@@ -1,6 +1,7 @@
 # Standard library imports
 import logging
 import math
+import os
 import time
 
 # Third-party imports
@@ -9,8 +10,13 @@ from numba import cuda
 from rich.console import Console
 from rich.logging import RichHandler
 
-# Local imports
+# Reduce CUDA memory allocation logging verbosity
+os.environ.setdefault('NUMBA_CUDA_LOG_LEVEL', '30')  # WARNING level
+
 from .cuda_kernel_detrend import detrend_kernel
+
+# Local imports
+from .gaussian_filter import gaussian_blur, gaussian_blur_cuda
 from .spatial_processing import compute_spatial_averages
 
 # Setup rich console and logging
@@ -19,7 +25,7 @@ logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers
 log = logging.getLogger("rich")
 
 
-def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 100) -> tuple:
+def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 16.0) -> tuple:
     """
     Process image stack using GPU for detrending and CPU for spatial averaging.
 
@@ -27,9 +33,10 @@ def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
         image_stack: Input array of shape (n_frames, height, width)
         roi_size: Size of Region of Interest (ROI)
         window_size: Size of moving average window for detrending
+        sigma: Standard deviation for Gaussian kernel
 
     Returns:
-        Tuple of (detrended_stack, averaged_stack)
+        Tuple of (detrended_stack, averaged_stack, gaussian_stack)
 
     """
     n_frames, height, width = image_stack.shape
@@ -64,7 +71,12 @@ def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
     console.print("[cyan]Computing spatial averages...")
     start_time = time.time()
     averaged_stack = compute_spatial_averages(detrended_stack, roi_size)
-
     console.print(f"Spatial averaging time: {time.time() - start_time:.2f} seconds")
 
-    return detrended_stack, averaged_stack
+    # Apply Gaussian blur to detrended stack using CUDA acceleration
+    console.print("[cyan]Applying Gaussian blur on GPU...")
+    start_time = time.time()
+    gaussian_stack = gaussian_blur_cuda(detrended_stack, sigma)
+    console.print(f"GPU Gaussian blur time: {time.time() - start_time:.2f} seconds")
+
+    return detrended_stack, averaged_stack, gaussian_stack

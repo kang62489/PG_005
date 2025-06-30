@@ -30,10 +30,11 @@ def main() -> None:
     raw_path = Path(__file__).parent / "raw_images"
     output_name_1 = f"Corr_{filename}"
     output_name_2 = f"Conv_{filename}"
+    output_name_3 = f"Gauss_{filename}"
     roi_size = 16
 
     # Delete existing output files
-    for output_file in [output_name_1, output_name_2]:
+    for output_file in [output_name_1, output_name_2, output_name_3]:
         Path(output_file).unlink(missing_ok=True)
 
     with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
@@ -52,9 +53,9 @@ def main() -> None:
     t_start = time.time()
 
     if cuda.is_available():
-        detrended, averaged = process_on_gpu(img_raw, roi_size)
+        detrended, averaged, gaussian = process_on_gpu(img_raw, roi_size)
     else:
-        detrended, averaged = process_on_cpu(img_raw, roi_size)
+        detrended, averaged, gaussian = process_on_cpu(img_raw, roi_size)
     console.print(f"Total processing time: {time.time() - t_start:.2f} seconds")
 
     with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
@@ -62,12 +63,15 @@ def main() -> None:
         task4 = progress.add_task("[cyan]Saving results...", total=1)
         detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
         averaged_uint16 = np.clip(averaged, 0, 65535).astype(np.uint16)
+        gaussian_uint16 = np.clip(gaussian, 0, 65535).astype(np.uint16)
 
         imageio.volwrite(output_name_1, detrended_uint16)
         imageio.volwrite(output_name_2, averaged_uint16)
+        imageio.volwrite(output_name_3, gaussian_uint16)
+
         progress.update(task4, advance=1)
 
-    log.info("Results %s and %s saved!", output_name_1, output_name_2)
+    log.info("Results %s, %s and %s saved!", output_name_1, output_name_2, output_name_3)
     console.print("[bold green]Processing completed successfully!")
 
 

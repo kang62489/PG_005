@@ -9,6 +9,7 @@ from rich.logging import RichHandler
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 
 from .cpu_parallel_detrend import detrend_parallel
+from .gaussian_filter import gaussian_blur, gaussian_blur_cuda
 
 # Local imports
 from .spatial_processing import compute_spatial_averages
@@ -19,7 +20,9 @@ logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers
 log = logging.getLogger("rich")
 
 
-def process_on_cpu(image_stack: np.ndarray, roi_size: int, window_size: int = 100) -> tuple[np.ndarray, np.ndarray]:
+def process_on_cpu(
+    image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 16.0
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Process image stack entirely on CPU using JIT.
 
@@ -27,6 +30,7 @@ def process_on_cpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
         image_stack: Input array of shape (n_frames, height, width)
         roi_size: Size of Region of Interest (ROI)
         window_size: Size of moving average window for detrending
+        sigma: Standard deviation for Gaussian kernel
 
     Returns:
         Tuple of (detrended_stack, averaged_stack)
@@ -42,6 +46,8 @@ def process_on_cpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
     _ = detrend_parallel(test_data, 10)
     test_frame = rng.random((2, 8, 8), dtype=np.float32)
     _ = compute_spatial_averages(test_frame, 4)
+    test_stack = rng.random((2, 8, 8), dtype=np.float32)
+    _ = gaussian_blur_cuda(test_stack, 4)
     log.info("Initialization complete!")
 
     # Detrend pixels
@@ -65,4 +71,12 @@ def process_on_cpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
         progress.update(task3, advance=1)
     log.info("Processing time:  %s seconds", f"{time.time() - t_start:.2f}")
 
-    return detrended_stack, averaged_stack
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
+        # Process spatial averaging
+        task5 = progress.add_task("[cyan]Processing spatial averaging...", total=1)
+        t_start = time.time()
+        gaussian_stack = gaussian_blur(detrended_stack, sigma)
+        progress.update(task5, advance=1)
+    log.info("Processing time:  %s seconds", f"{time.time() - t_start:.2f}")
+
+    return detrended_stack, averaged_stack, gaussian_stack
