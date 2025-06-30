@@ -1,4 +1,5 @@
 # Standard library imports
+import logging
 import os
 import time
 from pathlib import Path
@@ -8,56 +9,63 @@ import imageio.v2 as imageio
 import numpy as np
 from numba import cuda
 from rich.console import Console
+from rich.logging import RichHandler
+from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 
 # Local imports
-from functions import check_cuda, process_on_cpu, process_on_gpu, test_cuda
+from functions import check_cuda, get_memory_usage, process_on_cpu, process_on_gpu, test_cuda
 
 # Force Numba to recompile
 os.environ["NUMBA_DISABLE_FUNCTION_CACHING"] = "1"
+
+# Setup rich console and logging
 console = Console()
+logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers=[RichHandler(rich_tracebacks=True)])
+log = logging.getLogger("rich")
 
 
 def main() -> None:
     # Parameters
-    filepath = "2025_06_11-0012.tif"
-    output_name_1 = f"Corr_{filepath}"
-    output_name_2 = f"Conv_{filepath}"
+    filename = "2025_06_11-0012.tif"
+    output_name_1 = f"Corr_{filename}"
+    output_name_2 = f"Conv_{filename}"
     roi_size = 16
 
     # Delete existing output files
     for output_file in [output_name_1, output_name_2]:
         Path(output_file).unlink(missing_ok=True)
 
-    try:
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Load image stack
-        console.print("[bold green]Loading image stack...")
+        task1 = progress.add_task("[cyan]Loading image stack...", total=1)
         t_start = time.time()
-        img_raw = imageio.volread(f"raw_images/{filepath}").astype(np.float32)
-        console.print(f"Loading time: {time.time() - t_start:.2f} seconds")
-        console.print(f"Image shape: {img_raw.shape}")
+        img_raw = imageio.volread(filename).astype(np.float32)
+        progress.update(task1, advance=1)
+        log.info("Loading time: %s seconds", f"{time.time() - t_start:.2f}")
+        log.info("Image shape: %s", f"{img_raw.shape}")
+        log.info("Memory usage: %s GB", f"{get_memory_usage():.2f}")
 
-        # Process on either GPU or CPU
-        console.print("[bold green]Processing data...")
-        t_start = time.time()
-        if cuda.is_available():
-            detrended, averaged = process_on_gpu(img_raw, roi_size)
-        else:
-            detrended, averaged = process_on_cpu(img_raw, roi_size)
-        console.print(f"Total processing time: {time.time() - t_start:.2f} seconds")
+    # Process on either GPU or CPU
+    console.print("[bold green]Processing data...")
+    t_start = time.time()
+    if cuda.is_available():
+        detrended, averaged = process_on_gpu(img_raw, roi_size)
+    else:
+        detrended, averaged = process_on_cpu(img_raw, roi_size)
+    console.print(f"Total processing time: {time.time() - t_start:.2f} seconds")
 
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Save results
-        console.print("[bold green]Saving results...")
+        task4 = progress.add_task("[cyan]Saving results...", total=1)
         detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
         averaged_uint16 = np.clip(averaged, 0, 65535).astype(np.uint16)
 
         imageio.volwrite(output_name_1, detrended_uint16)
         imageio.volwrite(output_name_2, averaged_uint16)
+        log.info("[bold green] %s and %s saved!", output_name_1, output_name_2)
+        progress.update(task4, advance=1)
 
-        console.print("[bold green]Processing completed successfully!")
-
-    except Exception as e:
-        console.print(f"[bold red]Error: {e!s}")
-        raise
+        log.info("[bold green]Processing completed successfully!")
 
 
 if __name__ == "__main__":

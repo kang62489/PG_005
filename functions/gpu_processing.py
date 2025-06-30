@@ -1,4 +1,5 @@
 # Standard library imports
+import logging
 import math
 import time
 
@@ -6,11 +7,15 @@ import time
 import numpy as np
 from numba import cuda
 from rich.console import Console
+from rich.logging import RichHandler
 
 # Local imports
 from .cuda_kernel_detrend import detrend_kernel
 
+# Setup rich console and logging
 console = Console()
+logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers=[RichHandler(rich_tracebacks=True)])
+log = logging.getLogger("rich")
 
 
 def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 100) -> tuple:
