@@ -7,6 +7,6 @@ wheels/
 *.egg-info
 raw_images/
 *output/
-
+*.tif
 # Virtual environments
 .venv

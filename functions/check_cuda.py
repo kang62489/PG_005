@@ -16,13 +16,9 @@ def check_cuda() -> bool:
         # First check if CUDA is actually available through Numba
         if cuda.is_available():
             device = cuda.get_current_device()
-            console.print(
-                f"[green]CUDA is available. Using device: {device.name.decode('utf-8')}",
-            )
+            console.print(f"[green]CUDA is available. Using device: {device.name.decode('utf-8')}")
             console.print(f"[green]Compute Capability: {device.compute_capability}")
-            console.print(
-                f"[green]Max threads per block: {device.MAX_THREADS_PER_BLOCK}",
-            )
+            console.print(f"[green]Max threads per block: {device.MAX_THREADS_PER_BLOCK}")
 
             return True
 
@@ -42,9 +38,7 @@ def check_cuda() -> bool:
             pynvml.NVMLError_Uninitialized,
             pynvml.NVMLError_LibraryNotFound,
         ) as e:
-            console.print(
-                f"[bold red]NVIDIA driver not found or not properly installed: {e!s}",
-            )
+            console.print(f"[bold red]NVIDIA driver not found or not properly installed: {e!s}")
             return False
 
         # Check CUDA installation
@@ -69,23 +63,22 @@ def check_cuda() -> bool:
             os.environ["PATH"] = f"{Path(cuda_path) / 'libnvvp'};{os.environ['PATH']}"
 
             console.print(
-                f"[yellow]Found CUDA installation at: {cuda_path} and set it to CUDA_PATH, CUDA_HOME, and PATH",
+                f"[yellow]Found CUDA installation at: {cuda_path} and set it to CUDA_PATH, CUDA_HOME, and PATH"
             )
 
             # Try to reinitialize CUDA
             if cuda.is_available():
                 device = cuda.get_current_device()
-                console.print(
-                    f"[green]Successfully initialized CUDA with device: {device.name}",
-                )
+                console.print(f"[green]Successfully initialized CUDA with device: {device.name}")
                 return True
-            console.print("[bold red]Found CUDA but failed to initialize")
-            # Print current environment variables for debugging
-            console.print("\n[yellow]Current CUDA environment variables:")
-            for key in ["CUDA_PATH", "CUDA_HOME", "PATH"]:
-                console.print(f"[yellow]{key}: {os.environ.get(key, 'Not set')}")
-            return False
 
     except (KeyError, TypeError, RuntimeError) as e:
         console.print(f"[bold red]Error checking CUDA: {e!s}")
-    return False
+        return False
+    else:
+        console.print("[bold red]Found CUDA but failed to initialize")
+        # Print current environment variables for debugging
+        console.print("\n[yellow]Current CUDA environment variables:")
+        for key in ["CUDA_PATH", "CUDA_HOME", "PATH"]:
+            console.print(f"[yellow]{key}: {os.environ.get(key, 'Not set')}")
+        return False

@@ -7,6 +7,8 @@ requires-python = ">=3.11"
 dependencies = []
 
 [tool.ruff]
+line-length = 120
+
 lint.extend-select = [
     "E",    # Pycodestyle errors (style issues)
     "W",    # Pycodestyle warnings (style issues)
@@ -70,6 +72,8 @@ lint.extend-select = [
 ]
 
 lint.ignore = [
+    "BLE001", # Flake8-blind-except - bare except
+    "COM812", # Flake8-commas - trailing comma missing
     "D400",  # Pydocstyle - First line should end with a period
     "D415",  # Pydocstyle - First line should end with a period, question mark, or exclamation point
     "E501",  # Pycodestyle - line too long
@@ -83,3 +87,8 @@ lint.ignore = [
     "RET504", # Flake8-return - Checks for variable assignments that immediately precede a return of the assigned variable.
     "FA102", # Flake8-future-annotations - Missing `from __future__ import annotations`, but uses PEP 604 union
 ]
+
+[tool.ruff.format]
+line-ending = "auto"
+indent-style = "space"
+skip-magic-trailing-comma = true
