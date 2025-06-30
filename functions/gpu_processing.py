@@ -11,6 +11,7 @@ from rich.logging import RichHandler
 
 # Local imports
 from .cuda_kernel_detrend import detrend_kernel
+from .spatial_processing import compute_spatial_averages
 
 # Setup rich console and logging
 console = Console()
@@ -59,36 +60,10 @@ def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
     pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
     detrended_stack -= pixel_offsets_adjust
 
-    # Compute spatial averages using pure NumPy (no JIT)
-    console.print("[cyan]Computing spatial averages (NumPy)...")
+    # Compute spatial averages
+    console.print("[cyan]Computing spatial averages...")
     start_time = time.time()
-
-    # Pure NumPy implementation of spatial averaging
-    n_frames, height, width = detrended_stack.shape
-    averaged_stack = np.zeros_like(detrended_stack, dtype=np.float32)
-
-    # Adjust height and width to be multiples of roi_size
-    height_adjusted = height - (height % roi_size)
-    width_adjusted = width - (width % roi_size)
-
-    # Process each frame
-    for frame_idx in range(n_frames):
-        # Reshape to group pixels into ROIs
-        frame_reshaped = detrended_stack[frame_idx, :height_adjusted, :width_adjusted].reshape(
-            height_adjusted // roi_size, roi_size, width_adjusted // roi_size, roi_size
-        )
-
-        # Calculate mean for each ROI
-        roi_means = frame_reshaped.mean(axis=(1, 3))
-
-        # Expand back to original size
-        for i in range(height_adjusted // roi_size):
-            for j in range(width_adjusted // roi_size):
-                y_start = i * roi_size
-                y_end = (i + 1) * roi_size
-                x_start = j * roi_size
-                x_end = (j + 1) * roi_size
-                averaged_stack[frame_idx, y_start:y_end, x_start:x_end] = roi_means[i, j]
+    averaged_stack = compute_spatial_averages(detrended_stack, roi_size)
 
     console.print(f"Spatial averaging time: {time.time() - start_time:.2f} seconds")
 

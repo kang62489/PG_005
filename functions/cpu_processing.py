@@ -40,8 +40,8 @@ def process_on_cpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
     rng = np.random.default_rng()
     test_data = rng.random((10, 100), dtype=np.float32)
     _ = detrend_parallel(test_data, 10)
-    test_frame = rng.random((128, 128), dtype=np.float32)
-    _ = compute_spatial_averages(test_frame, 32)
+    test_frame = rng.random((2, 8, 8), dtype=np.float32)
+    _ = compute_spatial_averages(test_frame, 4)
     log.info("Initialization complete!")
 
     # Detrend pixels
@@ -55,13 +55,14 @@ def process_on_cpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
         pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
         detrended_stack -= pixel_offsets_adjust
         progress.update(task2, advance=1)
-        log.info("Detrending time: %s seconds", str(time.time() - t_start))
+    log.info("Detrending time: %s seconds", f"{time.time() - t_start:.2f}")
 
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Process spatial averaging
         task3 = progress.add_task("[cyan]Processing spatial averaging...", total=1)
         t_start = time.time()
         averaged_stack = compute_spatial_averages(detrended_stack, roi_size)
         progress.update(task3, advance=1)
-        log.info("Processing time: %s seconds", str(time.time() - t_start))
+    log.info("Processing time:  %s seconds", f"{time.time() - t_start:.2f}")
 
     return detrended_stack, averaged_stack

@@ -1,7 +1,6 @@
 # Standard library imports
 import argparse
 import logging
-import time
 from pathlib import Path
 
 # Third-party imports
@@ -119,16 +118,15 @@ def process_file(filepath: str, roi_size: int, config: dict) -> None:
     with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Load image stack
         task1 = progress.add_task("[cyan]Loading image stack...", total=1)
-        t_start = time.time()
         img_raw = imageio.volread(filepath).astype(np.float32)
         progress.update(task1, advance=1)
-        log.info("Loading time: %s seconds", f"{time.time() - t_start:.2f}")
-        log.info("Image shape: %s", f"{img_raw.shape}")
-        log.info("Memory usage: %s GB", f"{get_memory_usage():.2f}")
 
+    log.info("Image shape: %s", f"{img_raw.shape}")
+    log.info("Memory usage: %s GB", f"{get_memory_usage():.2f}")
+
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Detrend pixels
         task2 = progress.add_task("[cyan]Detrending pixels...", total=1)
-        t_start = time.time()
         frames, height, width = img_raw.shape
         array_for_detrend = img_raw.reshape(frames, -1).T
         detrended = detrend_parallel(array_for_detrend, config["window_size"])
@@ -139,14 +137,12 @@ def process_file(filepath: str, roi_size: int, config: dict) -> None:
 
         detrended = detrended.T.reshape(frames, height, width)
         progress.update(task2, advance=1)
-        log.info("Detrending time: %s seconds", f"{time.time() - t_start:.2f}")
 
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Process spatial averaging
         task3 = progress.add_task("[cyan]Processing spatial averaging...", total=1)
-        t_start = time.time()
         averaged = process_frames(detrended, roi_size)
         progress.update(task3, advance=1)
-        log.info("Processing time: %s seconds", f"{time.time() - t_start:.2f}")
 
         # Save results
         task4 = progress.add_task("[cyan]Saving results...", total=1)
@@ -156,8 +152,8 @@ def process_file(filepath: str, roi_size: int, config: dict) -> None:
         imageio.volwrite(output_name_1, detrended_uint16)
         imageio.volwrite(output_name_2, averaged_uint16)
         progress.update(task4, advance=1)
-
-        log.info("[bold green]Processing completed successfully!")
+    log.info("Results %s and %s saved!", output_name_1, output_name_2)
+    console.print("[bold green]Processing completed successfully!")
 
 
 def main() -> None:
@@ -195,12 +191,12 @@ def main() -> None:
 
 if __name__ == "__main__":
     # Warm up Numba functions
-    log.info("Initializing Numba functions...")
-    rng = np.random.default_rng()
-    test_data = rng.random((10, 100), dtype=np.float32)
-    _ = detrend_parallel(test_data, 10)
-    test_frame = rng.random((128, 128), dtype=np.float32)
-    _ = spatial_average(test_frame, 32)
-    log.info("Initialization complete!")
+    # log.info("Initializing Numba functions...")
+    # rng = np.random.default_rng()
+    # test_data = rng.random((10, 100), dtype=np.float32)
+    # _ = detrend_parallel(test_data, 10)
+    # test_frame = rng.random((128, 128), dtype=np.float32)
+    # _ = spatial_average(test_frame, 32)
+    # log.info("Initialization complete!")
 
     main()

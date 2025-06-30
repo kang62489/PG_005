@@ -16,7 +16,11 @@ def detrend_parallel(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
             window_end = min(n_frames, frame_idx + window_size // 2)
             moving_avgs[frame_idx] = np.mean(pixel_data[pixel_idx, window_start:window_end])
 
-        trend = moving_avgs - min(moving_avgs[0], moving_avgs[-1])
-        detrended[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - trend
+            # Find minimum edge value
+            edge_min = min(moving_avgs[0], moving_avgs[-1])
+
+        for frame_idx in prange(n_frames):
+            trend = moving_avgs[frame_idx] - edge_min
+            detrended[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - trend
 
     return detrended
