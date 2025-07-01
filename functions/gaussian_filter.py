@@ -6,20 +6,27 @@ from numba import cuda, jit, prange
 
 
 @jit(nopython=True, parallel=True)
-def gaussian_kernel_1d(sigma, size=None):
-    """Create a 1D Gaussian kernel array."""
+def gaussian_kernel_1d(sigma: float, size: int | None) -> np.ndarray:
+    """
+    Create a 1D Gaussian kernel array.
+
+    Args:
+        sigma: Standard deviation of the Gaussian distribution
+        size: Size of the kernel (should be odd number)
+
+    """
     if size is None:
-        size = int(math.ceil(sigma * 6))
+        size = math.ceil(sigma * 6)
         if size % 2 == 0:
             size += 1
 
     x = np.arange(-(size // 2), (size // 2) + 1, dtype=np.float32)
     kernel = np.exp(-(x**2) / (2 * sigma**2))
-    return kernel / kernel.sum()
+    return kernel / kernel.sum()  # Normaize to make sum of kernel = 1
 
 
 @jit(nopython=True)
-def convolve_1d(arr, kernel, axis, mode="valid") -> np.ndarray:
+def convolve_1d(arr: np.ndarray, kernel: np.ndarray, axis: int, mode: str = "valid") -> np.ndarray:
     """
     Apply 1D convolution along specified axis.
 
@@ -92,7 +99,7 @@ def convolve_1d(arr, kernel, axis, mode="valid") -> np.ndarray:
 
 
 @jit(nopython=True, parallel=True)
-def gaussian_blur(detrended_stack: np.ndarray, sigma: float, mode="same") -> np.ndarray:
+def gaussian_blur(detrended_stack: np.ndarray, sigma: float, mode: str = "same") -> np.ndarray:
     """
     Apply Gaussian blur to detrended stack using separable convolution.
 
@@ -122,7 +129,7 @@ def gaussian_blur(detrended_stack: np.ndarray, sigma: float, mode="same") -> np.
 
 
 @cuda.jit
-def gaussian_kernel_1d_cuda(kernel_out, sigma, size):
+def gaussian_kernel_1d_cuda(kernel_out: np.ndarray, sigma: float, size: int) -> None:
     """
     Generate 1D Gaussian kernel on GPU.
 
@@ -153,7 +160,7 @@ def gaussian_kernel_1d_cuda(kernel_out, sigma, size):
 
 
 @cuda.jit
-def normalize_kernel_cuda(kernel, size):
+def normalize_kernel_cuda(kernel: np.ndarray, size: int) -> None:
     """
     Normalize Gaussian kernel so sum equals 1.0.
 
@@ -207,7 +214,9 @@ def normalize_kernel_cuda(kernel, size):
 
 
 @cuda.jit
-def convolve_horizontal_cuda(input_img, output_img, kernel, height, width, kernel_size):
+def convolve_horizontal_cuda(
+    input_img: np.ndarray, output_img: np.ndarray, kernel: np.ndarray, height: int, width: int, kernel_size: int
+) -> None:
     """
     Perform horizontal convolution on GPU with 2D thread blocks.
 
@@ -262,7 +271,9 @@ def convolve_horizontal_cuda(input_img, output_img, kernel, height, width, kerne
 
 
 @cuda.jit
-def convolve_vertical_cuda(input_img, output_img, kernel, height, width, kernel_size):
+def convolve_vertical_cuda(
+    input_img: np.ndarray, output_img: np.ndarray, kernel: np.ndarray, height: int, width: int, kernel_size: int
+) -> None:
     """
     Perform vertical convolution on GPU with 2D thread blocks.
 
@@ -346,7 +357,7 @@ def gaussian_blur_cuda(detrended_stack: np.ndarray, sigma: float) -> np.ndarray:
         detrended_stack = detrended_stack.astype(np.float32)
 
     # Calculate optimal kernel size (6 sigma rule with odd size)
-    kernel_size = int(math.ceil(sigma * 6))
+    kernel_size = math.ceil(sigma * 6)
     if kernel_size % 2 == 0:
         kernel_size += 1
 
@@ -382,9 +393,9 @@ def gaussian_blur_cuda(detrended_stack: np.ndarray, sigma: float) -> np.ndarray:
     # This eliminates repeated allocation/deallocation overhead
     frame_size = height * width
     input_gpu = cuda.device_array(frame_size, dtype=np.float32)
-    temp_gpu = cuda.device_array(frame_size, dtype=np.float32) 
+    temp_gpu = cuda.device_array(frame_size, dtype=np.float32)
     output_gpu = cuda.device_array(frame_size, dtype=np.float32)
-    
+
     # Pre-allocate host buffer for efficient memory transfer
     result_buffer = np.empty(frame_size, dtype=np.float32)
 
