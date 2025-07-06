@@ -1,8 +1,25 @@
+# Standard library imports
+import logging
+
 # Third-party imports
 import math
+import os
+import warnings
 
 import numpy as np
 from numba import cuda, jit, prange
+from numba.core.errors import NumbaPerformanceWarning
+
+# Suppress numba performance warnings
+warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
+
+# Suppress CUDA memory management info messages
+os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
+os.environ["NUMBA_DISABLE_CUDA"] = "0"
+os.environ["NUMBA_CUDA_LOG_LEVEL"] = "40"  # WARNING level
+
+logging.getLogger("numba.cuda.cudadrv.driver").setLevel(logging.ERROR)
+logging.getLogger("numba.cuda.cudadrv.runtime").setLevel(logging.ERROR)
 
 
 @jit(nopython=True, parallel=True)

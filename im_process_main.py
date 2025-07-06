@@ -26,7 +26,7 @@ log = logging.getLogger("rich")
 
 def main() -> None:
     # Parameters
-    filename = "2025_06_11-0012.tif"
+    filename = "2023_10_05-0010.tif"
     raw_path = Path(__file__).parent / "raw_images"
     output_name_1 = f"Corr_{filename}"
     output_name_2 = f"Conv_{filename}"
