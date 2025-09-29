@@ -21,7 +21,7 @@ log = logging.getLogger("rich")
 
 
 def process_on_cpu(
-    image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 16.0
+    image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 8.0
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Process image stack entirely on CPU using JIT.
@@ -33,7 +33,7 @@ def process_on_cpu(
         sigma: Standard deviation for Gaussian kernel
 
     Returns:
-        Tuple of (detrended_stack, averaged_stack)
+        Tuple of (detrended_stack, averaged_stack, gaussian_stack)
 
     """
     n_frames, height, width = image_stack.shape
@@ -58,7 +58,9 @@ def process_on_cpu(
         detrended_stack = detrended_pixels.T.reshape(n_frames, height, width)
 
         pixel_offsets = np.mean(detrended_stack, axis=0)
-        pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
+        # pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
+        ## Shift all pixel values to the center of the uint16 range
+        pixel_offsets_adjust = pixel_offsets - (65536 / 2)
         detrended_stack -= pixel_offsets_adjust
         progress.update(task2, advance=1)
     log.info("Detrending time: %s seconds", f"{time.time() - t_start:.2f}")

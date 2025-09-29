@@ -26,7 +26,7 @@ log = logging.getLogger("rich")
 
 def main() -> None:
     # Parameters
-    filename = "2025_02_27-0036.tif"
+    filename = "2025_06_11-0002.tif"
     raw_path = Path(__file__).parent / "raw_images"
     output_name_1 = f"Corr_{filename}"
     output_name_2 = f"Conv_{filename}"
@@ -37,6 +37,7 @@ def main() -> None:
     for output_file in [output_name_1, output_name_2, output_name_3]:
         Path(output_file).unlink(missing_ok=True)
 
+    # Set a progressbar to show image loading progress
     with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Load image stack
         task1 = progress.add_task("[cyan]Loading image stack...", total=1)

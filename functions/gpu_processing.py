@@ -25,7 +25,7 @@ logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers
 log = logging.getLogger("rich")
 
 
-def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 8.0) -> tuple:
+def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 16.0) -> tuple:
     """
     Process image stack using GPU for detrending and CPU for spatial averaging.
 
@@ -64,7 +64,9 @@ def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
     # Reshape detrended data back to original dimensions
     detrended_stack = detrended_pixels.T.reshape(n_frames, height, width)
     pixel_offsets = np.mean(detrended_stack, axis=0)
-    pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
+    # pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
+    ## Shift all pixel values to the center of the uint16 range
+    pixel_offsets_adjust = pixel_offsets - (65536 / 2)
     detrended_stack -= pixel_offsets_adjust
 
     # Compute spatial averages
