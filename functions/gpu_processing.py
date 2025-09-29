@@ -11,12 +11,12 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 # Reduce CUDA memory allocation logging verbosity
-os.environ.setdefault('NUMBA_CUDA_LOG_LEVEL', '30')  # WARNING level
+os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "30")  # WARNING level
 
 from .cuda_kernel_detrend import detrend_kernel
 
 # Local imports
-from .gaussian_filter import gaussian_blur, gaussian_blur_cuda
+from .gaussian_filter import gaussian_blur_cuda
 from .spatial_processing import compute_spatial_averages
 
 # Setup rich console and logging
@@ -25,7 +25,7 @@ logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers
 log = logging.getLogger("rich")
 
 
-def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 16.0) -> tuple:
+def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 8.0) -> tuple:
     """
     Process image stack using GPU for detrending and CPU for spatial averaging.
 

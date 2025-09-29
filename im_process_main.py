@@ -26,12 +26,12 @@ log = logging.getLogger("rich")
 
 def main() -> None:
     # Parameters
-    filename = "2023_10_05-0010.tif"
+    filename = "2025_02_27-0036.tif"
     raw_path = Path(__file__).parent / "raw_images"
     output_name_1 = f"Corr_{filename}"
     output_name_2 = f"Conv_{filename}"
     output_name_3 = f"Gauss_{filename}"
-    roi_size = 16
+    roi_size = 4
 
     # Delete existing output files
     for output_file in [output_name_1, output_name_2, output_name_3]:
