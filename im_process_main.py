@@ -28,9 +28,9 @@ def main() -> None:
     # Parameters
     filename = "2025_06_11-0002.tif"
     raw_path = Path(__file__).parent / "raw_images"
-    output_name_1 = f"Corr_{filename}"
-    output_name_2 = f"Conv_{filename}"
-    output_name_3 = f"Gauss_{filename}"
+    output_name_1 = f"{Path(filename).stem}_Corr.tif"
+    output_name_2 = f"{Path(filename).stem}_Conv.tif"
+    output_name_3 = f"{Path(filename).stem}_Gauss.tif"
     roi_size = 4
 
     # Delete existing output files
@@ -62,13 +62,25 @@ def main() -> None:
     with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Save results
         task4 = progress.add_task("[cyan]Saving results...", total=1)
-        detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
-        averaged_uint16 = np.clip(averaged, 0, 65535).astype(np.uint16)
-        gaussian_uint16 = np.clip(gaussian, 0, 65535).astype(np.uint16)
+        # Original uint16 conversion (commented out)
+        # detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
+        # averaged_uint16 = np.clip(averaged, 0, 65535).astype(np.uint16)
+        # gaussian_uint16 = np.clip(gaussian, 0, 65535).astype(np.uint16)
 
-        imageio.volwrite(output_name_1, detrended_uint16)
-        imageio.volwrite(output_name_2, averaged_uint16)
-        imageio.volwrite(output_name_3, gaussian_uint16)
+        # Convert to percentage float32
+        detrended_float = 100 * (detrended - 32768) / 32768
+        averaged_float = 100 * (averaged - 32768) / 32768
+        gaussian_float = 100 * (gaussian - 32768) / 32768
+
+        # Original uint16 save (commented out)
+        # imageio.volwrite(output_name_1, detrended_uint16)
+        # imageio.volwrite(output_name_2, averaged_uint16)
+        # imageio.volwrite(output_name_3, gaussian_uint16)
+
+        # Save as float16 (half the size of float32)
+        imageio.volwrite(output_name_1, detrended_float.astype(np.float16))
+        imageio.volwrite(output_name_2, averaged_float.astype(np.float16))
+        imageio.volwrite(output_name_3, gaussian_float.astype(np.float16))
 
         progress.update(task4, advance=1)
 
