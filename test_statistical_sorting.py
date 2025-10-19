@@ -1,6 +1,6 @@
 """
 Standalone Numba-accelerated statistical sorting script based on mu and sigma.
-Processes frames 60-80 from 2025_06_11-0002_Corr.tif with 5-level statistical binning.
+Processes frames 60-80 from 2025_06_11-0002_Corr.tif with 6-level statistical binning.
 """
 
 import time
@@ -25,38 +25,42 @@ def calculate_stats_numba(pixels: np.ndarray):
 
 
 @jit(nopython=True, cache=True)
-def statistical_binning_numba(pixels: np.ndarray, mean: float, std: float, n_levels: int = 5) -> np.ndarray:
+def statistical_binning_numba(pixels: np.ndarray, mean: float, std: float, n_levels: int = 6) -> np.ndarray:
     """
     Fast statistical binning using mean and standard deviation with Numba JIT.
 
-    Creates bins based on statistical ranges:
-    Level 1: < mean - 2*std
-    Level 2: mean - 2*std to mean - std
-    Level 3: mean - std to mean + std
-    Level 4: mean + std to mean + 2*std
-    Level 5: > mean + 2*std
+    Creates bins based on statistical ranges for better pseudocolor distinction:
+    Level 1: < mean - 2*std (value 42)
+    Level 2: mean - 2*std to mean - std (value 85)
+    Level 3: mean - std to mean (value 128)
+    Level 4: mean to mean + std (value 170)
+    Level 5: mean + std to mean + 2*std (value 213)
+    Level 6: > mean + 2*std (value 255)
     """
     result = np.empty_like(pixels, dtype=np.uint8)
 
     # Define thresholds based on statistical ranges
     thresh1 = mean - 2.0 * std
     thresh2 = mean - std
-    thresh3 = mean + std
-    thresh4 = mean + 2.0 * std
+    thresh3 = mean
+    thresh4 = mean + std
+    thresh5 = mean + 2.0 * std
 
     for i in range(pixels.size):
         pixel = float(pixels.flat[i])
 
         if pixel < thresh1:
-            result.flat[i] = 1
+            result.flat[i] = 42
         elif pixel < thresh2:
-            result.flat[i] = 2
+            result.flat[i] = 85
         elif pixel < thresh3:
-            result.flat[i] = 3
+            result.flat[i] = 128
         elif pixel < thresh4:
-            result.flat[i] = 4
+            result.flat[i] = 170
+        elif pixel < thresh5:
+            result.flat[i] = 213
         else:
-            result.flat[i] = 5
+            result.flat[i] = 255
 
     return result
 
@@ -71,31 +75,34 @@ def gpu_statistical_binning_kernel(pixels, result, mean, std):
         # Define thresholds
         thresh1 = mean - 2.0 * std
         thresh2 = mean - std
-        thresh3 = mean + std
-        thresh4 = mean + 2.0 * std
+        thresh3 = mean
+        thresh4 = mean + std
+        thresh5 = mean + 2.0 * std
 
         if pixel < thresh1:
-            result[idx] = 1
+            result[idx] = 42
         elif pixel < thresh2:
-            result[idx] = 2
+            result[idx] = 85
         elif pixel < thresh3:
-            result[idx] = 3
+            result[idx] = 128
         elif pixel < thresh4:
-            result[idx] = 4
+            result[idx] = 170
+        elif pixel < thresh5:
+            result[idx] = 213
         else:
-            result[idx] = 5
+            result[idx] = 255
 
 
-def numba_statistical_sorting(image_stack: np.ndarray, n_levels: int = 5) -> np.ndarray:
+def numba_statistical_sorting(image_stack: np.ndarray, n_levels: int = 6) -> np.ndarray:
     """
     Apply Numba-accelerated statistical sorting to pixel values into levels.
 
     Args:
         image_stack: Input image stack as numpy array
-        n_levels: Number of intensity levels (default: 5)
+        n_levels: Number of intensity levels (default: 6)
 
     Returns:
-        Sorted labels as uint8 array with values 1-n_levels
+        Sorted labels as uint8 array with values spread across 8-bit range (42, 85, 128, 170, 213, 255)
 
     """
     console.print(f"[cyan]Applying Numba-accelerated statistical sorting into {n_levels} levels...")
@@ -108,7 +115,7 @@ def numba_statistical_sorting(image_stack: np.ndarray, n_levels: int = 5) -> np.
 
     # Handle edge cases
     if pixels.min() == pixels.max():
-        return np.full(original_shape, 3, dtype=np.uint8)  # All pixels in middle level
+        return np.full(original_shape, 128, dtype=np.uint8)  # All pixels in middle level
 
     # Calculate statistics using Numba
     mean, std = calculate_stats_numba(pixels)
@@ -116,7 +123,7 @@ def numba_statistical_sorting(image_stack: np.ndarray, n_levels: int = 5) -> np.
 
     # Handle case where std is very small
     if std < 1e-6:
-        return np.full(original_shape, 3, dtype=np.uint8)
+        return np.full(original_shape, 128, dtype=np.uint8)
 
     # Use CUDA for binning if available
     if cuda.is_available():
@@ -143,7 +150,7 @@ def numba_statistical_sorting(image_stack: np.ndarray, n_levels: int = 5) -> np.
     return result.reshape(original_shape)
 
 
-def cpu_only_statistical_sorting(image_stack: np.ndarray, n_levels: int = 5) -> np.ndarray:
+def cpu_only_statistical_sorting(image_stack: np.ndarray, n_levels: int = 6) -> np.ndarray:
     """
     CPU-only statistical sorting using Numba acceleration for data processing.
     """
@@ -156,14 +163,14 @@ def cpu_only_statistical_sorting(image_stack: np.ndarray, n_levels: int = 5) -> 
     pixels = image_stack.flatten().astype(np.float32)
 
     if pixels.min() == pixels.max():
-        return np.full(original_shape, 3, dtype=np.uint8)
+        return np.full(original_shape, 128, dtype=np.uint8)
 
     # Calculate statistics using Numba
     mean, std = calculate_stats_numba(pixels)
     console.print(f"[green]Statistics - Mean: {mean:.2f}, Std: {std:.2f}")
 
     if std < 1e-6:
-        return np.full(original_shape, 3, dtype=np.uint8)
+        return np.full(original_shape, 128, dtype=np.uint8)
 
     # Apply statistical binning using Numba
     result = statistical_binning_numba(pixels, mean, std, n_levels)
@@ -183,26 +190,28 @@ def display_statistical_info(image_stack: np.ndarray, result: np.ndarray, n_leve
     console.print("[cyan]Threshold Ranges:")
     console.print(f"Level 1: < {mean - 2 * std:.2f} (μ - 2σ)")
     console.print(f"Level 2: {mean - 2 * std:.2f} to {mean - std:.2f} (μ - 2σ to μ - σ)")
-    console.print(f"Level 3: {mean - std:.2f} to {mean + std:.2f} (μ - σ to μ + σ)")
-    console.print(f"Level 4: {mean + std:.2f} to {mean + 2 * std:.2f} (μ + σ to μ + 2σ)")
-    console.print(f"Level 5: > {mean + 2 * std:.2f} (μ + 2σ)")
+    console.print(f"Level 3: {mean - std:.2f} to {mean:.2f} (μ - σ to μ)")
+    console.print(f"Level 4: {mean:.2f} to {mean + std:.2f} (μ to μ + σ)")
+    console.print(f"Level 5: {mean + std:.2f} to {mean + 2 * std:.2f} (μ + σ to μ + 2σ)")
+    console.print(f"Level 6: > {mean + 2 * std:.2f} (μ + 2σ)")
     console.print("")
 
     # Count pixels per level
-    for level in range(1, n_levels + 1):
-        count = np.sum(result == level)
+    level_values = [42, 85, 128, 170, 213, 255]
+    for i, level_val in enumerate(level_values, 1):
+        count = np.sum(result == level_val)
         percentage = (count / result.size) * 100
-        console.print(f"Level {level}: {count:,} pixels ({percentage:.1f}%)")
+        console.print(f"Level {i} (value {level_val}): {count:,} pixels ({percentage:.1f}%)")
 
 
 def main():
     """Main function to test statistical sorting on selected frames."""
     # Parameters
-    input_file = "2025_06_11-0012_Gauss.tif"
-    output_file = "test_statistical_frames_60_80.tif"
-    start_frame = 60
-    end_frame = 80
-    n_levels = 5
+    input_file = "2025_06_11-0002_Gauss.tif"
+    output_file = f"{Path(input_file).stem}_STAT.tif"
+    start_frame = 0
+    end_frame = 1200
+    n_levels = 6
 
     console.print("[bold green]Statistical Sorting Testing Script (μ ± σ)")
     console.print(f"Input: {input_file}")

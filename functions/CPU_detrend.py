@@ -4,7 +4,7 @@ from numba import jit, prange
 
 
 @jit(nopython=True, parallel=True)
-def detrend_parallel(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
+def cpu_detrend_jitted(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
     """Detrend pixels by removing moving average in parallel."""
     n_pixels, n_frames = pixel_data.shape
     detrended = np.zeros_like(pixel_data, dtype=np.float32)
@@ -21,6 +21,7 @@ def detrend_parallel(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
 
         for frame_idx in prange(n_frames):
             trend = moving_avgs[frame_idx] - edge_min
+            # trend = moving_avgs[frame_idx]
             detrended[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - trend
 
     return detrended

@@ -13,11 +13,8 @@ from rich.logging import RichHandler
 # Reduce CUDA memory allocation logging verbosity
 os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "30")  # WARNING level
 
-from .cuda_kernel_detrend import detrend_kernel
-
-# Local imports
-from .gaussian_filter import gaussian_blur_cuda
-from .spatial_processing import compute_spatial_averages
+# Local application imports
+from functions import gpu_detrend_jitted, gpu_gaussian_blur
 
 # Setup rich console and logging
 console = Console()
@@ -25,7 +22,7 @@ logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers
 log = logging.getLogger("rich")
 
 
-def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 16.0) -> tuple:
+def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 4.0) -> tuple:
     """
     Process image stack using GPU for detrending and CPU for spatial averaging.
 
@@ -56,7 +53,7 @@ def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
     # Perform detrending on GPU
     console.print("[cyan]Detrending pixels on GPU...")
     start_time = time.time()
-    detrend_kernel[blocks_per_grid, threads_per_block](gpu_input, gpu_output, window_size)
+    gpu_detrend_jitted[blocks_per_grid, threads_per_block](gpu_input, gpu_output, window_size)
     cuda.synchronize()
     detrended_pixels = gpu_output.copy_to_host()
     console.print(f"Detrending time: {time.time() - start_time:.2f} seconds")
@@ -64,21 +61,15 @@ def process_on_gpu(image_stack: np.ndarray, roi_size: int, window_size: int = 10
     # Reshape detrended data back to original dimensions
     detrended_stack = detrended_pixels.T.reshape(n_frames, height, width)
     pixel_offsets = np.mean(detrended_stack, axis=0)
-    # pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
+    pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
     ## Shift all pixel values to the center of the uint16 range
-    pixel_offsets_adjust = pixel_offsets - (65536 / 2)
+    # pixel_offsets_adjust = pixel_offsets - 450
     detrended_stack -= pixel_offsets_adjust
-
-    # Compute spatial averages
-    console.print("[cyan]Computing spatial averages...")
-    start_time = time.time()
-    averaged_stack = compute_spatial_averages(detrended_stack, roi_size)
-    console.print(f"Spatial averaging time: {time.time() - start_time:.2f} seconds")
 
     # Apply Gaussian blur to detrended stack using CUDA acceleration
     console.print("[cyan]Applying Gaussian blur on GPU...")
     start_time = time.time()
-    gaussian_stack = gaussian_blur_cuda(detrended_stack, sigma)
+    gaussian_stack = gpu_gaussian_blur(detrended_stack, sigma)
     console.print(f"GPU Gaussian blur time: {time.time() - start_time:.2f} seconds")
 
-    return detrended_stack, averaged_stack, gaussian_stack
+    return detrended_stack, gaussian_stack

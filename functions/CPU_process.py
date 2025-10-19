@@ -8,11 +8,8 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 
-from .cpu_parallel_detrend import detrend_parallel
-from .gaussian_filter import gaussian_blur, gaussian_blur_cuda
-
-# Local imports
-from .spatial_processing import compute_spatial_averages
+# Local application imports
+from functions import cpu_detrend_jitted, cpu_gaussian_blur
 
 # Setup rich console and logging
 console = Console()
@@ -43,42 +40,31 @@ def process_on_cpu(
     log.info("Initializing Numba functions...")
     rng = np.random.default_rng()
     test_data = rng.random((10, 100), dtype=np.float32)
-    _ = detrend_parallel(test_data, 10)
-    test_frame = rng.random((2, 8, 8), dtype=np.float32)
-    _ = compute_spatial_averages(test_frame, 4)
+    _ = cpu_detrend_jitted(test_data, 10)
     test_stack = rng.random((2, 8, 8), dtype=np.float32)
-    _ = gaussian_blur_cuda(test_stack, 4)
+    _ = cpu_gaussian_blur(test_stack, 4)
     log.info("Initialization complete!")
 
     # Detrend pixels
     with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
-        task2 = progress.add_task("[cyan]Detrending pixels...", total=1)
+        task1 = progress.add_task("[cyan]Detrending pixels...", total=1)
         t_start = time.time()
-        detrended_pixels = detrend_parallel(pixels_time_series.astype(np.float32), window_size)
+        detrended_pixels = cpu_detrend_jitted(pixels_time_series.astype(np.float32), window_size)
         detrended_stack = detrended_pixels.T.reshape(n_frames, height, width)
 
-        pixel_offsets = np.mean(detrended_stack, axis=0)
-        # pixel_offsets_adjust = pixel_offsets - np.min(pixel_offsets)
-        ## Shift all pixel values to the center of the uint16 range
-        pixel_offsets_adjust = pixel_offsets - (65536 / 2)
-        detrended_stack -= pixel_offsets_adjust
-        progress.update(task2, advance=1)
+        all_pixels_averages = np.mean(detrended_stack, axis=0)
+        align_pixels_means_to_min = all_pixels_averages - np.min(all_pixels_averages)
+
+        detrended_stack -= align_pixels_means_to_min
+        progress.update(task1, advance=1)
     log.info("Detrending time: %s seconds", f"{time.time() - t_start:.2f}")
 
     with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Process spatial averaging
-        task3 = progress.add_task("[cyan]Processing spatial averaging...", total=1)
+        task2 = progress.add_task("[cyan]Processing spatial averaging...", total=1)
         t_start = time.time()
-        averaged_stack = compute_spatial_averages(detrended_stack, roi_size)
-        progress.update(task3, advance=1)
+        gaussian_stack = cpu_gaussian_blur(detrended_stack, sigma)
+        progress.update(task2, advance=1)
     log.info("Processing time:  %s seconds", f"{time.time() - t_start:.2f}")
 
-    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
-        # Process spatial averaging
-        task5 = progress.add_task("[cyan]Processing spatial averaging...", total=1)
-        t_start = time.time()
-        gaussian_stack = gaussian_blur(detrended_stack, sigma)
-        progress.update(task5, advance=1)
-    log.info("Processing time:  %s seconds", f"{time.time() - t_start:.2f}")
-
-    return detrended_stack, averaged_stack, gaussian_stack
+    return detrended_stack, gaussian_stack

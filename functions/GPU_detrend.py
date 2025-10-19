@@ -4,7 +4,7 @@ from numba import cuda
 
 
 @cuda.jit
-def detrend_kernel(pixel_data: np.ndarray, output: np.ndarray, window_size: int) -> None:
+def gpu_detrend_jitted(pixel_data: np.ndarray, output: np.ndarray, window_size: int) -> None:
     """
     CUDA kernel for detrending pixels by removing trend component of moving average.
 
@@ -43,4 +43,5 @@ def detrend_kernel(pixel_data: np.ndarray, output: np.ndarray, window_size: int)
 
     for frame_idx in range(n_frames):
         trend = moving_averages[frame_idx] - edge_min
+        # trend = moving_averages[frame_idx]
         output[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - trend
