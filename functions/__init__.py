@@ -1,11 +1,11 @@
 from .check_cuda import check_cuda
-from .CPU_detrend import cpu_detrend_jitted
-from .CPU_gauss import cpu_gaussian_blur
-from .CPU_process import process_on_cpu
+from .cpu_detrend import cpu_detrend_jitted
+from .cpu_gauss import cpu_gaussian_blur
+from .cpu_process import process_on_cpu
 from .get_memory_use import get_memory_usage
-from .GPU_detrend import gpu_detrend_jitted
-from .GPU_gauss import gpu_gaussian_blur
-from .GPU_process import process_on_gpu
+from .gpu_detrend import gpu_detrend_jitted
+from .gpu_gauss import gpu_gaussian_blur
+from .gpu_process import process_on_gpu
 from .test_cuda import test_cuda
 
 __all__ = [

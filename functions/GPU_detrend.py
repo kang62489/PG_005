@@ -28,7 +28,7 @@ def gpu_detrend_jitted(pixel_data: np.ndarray, output: np.ndarray, window_size: 
     for frame_idx in range(n_frames):
         # Define window boundaries
         window_start = max(0, frame_idx - half_window)
-        window_end = min(n_frames, frame_idx + half_window + 1)
+        window_end = min(n_frames, frame_idx + half_window)
 
         # Calculate moving average
         window_sum = 0.0

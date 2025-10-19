@@ -11,13 +11,13 @@ def cpu_detrend_jitted(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
 
     for pixel_idx in prange(n_pixels):
         moving_avgs = np.zeros(n_frames, dtype=np.float32)
-        for frame_idx in range(n_frames):
+        for frame_idx in prange(n_frames):
             window_start = max(0, frame_idx - window_size // 2)
             window_end = min(n_frames, frame_idx + window_size // 2)
             moving_avgs[frame_idx] = np.mean(pixel_data[pixel_idx, window_start:window_end])
 
-            # Find minimum edge value
-            edge_min = min(moving_avgs[0], moving_avgs[-1])
+        # Find minimum edge value
+        edge_min = min(moving_avgs[0], moving_avgs[-1])
 
         for frame_idx in prange(n_frames):
             trend = moving_avgs[frame_idx] - edge_min

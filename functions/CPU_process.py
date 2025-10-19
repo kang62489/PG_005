@@ -18,7 +18,7 @@ log = logging.getLogger("rich")
 
 
 def process_on_cpu(
-    image_stack: np.ndarray, roi_size: int, window_size: int = 101, sigma: float = 8.0
+    image_stack: np.ndarray, window_size: int = 101, sigma: float = 8.0
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Process image stack entirely on CPU using JIT.
@@ -61,7 +61,7 @@ def process_on_cpu(
 
     with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Process spatial averaging
-        task2 = progress.add_task("[cyan]Processing spatial averaging...", total=1)
+        task2 = progress.add_task("[cyan]Processing Gaussian blur...", total=1)
         t_start = time.time()
         gaussian_stack = cpu_gaussian_blur(detrended_stack, sigma)
         progress.update(task2, advance=1)
