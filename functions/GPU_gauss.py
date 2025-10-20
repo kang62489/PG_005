@@ -23,92 +23,64 @@ logging.getLogger("numba.cuda.cudadrv.runtime").setLevel(logging.ERROR)
 
 
 @cuda.jit
-def gaussian_kernel_1d_cuda(kernel_out: np.ndarray, sigma: float, size: int) -> None:
+def generate_normalized_gaussian_kernel(kernel_out: np.ndarray, sigma: float, size: int) -> None:
     """
-    Generate 1D Gaussian kernel on GPU.
+    Generate and normalize 1D Gaussian kernel on GPU.
 
     This CUDA kernel creates a normalized 1D Gaussian filter kernel.
-    Each thread computes one element of the kernel array.
+    Each thread computes one element, then thread 0 normalizes the entire kernel.
+
+    Thread Index Examples (for kernel size=7):
+        Thread 0: handles kernel[0] (leftmost, distance=-3 from center)
+        Thread 1: handles kernel[1] (distance=-2 from center)  
+        Thread 2: handles kernel[2] (distance=-1 from center)
+        Thread 3: handles kernel[3] (center, distance=0, peak value)
+        Thread 4: handles kernel[4] (distance=+1 from center)
+        Thread 5: handles kernel[5] (distance=+2 from center)
+        Thread 6: handles kernel[6] (rightmost, distance=+3 from center)
 
     Args:
         kernel_out: Output array to store the Gaussian kernel
         sigma: Standard deviation of the Gaussian distribution
         size: Size of the kernel (should be odd number)
-
     """
     # Get the thread index - each thread handles one kernel element
-    idx = cuda.grid(1)
+    # For size=7: threads 0,1,2,3,4,5,6 run simultaneously
+    thread_idx = cuda.grid(1)
 
     # Boundary check to ensure we don't exceed kernel size
-    if idx >= size:
+    if thread_idx >= size:
         return
 
     # Calculate the x-coordinate relative to kernel center
     # For a kernel of size N, center is at index N//2
-    center = size // 2
-    x = idx - center
+    # Example: size=7, center=3, positions: [-3,-2,-1,0,1,2,3]
+    kernel_center = size // 2
+    distance_from_center = thread_idx - kernel_center
 
     # Compute Gaussian value: exp(-(x^2)/(2*sigma^2))
     # Using float32 for GPU efficiency
-    kernel_out[idx] = math.exp(-(x * x) / (2.0 * sigma * sigma))
-
-
-@cuda.jit
-def normalize_kernel_cuda(kernel: np.ndarray, size: int) -> None:
-    """
-    Normalize Gaussian kernel so sum equals 1.0.
-
-    This kernel performs parallel reduction to compute the sum,
-    then normalizes each element by dividing by the total sum.
-
-    Args:
-        kernel: Input/output kernel array to normalize
-        size: Size of the kernel array
-
-    """
-    # Use shared memory for efficient parallel reduction
-    # Allocate shared memory for partial sums
-    shared_data = cuda.shared.array(256, dtype=np.float32)
-
-    # Get thread and block information
-    tid = cuda.threadIdx.x
-    idx = cuda.grid(1)
-
-    # Load data into shared memory (or 0 if out of bounds)
-    if idx < size:
-        shared_data[tid] = kernel[idx]
-    else:
-        shared_data[tid] = 0.0
-
-    # Synchronize threads before reduction
-    cuda.syncthreads()
-
-    # Perform parallel reduction in shared memory
-    # This efficiently computes the sum of all kernel elements
-    stride = cuda.blockDim.x // 2
-    while stride > 0:
-        if tid < stride and tid + stride < cuda.blockDim.x:
-            shared_data[tid] += shared_data[tid + stride]
-        cuda.syncthreads()
-        stride //= 2
-
-    # Thread 0 stores the block's partial sum
-    if tid == 0:
-        # Use atomic add to accumulate partial sums from all blocks
-        cuda.atomic.add(kernel, size, shared_data[0])  # Store sum at end of array
+    kernel_out[thread_idx] = math.exp(-(distance_from_center * distance_from_center) / (2.0 * sigma * sigma))
 
     # Synchronize all threads before normalization
     cuda.syncthreads()
 
-    # Normalize each element by the total sum
-    if idx < size:
-        total_sum = kernel[size]  # Sum stored at index 'size'
-        if total_sum > 0:
-            kernel[idx] /= total_sum
+    # Let thread 0 normalize the entire kernel (simple approach for small kernels)
+    if thread_idx == 0:
+        # Calculate sum of all kernel elements
+        kernel_sum = 0.0
+        for i in range(size):
+            kernel_sum += kernel_out[i]
+
+        # Normalize each element to make total sum = 1.0
+        for i in range(size):
+            kernel_out[i] /= kernel_sum
+
+
 
 
 @cuda.jit
-def convolve_horizontal_cuda(
+def convolve_horizontal(
     input_img: np.ndarray, output_img: np.ndarray, kernel: np.ndarray, height: int, width: int, kernel_size: int
 ) -> None:
     """
@@ -141,19 +113,19 @@ def convolve_horizontal_cuda(
     weight_sum = 0.0  # For handling boundary conditions
 
     # Apply convolution kernel
-    for k in range(kernel_size):
+    for kernel_pos in range(kernel_size):
         # Calculate source column index
-        src_col = col + k - kernel_half
+        neighbor_col = col + kernel_pos - kernel_half
 
         # Handle boundary conditions by clamping to valid range
-        if src_col < 0:
-            src_col = 0
-        elif src_col >= width:
-            src_col = width - 1
+        if neighbor_col < 0:
+            neighbor_col = 0
+        elif neighbor_col >= width:
+            neighbor_col = width - 1
 
         # Accumulate weighted pixel values
-        pixel_value = input_img[row * width + src_col]
-        kernel_weight = kernel[k]
+        pixel_value = input_img[row * width + neighbor_col]
+        kernel_weight = kernel[kernel_pos]
         result += pixel_value * kernel_weight
         weight_sum += kernel_weight
 
@@ -165,7 +137,7 @@ def convolve_horizontal_cuda(
 
 
 @cuda.jit
-def convolve_vertical_cuda(
+def convolve_vertical(
     input_img: np.ndarray, output_img: np.ndarray, kernel: np.ndarray, height: int, width: int, kernel_size: int
 ) -> None:
     """
@@ -197,19 +169,19 @@ def convolve_vertical_cuda(
     weight_sum = 0.0  # For handling boundary conditions
 
     # Apply convolution kernel
-    for k in range(kernel_size):
+    for kernel_pos in range(kernel_size):
         # Calculate source row index
-        src_row = row + k - kernel_half
+        neighbor_row = row + kernel_pos - kernel_half
 
         # Handle boundary conditions by clamping to valid range
-        if src_row < 0:
-            src_row = 0
-        elif src_row >= height:
-            src_row = height - 1
+        if neighbor_row < 0:
+            neighbor_row = 0
+        elif neighbor_row >= height:
+            neighbor_row = height - 1
 
         # Accumulate weighted pixel values
-        pixel_value = input_img[src_row * width + col]
-        kernel_weight = kernel[k]
+        pixel_value = input_img[neighbor_row * width + col]
+        kernel_weight = kernel[kernel_pos]
         result += pixel_value * kernel_weight
         weight_sum += kernel_weight
 
@@ -256,21 +228,14 @@ def gpu_gaussian_blur(detrended_stack: np.ndarray, sigma: float) -> np.ndarray:
         kernel_size += 1
 
     # Allocate GPU memory for kernel ONCE (reused across all frames)
-    # Add extra space for sum storage during normalization
-    kernel_gpu = cuda.device_array(kernel_size + 1, dtype=np.float32)
+    kernel_gpu = cuda.device_array(kernel_size, dtype=np.float32)
 
     # Generate Gaussian kernel on GPU
     threads_per_block = min(256, kernel_size)
     blocks_per_grid = math.ceil(kernel_size / threads_per_block)
 
-    # Step 1: Generate unnormalized Gaussian values
-    gaussian_kernel_1d_cuda[blocks_per_grid, threads_per_block](kernel_gpu, sigma, kernel_size)
-    cuda.synchronize()
-
-    # Step 2: Normalize kernel (parallel reduction)
-    # Reset sum accumulator
-    kernel_gpu[kernel_size] = 0.0
-    normalize_kernel_cuda[blocks_per_grid, threads_per_block](kernel_gpu, kernel_size)
+    # Generate and normalize Gaussian kernel on GPU (combined operation)
+    generate_normalized_gaussian_kernel[blocks_per_grid, threads_per_block](kernel_gpu, sigma, kernel_size)
     cuda.synchronize()
 
     # Allocate output array
@@ -303,13 +268,13 @@ def gpu_gaussian_blur(detrended_stack: np.ndarray, sigma: float) -> np.ndarray:
 
         # Step 1: Apply horizontal convolution using pre-allocated buffers
         # This creates a separable filter implementation
-        convolve_horizontal_cuda[blocks_per_grid_2d, threads_per_block_2d](
+        convolve_horizontal[blocks_per_grid_2d, threads_per_block_2d](
             input_gpu, temp_gpu, kernel_gpu, height, width, kernel_size
         )
         cuda.synchronize()
 
         # Step 2: Apply vertical convolution to complete the 2D Gaussian filter
-        convolve_vertical_cuda[blocks_per_grid_2d, threads_per_block_2d](
+        convolve_vertical[blocks_per_grid_2d, threads_per_block_2d](
             temp_gpu, output_gpu, kernel_gpu, height, width, kernel_size
         )
         cuda.synchronize()
