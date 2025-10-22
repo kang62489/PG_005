@@ -1,4 +1,6 @@
 """
+Descriptions
+
 Standalone Numba-accelerated K-means testing script for image segmentation.
 Processes frames 60-80 from 2025_06_11-0002_Corr.tif with 5-level clustering.
 """
@@ -123,9 +125,7 @@ def numba_kmeans_sorting(image_stack: np.ndarray, n_levels: int = 5) -> np.ndarr
 
 
 def cpu_only_kmeans(image_stack: np.ndarray, n_levels: int = 5) -> np.ndarray:
-    """
-    CPU-only K-means clustering using scikit-learn with Numba acceleration for data processing.
-    """
+    """CPU-only K-means clustering using scikit-learn with Numba acceleration for data processing."""
     console.print(f"[yellow]Using CPU-only K-means sorting into {n_levels} levels...")
 
     # Store original shape

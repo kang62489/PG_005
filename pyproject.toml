@@ -8,6 +8,8 @@ dependencies = []
 
 [tool.ruff]
 line-length = 120
+fix=true
+unfixable = ["F401"]
 
 lint.extend-select = [
     "E",    # Pycodestyle errors (style issues)
@@ -89,7 +91,7 @@ lint.ignore = [
     "PLR0913", # Pylint - Too many arguments to function call
     "RUF003", # Ruff -  Checks for ambiguous Unicode characters in comments.
     "RUF100", # Ruff - Checks for noqa directives that are no longer applicable.
-]
+    "N816", # Pylint - Checks for global variable names that follow the mixedCase convention.
 
 [tool.ruff.format]
 line-ending = "auto"
