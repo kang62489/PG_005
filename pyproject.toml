@@ -92,6 +92,7 @@ lint.ignore = [
     "RUF003", # Ruff -  Checks for ambiguous Unicode characters in comments.
     "RUF100", # Ruff - Checks for noqa directives that are no longer applicable.
     "N816", # Pylint - Checks for global variable names that follow the mixedCase convention.
+]
 
 [tool.ruff.format]
 line-ending = "auto"

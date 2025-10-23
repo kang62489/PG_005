@@ -23,5 +23,6 @@
     "peacock.color": "#9635a8",
     "python-envs.defaultEnvManager": "ms-python.python:conda",
     "python-envs.defaultPackageManager": "ms-python.python:conda",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "augment.completions.enableQuickSuggestions": false
 }

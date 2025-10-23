@@ -26,18 +26,13 @@ os.environ["NUMBA_DISABLE_FUNCTION_CACHING"] = "1"
 
 # Setup rich console and logging
 console = Console()
-logging.basicConfig(
-    level="INFO",
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(rich_tracebacks=True)],
-)
+logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers=[RichHandler(rich_tracebacks=True)])
 log = logging.getLogger("rich")
 
 
 def main() -> None:
     # Parameters
-    filename = "2025_10_13-0035.tif"
+    filename = "2025_06_11-0012.tif"
     raw_path = Path(__file__).parent / "raw_images"
     output_name_1 = f"{Path(filename).stem}_Cal.tif"
     output_name_2 = f"{Path(filename).stem}_Gauss.tif"
@@ -47,12 +42,7 @@ def main() -> None:
         Path(output_file).unlink(missing_ok=True)
 
     # Set a progressbar to show image loading progress
-    with Progress(
-        SpinnerColumn(),
-        *Progress.get_default_columns(),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Load image stack
         task1 = progress.add_task("[cyan]Loading image stack...", total=1)
         t_start = time.time()
@@ -74,12 +64,7 @@ def main() -> None:
     # detrended, gaussian = process_on_cpu(img_raw)
     console.print(f"Total processing time: {time.time() - t_start:.2f} seconds")
 
-    with Progress(
-        SpinnerColumn(),
-        *Progress.get_default_columns(),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
         # Save results
         task2 = progress.add_task("[cyan]Saving results...", total=1)
         detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
