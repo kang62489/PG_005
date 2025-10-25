@@ -5,12 +5,14 @@ from pathlib import Path
 
 # Third-party imports
 import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyabf
 from PySide6.QtWidgets import QApplication
 from rich.console import Console
 from scipy.signal import find_peaks
+from tabulate import tabulate
 
 # Local application imports
 from classes import PlotResults
@@ -23,10 +25,14 @@ console = Console()
 app = QApplication(sys.argv)
 
 
-## Load ABF file for truncation
+## Load ABF and Tiff file for truncation
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = "2025_06_11-0013.abf"
+abf_file = "2025_06_11-0003.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
+
+img_path = Path(__file__).parent
+img_file = "2025_06_11-0002_Gauss.tif"
+loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX
 data = loaded_abf.data
@@ -49,60 +55,104 @@ Vm: np.ndarray = data[0][t_start_index:t_end_index]
 time_rec: np.ndarray = time[t_start_index:t_end_index]
 
 ## Find peaks (neuronal spikes) in the specified time range
-lst_peak_idx, properties = find_peaks(Vm, height=-20, distance=200, prominence=10)
-console.print(f"Found {len(lst_peak_idx)} peaks")
+peak_indices, properties = find_peaks(Vm, height=-20, distance=200, prominence=10)
+console.print(f"Found {len(peak_indices)} peaks")
 
 ## Plot Vm and peaks with my custom class
 df_Vm = pd.DataFrame({"Time": time_rec, "Vm": Vm})
-df_peaks = pd.DataFrame({"Time": time_rec[lst_peak_idx], "Peaks": Vm[lst_peak_idx]})
+peak_times = time_rec[peak_indices]
+peak_values = Vm[peak_indices]
+df_peaks = pd.DataFrame({"Time": peak_times, "Peaks": peak_values})
 
 plotter = PlotResults([df_Vm, df_peaks], title="Vm vs Time")
 
 ## Find frames which contain spikes
 Ts_images: float = 1 / fs_imgs
-points_per_frame: int = Ts_images * fs_ephys
+points_per_frame: int = int(Ts_images * fs_ephys)
 
-frame_number = np.ceil(lst_peak_idx / points_per_frame)
-frame_number = frame_number.astype(int)
+frame_indices = np.floor(peak_indices / points_per_frame).astype(int)
 
-console.print(f"Frame number: {frame_number}")
-inter_spiking_frame_interval = np.diff(frame_number).astype(int)
-start_to_first_spike: int = frame_number[0]
-last_spike_to_end: int = int(len(df_Vm) / points_per_frame - frame_number[-1])
-inter_spiking_frame_interval = np.insert(inter_spiking_frame_interval, 0, start_to_first_spike).astype(int)
-inter_spiking_frame_interval = np.append(inter_spiking_frame_interval, last_spike_to_end).astype(int)
-
-console.print(f"Inter frame interval: {inter_spiking_frame_interval}")
-console.print(f"Minimum inter frame interval: {np.min(inter_spiking_frame_interval)}")
+# -1 : don't count the frame containing the spike
+inter_spike_frames = (np.diff(frame_indices) - 1).astype(int)
+leading_frames: int = frame_indices[0] - 1
+trailing_frames: int = int(loaded_img.shape[0] - frame_indices[-1] - 1)
+inter_spike_frames = np.insert(inter_spike_frames, 0, leading_frames).astype(int)
+inter_spike_frames = np.append(inter_spike_frames, trailing_frames).astype(int)
 
 ## Truncate the image stack based on the spikeing frame index
-# Load image stack (calibrated)
-img_path = Path(__file__).parent
-img_file = "2025_06_11-0012_Gauss.tif"
-
-loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
-minimal_required_frames: int = 2
+minimal_required_frames: int = 1
 maximum_allowed_frames: int = 4
 lst_img_segments = []
-for idx_of_spike, frame_of_spike in enumerate(frame_number):
-    left_frames: int = inter_spiking_frame_interval[idx_of_spike]
-    right_frames: int = inter_spiking_frame_interval[idx_of_spike + 1]
+lst_abf_segments = []
+lst_time_segments = []
+lst_skipped_spikes = []
+lst_quick_spikes = []
+lst_all_spikes = []
+new_spike_idx = 0
+
+for idx_of_spike, frame_of_spike in enumerate(frame_indices):
+    left_frames: int = inter_spike_frames[idx_of_spike]
+    right_frames: int = inter_spike_frames[idx_of_spike + 1]
 
     available_frames: int = np.min([left_frames, right_frames])
     if available_frames < minimal_required_frames:
-        console.print(f"Less than 2 frames available for the spike number {idx_of_spike}, skipping...")
+        lst_skipped_spikes.append({"Frame Index": f"{frame_of_spike:03d}", "Available Frames": f"{available_frames}"})
         continue
 
     if available_frames > maximum_allowed_frames:
         available_frames = maximum_allowed_frames
     else:
-        console.print(f"Available frames for the spike number {idx_of_spike}: {available_frames}")
+        lst_quick_spikes.append({"Frame Index": f"{frame_of_spike:03d}", "Available Frames": f"{available_frames}"})
+
+    lst_all_spikes.append(
+        {
+            "Frame Index": f"{new_spike_idx:03d}",
+            "Frame of Spike": f"{frame_of_spike:03d}",
+            "Available Frames": f"{available_frames}",
+        }
+    )
+    new_spike_idx += 1
 
     left_idx: int = frame_of_spike - available_frames
     right_idx: int = frame_of_spike + available_frames
-    lst_img_segments.append(loaded_img[left_idx : right_idx + 1])
 
-console.print(f"Total segments created: {len(lst_img_segments)}")
+    # Truncate image stack
+    lst_img_segments.append(loaded_img[left_idx : right_idx + 1])
+    # Truncate the time series
+    lst_time_segments.append(time_rec[left_idx * points_per_frame : (right_idx + 1) * points_per_frame])
+    # Truncate corresponding spiking data
+    lst_abf_segments.append(Vm[left_idx * points_per_frame : (right_idx + 1) * points_per_frame])
+
+
+console.print(
+    f"Total segments created: Image {len(lst_img_segments)}, Time {len(lst_time_segments)}, ABF {len(lst_abf_segments)}"
+)
+
+if lst_skipped_spikes != []:
+    df_skipped_spikes = pd.DataFrame(lst_skipped_spikes)
+    console.print("[bold red]\nSkipped Spikes[/bold red]")
+    print(tabulate(df_skipped_spikes, headers="keys", showindex=False, tablefmt="pretty"))
+else:
+    console.print("[bold green]\nNo spikes were skipped[/bold green]")
+
+if lst_quick_spikes != []:
+    df_short_spikes = pd.DataFrame(lst_quick_spikes)
+    console.print("[bold yellow]\nQuick Spikes[/bold yellow]")
+    print(tabulate(df_short_spikes, headers="keys", showindex=False, tablefmt="pretty"))
+else:
+    console.print("[bold green]\nNo quick spike presented[/bold green]")
+
+df_all_spikes = pd.DataFrame(lst_all_spikes)
+console.print("[bold green]\nAll Spikes[/bold green]")
+print(tabulate(df_all_spikes, headers="keys", showindex=False, tablefmt="pretty"))
+
+# seg_id = 108
+# fig, ax = plt.subplots(figsize=(10, 6))
+# ax.plot()
+# ax.set_xlabel("Time")
+# ax.set_ylabel("Vm")
+# ax.set_title("Segment ABF Data")
+# plt.show()
 
 ## K-means clustering analysis on first segment (for testing)
 # WHY: Test clustering approach on one segment before processing all
@@ -113,13 +163,13 @@ if lst_img_segments:
     console.print("Processing first segment for testing...")
 
     # Choose which segment to analyze
-    segment_idx = 5  # Change this to test different segments
-    test_segment = lst_img_segments[segment_idx]
-    console.print(f"Analyzing segment {segment_idx}")
-    console.print(f"Segment shape: {test_segment.shape} (frames, height, width)")
+    seg_idx = 4  # Change this to test different segments
+    test_seg = lst_img_segments[seg_idx]
+    console.print(f"Analyzing segment {seg_idx}")
+    console.print(f"Segment shape: {test_seg.shape} (frames, height, width)")
 
     # Apply k-means to all frames in this segment
-    clustered_frames, frame_centers = process_segment_kmeans(test_segment, n_clusters=3)
+    clustered_frames, frame_centers = process_segment_kmeans(test_seg, n_clusters=3)
 
     console.print(f"Clustering completed! {len(clustered_frames)} frames processed")
 
@@ -127,20 +177,22 @@ if lst_img_segments:
     for i, centers in enumerate(frame_centers):
         console.print(f"Frame {i + 1} cluster centers: {centers}")
 
-    # Calculate actual frame numbers for THIS specific segment
-    spike_frame = frame_number[segment_idx]  # Spike frame for this segment
-    available_frames = (
-        maximum_allowed_frames if len(test_segment) > maximum_allowed_frames else (len(test_segment) - 1) // 2
-    )
-    start_frame = spike_frame - available_frames
-    actual_frame_numbers = list(range(start_frame, start_frame + len(test_segment)))
-
-    console.print(f"Displaying frames: {actual_frame_numbers}")
-    console.print(f"Spike frame: {spike_frame} (center frame)")
+    # Create a list of spiking traces for each frame in the segment
+    spike_trace = [lst_time_segments[seg_idx], lst_abf_segments[seg_idx]]
 
     # Visualize results
     console.print("Generating visualization...")
-    visualize_clustering_results(test_segment, clustered_frames, seg_idx=segment_idx, frame_numbers=actual_frame_numbers)
+    # Calculate actual frame indices for THIS specific segment
+    spike_frame = frame_indices[seg_idx]  # Spike frame for this segment
+    seg_length = len(test_seg)
+    frames_each_side = (seg_length - 1) // 2  # Frames on each side of spike
+    start_frame = spike_frame - frames_each_side
+    span_of_frames = list(range(start_frame, start_frame + seg_length))
+
+    console.print(f"Displaying frames: {span_of_frames}")
+    console.print(f"Spike frame: {spike_frame} (center frame)")
+
+    visualize_clustering_results(test_seg, clustered_frames, spike_trace, span_of_frames, seg_index=seg_idx)
 
 else:
     console.print("No segments available for clustering analysis")

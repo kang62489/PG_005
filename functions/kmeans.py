@@ -1,172 +1,180 @@
 """
-K-means clustering functions for calcium imaging data analysis.
-Used to identify neural activity regions in each frame.
+Purpose
+
+K-means clustering functions for ACh imaging data analysis.
+Used to identify ACh releasing areas related to firing activities in each frame.
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import ListedColormap
 from sklearn.cluster import KMeans
 
 
-def prepare_frame_for_kmeans(frame, n_clusters=3):
+def prepare_frame_for_kmeans(image_frame: np.ndarray) -> tuple[np.ndarray, int, int]:
     """
-    Reshape 2D calcium imaging frame to 1D array for k-means clustering.
+    Reshape 2D ACh imaging frame to 1D array for k-means clustering.
 
     WHY: K-means needs pixel intensities as 1D data, but images are 2D
     GOAL: Convert spatial data to intensity-based clustering data
 
     Args:
-        frame: 2D numpy array (image frame)
-        n_clusters: Number of clusters (default 3: background, inactive, active)
+        image_frame: 2D numpy array (image frame)
 
     Returns:
-        pixels: Flattened pixel intensities
-        h, w: Original frame dimensions
+        flattened_pixels: Flattened pixel intensities for k-means input
+        frame_height, frame_width: Original frame dimensions
 
     """
-    h, w = frame.shape
-    pixels = frame.reshape(-1, 1)  # Flatten to (n_pixels, 1)
-    return pixels, h, w
+    frame_height, frame_width = image_frame.shape
+    flattened_pixels = image_frame.reshape(-1, 1)  # Flatten to (n_pixels, 1)
+    return flattened_pixels, frame_height, frame_width
 
 
-def apply_kmeans_to_frame(frame, n_clusters=3):
+def apply_kmeans_to_frame(image_frame: np.ndarray, n_clusters: int = 3) -> tuple[np.ndarray, np.ndarray]:
     """
-    Apply k-means clustering to identify neural activity regions.
+    Apply k-means clustering to identify ACh releasing areas.
 
-    WHY: Segment pixels into functional groups based on calcium signal intensity
-    GOAL: Separate background (low), inactive neurons (medium), active neurons (high)
+    WHY: Segment pixels into functional groups based on ACh signal intensity
+    GOAL: Separate background (low), moderate ACh release (medium), high ACh release (high)
 
     Args:
-        frame: 2D numpy array (image frame)
+        image_frame: 2D numpy array (image frame)
         n_clusters: Number of clusters (default 3)
 
     Returns:
-        clustered_frame: 2D array with cluster labels (0=background, 2=active)
-        sorted_centers: Cluster centers sorted by intensity (low to high)
+        intensity_ordered_frame: 2D array with cluster labels (0=background, 2=high ACh release)
+        intensity_ordered_centers: Cluster centers sorted by intensity (low to high)
 
     """
-    pixels, h, w = prepare_frame_for_kmeans(frame, n_clusters)
+    flattened_pixels, frame_height, frame_width = prepare_frame_for_kmeans(image_frame)
 
     # K-means clustering with fixed random state for reproducibility
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    raw_labels = kmeans.fit_predict(pixels)
-    centers = kmeans.cluster_centers_.flatten()
+    kmeans_algorithm = KMeans(n_clusters=n_clusters, random_state=42)
+    random_cluster_labels = kmeans_algorithm.fit_predict(flattened_pixels)
+    cluster_centers = kmeans_algorithm.cluster_centers_.flatten()
 
     # CRITICAL: Sort clusters by intensity to ensure consistent labeling
     # 0 = background (lowest intensity)
-    # 1 = medium activity
-    # 2 = high activity (active neurons)
-    sorted_indices = np.argsort(centers)
+    # 1 = moderate ACh release
+    # 2 = high ACh release areas
+    # Sort the indices of the centers based on their values
+    intensity_sorted_indices = np.argsort(cluster_centers)
 
     # Create mapping from random k-means labels to intensity-ordered labels
-    label_mapping = np.zeros(n_clusters, dtype=int)
-    label_mapping[sorted_indices] = np.arange(n_clusters)
+    # Very cool method (fancy indexing/array indexing in Numpy)
+    label_remapping_table = np.zeros(n_clusters, dtype=int)
+    label_remapping_table[intensity_sorted_indices] = np.arange(n_clusters)
 
-    # Remap labels to intensity order
-    intensity_ordered_labels = label_mapping[raw_labels]
-    clustered_frame = intensity_ordered_labels.reshape(h, w)
+    # Remap labels to intensity order using fancy indexing
+    # random_cluster_labels as indices for lookup in remapping table
+    intensity_ordered_labels = label_remapping_table[random_cluster_labels]
+    intensity_ordered_frame = intensity_ordered_labels.reshape(frame_height, frame_width)
 
     # Return sorted centers for reference
-    sorted_centers = centers[sorted_indices]
+    intensity_ordered_centers = cluster_centers[intensity_sorted_indices]
 
-    return clustered_frame, sorted_centers
+    return intensity_ordered_frame, intensity_ordered_centers
 
 
-def visualize_clustering_results(original_segment, clustered_segment, seg_idx=0, frame_numbers=None):
+def visualize_clustering_results(
+    original_frames: list[np.ndarray],
+    clustered_frames: list[np.ndarray],
+    spike_trace: list[np.ndarray],
+    span_of_frames: list[int],
+    seg_index: int = 0,
+) -> None:
     """
-    Visualize original calcium signals vs clustered neural activity regions.
+    Visualize original ACh signals vs clustered ACh releasing areas.
 
-    WHY: See which neurons fire together and how spatial patterns change
-    GOAL: Identify coordinated neural activity during spike events
+    WHY: See which areas release ACh together and how spatial patterns change
+    GOAL: Identify coordinated ACh release during firing activities
 
     Args:
-        original_segment: List of original frames
-        clustered_segment: List of clustered frames
-        seg_idx: Segment index for title
+        original_frames: List of original frames
+        clustered_frames: List of clustered frames
+        seg_index: Segment index for title
+        span_of_frames: List of frame numbers spanning the segment
 
     """
-    n_frames = len(original_segment)
+    n_frames = len(original_frames)
 
-    # 5 rows: Original + Cluster 0 + Cluster 1 + Cluster 2 + All Clusters
-    fig, axes = plt.subplots(5, n_frames, figsize=(3 * n_frames, 12))
+    # Layout constants
+    n_image_rows = 2  # Original + clustered
+    n_total_rows = n_image_rows + 1  # 2 image rows + 1 trace row
+    trace_row_position = n_total_rows  # Bottom row for spike trace
 
-    # Handle single frame case
-    if n_frames == 1:
-        axes = axes.reshape(5, 1)
+    # Create figure and manually add subplots using 3-row grid
+    fig = plt.figure(figsize=(3 * n_frames, 9))
 
     for i in range(n_frames):
-        # Use actual frame numbers if provided
-        if frame_numbers is not None:
-            frame_title = f"Frame {frame_numbers[i]}"
-        else:
-            frame_title = f"Frame {i + 1}"
+        frame_title = f"Frame {span_of_frames[i]}"
 
-        # Row 0: Original frame
-        axes[0, i].imshow(original_segment[i], cmap="gray")
-        axes[0, i].set_title(f"Original {frame_title}")
-        axes[0, i].axis("off")
+        # Row 1: Original frame
+        original_position = i + 1
+        ax1 = fig.add_subplot(n_total_rows, n_frames, original_position)
+        ax1.imshow(original_frames[i], cmap="gray")
+        ax1.set_title(f"Original {frame_title}")
+        ax1.axis("off")
 
-        # Get clustered frame for this iteration
-        clustered_frame = clustered_segment[i]
+        # Row 2: Clustered frame
+        clustered_position = n_frames + i + 1
+        ax2 = fig.add_subplot(n_total_rows, n_frames, clustered_position)
+        current_clustered_frame = clustered_frames[i]
+        cluster_colors = ["white", "white", "red"]  # 0=background, 1=moderate, 2=high ACh
+        cluster_colormap = ListedColormap(cluster_colors)
+        ax2.imshow(current_clustered_frame, cmap=cluster_colormap, vmin=0, vmax=2)
+        ax2.set_title(f"Clustered {frame_title}")
+        ax2.axis("off")
 
-        # Row 1: Cluster 0 only (Background)
-        cluster_0 = (clustered_frame == 0).astype(int)
-        axes[1, i].imshow(cluster_0, cmap="gray", vmin=0, vmax=1)
-        axes[1, i].set_title("Cluster 0 (Background)")
-        axes[1, i].axis("off")
+    # Row 3: Spike trace spanning all columns
+    spike_ax = fig.add_subplot(n_total_rows, 1, trace_row_position)
+    spike_ax.plot(spike_trace[0], spike_trace[1])
 
-        # Row 2: Cluster 1 only (Medium Activity)
-        cluster_1 = (clustered_frame == 1).astype(int)
-        axes[2, i].imshow(cluster_1, cmap="Blues", vmin=0, vmax=1)
-        axes[2, i].set_title("Cluster 1 (Medium)")
-        axes[2, i].axis("off")
+    # Plot vertical lines for each frame boundary
+    div_width: int = int(len(spike_trace[0]) / n_frames)
+    for i in range(n_frames + 1):
+        time_position = spike_trace[0][i * div_width] if i * div_width < len(spike_trace[0]) else spike_trace[0][-1]
+        spike_ax.axvline(x=time_position, color='gray', linestyle=':', alpha=0.7)
 
-        # Row 3: Cluster 2 only (High Activity)
-        cluster_2 = (clustered_frame == 2).astype(int)
-        axes[3, i].imshow(cluster_2, cmap="Reds", vmin=0, vmax=1)
-        axes[3, i].set_title("Cluster 2 (Active)")
-        axes[3, i].axis("off")
+    spike_ax.set_xlabel("Time")
+    spike_ax.set_ylabel("Vm")
+    spike_ax.set_xlim(spike_trace[0][0], spike_trace[0][-1])
+    spike_ax.set_title("Spike Trace")
 
-        # Row 4: All clusters combined with colors
-        from matplotlib.colors import ListedColormap
-
-        custom_colors = ["black", "blue", "red"]  # 0=black, 1=blue, 2=red
-        custom_cmap = ListedColormap(custom_colors)
-        axes[4, i].imshow(clustered_frame, cmap=custom_cmap, vmin=0, vmax=2)
-        axes[4, i].set_title("All Clusters")
-        axes[4, i].axis("off")
-
-    plt.suptitle(f"Segment {seg_idx + 1}: K-means Clustering Analysis")
-    plt.tight_layout()
+    plt.suptitle(f"Segment {seg_index + 1}: K-means Clustering Analysis")
+    plt.subplots_adjust(wspace=0)  # Remove horizontal spacing between image columns
     plt.show()
 
 
-def process_segment_kmeans(segment, n_clusters=3):
+def process_segment_kmeans(
+    image_seg: list[np.ndarray], n_clusters: int = 3
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """
     Apply k-means clustering to all frames in a segment.
 
-    WHY: Neural activity changes rapidly - track frame-by-frame activation patterns
-    GOAL: See how neuron activation patterns change during spike events
+    WHY: ACh release changes rapidly - track frame-by-frame release patterns
+    GOAL: See how ACh release patterns change during firing activities
 
     Args:
-        segment: 3D array (frames, height, width)
+        image_seg: 3D array (frames, height, width)
         n_clusters: Number of clusters
 
     Returns:
-        clustered_frames: List of clustered frames
-        all_centers: List of cluster centers for each frame
+        all_clustered_frames: List of clustered frames with intensity-ordered labels
+        all_cluster_centers: List of cluster centers for each frame (sorted by intensity)
 
     """
-    clustered_frames = []
-    all_centers = []
+    all_clustered_frames = []
+    all_cluster_centers = []
 
-    for frame_idx, frame in enumerate(segment):
-        # Apply k-means to identify active vs inactive regions
-        clustered_frame, centers = apply_kmeans_to_frame(frame, n_clusters)
+    for frame_idx, current_frame in enumerate(image_seg):
+        # Apply k-means to identify ACh releasing areas
+        intensity_ordered_frame, intensity_ordered_centers = apply_kmeans_to_frame(current_frame, n_clusters)
 
-        clustered_frames.append(clustered_frame)
-        all_centers.append(centers)
+        all_clustered_frames.append(intensity_ordered_frame)
+        all_cluster_centers.append(intensity_ordered_centers)
 
-        print(f"  Frame {frame_idx + 1}/{len(segment)} processed")
+        print(f"  Frame {frame_idx + 1}/{len(image_seg)} processed")
 
-    return clustered_frames, all_centers
+    return all_clustered_frames, all_cluster_centers
