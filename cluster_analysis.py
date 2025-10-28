@@ -27,11 +27,11 @@ app = QApplication(sys.argv)
 
 ## Load ABF and Tiff file for truncation
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = "2025_06_11-0003.abf"
+abf_file = "2025_06_11-0013.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
 img_path = Path(__file__).parent
-img_file = "2025_06_11-0002_Gauss.tif"
+img_file = "2025_06_11-0012_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX
@@ -55,8 +55,15 @@ Vm: np.ndarray = data[0][t_start_index:t_end_index]
 time_rec: np.ndarray = time[t_start_index:t_end_index]
 
 ## Find peaks (neuronal spikes) in the specified time range
-peak_indices, properties = find_peaks(Vm, height=-20, distance=200, prominence=10)
+peak_indices, properties = find_peaks(Vm, height=0, distance=200, prominence=10)
 console.print(f"Found {len(peak_indices)} peaks")
+
+# Check if any peaks were found
+if len(peak_indices) == 0:
+    console.print("[bold red]No peaks found! Exiting...[/bold red]")
+    console.print("Try adjusting peak detection parameters (height, distance, prominence)")
+    app.exec()
+    exit()
 
 ## Plot Vm and peaks with my custom class
 df_Vm = pd.DataFrame({"Time": time_rec, "Vm": Vm})
@@ -146,56 +153,141 @@ df_all_spikes = pd.DataFrame(lst_all_spikes)
 console.print("[bold green]\nAll Spikes[/bold green]")
 print(tabulate(df_all_spikes, headers="keys", showindex=False, tablefmt="pretty"))
 
-# seg_id = 108
-# fig, ax = plt.subplots(figsize=(10, 6))
-# ax.plot()
-# ax.set_xlabel("Time")
-# ax.set_ylabel("Vm")
-# ax.set_title("Segment ABF Data")
-# plt.show()
-
 ## K-means clustering analysis on first segment (for testing)
 # WHY: Test clustering approach on one segment before processing all
 # GOAL: Identify neural activity regions during spike events
 
-if lst_img_segments:
-    console.print("\n=== K-means Clustering Analysis ===")
-    console.print("Processing first segment for testing...")
+# if lst_img_segments:
+#     console.print("\n=== K-means Clustering Analysis ===")
+#     console.print("Processing first segment for testing...")
 
-    # Choose which segment to analyze
-    seg_idx = 4  # Change this to test different segments
-    test_seg = lst_img_segments[seg_idx]
-    console.print(f"Analyzing segment {seg_idx}")
-    console.print(f"Segment shape: {test_seg.shape} (frames, height, width)")
+#     # Choose which segment to analyze
+#     seg_idx = 108  # Change this to test different segments
+#     test_seg = lst_img_segments[seg_idx]
+#     console.print(f"Analyzing segment {seg_idx}")
+#     console.print(f"Segment shape: {test_seg.shape} (frames, height, width)")
 
-    # Apply k-means to all frames in this segment
-    clustered_frames, frame_centers = process_segment_kmeans(test_seg, n_clusters=3)
+#     # Apply k-means to all frames in this segment
+#     clustered_frames, frame_centers = process_segment_kmeans(test_seg, n_clusters=3)
 
-    console.print(f"Clustering completed! {len(clustered_frames)} frames processed")
+#     console.print(f"Clustering completed! {len(clustered_frames)} frames processed")
 
-    # Show cluster centers for each frame
-    for i, centers in enumerate(frame_centers):
-        console.print(f"Frame {i + 1} cluster centers: {centers}")
+#     # Show cluster centers for each frame
+#     for i, centers in enumerate(frame_centers):
+#         console.print(f"Frame {i + 1} cluster centers: {centers}")
 
-    # Create a list of spiking traces for each frame in the segment
-    spike_trace = [lst_time_segments[seg_idx], lst_abf_segments[seg_idx]]
+#     # Create a list of spiking traces for each frame in the segment
+#     spike_trace = [lst_time_segments[seg_idx], lst_abf_segments[seg_idx]]
 
-    # Visualize results
-    console.print("Generating visualization...")
-    # Calculate actual frame indices for THIS specific segment
-    spike_frame = frame_indices[seg_idx]  # Spike frame for this segment
-    seg_length = len(test_seg)
-    frames_each_side = (seg_length - 1) // 2  # Frames on each side of spike
-    start_frame = spike_frame - frames_each_side
-    span_of_frames = list(range(start_frame, start_frame + seg_length))
+#     # Visualize results
+#     console.print("Generating visualization...")
+#     # Calculate actual frame indices for THIS specific segment
+#     spike_frame = frame_indices[seg_idx]  # Spike frame for this segment
+#     seg_length = len(test_seg)
+#     frames_each_side = (seg_length - 1) // 2  # Frames on each side of spike
+#     start_frame = spike_frame - frames_each_side
+#     span_of_frames = list(range(start_frame, start_frame + seg_length))
 
-    console.print(f"Displaying frames: {span_of_frames}")
-    console.print(f"Spike frame: {spike_frame} (center frame)")
+#     visualize_clustering_results(test_seg, clustered_frames, spike_trace, span_of_frames, seg_index=seg_idx)
 
-    visualize_clustering_results(test_seg, clustered_frames, spike_trace, span_of_frames, seg_index=seg_idx)
+# else:
+#     console.print("No segments available for clustering analysis")
 
-else:
-    console.print("No segments available for clustering analysis")
+# Spike-triggered Averaging before k-means
+min_length = min(len(seg) for seg in lst_img_segments)
+target_frames = 9  # Force 9 frames for visualization
+console.print(f"Minimum segment length: {min_length}, using {target_frames} frames")
+
+# Simple averaging: take center frames from each segment
+averaged_frames = []
+for frame_idx in range(target_frames):
+    # Collect same frame position from all segments
+    frame_stack = []
+    for segment in lst_img_segments:
+        seg_length = len(segment)
+        if seg_length >= target_frames:
+            # Long enough: extract normally
+            center_start = (seg_length - target_frames) // 2
+            frame_stack.append(segment[center_start + frame_idx])
+        else:
+            # Short segment: pad into target template
+            seg_center_in_target = target_frames // 2  # Position 4 in 9-frame array
+            seg_start_in_target = seg_center_in_target - seg_length // 2
+
+            # Check if this frame_idx falls within the segment's range
+            if seg_start_in_target <= frame_idx < seg_start_in_target + seg_length:
+                seg_frame_idx = frame_idx - seg_start_in_target
+                frame_stack.append(segment[seg_frame_idx])
+            # If outside range, skip this segment for this frame position
+
+    # Average all frames at this position
+    averaged_frame = np.mean(frame_stack, axis=0)
+    averaged_frames.append(averaged_frame)
+
+averaged_segment = np.array(averaged_frames)
+console.print(f"Created averaged segment with shape: {averaged_segment.shape}")
+
+# Apply k-means to averaged segment
+clustered_frames, frame_centers = process_segment_kmeans(averaged_segment, n_clusters=3)
+console.print("K-means completed on averaged data")
+
+# Show cluster centers for each averaged frame
+for i, centers in enumerate(frame_centers):
+    console.print(f"Averaged Frame {i + 1} cluster centers: {centers}")
+
+# Average spike traces the same way
+averaged_spike_data = []
+for frame_idx in range(target_frames):
+    # Collect same time portion from all spike traces
+    spike_stack = []
+    for i, segment in enumerate(lst_abf_segments):
+        img_seg_length = len(lst_img_segments[i])  # Corresponding image segment length
+
+        if img_seg_length >= target_frames:
+            # Long enough: extract normally
+            center_start = (len(segment) - target_frames * points_per_frame) // 2
+            start_idx = center_start + frame_idx * points_per_frame
+            end_idx = start_idx + points_per_frame
+            spike_stack.append(segment[start_idx:end_idx])
+        else:
+            # Short segment: pad into target template
+            seg_center_in_target = target_frames // 2
+            seg_start_in_target = seg_center_in_target - img_seg_length // 2
+
+            # Check if this frame_idx falls within the segment's range
+            if seg_start_in_target <= frame_idx < seg_start_in_target + img_seg_length:
+                seg_frame_idx = frame_idx - seg_start_in_target
+                start_idx = seg_frame_idx * points_per_frame
+                end_idx = start_idx + points_per_frame
+                spike_stack.append(segment[start_idx:end_idx])
+            # If outside range, skip this segment for this frame position
+
+    # Average all spike data at this time portion (only if we have data)
+    if spike_stack:
+        averaged_spike = np.mean(spike_stack, axis=0)
+        averaged_spike_data.extend(averaged_spike)
+    else:
+        # No data for this frame, pad with zeros
+        averaged_spike_data.extend(np.zeros(points_per_frame))
+
+# Create time array centered at spike (0 ms)
+total_time_points = len(averaged_spike_data)
+time_step = 1000 / fs_ephys  # Convert to milliseconds
+time_avg = np.linspace(-200, 249, total_time_points)
+
+console.print(f"Created averaged spike trace with {len(averaged_spike_data)} points")
+console.print(f"Time range: {time_avg[0]:.1f} to {time_avg[-1]:.1f} ms")
+
+# Create averaged spike trace for visualization
+spike_trace_avg = [time_avg, averaged_spike_data]
+
+# Create frame numbers for averaged data (centered around 0)
+half_frames = target_frames // 2
+span_of_frames_avg = list(range(-half_frames, half_frames + (target_frames % 2)))
+
+# Visualize averaged results
+console.print("Generating averaged visualization...")
+visualize_clustering_results(averaged_segment, clustered_frames, spike_trace_avg, span_of_frames_avg, seg_index=-1)
 
 
 app.exec()
