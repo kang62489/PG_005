@@ -16,7 +16,7 @@ from tabulate import tabulate
 
 # Local application imports
 from classes import PlotResults
-from functions.kmeans import process_segment_kmeans, visualize_clustering_results
+from functions.kmeans import process_segment_kmeans, process_segment_kmeans_concatenated, visualize_clustering_results
 
 # Setup rich console
 console = Console()
@@ -27,11 +27,11 @@ app = QApplication(sys.argv)
 
 ## Load ABF and Tiff file for truncation
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = "2025_04_03-0022.abf"
+abf_file = "2025_06_11-0003.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
 img_path = Path(__file__).parent
-img_file = "2025_04_03-0032_Gauss.tif"
+img_file = "2025_06_11-0002_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX
@@ -227,13 +227,12 @@ for frame_idx in range(target_frames):
 averaged_segment = np.array(averaged_frames)
 console.print(f"Created averaged segment with shape: {averaged_segment.shape}")
 
-# Apply k-means to averaged segment
-clustered_frames, frame_centers = process_segment_kmeans(averaged_segment, n_clusters=3)
-console.print("K-means completed on averaged data")
+# Apply k-means to averaged segment using concatenated approach
+clustered_frames, cluster_centers = process_segment_kmeans_concatenated(averaged_segment, n_clusters=3)
+console.print("Concatenated k-means completed on averaged data")
 
-# Show cluster centers for each averaged frame
-for i, centers in enumerate(frame_centers):
-    console.print(f"Averaged Frame {i + 1} cluster centers: {centers}")
+# Show cluster centers from concatenated analysis
+console.print(f"Concatenated cluster centers: {cluster_centers}")
 
 # Average spike traces the same way
 averaged_spike_data = []

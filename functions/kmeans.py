@@ -183,3 +183,103 @@ def process_segment_kmeans(
         print(f"  Frame {frame_idx + 1}/{len(image_seg)} processed")
 
     return all_clustered_frames, all_cluster_centers
+
+
+def concatenate_frames_horizontally(image_frames: list[np.ndarray]) -> np.ndarray:
+    """
+    Concatenate multiple frames horizontally into a single wide image.
+
+    WHY: Create single image (1024, 1024*9) for k-means clustering
+    GOAL: Analyze all frames together as one spatial pattern
+
+    Args:
+        image_frames: List of 2D numpy arrays (9 frames)
+
+    Returns:
+        concatenated_image: Single wide image (height, width*n_frames)
+
+    """
+    concatenated_image = np.concatenate(image_frames, axis=1)
+    print(f"Concatenated {len(image_frames)} frames into shape: {concatenated_image.shape}")
+    return concatenated_image
+
+
+def apply_kmeans_to_concatenated(image_frames: list[np.ndarray], n_clusters: int = 3) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Apply k-means clustering to horizontally concatenated frames.
+
+    WHY: Find spatial patterns across entire concatenated sequence
+    GOAL: Identify regions that behave consistently across time
+
+    Args:
+        image_frames: List of 2D numpy arrays (9 frames)
+        n_clusters: Number of clusters (default 3)
+
+    Returns:
+        clustered_concatenated: Wide clustered image (height, width*n_frames)
+        cluster_centers: Cluster centers sorted by intensity
+
+    """
+    # Concatenate frames horizontally
+    concatenated_image = concatenate_frames_horizontally(image_frames)
+    
+    # Apply standard k-means to the concatenated image
+    clustered_concatenated, cluster_centers = apply_kmeans_to_frame(concatenated_image, n_clusters)
+    
+    return clustered_concatenated, cluster_centers
+
+
+def split_concatenated_result(clustered_concatenated: np.ndarray, n_frames: int) -> list[np.ndarray]:
+    """
+    Split concatenated clustering result back into individual frames.
+
+    Args:
+        clustered_concatenated: Wide clustered image (height, width*n_frames)
+        n_frames: Number of original frames
+
+    Returns:
+        clustered_frames: List of individual clustered frames
+
+    """
+    height, total_width = clustered_concatenated.shape
+    frame_width = total_width // n_frames
+    
+    clustered_frames = []
+    for i in range(n_frames):
+        start_col = i * frame_width
+        end_col = (i + 1) * frame_width
+        frame = clustered_concatenated[:, start_col:end_col]
+        clustered_frames.append(frame)
+    
+    return clustered_frames
+
+
+def process_segment_kmeans_concatenated(
+    image_seg: list[np.ndarray], n_clusters: int = 3
+) -> tuple[list[np.ndarray], np.ndarray]:
+    """
+    Apply k-means clustering to segment by concatenating all frames horizontally.
+
+    WHY: Analyze entire sequence as single spatial pattern
+    GOAL: Find consistent regions across time sequence
+
+    Args:
+        image_seg: List of 2D arrays (9 frames)
+        n_clusters: Number of clusters
+
+    Returns:
+        clustered_frames: List of individual clustered frames
+        cluster_centers: Cluster centers from concatenated analysis
+
+    """
+    print(f"Processing {len(image_seg)} frames as concatenated image with {n_clusters} clusters...")
+    
+    # Apply k-means to concatenated frames
+    clustered_concatenated, cluster_centers = apply_kmeans_to_concatenated(image_seg, n_clusters)
+    
+    # Split result back into individual frames for visualization
+    clustered_frames = split_concatenated_result(clustered_concatenated, len(image_seg))
+    
+    print(f"Concatenated clustering completed. Found {n_clusters} spatial patterns.")
+    
+    return clustered_frames, cluster_centers
