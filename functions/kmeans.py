@@ -31,77 +31,23 @@ def prepare_frame_for_kmeans(image_frame: np.ndarray) -> tuple[np.ndarray, int, 
     return flattened_pixels, frame_height, frame_width
 
 
-def calculate_wcss(flattened_pixels: np.ndarray, max_clusters: int = 6) -> list[float]:
+def apply_kmeans_to_frame(image_frame: np.ndarray, n_clusters: int = 3) -> tuple[np.ndarray, np.ndarray]:
     """
-    Calculate Within-Cluster Sum of Squares for different cluster counts.
-
-    Args:
-        flattened_pixels: Flattened pixel intensities
-        max_clusters: Maximum number of clusters to test
-
-    Returns:
-        wcss_values: List of WCSS values for each cluster count
-
-    """
-    wcss_values = []
-    for k in range(1, max_clusters + 1):
-        kmeans = KMeans(n_clusters=k, random_state=100)
-        kmeans.fit(flattened_pixels)
-        wcss_values.append(kmeans.inertia_)
-    return wcss_values
-
-
-def find_optimal_clusters_elbow(wcss_values: list[float], max_clusters: int = 6) -> int:
-    """
-    Find optimal number of clusters using elbow method.
-
-    Args:
-        wcss_values: List of WCSS values
-        max_clusters: Maximum clusters tested
-
-    Returns:
-        optimal_k: Optimal number of clusters
-
-    """
-    # Calculate rate of change (differences between consecutive WCSS values)
-    differences = np.diff(wcss_values)
-
-    # Calculate second differences (rate of change of the rate of change)
-    second_differences = np.diff(differences)
-
-    # Find elbow point - where second difference is maximum (steepest change in slope)
-    if len(second_differences) > 0:
-        elbow_index = np.argmax(second_differences) + 2  # +2 because we lost 2 indices from diff operations
-        return min(elbow_index, max_clusters)
-    return 1  # Default to 1 cluster if calculation fails
-
-
-def apply_kmeans_to_frame(
-    image_frame: np.ndarray, n_clusters: int = None, max_clusters: int = 6
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Apply k-means clustering to identify ACh releasing areas with adaptive cluster count.
+    Apply k-means clustering to identify ACh releasing areas.
 
     WHY: Segment pixels into functional groups based on ACh signal intensity
-    GOAL: Automatically detect optimal number of clusters (1 for pre-spike, 2-3 during release)
+    GOAL: Separate background (low), moderate ACh release (medium), high ACh release (high)
 
     Args:
         image_frame: 2D numpy array (image frame)
-        n_clusters: Number of clusters (if None, uses elbow method to find optimal)
-        max_clusters: Maximum clusters to test for elbow method
+        n_clusters: Number of clusters (default 3)
 
     Returns:
-        intensity_ordered_frame: 2D array with cluster labels (0=background, highest=max ACh release)
+        intensity_ordered_frame: 2D array with cluster labels (0=background, 2=high ACh release)
         intensity_ordered_centers: Cluster centers sorted by intensity (low to high)
 
     """
     flattened_pixels, frame_height, frame_width = prepare_frame_for_kmeans(image_frame)
-
-    # Determine optimal number of clusters if not specified
-    if n_clusters is None:
-        wcss_values = calculate_wcss(flattened_pixels, max_clusters)
-        n_clusters = find_optimal_clusters_elbow(wcss_values, max_clusters)
-        print(f"    Optimal clusters detected: {n_clusters}")
 
     # K-means clustering with fixed random state for reproducibility
     kmeans_algorithm = KMeans(n_clusters=n_clusters, random_state=100)
@@ -147,6 +93,7 @@ def visualize_clustering_results(
     Args:
         original_frames: List of original frames
         clustered_frames: List of clustered frames
+        spike_trace: List of time and voltage arrays for spike trace
         seg_index: Segment index for title
         span_of_frames: List of frame numbers spanning the segment
 
@@ -206,18 +153,17 @@ def visualize_clustering_results(
 
 
 def process_segment_kmeans(
-    image_seg: list[np.ndarray], n_clusters: int = None, max_clusters: int = 6
+    image_seg: list[np.ndarray], n_clusters: int = 3
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """
-    Apply k-means clustering to all frames in a segment with adaptive clustering.
+    Apply k-means clustering to all frames in a segment.
 
     WHY: ACh release changes rapidly - track frame-by-frame release patterns
-    GOAL: Automatically detect appropriate cluster count for each frame (1 pre-spike, 2-3 during release)
+    GOAL: See how ACh release patterns change during firing activities
 
     Args:
         image_seg: 3D array (frames, height, width)
-        n_clusters: Number of clusters (if None, uses elbow method for each frame)
-        max_clusters: Maximum clusters to test for elbow method
+        n_clusters: Number of clusters
 
     Returns:
         all_clustered_frames: List of clustered frames with intensity-ordered labels
@@ -228,10 +174,8 @@ def process_segment_kmeans(
     all_cluster_centers = []
 
     for frame_idx, current_frame in enumerate(image_seg):
-        # Apply k-means to identify ACh releasing areas with adaptive clustering
-        intensity_ordered_frame, intensity_ordered_centers = apply_kmeans_to_frame(
-            current_frame, n_clusters, max_clusters
-        )
+        # Apply k-means to identify ACh releasing areas
+        intensity_ordered_frame, intensity_ordered_centers = apply_kmeans_to_frame(current_frame, n_clusters)
 
         all_clustered_frames.append(intensity_ordered_frame)
         all_cluster_centers.append(intensity_ordered_centers)
