@@ -27,11 +27,11 @@ app = QApplication(sys.argv)
 
 ## Load ABF and Tiff file for truncation
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = "2025_06_11-0003.abf"
+abf_file = "2025_06_11-0013.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
 img_path = Path(__file__).parent
-img_file = "2025_06_11-0002_Gauss.tif"
+img_file = "2025_06_11-0012_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX

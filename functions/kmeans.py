@@ -222,10 +222,10 @@ def apply_kmeans_to_concatenated(image_frames: list[np.ndarray], n_clusters: int
     """
     # Concatenate frames horizontally
     concatenated_image = concatenate_frames_horizontally(image_frames)
-    
+
     # Apply standard k-means to the concatenated image
     clustered_concatenated, cluster_centers = apply_kmeans_to_frame(concatenated_image, n_clusters)
-    
+
     return clustered_concatenated, cluster_centers
 
 
@@ -243,14 +243,14 @@ def split_concatenated_result(clustered_concatenated: np.ndarray, n_frames: int)
     """
     height, total_width = clustered_concatenated.shape
     frame_width = total_width // n_frames
-    
+
     clustered_frames = []
     for i in range(n_frames):
         start_col = i * frame_width
         end_col = (i + 1) * frame_width
         frame = clustered_concatenated[:, start_col:end_col]
         clustered_frames.append(frame)
-    
+
     return clustered_frames
 
 
@@ -273,13 +273,13 @@ def process_segment_kmeans_concatenated(
 
     """
     print(f"Processing {len(image_seg)} frames as concatenated image with {n_clusters} clusters...")
-    
+
     # Apply k-means to concatenated frames
     clustered_concatenated, cluster_centers = apply_kmeans_to_concatenated(image_seg, n_clusters)
-    
+
     # Split result back into individual frames for visualization
     clustered_frames = split_concatenated_result(clustered_concatenated, len(image_seg))
-    
+
     print(f"Concatenated clustering completed. Found {n_clusters} spatial patterns.")
-    
+
     return clustered_frames, cluster_centers

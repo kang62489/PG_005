@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:docs.anthropic.com)",
       "Bash(rm:*)",
-      "Bash(claude config --help)"
+      "Bash(claude config --help)",
+      "Bash(find:*)"
     ],
     "deny": []
   }
