@@ -26,12 +26,14 @@ app = QApplication(sys.argv)
 
 
 ## Load ABF and Tiff file for truncation
+exp_date = "2025_06_11"
+
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = "2025_06_11-0013.abf"
+abf_file = f"{exp_date}-0003.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
 img_path = Path(__file__).parent
-img_file = "2025_06_11-0012_Gauss.tif"
+img_file = f"{exp_date}-0002_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX
@@ -195,7 +197,7 @@ print(tabulate(df_all_spikes, headers="keys", showindex=False, tablefmt="pretty"
 
 # Spike-triggered Averaging before k-means
 min_length = min(len(seg) for seg in lst_img_segments)
-target_frames = 9  # Force 9 frames for visualization
+target_frames = maximum_allowed_frames * 2 + 1  # Based on maximum_allowed_frames parameter
 console.print(f"Minimum segment length: {min_length}, using {target_frames} frames")
 
 # Simple averaging: take center frames from each segment
@@ -234,20 +236,19 @@ console.print("Concatenated k-means completed on averaged data")
 # Show cluster centers from concatenated analysis
 console.print(f"Concatenated cluster centers: {cluster_centers}")
 
-# Average spike traces the same way
-averaged_spike_data = []
-for frame_idx in range(target_frames):
-    # Collect same time portion from all spike traces
-    spike_stack = []
-    for i, segment in enumerate(lst_abf_segments):
-        img_seg_length = len(lst_img_segments[i])  # Corresponding image segment length
+# Collect all spike traces for overlay plotting (instead of averaging)
+all_spike_traces = []
+for i, segment in enumerate(lst_abf_segments):
+    img_seg_length = len(lst_img_segments[i])  # Corresponding image segment length
+    spike_data = []
 
+    for frame_idx in range(target_frames):
         if img_seg_length >= target_frames:
             # Long enough: extract normally
             center_start = (len(segment) - target_frames * points_per_frame) // 2
             start_idx = center_start + frame_idx * points_per_frame
             end_idx = start_idx + points_per_frame
-            spike_stack.append(segment[start_idx:end_idx])
+            spike_data.extend(segment[start_idx:end_idx])
         else:
             # Short segment: pad into target template
             seg_center_in_target = target_frames // 2
@@ -258,35 +259,28 @@ for frame_idx in range(target_frames):
                 seg_frame_idx = frame_idx - seg_start_in_target
                 start_idx = seg_frame_idx * points_per_frame
                 end_idx = start_idx + points_per_frame
-                spike_stack.append(segment[start_idx:end_idx])
-            # If outside range, skip this segment for this frame position
+                spike_data.extend(segment[start_idx:end_idx])
+            else:
+                # Outside range, pad with NaN for this frame
+                spike_data.extend(np.full(points_per_frame, np.nan))
 
-    # Average all spike data at this time portion (only if we have data)
-    if spike_stack:
-        averaged_spike = np.mean(spike_stack, axis=0)
-        averaged_spike_data.extend(averaged_spike)
-    else:
-        # No data for this frame, pad with zeros
-        averaged_spike_data.extend(np.zeros(points_per_frame))
+    # Create time array centered at spike (0 ms) for this trace
+    total_time_points = len(spike_data)
+    time_trace = np.linspace(-200, 249, total_time_points)
 
-# Create time array centered at spike (0 ms)
-total_time_points = len(averaged_spike_data)
-time_step = 1000 / fs_ephys  # Convert to milliseconds
-time_avg = np.linspace(-200, 249, total_time_points)
+    # Add this trace to the collection
+    all_spike_traces.append([time_trace, np.array(spike_data)])
 
-console.print(f"Created averaged spike trace with {len(averaged_spike_data)} points")
-console.print(f"Time range: {time_avg[0]:.1f} to {time_avg[-1]:.1f} ms")
-
-# Create averaged spike trace for visualization
-spike_trace_avg = [time_avg, averaged_spike_data]
+console.print(f"Collected {len(all_spike_traces)} spike traces for overlay plotting")
+console.print(f"Time range: {all_spike_traces[0][0][0]:.1f} to {all_spike_traces[0][0][-1]:.1f} ms")
 
 # Create frame numbers for averaged data (centered around 0)
 half_frames = target_frames // 2
 span_of_frames_avg = list(range(-half_frames, half_frames + (target_frames % 2)))
 
-# Visualize averaged results
-console.print("Generating averaged visualization...")
-visualize_clustering_results(averaged_segment, clustered_frames, spike_trace_avg, span_of_frames_avg, seg_index=-1)
+# Visualize results with all spike traces overlaid
+console.print("Generating visualization with overlaid spike traces...")
+visualize_clustering_results(averaged_segment, clustered_frames, all_spike_traces, span_of_frames_avg, seg_index=-1)
 
 
 app.exec()

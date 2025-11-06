@@ -80,7 +80,7 @@ def apply_kmeans_to_frame(image_frame: np.ndarray, n_clusters: int = 3) -> tuple
 def visualize_clustering_results(
     original_frames: list[np.ndarray],
     clustered_frames: list[np.ndarray],
-    spike_trace: list[np.ndarray],
+    spike_trace: list[np.ndarray] | list[list[np.ndarray]],
     span_of_frames: list[int],
     seg_index: int = 0,
 ) -> None:
@@ -93,7 +93,7 @@ def visualize_clustering_results(
     Args:
         original_frames: List of original frames
         clustered_frames: List of clustered frames
-        spike_trace: List of time and voltage arrays for spike trace
+        spike_trace: Either [time, voltage] for single trace, or list of [time, voltage] pairs for multiple traces
         seg_index: Segment index for title
         span_of_frames: List of frame numbers spanning the segment
 
@@ -130,18 +130,41 @@ def visualize_clustering_results(
 
     # Row 3: Spike trace spanning all columns
     spike_ax = fig.add_subplot(n_total_rows, 1, trace_row_position)
-    spike_ax.plot(spike_trace[0], spike_trace[1])
+
+    # Check if spike_trace is a single trace or multiple traces
+    is_multi_trace = isinstance(spike_trace[0], list) or (isinstance(spike_trace[0], np.ndarray) and spike_trace[0].ndim > 1)
+
+    if is_multi_trace:
+        # Plot multiple traces as overlays with distinct colors
+        # Use a colormap with distinct colors
+        import matplotlib.cm as cm
+        n_traces = len(spike_trace)
+        colors = cm.tab20(np.linspace(0, 1, n_traces))  # tab20 provides 20 distinct colors
+
+        for idx, trace in enumerate(spike_trace):
+            spike_ax.plot(trace[0], trace[1], alpha=0.6, linewidth=0.8, color=colors[idx])
+        reference_time = spike_trace[0][0]
+        reference_voltage = spike_trace[0][1]
+    else:
+        # Plot single trace
+        spike_ax.plot(spike_trace[0], spike_trace[1])
+        reference_time = spike_trace[0]
+        reference_voltage = spike_trace[1]
 
     # Plot vertical lines for each frame boundary
-    div_width: int = int(len(spike_trace[0]) / n_frames)
+    div_width: int = int(len(reference_time) / n_frames)
     for i in range(n_frames + 1):
-        time_position = spike_trace[0][i * div_width] if i * div_width < len(spike_trace[0]) else spike_trace[0][-1]
+        time_position = reference_time[i * div_width] if i * div_width < len(reference_time) else reference_time[-1]
         spike_ax.axvline(x=time_position, color="gray", linestyle=":", alpha=0.7)
 
-    spike_ax.set_xlabel("Time")
-    spike_ax.set_ylabel("Vm")
-    spike_ax.set_xlim(spike_trace[0][0], spike_trace[0][-1])
-    spike_ax.set_title("Spike Trace")
+    spike_ax.set_xlabel("Time (ms)")
+    spike_ax.set_ylabel("Vm (mV)")
+    spike_ax.set_xlim(reference_time[0], reference_time[-1])
+
+    if is_multi_trace:
+        spike_ax.set_title(f"Spike Traces (n={len(spike_trace)} overlays)")
+    else:
+        spike_ax.set_title("Spike Trace")
 
     if seg_index == -1:
         plt.suptitle("Spike-Triggered Average: K-means Clustering Analysis")

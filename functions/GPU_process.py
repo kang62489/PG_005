@@ -22,7 +22,7 @@ logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers
 log = logging.getLogger("rich")
 
 
-def process_on_gpu(image_stack: np.ndarray, window_size: int = 101, sigma: float = 4.0) -> tuple:
+def process_on_gpu(image_stack: np.ndarray, window_size: int = 101, sigma: float = 8.0) -> tuple:
     """
     Process image stack using GPU for detrending and CPU for spatial averaging.
 

@@ -32,7 +32,7 @@ log = logging.getLogger("rich")
 
 def main() -> None:
     # Parameters
-    filename = "2025_10_02-0017.tif"
+    filename = "2025_04_03-0032.tif"
     raw_path = Path(__file__).parent / "raw_images"
     output_name_1 = f"{Path(filename).stem}_Cal.tif"
     output_name_2 = f"{Path(filename).stem}_Gauss.tif"

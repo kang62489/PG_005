@@ -143,60 +143,131 @@ def kmeans_step_by_step(data: np.ndarray, n_clusters: int = 3, max_iterations: i
 
 def visualize_results(image: np.ndarray, labels: np.ndarray, centers: np.ndarray, history: dict):
     """
-    Visualize original image, clustering results, and convergence.
+    Visualize step-by-step k-means iterations showing pixel assignments and centroid updates.
     """
     height, width = image.shape
-    clustered_image = labels.reshape(height, width)
-
-    # Sort clusters by intensity for consistent coloring
-    sorted_indices = np.argsort(centers[:, 0])
-    label_mapping = np.zeros(len(centers), dtype=int)
-    label_mapping[sorted_indices] = np.arange(len(centers))
-    clustered_image_sorted = label_mapping[clustered_image]
-
-    fig, axes = plt.subplots(2, 2, figsize=(12, 12))
-
-    # Original image
-    axes[0, 0].imshow(image, cmap='gray', vmin=0, vmax=1)
-    axes[0, 0].set_title('Original Image (64x64)', fontsize=14, fontweight='bold')
-    axes[0, 0].axis('off')
-
-    # Clustered image
+    n_iterations = len(history['labels'])
     colors = ['darkblue', 'yellow', 'red']
     cmap = ListedColormap(colors[:len(centers)])
-    im = axes[0, 1].imshow(clustered_image_sorted, cmap=cmap, vmin=0, vmax=len(centers)-1)
-    axes[0, 1].set_title('K-means Clustering Result', fontsize=14, fontweight='bold')
-    axes[0, 1].axis('off')
-
-    # Add colorbar
-    cbar = plt.colorbar(im, ax=axes[0, 1], ticks=range(len(centers)))
-    cbar.set_label('Cluster ID', rotation=270, labelpad=20)
-
-    # Histogram showing data distribution and centroids
-    axes[1, 0].hist(image.flatten(), bins=50, alpha=0.7, color='gray', edgecolor='black')
-    colors_line = ['darkblue', 'gold', 'red']
-    for i, center in enumerate(centers):
-        axes[1, 0].axvline(center[0], color=colors_line[i], linewidth=3,
-                          linestyle='--', label=f'Centroid {i}')
-    axes[1, 0].set_xlabel('Pixel Intensity', fontsize=12)
-    axes[1, 0].set_ylabel('Frequency', fontsize=12)
-    axes[1, 0].set_title('Pixel Distribution with Final Centroids', fontsize=14, fontweight='bold')
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-
+    
+    # Create figure with subplots for each iteration plus original and convergence
+    n_cols = min(4, n_iterations + 2)  # Max 4 columns
+    n_rows = max(2, (n_iterations + 3) // n_cols)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 4*n_rows))
+    
+    # Flatten axes for easier indexing
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    if n_cols == 1:
+        axes = axes.reshape(-1, 1)
+    axes_flat = axes.flatten()
+    
+    plot_idx = 0
+    
+    # Original image
+    axes_flat[plot_idx].imshow(image, cmap='gray', vmin=0, vmax=1)
+    axes_flat[plot_idx].set_title('Original Image', fontsize=12, fontweight='bold')
+    axes_flat[plot_idx].axis('off')
+    plot_idx += 1
+    
+    # Show each iteration
+    for iter_idx in range(n_iterations):
+        if plot_idx >= len(axes_flat):
+            break
+            
+        # Get labels for this iteration
+        iter_labels = history['labels'][iter_idx]
+        clustered_image = iter_labels.reshape(height, width)
+        
+        # Sort clusters by their centroid values for consistent coloring
+        current_centers = history['centers'][iter_idx + 1]  # +1 because centers[0] is initial
+        sorted_indices = np.argsort(current_centers[:, 0])
+        label_mapping = np.zeros(len(current_centers), dtype=int)
+        label_mapping[sorted_indices] = np.arange(len(current_centers))
+        clustered_image_sorted = label_mapping[clustered_image]
+        
+        im = axes_flat[plot_idx].imshow(clustered_image_sorted, cmap=cmap, vmin=0, vmax=len(centers)-1)
+        
+        # Show centroid values in title
+        center_vals = [f"{current_centers[i, 0]:.3f}" for i in sorted_indices]
+        title = f"Iteration {iter_idx + 1}\nCentroids: {', '.join(center_vals)}"
+        axes_flat[plot_idx].set_title(title, fontsize=10, fontweight='bold')
+        axes_flat[plot_idx].axis('off')
+        plot_idx += 1
+    
     # Convergence plot
-    iterations = range(len(history['distances']))
-    axes[1, 1].plot(iterations, history['distances'], 'o-', linewidth=2, markersize=8, color='darkgreen')
-    axes[1, 1].set_xlabel('Iteration', fontsize=12)
-    axes[1, 1].set_ylabel('Average Distance to Centroid', fontsize=12)
-    axes[1, 1].set_title('Convergence: Distance Over Iterations', fontsize=14, fontweight='bold')
-    axes[1, 1].grid(True, alpha=0.3)
-    axes[1, 1].set_xticks(iterations)
-
+    if plot_idx < len(axes_flat):
+        iterations = range(len(history['distances']))
+        axes_flat[plot_idx].plot(iterations, history['distances'], 'o-', linewidth=2, markersize=6, color='darkgreen')
+        axes_flat[plot_idx].set_xlabel('Iteration', fontsize=10)
+        axes_flat[plot_idx].set_ylabel('Avg Distance', fontsize=10)
+        axes_flat[plot_idx].set_title('Convergence', fontsize=12, fontweight='bold')
+        axes_flat[plot_idx].grid(True, alpha=0.3)
+        axes_flat[plot_idx].set_xticks(iterations)
+        plot_idx += 1
+    
+    # Hide unused subplots
+    for i in range(plot_idx, len(axes_flat)):
+        axes_flat[i].axis('off')
+    
     plt.tight_layout()
-    plt.savefig('kmeans_demo_results.png', dpi=150, bbox_inches='tight')
-    print(f"\nVisualization saved as 'kmeans_demo_results.png'")
-    # plt.show()  # Commented out to avoid blocking
+    plt.show()
+
+
+def visualize_detailed_steps(image: np.ndarray, labels: np.ndarray, centers: np.ndarray, history: dict):
+    """
+    Visualize detailed step-by-step process with pixel scatter plots.
+    """
+    data = image.flatten()
+    n_iterations = len(history['labels'])
+    colors = ['darkblue', 'orange', 'red']
+    
+    fig, axes = plt.subplots(2, n_iterations, figsize=(4*n_iterations, 8))
+    if n_iterations == 1:
+        axes = axes.reshape(-1, 1)
+    
+    for iter_idx in range(n_iterations):
+        # Top row: Image with cluster assignments
+        iter_labels = history['labels'][iter_idx]
+        clustered_image = iter_labels.reshape(image.shape)
+        
+        # Sort for consistent coloring
+        current_centers = history['centers'][iter_idx + 1]
+        sorted_indices = np.argsort(current_centers[:, 0])
+        label_mapping = np.zeros(len(current_centers), dtype=int)
+        label_mapping[sorted_indices] = np.arange(len(current_centers))
+        clustered_image_sorted = label_mapping[clustered_image]
+        
+        cmap = ListedColormap(colors[:len(centers)])
+        axes[0, iter_idx].imshow(clustered_image_sorted, cmap=cmap, vmin=0, vmax=len(centers)-1)
+        axes[0, iter_idx].set_title(f'Iteration {iter_idx + 1}\nCluster Assignments', fontsize=12)
+        axes[0, iter_idx].axis('off')
+        
+        # Bottom row: Scatter plot of pixel values
+        for cluster_id in range(len(centers)):
+            cluster_mask = iter_labels == cluster_id
+            cluster_pixels = data[cluster_mask]
+            if len(cluster_pixels) > 0:
+                # Use jitter for better visibility
+                y_vals = np.random.normal(cluster_id, 0.05, len(cluster_pixels))
+                axes[1, iter_idx].scatter(cluster_pixels, y_vals, 
+                                        c=colors[label_mapping[cluster_id]], alpha=0.6, s=1)
+        
+        # Plot centroids
+        for i, center_val in enumerate(current_centers[:, 0]):
+            mapped_i = label_mapping[i]
+            axes[1, iter_idx].scatter(center_val, mapped_i, c='black', s=100, marker='x', linewidth=3)
+            axes[1, iter_idx].scatter(center_val, mapped_i, c=colors[mapped_i], s=60, marker='x', linewidth=2)
+        
+        axes[1, iter_idx].set_xlabel('Pixel Intensity')
+        axes[1, iter_idx].set_ylabel('Cluster')
+        axes[1, iter_idx].set_title(f'Pixel Distribution\nCentroids: {[f"{c[0]:.3f}" for c in current_centers[sorted_indices]]}')
+        axes[1, iter_idx].set_yticks(range(len(centers)))
+        axes[1, iter_idx].grid(True, alpha=0.3)
+        axes[1, iter_idx].set_ylim(-0.5, len(centers)-0.5)
+    
+    plt.tight_layout()
+    plt.show()
 
 
 def main():
@@ -214,8 +285,11 @@ def main():
     labels, centers, history = kmeans_step_by_step(data, n_clusters=3, max_iterations=10)
 
     # Visualize results
-    print("\nGenerating visualization...")
+    print("\nGenerating step-by-step visualization...")
     visualize_results(image, labels, centers, history)
+    
+    print("\nGenerating detailed scatter plot visualization...")
+    visualize_detailed_steps(image, labels, centers, history)
 
     print("\n" + "="*70)
     print("DEMONSTRATION COMPLETE")
