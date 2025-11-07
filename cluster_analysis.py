@@ -29,11 +29,11 @@ app = QApplication(sys.argv)
 exp_date = "2025_06_11"
 
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = f"{exp_date}-0003.abf"
+abf_file = f"{exp_date}-0013.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
 img_path = Path(__file__).parent
-img_file = f"{exp_date}-0002_Gauss.tif"
+img_file = f"{exp_date}-0012_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX
