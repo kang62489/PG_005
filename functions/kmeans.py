@@ -83,6 +83,7 @@ def visualize_clustering_results(
     spike_trace: list[np.ndarray] | list[list[np.ndarray]],
     span_of_frames: list[int],
     seg_index: int = 0,
+    img_filename: str = None,
 ) -> None:
     """
     Visualize original ACh signals vs clustered ACh releasing areas.
@@ -96,6 +97,7 @@ def visualize_clustering_results(
         spike_trace: Either [time, voltage] for single trace, or list of [time, voltage] pairs for multiple traces
         seg_index: Segment index for title
         span_of_frames: List of frame numbers spanning the segment
+        img_filename: Name of the analyzed image file (optional)
 
     """
     n_frames = len(original_frames)
@@ -132,12 +134,15 @@ def visualize_clustering_results(
     spike_ax = fig.add_subplot(n_total_rows, 1, trace_row_position)
 
     # Check if spike_trace is a single trace or multiple traces
-    is_multi_trace = isinstance(spike_trace[0], list) or (isinstance(spike_trace[0], np.ndarray) and spike_trace[0].ndim > 1)
+    is_multi_trace = isinstance(spike_trace[0], list) or (
+        isinstance(spike_trace[0], np.ndarray) and spike_trace[0].ndim > 1
+    )
 
     if is_multi_trace:
         # Plot multiple traces as overlays with distinct colors
         # Use a colormap with distinct colors
-        import matplotlib.cm as cm
+        from matplotlib import cm
+
         n_traces = len(spike_trace)
         colors = cm.tab20(np.linspace(0, 1, n_traces))  # tab20 provides 20 distinct colors
 
@@ -166,10 +171,15 @@ def visualize_clustering_results(
     else:
         spike_ax.set_title("Spike Trace")
 
-    if seg_index == -1:
-        plt.suptitle("Spike-Triggered Average: K-means Clustering Analysis")
+    # Create title based on image filename or default
+    if img_filename:
+        base_title = f"{img_filename}: K-means Clustering Analysis"
+    elif seg_index == -1:
+        base_title = "Spike-Triggered Average: K-means Clustering Analysis"
     else:
-        plt.suptitle(f"Segment {seg_index + 1}: K-means Clustering Analysis")
+        base_title = f"Segment {seg_index + 1}: K-means Clustering Analysis"
+
+    plt.suptitle(base_title)
     plt.subplots_adjust(wspace=0)  # Remove horizontal spacing between image columns
     plt.show(block=False)
     plt.pause(0.001)

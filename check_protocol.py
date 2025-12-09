@@ -7,7 +7,7 @@ import pyabf
 from rich import print
 from tabulate import tabulate
 
-dirname = Path("E:\\ExpData\\Raw\\2025_10_13")
+dirname = Path("C:\\Users\\KANG\\Desktop\\Today\\New folder")
 # dirname = Path("E:/PRJ_Striatal_ACh_Dynamics/Data/2025_06_12/abfs")
 
 

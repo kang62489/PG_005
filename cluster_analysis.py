@@ -26,14 +26,14 @@ app = QApplication(sys.argv)
 
 
 ## Load ABF and Tiff file for truncation
-exp_date = "2025_06_11"
+exp_date = "2025_11_27"
 
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = f"{exp_date}-0013.abf"
+abf_file = f"{exp_date}-0009.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
 img_path = Path(__file__).parent
-img_file = f"{exp_date}-0012_Gauss.tif"
+img_file = f"{exp_date}-0010_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX
@@ -65,7 +65,7 @@ if len(peak_indices) == 0:
     console.print("[bold red]No peaks found! Exiting...[/bold red]")
     console.print("Try adjusting peak detection parameters (height, distance, prominence)")
     app.exec()
-    exit()
+    sys.exit()
 
 ## Plot Vm and peaks with my custom class
 df_Vm = pd.DataFrame({"Time": time_rec, "Vm": Vm})
@@ -78,8 +78,14 @@ plotter = PlotResults([df_Vm, df_peaks], title="Vm vs Time")
 ## Find frames which contain spikes
 Ts_images: float = 1 / fs_imgs
 points_per_frame: int = int(Ts_images * fs_ephys)
+# Total recorded frames
+# (I manually delete the first frame and/or last frame,
+# if total = 1201, then first frame is deleted; if total = 1202, then both frames are deleted)
+total_recorded_frames = (t_end_index - t_start_index) // points_per_frame
+console.print(f"Total recorded frames: {total_recorded_frames}")
 
-frame_indices = np.floor(peak_indices / points_per_frame).astype(int)
+# -1 : first frame is deleted
+frame_indices = np.floor(peak_indices / points_per_frame).astype(int) - 1
 
 # -1 : don't count the frame containing the spike
 inter_spike_frames = (np.diff(frame_indices) - 1).astype(int)
@@ -88,7 +94,7 @@ trailing_frames: int = int(loaded_img.shape[0] - frame_indices[-1] - 1)
 inter_spike_frames = np.insert(inter_spike_frames, 0, leading_frames).astype(int)
 inter_spike_frames = np.append(inter_spike_frames, trailing_frames).astype(int)
 
-## Truncate the image stack based on the spikeing frame index
+## Truncate the image stack based on the spiking frame index
 minimal_required_frames: int = 1
 maximum_allowed_frames: int = 4
 lst_img_segments = []
@@ -122,15 +128,19 @@ for idx_of_spike, frame_of_spike in enumerate(frame_indices):
     )
     new_spike_idx += 1
 
-    left_idx: int = frame_of_spike - available_frames
-    right_idx: int = frame_of_spike + available_frames
+    left_idx_img: int = frame_of_spike - available_frames
+    right_idx_img: int = frame_of_spike + available_frames
+
+    # ABF frames remain unchanged, add 1 to compensate for 0-based indexing
+    left_idx_abf: int = frame_of_spike + 1 - available_frames
+    right_idx_abf: int = frame_of_spike + 1 + available_frames
 
     # Truncate image stack
-    lst_img_segments.append(loaded_img[left_idx : right_idx + 1])
+    lst_img_segments.append(loaded_img[left_idx_img : right_idx_img + 1])
     # Truncate the time series
-    lst_time_segments.append(time_rec[left_idx * points_per_frame : (right_idx + 1) * points_per_frame])
+    lst_time_segments.append(time_rec[left_idx_abf * points_per_frame : (right_idx_abf + 1) * points_per_frame])
     # Truncate corresponding spiking data
-    lst_abf_segments.append(Vm[left_idx * points_per_frame : (right_idx + 1) * points_per_frame])
+    lst_abf_segments.append(Vm[left_idx_abf * points_per_frame : (right_idx_abf + 1) * points_per_frame])
 
 
 console.print(
@@ -195,10 +205,15 @@ print(tabulate(df_all_spikes, headers="keys", showindex=False, tablefmt="pretty"
 # else:
 #     console.print("No segments available for clustering analysis")
 
+# Z-scored before k-means
+
+
 # Spike-triggered Averaging before k-means
 min_length = min(len(seg) for seg in lst_img_segments)
 target_frames = maximum_allowed_frames * 2 + 1  # Based on maximum_allowed_frames parameter
-console.print(f"Minimum segment length: {min_length}, using {target_frames} frames")
+console.print(
+    f"Minimum segment length: {min_length}, using maximum allowed frames {maximum_allowed_frames}, total {target_frames} frames"
+)
 
 # Simple averaging: take center frames from each segment
 averaged_frames = []
@@ -280,7 +295,9 @@ span_of_frames_avg = list(range(-half_frames, half_frames + (target_frames % 2))
 
 # Visualize results with all spike traces overlaid
 console.print("Generating visualization with overlaid spike traces...")
-visualize_clustering_results(averaged_segment, clustered_frames, all_spike_traces, span_of_frames_avg, seg_index=-1)
+visualize_clustering_results(
+    averaged_segment, clustered_frames, all_spike_traces, span_of_frames_avg, seg_index=-1, img_filename=img_file
+)
 
 
 app.exec()

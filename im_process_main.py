@@ -30,9 +30,9 @@ logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers
 log = logging.getLogger("rich")
 
 
-def main() -> None:
+def main(file: str) -> None:
     # Parameters
-    filename = "2025_04_03-0032.tif"
+    filename = file
     raw_path = Path(__file__).parent / "raw_images"
     output_name_1 = f"{Path(filename).stem}_Cal.tif"
     output_name_2 = f"{Path(filename).stem}_Gauss.tif"
@@ -89,4 +89,8 @@ if cuda_available:
 if not cuda_available:
     console.print("[yellow]Falling back to CPU processing...")
 
-main()
+date = "2025_06_11"
+serials = ["0003", "0004", "0008"]
+file_list = [f"{date}-{serial}.tif" for serial in serials]
+for file in file_list:
+    main(file)
