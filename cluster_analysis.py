@@ -29,11 +29,12 @@ app = QApplication(sys.argv)
 exp_date = "2025_11_27"
 
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = f"{exp_date}-0009.abf"
+abf_file = f"{exp_date}-0023.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
+magnification: str = "10X"  # Options: "10X", "40X", "60X" - for area calculation
 img_path = Path(__file__).parent
-img_file = f"{exp_date}-0010_Gauss.tif"
+img_file = f"{exp_date}-0035_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX
@@ -42,6 +43,7 @@ fs_ephys: float = loaded_abf.dataRate
 fs_imgs: float = 20
 
 console.print(f"Sampling Rate: {fs_ephys} Hz")
+console.print(f"Magnification: {magnification}")
 
 # data[3] is channel #14 the triggering signal of cammera acquisition
 TTL_5V_HIGH: float = 2.0  # Threshold for TTL HIGH (5V)
@@ -95,7 +97,7 @@ inter_spike_frames = np.insert(inter_spike_frames, 0, leading_frames).astype(int
 inter_spike_frames = np.append(inter_spike_frames, trailing_frames).astype(int)
 
 ## Truncate the image stack based on the spiking frame index
-minimal_required_frames: int = 1
+minimal_required_frames: int = 3
 maximum_allowed_frames: int = 4
 lst_img_segments = []
 lst_abf_segments = []
@@ -205,8 +207,41 @@ print(tabulate(df_all_spikes, headers="keys", showindex=False, tablefmt="pretty"
 # else:
 #     console.print("No segments available for clustering analysis")
 
-# Z-scored before k-means
+# Z-score normalization using baseline frames (all frames before spike)
+console.print("\n=== Z-score Normalization ===")
+lst_img_segments_zscore = []
 
+for i, segment in enumerate(lst_img_segments):
+    seg_length = len(segment)
+
+    # Spike is at center, so baseline is all frames before spike
+    spike_frame_idx = seg_length // 2
+    baseline_frames_count = spike_frame_idx  # Frames [0 : spike_frame_idx]
+
+    if baseline_frames_count > 0:
+        baseline = segment[:baseline_frames_count]
+
+        # Calculate pixel-wise mean and std
+        baseline_mean = np.mean(baseline, axis=0)
+        baseline_std = np.std(baseline, axis=0)
+
+        # Avoid division by zero
+        baseline_std[baseline_std == 0] = 1
+
+        # Calculate z-scores for all frames in segment
+        zscore_segment = (segment - baseline_mean) / baseline_std
+        lst_img_segments_zscore.append(zscore_segment)
+
+        console.print(f"Segment {i}: {seg_length} frames, using {baseline_frames_count} baseline frames")
+    else:
+        # Segment too short (only 1 frame), keep as is
+        console.print(f"[yellow]Segment {i}: Only {seg_length} frame(s), skipping z-score[/yellow]")
+        lst_img_segments_zscore.append(segment)
+
+console.print(f"Z-score normalization completed for {len(lst_img_segments_zscore)} segments")
+
+# Replace original segments with z-scored versions
+lst_img_segments = lst_img_segments_zscore
 
 # Spike-triggered Averaging before k-means
 min_length = min(len(seg) for seg in lst_img_segments)
@@ -295,9 +330,40 @@ span_of_frames_avg = list(range(-half_frames, half_frames + (target_frames % 2))
 
 # Visualize results with all spike traces overlaid
 console.print("Generating visualization with overlaid spike traces...")
-visualize_clustering_results(
-    averaged_segment, clustered_frames, all_spike_traces, span_of_frames_avg, seg_index=-1, img_filename=img_file
+fig_cluster, df_areas = visualize_clustering_results(
+    averaged_segment,
+    clustered_frames,
+    all_spike_traces,
+    span_of_frames_avg,
+    seg_index=-1,
+    img_filename=img_file,
+    magnification=magnification,
 )
 
+# Create output directory
+output_dir = Path(__file__).parent / "output"
+output_dir.mkdir(exist_ok=True)
+console.print(f"\n[bold green]Saving outputs to: {output_dir}[/bold green]")
+
+# Extract base filename without .tif extension (e.g., "2025_11_13-0040_Gauss.tif" -> "2025_11_13-0040_Gauss")
+img_base = img_file.replace(".tif", "")
+
+# Save peak detection plot
+peak_plot_filename = f"{img_base}_peak_detection.png"
+plotter.fig.savefig(output_dir / peak_plot_filename, dpi=300, bbox_inches="tight")
+console.print(f"Saved peak detection plot: {peak_plot_filename}")
+
+# Save cluster analysis plot
+cluster_plot_filename = f"{img_base}_{magnification}_cluster_analysis.png"
+fig_cluster.savefig(output_dir / cluster_plot_filename, dpi=300, bbox_inches="tight")
+console.print(f"Saved cluster analysis plot: {cluster_plot_filename}")
+
+# Save area table as Excel
+if df_areas is not None:
+    excel_filename = f"{img_base}_{magnification}_cluster_areas.xlsx"
+    df_areas.to_excel(output_dir / excel_filename, index=False)
+    console.print(f"Saved area table: {excel_filename}")
+
+console.print("[bold green]All outputs saved successfully![/bold green]")
 
 app.exec()

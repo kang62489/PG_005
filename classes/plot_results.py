@@ -61,6 +61,8 @@ class PlotResults(QMainWindow):
         layout_plotting = QVBoxLayout()  # layout for hold navigation toolbar and canvas
 
         canvas_0 = MplCanvas()
+        self.canvas = canvas_0  # Store canvas for later access
+        self.fig = canvas_0.figure  # Store figure for saving
         self.df_list[0].plot(
             ax=canvas_0.axes,
             x="Time",

@@ -7,6 +7,7 @@ Used to identify ACh releasing areas related to firing activities in each frame.
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.colors import ListedColormap
 from sklearn.cluster import KMeans
 
@@ -77,6 +78,44 @@ def apply_kmeans_to_frame(image_frame: np.ndarray, n_clusters: int = 3) -> tuple
     return intensity_ordered_frame, intensity_ordered_centers
 
 
+def calculate_cluster_areas(clustered_frames: list[np.ndarray], magnification: str, n_clusters: int = 3) -> dict:
+    """
+    Calculate area sizes for each cluster label across all frames.
+
+    Args:
+        clustered_frames: List of clustered frames with labels (0, 1, 2, ...)
+        magnification: Microscope magnification ("10X", "40X", or "60X")
+        n_clusters: Number of clusters
+
+    Returns:
+        Dictionary with area statistics for each frame
+
+    """
+    # Define pixel-to-micron conversion based on magnification
+    conversion_factors = {
+        "10X": (1 / 0.75) ** 2,  # μm² per pixel
+        "40X": (1 / 3) ** 2,
+        "60X": (1 / 4.5) ** 2,
+    }
+
+    if magnification not in conversion_factors:
+        raise ValueError(f"Magnification must be one of {list(conversion_factors.keys())}")
+
+    pixel_area = conversion_factors[magnification]
+
+    # Calculate areas for each frame
+    frame_areas = []
+    for frame_idx, frame in enumerate(clustered_frames):
+        cluster_areas = {}
+        for cluster_label in range(n_clusters):
+            pixel_count = np.sum(frame == cluster_label)
+            area_um2 = pixel_count * pixel_area
+            cluster_areas[cluster_label] = {"pixel_count": pixel_count, "area_um2": area_um2}
+        frame_areas.append(cluster_areas)
+
+    return frame_areas
+
+
 def visualize_clustering_results(
     original_frames: list[np.ndarray],
     clustered_frames: list[np.ndarray],
@@ -84,7 +123,8 @@ def visualize_clustering_results(
     span_of_frames: list[int],
     seg_index: int = 0,
     img_filename: str = None,
-) -> None:
+    magnification: str = None,
+) -> tuple[plt.Figure, pd.DataFrame | None]:
     """
     Visualize original ACh signals vs clustered ACh releasing areas.
 
@@ -98,40 +138,93 @@ def visualize_clustering_results(
         seg_index: Segment index for title
         span_of_frames: List of frame numbers spanning the segment
         img_filename: Name of the analyzed image file (optional)
+        magnification: Microscope magnification ("10X", "40X", or "60X") for area calculation
 
     """
     n_frames = len(original_frames)
 
+    # Calculate cluster areas if magnification is provided
+    df_areas = None
+    if magnification is not None:
+        import pandas as pd
+        from tabulate import tabulate
+
+        print(f"\n=== Cluster Area Analysis (Magnification: {magnification}) ===")
+        # Check all frames for unique labels, not just the first one
+        all_labels = np.unique(np.concatenate([frame.flatten() for frame in clustered_frames]))
+        n_clusters = len(all_labels)
+        frame_areas = calculate_cluster_areas(clustered_frames, magnification, n_clusters)
+
+        # Map cluster labels to color names
+        cluster_colors_map = {0: "White", 1: "Yellow", 2: "Red"}
+
+        # Create table data with area and sqrt (distance estimate)
+        table_data = []
+        for frame_idx, areas in enumerate(frame_areas):
+            row = {"Frame": span_of_frames[frame_idx]}
+            for cluster_label in sorted(areas.keys()):
+                color_name = cluster_colors_map.get(cluster_label, f"Cluster {cluster_label}")
+                area_um2 = areas[cluster_label]["area_um2"]
+                sqrt_area = np.sqrt(area_um2)
+                row[f"{color_name} (μm²)"] = f"{area_um2:.2f}"
+                row[f"sqrt({color_name}) (μm) "] = f"{sqrt_area:.2f}"
+            table_data.append(row)
+
+        df_areas = pd.DataFrame(table_data)
+        print("\n" + tabulate(df_areas, headers="keys", showindex=False, tablefmt="pretty"))
+
     # Layout constants
     n_image_rows = 2  # Original + clustered
     n_total_rows = n_image_rows + 1  # 2 image rows + 1 trace row
-    trace_row_position = n_total_rows  # Bottom row for spike trace
+    n_cols = n_frames + 1  # frames + extra column for colorbar/legend
 
-    # Create figure and manually add subplots using 3-row grid
-    fig = plt.figure(figsize=(3 * n_frames, 9))
+    # Create figure with GridSpec for better control
+    from matplotlib.gridspec import GridSpec
+
+    fig = plt.figure(figsize=(3 * n_frames + 1.5, 9))
+    gs = GridSpec(n_total_rows, n_cols, figure=fig, width_ratios=[1] * n_frames + [0.3])
+
+    # Calculate z-score range for consistent coloring
+    all_frames_data = np.concatenate([frame.flatten() for frame in original_frames])
+    vmin, vmax = np.percentile(all_frames_data, [1, 99])
 
     for i in range(n_frames):
         frame_title = f"Frame {span_of_frames[i]}"
 
         # Row 1: Original frame
-        original_position = i + 1
-        ax1 = fig.add_subplot(n_total_rows, n_frames, original_position)
-        ax1.imshow(original_frames[i], cmap="gray")
+        ax1 = fig.add_subplot(gs[0, i])
+        im1 = ax1.imshow(original_frames[i], cmap="gray", vmin=vmin, vmax=vmax)
         ax1.set_title(f"Original {frame_title}")
         ax1.axis("off")
 
         # Row 2: Clustered frame
-        clustered_position = n_frames + i + 1
-        ax2 = fig.add_subplot(n_total_rows, n_frames, clustered_position)
+        ax2 = fig.add_subplot(gs[1, i])
         current_clustered_frame = clustered_frames[i]
         cluster_colors = ["white", "yellow", "red"]  # 0=background, 1=moderate, 2=high ACh
         cluster_colormap = ListedColormap(cluster_colors)
-        ax2.imshow(current_clustered_frame, cmap=cluster_colormap, vmin=0, vmax=2)
+        im2 = ax2.imshow(current_clustered_frame, cmap=cluster_colormap, vmin=0, vmax=2)
         ax2.set_title(f"Clustered {frame_title}")
         ax2.axis("off")
 
-    # Row 3: Spike trace spanning all columns
-    spike_ax = fig.add_subplot(n_total_rows, 1, trace_row_position)
+    # Add z-score colorbar in the extra column, row 1
+    cbar_ax1 = fig.add_subplot(gs[0, n_frames])
+    cbar1 = plt.colorbar(im1, cax=cbar_ax1)
+    cbar1.set_label("Z-score", rotation=90, labelpad=15)
+    # Rotate tick labels vertically
+    for label in cbar1.ax.get_yticklabels():
+        label.set_rotation(90)
+        label.set_va("center")
+
+    # Add cluster colorbar in the extra column, row 2
+    cbar_ax2 = fig.add_subplot(gs[1, n_frames])
+    cluster_colors = ["white", "yellow", "red"]
+    cluster_colormap = ListedColormap(cluster_colors)
+    cbar2 = plt.colorbar(im2, cax=cbar_ax2, ticks=[0, 1, 2])
+    cbar2.set_label("Cluster", rotation=90, labelpad=15)
+    cbar2.ax.set_yticklabels(["Background", "Moderate", "High ACh"], rotation=90, va="center")
+
+    # Row 3: Spike trace spanning only frame columns (aligns with images)
+    spike_ax = fig.add_subplot(gs[2, :n_frames])
 
     # Check if spike_trace is a single trace or multiple traces
     is_multi_trace = isinstance(spike_trace[0], list) or (
@@ -172,17 +265,20 @@ def visualize_clustering_results(
         spike_ax.set_title("Spike Trace")
 
     # Create title based on image filename or default
+    mag_prefix = f"({magnification}) " if magnification else ""
     if img_filename:
-        base_title = f"{img_filename}: K-means Clustering Analysis"
+        base_title = f"{mag_prefix}{img_filename}: K-means Clustering Analysis"
     elif seg_index == -1:
-        base_title = "Spike-Triggered Average: K-means Clustering Analysis"
+        base_title = f"{mag_prefix}Spike-Triggered Average: K-means Clustering Analysis"
     else:
-        base_title = f"Segment {seg_index + 1}: K-means Clustering Analysis"
+        base_title = f"{mag_prefix}Segment {seg_index + 1}: K-means Clustering Analysis"
 
     plt.suptitle(base_title)
-    plt.subplots_adjust(wspace=0)  # Remove horizontal spacing between image columns
+    gs.update(wspace=0.05, hspace=0.3)  # Adjust spacing for GridSpec layout
     plt.show(block=False)
     plt.pause(0.001)
+
+    return fig, df_areas
 
 
 def process_segment_kmeans(
