@@ -204,6 +204,308 @@ console.print(f"Z-score normalization completed for {len(lst_img_segments_zscore
 # Replace original segments with z-scored versions
 lst_img_segments = lst_img_segments_zscore
 
+# Extract base filename for saving outputs later
+img_base = img_file.replace(".tif", "")
+
+# Create output directory early for tier analysis plots
+output_dir = Path(__file__).parent / "output"
+output_dir.mkdir(exist_ok=True)
+
+# Analyze Frame 0 (central frame) positive z-score pixels across all segments
+console.print("\n=== Frame 0 Positive Z-Score Analysis ===")
+
+# Extract Frame 0 from all segments
+frame_0_list = []
+for i, segment in enumerate(lst_img_segments_zscore):
+    seg_length = len(segment)
+    spike_frame_idx = seg_length // 2  # Central frame (Frame 0)
+    frame_0 = segment[spike_frame_idx]
+    frame_0_list.append(frame_0)
+
+console.print(f"Extracted Frame 0 from {len(frame_0_list)} segments")
+
+# Find maximum z-score value across all Frame 0s (only positive values)
+max_zscore = 0
+for frame_0 in frame_0_list:
+    positive_pixels = frame_0[frame_0 > 0]
+    if len(positive_pixels) > 0:
+        max_zscore = max(max_zscore, np.max(positive_pixels))
+
+console.print(f"Maximum positive z-score: {max_zscore:.3f}")
+
+# Define fixed tier ranges: 0-0.5, 0.5-1, 1-1.5, 1.5-2, >2
+tier_ranges = [
+    (0.0, 0.5),    # Tier 0
+    (0.5, 1.0),    # Tier 1
+    (1.0, 1.5),    # Tier 2
+    (1.5, 2.0),    # Tier 3
+    (2.0, np.inf)  # Tier 4
+]
+n_tiers = len(tier_ranges)
+
+console.print(f"Number of tiers: {n_tiers}")
+console.print(f"Tier ranges:")
+for tier, (lower, upper) in enumerate(tier_ranges):
+    if np.isinf(upper):
+        console.print(f"  Tier {tier}: {lower:.1f} < z")
+    else:
+        console.print(f"  Tier {tier}: {lower:.1f} < z <= {upper:.1f}")
+
+# Classify pixels into tiers for all segments
+# For each pixel position, track which tier it belongs to in each segment
+img_shape = frame_0_list[0].shape
+pixel_tier_tracker = np.zeros((len(frame_0_list), img_shape[0], img_shape[1]), dtype=int) - 1  # -1 means not positive or no tier
+
+for seg_idx, frame_0 in enumerate(frame_0_list):
+    # Classify each pixel
+    tier_map = np.zeros(img_shape, dtype=int) - 1  # -1 for non-positive pixels
+
+    for tier, (lower, upper) in enumerate(tier_ranges):
+        # Find pixels in this tier range
+        if np.isinf(upper):
+            mask = frame_0 > lower
+        else:
+            mask = (frame_0 > lower) & (frame_0 <= upper)
+        tier_map[mask] = tier
+
+    pixel_tier_tracker[seg_idx] = tier_map
+
+console.print(f"Classified pixels into tiers for all {len(frame_0_list)} segments")
+
+# Find pixels that are ALWAYS in tier 4 (z > 2.0) across all segments
+tier_4 = 4
+always_tier_4_mask = np.ones(img_shape, dtype=bool)
+
+for seg_idx in range(len(frame_0_list)):
+    # Check if this pixel is in tier 4 in this segment
+    is_tier_4 = pixel_tier_tracker[seg_idx] == tier_4
+    always_tier_4_mask = always_tier_4_mask & is_tier_4
+
+n_always_tier_4 = np.sum(always_tier_4_mask)
+console.print(f"Found {n_always_tier_4} pixels that are ALWAYS in tier 4 (z > 2.0)")
+
+# Find pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0) across all segments
+tier_3 = 3
+always_tier_3_mask = np.ones(img_shape, dtype=bool)
+
+for seg_idx in range(len(frame_0_list)):
+    # Check if this pixel is in tier 3 in this segment
+    is_tier_3 = pixel_tier_tracker[seg_idx] == tier_3
+    always_tier_3_mask = always_tier_3_mask & is_tier_3
+
+n_always_tier_3 = np.sum(always_tier_3_mask)
+console.print(f"Found {n_always_tier_3} pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0)")
+
+# Find pixels that are ALWAYS in tier 2 (1.0 < z <= 1.5) across all segments
+tier_2 = 2
+always_tier_2_mask = np.ones(img_shape, dtype=bool)
+
+for seg_idx in range(len(frame_0_list)):
+    is_tier_2 = pixel_tier_tracker[seg_idx] == tier_2
+    always_tier_2_mask = always_tier_2_mask & is_tier_2
+
+n_always_tier_2 = np.sum(always_tier_2_mask)
+console.print(f"Found {n_always_tier_2} pixels that are ALWAYS in tier 2 (1.0 < z <= 1.5)")
+
+# Find pixels that are ALWAYS in tier 1 (0.5 < z <= 1.0) across all segments
+tier_1 = 1
+always_tier_1_mask = np.ones(img_shape, dtype=bool)
+
+for seg_idx in range(len(frame_0_list)):
+    is_tier_1 = pixel_tier_tracker[seg_idx] == tier_1
+    always_tier_1_mask = always_tier_1_mask & is_tier_1
+
+n_always_tier_1 = np.sum(always_tier_1_mask)
+console.print(f"Found {n_always_tier_1} pixels that are ALWAYS in tier 1 (0.5 < z <= 1.0)")
+
+# Find pixels that are ALWAYS in tier 0 (0.0 < z <= 0.5) across all segments
+tier_0 = 0
+always_tier_0_mask = np.ones(img_shape, dtype=bool)
+
+for seg_idx in range(len(frame_0_list)):
+    is_tier_0 = pixel_tier_tracker[seg_idx] == tier_0
+    always_tier_0_mask = always_tier_0_mask & is_tier_0
+
+n_always_tier_0 = np.sum(always_tier_0_mask)
+console.print(f"Found {n_always_tier_0} pixels that are ALWAYS in tier 0 (0.0 < z <= 0.5)")
+
+# Create visualization
+fig_tier, ax_tier = plt.subplots(figsize=(10, 8))
+
+# Use the averaged Frame 0 as background
+avg_frame_0 = np.mean(frame_0_list, axis=0)
+im = ax_tier.imshow(avg_frame_0, cmap='gray', interpolation='nearest')
+plt.colorbar(im, ax=ax_tier, label='Average Z-Score (Frame 0)')
+
+# Create overlay for all tiers
+overlay = np.zeros((*img_shape, 4))  # RGBA
+
+# Tier 0 pixels in green
+if n_always_tier_0 > 0:
+    overlay[always_tier_0_mask] = [0, 1, 0, 0.7]  # Green with 70% opacity
+
+# Tier 1 pixels in blue
+if n_always_tier_1 > 0:
+    overlay[always_tier_1_mask] = [0, 0, 1, 0.7]  # Blue with 70% opacity
+
+# Tier 2 pixels in cyan
+if n_always_tier_2 > 0:
+    overlay[always_tier_2_mask] = [0, 1, 1, 0.7]  # Cyan with 70% opacity
+
+# Tier 3 pixels in yellow
+if n_always_tier_3 > 0:
+    overlay[always_tier_3_mask] = [1, 1, 0, 0.7]  # Yellow with 70% opacity
+
+# Tier 4 pixels in red (will overlay other tiers if there's any overlap)
+if n_always_tier_4 > 0:
+    overlay[always_tier_4_mask] = [1, 0, 0, 0.7]  # Red with 70% opacity
+
+# Display overlay if there are any pixels
+if n_always_tier_0 > 0 or n_always_tier_1 > 0 or n_always_tier_2 > 0 or n_always_tier_3 > 0 or n_always_tier_4 > 0:
+    ax_tier.imshow(overlay, interpolation='nearest')
+
+title = f'Frame 0: Pixels Always in Tiers 0-4\n'
+title += f'Red (T4, z>2.0): {n_always_tier_4} | '
+title += f'Yellow (T3, 1.5-2.0): {n_always_tier_3} | '
+title += f'Cyan (T2, 1.0-1.5): {n_always_tier_2} | '
+title += f'Blue (T1, 0.5-1.0): {n_always_tier_1} | '
+title += f'Green (T0, 0.0-0.5): {n_always_tier_0}'
+ax_tier.set_title(title)
+
+ax_tier.set_xlabel('X (pixels)')
+ax_tier.set_ylabel('Y (pixels)')
+
+# Show the tier analysis plot
+plt.show()
+
+# Save Frame 0 clean image (only colored pixels, transparent background)
+fig_clean_f0, ax_clean_f0 = plt.subplots(figsize=(10, 10))
+ax_clean_f0.imshow(overlay, interpolation='nearest')
+ax_clean_f0.axis('off')
+fig_clean_f0.patch.set_alpha(0)  # Transparent figure background
+ax_clean_f0.patch.set_alpha(0)   # Transparent axes background
+fig_clean_f0.savefig(output_dir / f"{img_base}_frame0_tiers_clean.png", dpi=300, bbox_inches='tight', pad_inches=0, transparent=True)
+plt.close(fig_clean_f0)
+console.print(f"Saved clean Frame 0 image: {img_base}_frame0_tiers_clean.png")
+
+console.print("[bold green]Frame 0 analysis completed![/bold green]")
+
+# ============================================================================
+# Analyze Frame 1 (first frame after spike)
+# ============================================================================
+console.print("\n=== Frame 1 Positive Z-Score Analysis ===")
+
+# Extract Frame 1 from all segments
+frame_1_list = []
+for i, segment in enumerate(lst_img_segments_zscore):
+    seg_length = len(segment)
+    spike_frame_idx = seg_length // 2  # Central frame is Frame 0
+    frame_1_idx = spike_frame_idx + 1  # Frame 1 is one frame after spike
+
+    if frame_1_idx < seg_length:
+        frame_1 = segment[frame_1_idx]
+        frame_1_list.append(frame_1)
+    else:
+        console.print(f"[yellow]Warning: Segment {i} too short to have Frame 1[/yellow]")
+
+console.print(f"Extracted Frame 1 from {len(frame_1_list)} segments")
+
+# Find maximum z-score value in Frame 1
+max_zscore_f1 = 0
+for frame_1 in frame_1_list:
+    positive_pixels = frame_1[frame_1 > 0]
+    if len(positive_pixels) > 0:
+        max_zscore_f1 = max(max_zscore_f1, np.max(positive_pixels))
+
+console.print(f"Maximum positive z-score in Frame 1: {max_zscore_f1:.3f}")
+
+# Classify pixels into tiers for Frame 1
+pixel_tier_tracker_f1 = np.zeros((len(frame_1_list), img_shape[0], img_shape[1]), dtype=int) - 1
+
+for seg_idx, frame_1 in enumerate(frame_1_list):
+    tier_map = np.zeros(img_shape, dtype=int) - 1
+
+    for tier, (lower, upper) in enumerate(tier_ranges):
+        if np.isinf(upper):
+            mask = frame_1 > lower
+        else:
+            mask = (frame_1 > lower) & (frame_1 <= upper)
+        tier_map[mask] = tier
+
+    pixel_tier_tracker_f1[seg_idx] = tier_map
+
+console.print(f"Classified Frame 1 pixels into tiers for all {len(frame_1_list)} segments")
+
+# Find pixels that are ALWAYS in tier 4 in Frame 1
+always_tier_4_mask_f1 = np.ones(img_shape, dtype=bool)
+
+for seg_idx in range(len(frame_1_list)):
+    is_tier_4 = pixel_tier_tracker_f1[seg_idx] == tier_4
+    always_tier_4_mask_f1 = always_tier_4_mask_f1 & is_tier_4
+
+n_always_tier_4_f1 = np.sum(always_tier_4_mask_f1)
+console.print(f"Found {n_always_tier_4_f1} pixels that are ALWAYS in tier 4 (z > 2.0) in Frame 1")
+
+# Find pixels that are ALWAYS in tier 3 in Frame 1
+always_tier_3_mask_f1 = np.ones(img_shape, dtype=bool)
+
+for seg_idx in range(len(frame_1_list)):
+    is_tier_3 = pixel_tier_tracker_f1[seg_idx] == tier_3
+    always_tier_3_mask_f1 = always_tier_3_mask_f1 & is_tier_3
+
+n_always_tier_3_f1 = np.sum(always_tier_3_mask_f1)
+console.print(f"Found {n_always_tier_3_f1} pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0) in Frame 1")
+
+# Create visualization for Frame 1
+fig_tier_f1, ax_tier_f1 = plt.subplots(figsize=(10, 8))
+
+# Use the averaged Frame 1 as background
+avg_frame_1 = np.mean(frame_1_list, axis=0)
+im_f1 = ax_tier_f1.imshow(avg_frame_1, cmap='gray', interpolation='nearest')
+plt.colorbar(im_f1, ax=ax_tier_f1, label='Average Z-Score (Frame 1)')
+
+# Create overlay for both tiers
+overlay_f1 = np.zeros((*img_shape, 4))  # RGBA
+
+# Tier 3 pixels in yellow
+if n_always_tier_3_f1 > 0:
+    overlay_f1[always_tier_3_mask_f1] = [1, 1, 0, 0.7]  # Yellow with 70% opacity
+
+# Tier 4 pixels in red (will overlay tier 3 if there's any overlap)
+if n_always_tier_4_f1 > 0:
+    overlay_f1[always_tier_4_mask_f1] = [1, 0, 0, 0.7]  # Red with 70% opacity
+
+# Display overlay if there are any pixels
+if n_always_tier_3_f1 > 0 or n_always_tier_4_f1 > 0:
+    ax_tier_f1.imshow(overlay_f1, interpolation='nearest')
+
+title_f1 = f'Frame 1: Pixels Always in Tier 3 or Tier 4\n'
+title_f1 += f'Red (Tier 4, z > 2.0): {n_always_tier_4_f1} pixels | '
+title_f1 += f'Yellow (Tier 3, 1.5 < z <= 2.0): {n_always_tier_3_f1} pixels'
+ax_tier_f1.set_title(title_f1)
+
+ax_tier_f1.set_xlabel('X (pixels)')
+ax_tier_f1.set_ylabel('Y (pixels)')
+
+# Show the Frame 1 tier analysis plot
+plt.show()
+
+# Save Frame 1 clean image (only colored pixels, transparent background)
+fig_clean_f1, ax_clean_f1 = plt.subplots(figsize=(10, 10))
+ax_clean_f1.imshow(overlay_f1, interpolation='nearest')
+ax_clean_f1.axis('off')
+fig_clean_f1.patch.set_alpha(0)  # Transparent figure background
+ax_clean_f1.patch.set_alpha(0)   # Transparent axes background
+fig_clean_f1.savefig(output_dir / f"{img_base}_frame1_tiers_clean.png", dpi=300, bbox_inches='tight', pad_inches=0, transparent=True)
+plt.close(fig_clean_f1)
+console.print(f"Saved clean Frame 1 image: {img_base}_frame1_tiers_clean.png")
+
+console.print("[bold green]Frame 1 analysis completed![/bold green]")
+
+# ============================================================================
+# K-means clustering section - DISABLED
+# ============================================================================
+"""
 # Spike-triggered Averaging before k-means
 min_length = min(len(seg) for seg in lst_img_segments)
 target_frames = maximum_allowed_frames * 2 + 1  # Based on maximum_allowed_frames parameter
@@ -302,6 +604,15 @@ fig_cluster, df_areas = visualize_clustering_results(
     magnification=magnification,
 )
 
+# ============================================================================
+# End of K-means clustering section
+# ============================================================================
+"""
+
+# ============================================================================
+# Saving section - DISABLED
+# ============================================================================
+"""
 # Create output directory
 output_dir = Path(__file__).parent / "output"
 output_dir.mkdir(exist_ok=True)
@@ -327,5 +638,9 @@ if df_areas is not None:
     console.print(f"Saved area table: {excel_filename}")
 
 console.print("[bold green]All outputs saved successfully![/bold green]")
+"""
+# ============================================================================
+# End of Saving section
+# ============================================================================
 
 app.exec()

@@ -6,7 +6,9 @@
       "Bash(claude config --help)",
       "Bash(find:*)",
       "WebFetch(domain:code.claude.com)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(python cluster_analysis.py:*)",
+      "Bash(pip install:*)"
     ],
     "deny": []
   }
