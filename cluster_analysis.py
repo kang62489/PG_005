@@ -233,18 +233,16 @@ for frame_0 in frame_0_list:
 
 console.print(f"Maximum positive z-score: {max_zscore:.3f}")
 
-# Define fixed tier ranges: 0-0.5, 0.5-1, 1-1.5, 1.5-2, >2
+# Define fixed tier ranges: 0-1, 1-2, >2
 tier_ranges = [
-    (0.0, 0.5),    # Tier 0
-    (0.5, 1.0),    # Tier 1
-    (1.0, 1.5),    # Tier 2
-    (1.5, 2.0),    # Tier 3
-    (2.0, np.inf)  # Tier 4
+    (0.0, 1.0),  # Tier 0
+    (1.0, 2.0),  # Tier 1
+    (2.0, np.inf),  # Tier 2
 ]
 n_tiers = len(tier_ranges)
 
 console.print(f"Number of tiers: {n_tiers}")
-console.print(f"Tier ranges:")
+console.print("Tier ranges:")
 for tier, (lower, upper) in enumerate(tier_ranges):
     if np.isinf(upper):
         console.print(f"  Tier {tier}: {lower:.1f} < z")
@@ -254,7 +252,9 @@ for tier, (lower, upper) in enumerate(tier_ranges):
 # Classify pixels into tiers for all segments
 # For each pixel position, track which tier it belongs to in each segment
 img_shape = frame_0_list[0].shape
-pixel_tier_tracker = np.zeros((len(frame_0_list), img_shape[0], img_shape[1]), dtype=int) - 1  # -1 means not positive or no tier
+pixel_tier_tracker = (
+    np.zeros((len(frame_0_list), img_shape[0], img_shape[1]), dtype=int) - 1
+)  # -1 means not positive or no tier
 
 for seg_idx, frame_0 in enumerate(frame_0_list):
     # Classify each pixel
@@ -272,42 +272,19 @@ for seg_idx, frame_0 in enumerate(frame_0_list):
 
 console.print(f"Classified pixels into tiers for all {len(frame_0_list)} segments")
 
-# Find pixels that are ALWAYS in tier 4 (z > 2.0) across all segments
-tier_4 = 4
-always_tier_4_mask = np.ones(img_shape, dtype=bool)
-
-for seg_idx in range(len(frame_0_list)):
-    # Check if this pixel is in tier 4 in this segment
-    is_tier_4 = pixel_tier_tracker[seg_idx] == tier_4
-    always_tier_4_mask = always_tier_4_mask & is_tier_4
-
-n_always_tier_4 = np.sum(always_tier_4_mask)
-console.print(f"Found {n_always_tier_4} pixels that are ALWAYS in tier 4 (z > 2.0)")
-
-# Find pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0) across all segments
-tier_3 = 3
-always_tier_3_mask = np.ones(img_shape, dtype=bool)
-
-for seg_idx in range(len(frame_0_list)):
-    # Check if this pixel is in tier 3 in this segment
-    is_tier_3 = pixel_tier_tracker[seg_idx] == tier_3
-    always_tier_3_mask = always_tier_3_mask & is_tier_3
-
-n_always_tier_3 = np.sum(always_tier_3_mask)
-console.print(f"Found {n_always_tier_3} pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0)")
-
-# Find pixels that are ALWAYS in tier 2 (1.0 < z <= 1.5) across all segments
+# Find pixels that are ALWAYS in tier 2 (z > 2.0) across all segments
 tier_2 = 2
 always_tier_2_mask = np.ones(img_shape, dtype=bool)
 
 for seg_idx in range(len(frame_0_list)):
+    # Check if this pixel is in tier 2 in this segment
     is_tier_2 = pixel_tier_tracker[seg_idx] == tier_2
     always_tier_2_mask = always_tier_2_mask & is_tier_2
 
 n_always_tier_2 = np.sum(always_tier_2_mask)
-console.print(f"Found {n_always_tier_2} pixels that are ALWAYS in tier 2 (1.0 < z <= 1.5)")
+console.print(f"Found {n_always_tier_2} pixels that are ALWAYS in tier 2 (z > 2.0)")
 
-# Find pixels that are ALWAYS in tier 1 (0.5 < z <= 1.0) across all segments
+# Find pixels that are ALWAYS in tier 1 (1.0 < z <= 2.0) across all segments
 tier_1 = 1
 always_tier_1_mask = np.ones(img_shape, dtype=bool)
 
@@ -316,9 +293,9 @@ for seg_idx in range(len(frame_0_list)):
     always_tier_1_mask = always_tier_1_mask & is_tier_1
 
 n_always_tier_1 = np.sum(always_tier_1_mask)
-console.print(f"Found {n_always_tier_1} pixels that are ALWAYS in tier 1 (0.5 < z <= 1.0)")
+console.print(f"Found {n_always_tier_1} pixels that are ALWAYS in tier 1 (1.0 < z <= 2.0)")
 
-# Find pixels that are ALWAYS in tier 0 (0.0 < z <= 0.5) across all segments
+# Find pixels that are ALWAYS in tier 0 (0.0 < z <= 1.0) across all segments
 tier_0 = 0
 always_tier_0_mask = np.ones(img_shape, dtype=bool)
 
@@ -327,64 +304,55 @@ for seg_idx in range(len(frame_0_list)):
     always_tier_0_mask = always_tier_0_mask & is_tier_0
 
 n_always_tier_0 = np.sum(always_tier_0_mask)
-console.print(f"Found {n_always_tier_0} pixels that are ALWAYS in tier 0 (0.0 < z <= 0.5)")
+console.print(f"Found {n_always_tier_0} pixels that are ALWAYS in tier 0 (0.0 < z <= 1.0)")
 
 # Create visualization
 fig_tier, ax_tier = plt.subplots(figsize=(10, 8))
 
 # Use the averaged Frame 0 as background
 avg_frame_0 = np.mean(frame_0_list, axis=0)
-im = ax_tier.imshow(avg_frame_0, cmap='gray', interpolation='nearest')
-plt.colorbar(im, ax=ax_tier, label='Average Z-Score (Frame 0)')
+im = ax_tier.imshow(avg_frame_0, cmap="gray", interpolation="nearest")
+plt.colorbar(im, ax=ax_tier, label="Average Z-Score (Frame 0)")
 
 # Create overlay for all tiers
 overlay = np.zeros((*img_shape, 4))  # RGBA
 
-# Tier 0 pixels in green
+# Tier 0 pixels in green (0-1)
 if n_always_tier_0 > 0:
     overlay[always_tier_0_mask] = [0, 1, 0, 0.7]  # Green with 70% opacity
 
-# Tier 1 pixels in blue
+# Tier 1 pixels in yellow (1-2)
 if n_always_tier_1 > 0:
-    overlay[always_tier_1_mask] = [0, 0, 1, 0.7]  # Blue with 70% opacity
+    overlay[always_tier_1_mask] = [1, 1, 0, 0.7]  # Yellow with 70% opacity
 
-# Tier 2 pixels in cyan
+# Tier 2 pixels in red (>2)
 if n_always_tier_2 > 0:
-    overlay[always_tier_2_mask] = [0, 1, 1, 0.7]  # Cyan with 70% opacity
-
-# Tier 3 pixels in yellow
-if n_always_tier_3 > 0:
-    overlay[always_tier_3_mask] = [1, 1, 0, 0.7]  # Yellow with 70% opacity
-
-# Tier 4 pixels in red (will overlay other tiers if there's any overlap)
-if n_always_tier_4 > 0:
-    overlay[always_tier_4_mask] = [1, 0, 0, 0.7]  # Red with 70% opacity
+    overlay[always_tier_2_mask] = [1, 0, 0, 0.7]  # Red with 70% opacity
 
 # Display overlay if there are any pixels
-if n_always_tier_0 > 0 or n_always_tier_1 > 0 or n_always_tier_2 > 0 or n_always_tier_3 > 0 or n_always_tier_4 > 0:
-    ax_tier.imshow(overlay, interpolation='nearest')
+if n_always_tier_0 > 0 or n_always_tier_1 > 0 or n_always_tier_2 > 0:
+    ax_tier.imshow(overlay, interpolation="nearest")
 
-title = f'Frame 0: Pixels Always in Tiers 0-4\n'
-title += f'Red (T4, z>2.0): {n_always_tier_4} | '
-title += f'Yellow (T3, 1.5-2.0): {n_always_tier_3} | '
-title += f'Cyan (T2, 1.0-1.5): {n_always_tier_2} | '
-title += f'Blue (T1, 0.5-1.0): {n_always_tier_1} | '
-title += f'Green (T0, 0.0-0.5): {n_always_tier_0}'
+title = "Frame 0: Pixels Always in Tiers 0-2\n"
+title += f"Red (T2, z>2.0): {n_always_tier_2} | "
+title += f"Yellow (T1, 1.0-2.0): {n_always_tier_1} | "
+title += f"Green (T0, 0.0-1.0): {n_always_tier_0}"
 ax_tier.set_title(title)
 
-ax_tier.set_xlabel('X (pixels)')
-ax_tier.set_ylabel('Y (pixels)')
+ax_tier.set_xlabel("X (pixels)")
+ax_tier.set_ylabel("Y (pixels)")
 
-# Show the tier analysis plot
-plt.show()
+# Don't show yet - will show all at once at the end
 
 # Save Frame 0 clean image (only colored pixels, transparent background)
 fig_clean_f0, ax_clean_f0 = plt.subplots(figsize=(10, 10))
-ax_clean_f0.imshow(overlay, interpolation='nearest')
-ax_clean_f0.axis('off')
+ax_clean_f0.imshow(overlay, interpolation="nearest")
+ax_clean_f0.axis("off")
 fig_clean_f0.patch.set_alpha(0)  # Transparent figure background
-ax_clean_f0.patch.set_alpha(0)   # Transparent axes background
-fig_clean_f0.savefig(output_dir / f"{img_base}_frame0_tiers_clean.png", dpi=300, bbox_inches='tight', pad_inches=0, transparent=True)
+ax_clean_f0.patch.set_alpha(0)  # Transparent axes background
+fig_clean_f0.savefig(
+    output_dir / f"{img_base}_frame0_tiers_clean.png", dpi=300, bbox_inches="tight", pad_inches=0, transparent=True
+)
 plt.close(fig_clean_f0)
 console.print(f"Saved clean Frame 0 image: {img_base}_frame0_tiers_clean.png")
 
@@ -436,71 +404,299 @@ for seg_idx, frame_1 in enumerate(frame_1_list):
 
 console.print(f"Classified Frame 1 pixels into tiers for all {len(frame_1_list)} segments")
 
-# Find pixels that are ALWAYS in tier 4 in Frame 1
-always_tier_4_mask_f1 = np.ones(img_shape, dtype=bool)
+# Find pixels that are ALWAYS in tier 2 in Frame 1
+always_tier_2_mask_f1 = np.ones(img_shape, dtype=bool)
 
 for seg_idx in range(len(frame_1_list)):
-    is_tier_4 = pixel_tier_tracker_f1[seg_idx] == tier_4
-    always_tier_4_mask_f1 = always_tier_4_mask_f1 & is_tier_4
+    is_tier_2 = pixel_tier_tracker_f1[seg_idx] == tier_2
+    always_tier_2_mask_f1 = always_tier_2_mask_f1 & is_tier_2
 
-n_always_tier_4_f1 = np.sum(always_tier_4_mask_f1)
-console.print(f"Found {n_always_tier_4_f1} pixels that are ALWAYS in tier 4 (z > 2.0) in Frame 1")
+n_always_tier_2_f1 = np.sum(always_tier_2_mask_f1)
+console.print(f"Found {n_always_tier_2_f1} pixels that are ALWAYS in tier 2 (z > 2.0) in Frame 1")
 
-# Find pixels that are ALWAYS in tier 3 in Frame 1
-always_tier_3_mask_f1 = np.ones(img_shape, dtype=bool)
+# Find pixels that are ALWAYS in tier 1 in Frame 1
+always_tier_1_mask_f1 = np.ones(img_shape, dtype=bool)
 
 for seg_idx in range(len(frame_1_list)):
-    is_tier_3 = pixel_tier_tracker_f1[seg_idx] == tier_3
-    always_tier_3_mask_f1 = always_tier_3_mask_f1 & is_tier_3
+    is_tier_1 = pixel_tier_tracker_f1[seg_idx] == tier_1
+    always_tier_1_mask_f1 = always_tier_1_mask_f1 & is_tier_1
 
-n_always_tier_3_f1 = np.sum(always_tier_3_mask_f1)
-console.print(f"Found {n_always_tier_3_f1} pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0) in Frame 1")
+n_always_tier_1_f1 = np.sum(always_tier_1_mask_f1)
+console.print(f"Found {n_always_tier_1_f1} pixels that are ALWAYS in tier 1 (1.0 < z <= 2.0) in Frame 1")
+
+# Find pixels that are ALWAYS in tier 0 in Frame 1
+always_tier_0_mask_f1 = np.ones(img_shape, dtype=bool)
+
+for seg_idx in range(len(frame_1_list)):
+    is_tier_0 = pixel_tier_tracker_f1[seg_idx] == tier_0
+    always_tier_0_mask_f1 = always_tier_0_mask_f1 & is_tier_0
+
+n_always_tier_0_f1 = np.sum(always_tier_0_mask_f1)
+console.print(f"Found {n_always_tier_0_f1} pixels that are ALWAYS in tier 0 (0.0 < z <= 1.0) in Frame 1")
 
 # Create visualization for Frame 1
 fig_tier_f1, ax_tier_f1 = plt.subplots(figsize=(10, 8))
 
 # Use the averaged Frame 1 as background
 avg_frame_1 = np.mean(frame_1_list, axis=0)
-im_f1 = ax_tier_f1.imshow(avg_frame_1, cmap='gray', interpolation='nearest')
-plt.colorbar(im_f1, ax=ax_tier_f1, label='Average Z-Score (Frame 1)')
+im_f1 = ax_tier_f1.imshow(avg_frame_1, cmap="gray", interpolation="nearest")
+plt.colorbar(im_f1, ax=ax_tier_f1, label="Average Z-Score (Frame 1)")
 
-# Create overlay for both tiers
+# Create overlay for all tiers
 overlay_f1 = np.zeros((*img_shape, 4))  # RGBA
 
-# Tier 3 pixels in yellow
-if n_always_tier_3_f1 > 0:
-    overlay_f1[always_tier_3_mask_f1] = [1, 1, 0, 0.7]  # Yellow with 70% opacity
+# Tier 0 pixels in green (0-1)
+if n_always_tier_0_f1 > 0:
+    overlay_f1[always_tier_0_mask_f1] = [0, 1, 0, 0.7]  # Green with 70% opacity
 
-# Tier 4 pixels in red (will overlay tier 3 if there's any overlap)
-if n_always_tier_4_f1 > 0:
-    overlay_f1[always_tier_4_mask_f1] = [1, 0, 0, 0.7]  # Red with 70% opacity
+# Tier 1 pixels in yellow (1-2)
+if n_always_tier_1_f1 > 0:
+    overlay_f1[always_tier_1_mask_f1] = [1, 1, 0, 0.7]  # Yellow with 70% opacity
+
+# Tier 2 pixels in red (>2)
+if n_always_tier_2_f1 > 0:
+    overlay_f1[always_tier_2_mask_f1] = [1, 0, 0, 0.7]  # Red with 70% opacity
 
 # Display overlay if there are any pixels
-if n_always_tier_3_f1 > 0 or n_always_tier_4_f1 > 0:
-    ax_tier_f1.imshow(overlay_f1, interpolation='nearest')
+if n_always_tier_0_f1 > 0 or n_always_tier_1_f1 > 0 or n_always_tier_2_f1 > 0:
+    ax_tier_f1.imshow(overlay_f1, interpolation="nearest")
 
-title_f1 = f'Frame 1: Pixels Always in Tier 3 or Tier 4\n'
-title_f1 += f'Red (Tier 4, z > 2.0): {n_always_tier_4_f1} pixels | '
-title_f1 += f'Yellow (Tier 3, 1.5 < z <= 2.0): {n_always_tier_3_f1} pixels'
+title_f1 = "Frame 1: Pixels Always in Tiers 0-2\n"
+title_f1 += f"Red (T2, z > 2.0): {n_always_tier_2_f1} pixels | "
+title_f1 += f"Yellow (T1, 1.0-2.0): {n_always_tier_1_f1} pixels | "
+title_f1 += f"Green (T0, 0.0-1.0): {n_always_tier_0_f1} pixels"
 ax_tier_f1.set_title(title_f1)
 
-ax_tier_f1.set_xlabel('X (pixels)')
-ax_tier_f1.set_ylabel('Y (pixels)')
+ax_tier_f1.set_xlabel("X (pixels)")
+ax_tier_f1.set_ylabel("Y (pixels)")
 
-# Show the Frame 1 tier analysis plot
-plt.show()
+# Don't show yet - will show all at once at the end
 
 # Save Frame 1 clean image (only colored pixels, transparent background)
 fig_clean_f1, ax_clean_f1 = plt.subplots(figsize=(10, 10))
-ax_clean_f1.imshow(overlay_f1, interpolation='nearest')
-ax_clean_f1.axis('off')
+ax_clean_f1.imshow(overlay_f1, interpolation="nearest")
+ax_clean_f1.axis("off")
 fig_clean_f1.patch.set_alpha(0)  # Transparent figure background
-ax_clean_f1.patch.set_alpha(0)   # Transparent axes background
-fig_clean_f1.savefig(output_dir / f"{img_base}_frame1_tiers_clean.png", dpi=300, bbox_inches='tight', pad_inches=0, transparent=True)
+ax_clean_f1.patch.set_alpha(0)  # Transparent axes background
+fig_clean_f1.savefig(
+    output_dir / f"{img_base}_frame1_tiers_clean.png", dpi=300, bbox_inches="tight", pad_inches=0, transparent=True
+)
 plt.close(fig_clean_f1)
 console.print(f"Saved clean Frame 1 image: {img_base}_frame1_tiers_clean.png")
 
 console.print("[bold green]Frame 1 analysis completed![/bold green]")
+
+# ============================================================================
+# NEW ANALYSIS: Averaged Z-Score Analysis (Frames 0-4)
+# ============================================================================
+console.print("\n=== Averaged Z-Score Analysis (Frames 0-4) ===")
+
+# Average frames 0 to 4 (spike frame and 4 frames after)
+console.print("Averaging frames 0 to 4 (spike + 4 after)...")
+averaged_frames_0_to_4_per_segment = []
+for i, segment in enumerate(lst_img_segments_zscore):
+    seg_length = len(segment)
+    spike_frame_idx = seg_length // 2  # Central frame (Frame 0)
+
+    # Extract frames 0 to 4 (spike and 4 frames after)
+    end_idx = min(spike_frame_idx + 5, seg_length)  # frames 0, 1, 2, 3, 4
+    frames_0_to_4 = segment[spike_frame_idx:end_idx]
+
+    # Average these frames
+    avg_0_to_4 = np.mean(frames_0_to_4, axis=0)
+    averaged_frames_0_to_4_per_segment.append(avg_0_to_4)
+
+console.print(f"Created {len(averaged_frames_0_to_4_per_segment)} averaged segments (frames 0-4)")
+
+# Average across all segments
+final_avg_frames_0_to_4 = np.mean(averaged_frames_0_to_4_per_segment, axis=0)
+console.print(f"Final averaged frame shape (frames 0-4): {final_avg_frames_0_to_4.shape}")
+
+# Create visualizations
+console.print("\nCreating visualizations...")
+
+
+# Function to create contour plot with tiers
+def create_tier_contour_plot(data, title_prefix, filename, magnification):
+    """Create a contour plot with tier-based classification"""
+    from matplotlib.patches import Rectangle
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    # Create meshgrid for contour
+    y, x = np.meshgrid(np.arange(data.shape[0]), np.arange(data.shape[1]), indexing="ij")
+
+    # Plot filled contours with tier levels
+    # Define contour levels based on tier ranges: 0-1, 1-2, >2
+    base_levels = [0.0, 1.0, 2.0]
+    data_max = data.max()
+
+    # Only include levels that are less than data max, then add data max
+    levels = [level for level in base_levels if level < data_max]
+    levels.append(data_max)
+
+    # Make sure we have at least 2 levels for contouring
+    if len(levels) < 2:
+        levels = [0.0, data_max]
+
+    # Create filled contour plot
+    contour_filled = ax.contourf(x, y, data, levels=levels, cmap="RdYlBu_r", alpha=0.8, extend="both")
+
+    # Add contour lines at tier boundaries
+    contour_lines = ax.contour(x, y, data, levels=levels, colors="black", linewidths=1.5, alpha=0.6)
+
+    # Label contour lines with z-score values
+    ax.clabel(contour_lines, inline=True, fontsize=10, fmt="%.1f")
+
+    # Add colorbar with tier labels
+    cbar = plt.colorbar(contour_filled, ax=ax, label="Z-Score")
+
+    # Add tier annotations to colorbar
+    tier_labels = ["T0: 0-1", "T1: 1-2", "T2: >2"]
+    tier_positions = [0.5, 1.5, 2.5]
+
+    # Add title with filename
+    ax.set_title(f"{title_prefix}\nZ-Score Contour with Tier Classification\nFile: {filename}", fontsize=14, pad=20)
+    ax.set_xlabel("X (pixels)", fontsize=12)
+    ax.set_ylabel("Y (pixels)", fontsize=12)
+    ax.set_aspect("equal")
+
+    # Invert y-axis to match image coordinates
+    ax.invert_yaxis()
+
+    # Add grid
+    ax.grid(True, alpha=0.3, linestyle="--")
+
+    # Calculate pixel size based on magnification
+    # Typical values for microscopy (adjust if needed)
+    pixel_size_dict = {
+        "10X": 0.645,  # micrometers per pixel
+        "40X": 0.16125,
+        "60X": 0.1075,
+    }
+    pixel_size = pixel_size_dict.get(magnification, 0.645)
+
+    # Add manual scale bar
+    # Determine a good scale bar length (e.g., 100 µm)
+    scalebar_length_um = 100  # micrometers
+    scalebar_length_pixels = scalebar_length_um / pixel_size
+
+    # Position scale bar in lower right corner
+    sb_x = data.shape[1] * 0.80  # Start at 80% across
+    sb_y = data.shape[0] * 0.05  # 5% from bottom
+
+    # Draw the scale bar in yellow
+    ax.plot([sb_x, sb_x + scalebar_length_pixels], [sb_y, sb_y], "y-", linewidth=4, solid_capstyle="butt")
+
+    # Add text label above the scale bar to avoid overlap
+    ax.text(
+        sb_x + scalebar_length_pixels / 2,
+        sb_y + data.shape[0] * 0.06,
+        f"{scalebar_length_um} µm",
+        ha="center",
+        va="bottom",
+        fontsize=12,
+        fontweight="bold",
+        color="yellow",
+        bbox=dict(boxstyle="round", facecolor="black", alpha=0.6, edgecolor="yellow"),
+    )
+
+    # Add statistics text
+    stats_text = f"Max Z: {data.max():.3f}\n"
+    stats_text += f"Mean Z: {data.mean():.3f}\n"
+    stats_text += f"Std Z: {data.std():.3f}"
+    ax.text(
+        0.02,
+        0.98,
+        stats_text,
+        transform=ax.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+    )
+
+    return fig, ax
+
+
+# Create image plot for averaged frames 0-4
+console.print("Creating image plot for frames 0-4 averaged...")
+fig_img_0to4, ax_img_0to4 = plt.subplots(figsize=(10, 8))
+
+im_avg = ax_img_0to4.imshow(final_avg_frames_0_to_4, cmap="gray", interpolation="nearest")
+plt.colorbar(im_avg, ax=ax_img_0to4, label="Average Z-Score (Frames 0-4)")
+
+ax_img_0to4.set_title(f"Averaged Z-Score Image (Frames 0-4: Spike + 4 After)\nFile: {img_file}", fontsize=14)
+ax_img_0to4.set_xlabel("X (pixels)", fontsize=12)
+ax_img_0to4.set_ylabel("Y (pixels)", fontsize=12)
+
+# Calculate pixel size based on magnification
+pixel_size_dict = {
+    "10X": 0.645,  # micrometers per pixel
+    "40X": 0.16125,
+    "60X": 0.1075,
+}
+pixel_size = pixel_size_dict.get(magnification, 0.645)
+
+# Add manual scale bar
+scalebar_length_um = 100  # micrometers
+scalebar_length_pixels = scalebar_length_um / pixel_size
+
+# Position scale bar in lower right corner
+sb_x = final_avg_frames_0_to_4.shape[1] * 0.80  # Start at 80% across
+sb_y = final_avg_frames_0_to_4.shape[0] * 0.05  # 5% from bottom
+
+# Draw the scale bar in yellow
+ax_img_0to4.plot([sb_x, sb_x + scalebar_length_pixels], [sb_y, sb_y], "y-", linewidth=4, solid_capstyle="butt")
+
+# Add text label above the scale bar to avoid overlap
+ax_img_0to4.text(
+    sb_x + scalebar_length_pixels / 2,
+    sb_y + final_avg_frames_0_to_4.shape[0] * 0.06,
+    f"{scalebar_length_um} µm",
+    ha="center",
+    va="bottom",
+    fontsize=12,
+    fontweight="bold",
+    color="yellow",
+    bbox=dict(boxstyle="round", facecolor="black", alpha=0.6, edgecolor="yellow"),
+)
+
+# Add statistics text
+stats_text_img = f"Max Z: {final_avg_frames_0_to_4.max():.3f}\n"
+stats_text_img += f"Mean Z: {final_avg_frames_0_to_4.mean():.3f}\n"
+stats_text_img += f"Std Z: {final_avg_frames_0_to_4.std():.3f}"
+ax_img_0to4.text(
+    0.02,
+    0.98,
+    stats_text_img,
+    transform=ax_img_0to4.transAxes,
+    fontsize=10,
+    verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+)
+
+# Save the image plot
+output_file_img = output_dir / f"{img_base}_zscore_image_frames0to4.png"
+fig_img_0to4.savefig(output_file_img, dpi=300, bbox_inches="tight")
+console.print(f"Saved z-score image (frames 0-4): {output_file_img.name}")
+
+# Create contour plot for frames 0-4 averaged
+console.print("Creating contour plot for frames 0-4 averaged...")
+fig_contour_0to4, ax_contour_0to4 = create_tier_contour_plot(
+    final_avg_frames_0_to_4, "Averaged Z-Score (Frames 0-4: Spike + 4 After)", img_file, magnification
+)
+plt.tight_layout()
+
+# Save the plot
+output_file_0to4 = output_dir / f"{img_base}_zscore_contour_frames0to4.png"
+fig_contour_0to4.savefig(output_file_0to4, dpi=300, bbox_inches="tight")
+console.print(f"Saved contour plot (frames 0-4): {output_file_0to4.name}")
+
+console.print("[bold green]Averaged Z-Score Analysis (Frames 0-4) completed![/bold green]")
+
+# Show all plots at once
+console.print("\n[bold cyan]Displaying all plots...[/bold cyan]")
+plt.show()
 
 # ============================================================================
 # K-means clustering section - DISABLED

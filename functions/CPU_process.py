@@ -18,7 +18,7 @@ log = logging.getLogger("rich")
 
 
 def process_on_cpu(
-    image_stack: np.ndarray, window_size: int = 101, sigma: float = 8.0
+    image_stack: np.ndarray, window_size: int = 101, sigma: float = 6.0
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Process image stack entirely on CPU using JIT.
