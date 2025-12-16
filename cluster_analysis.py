@@ -167,45 +167,6 @@ df_all_spikes = pd.DataFrame(lst_all_spikes)
 console.print("[bold green]\nAll Spikes[/bold green]")
 print(tabulate(df_all_spikes, headers="keys", showindex=False, tablefmt="pretty"))
 
-## K-means clustering analysis on first segment (for testing)
-# WHY: Test clustering approach on one segment before processing all
-# GOAL: Identify neural activity regions during spike events
-
-# if lst_img_segments:
-#     console.print("\n=== K-means Clustering Analysis ===")
-#     console.print("Processing first segment for testing...")
-
-#     # Choose which segment to analyze
-#     seg_idx = 108  # Change this to test different segments
-#     test_seg = lst_img_segments[seg_idx]
-#     console.print(f"Analyzing segment {seg_idx}")
-#     console.print(f"Segment shape: {test_seg.shape} (frames, height, width)")
-
-#     # Apply k-means to all frames in this segment
-#     clustered_frames, frame_centers = process_segment_kmeans(test_seg, n_clusters=3)
-
-#     console.print(f"Clustering completed! {len(clustered_frames)} frames processed")
-
-#     # Show cluster centers for each frame
-#     for i, centers in enumerate(frame_centers):
-#         console.print(f"Frame {i + 1} cluster centers: {centers}")
-
-#     # Create a list of spiking traces for each frame in the segment
-#     spike_trace = [lst_time_segments[seg_idx], lst_abf_segments[seg_idx]]
-
-#     # Visualize results
-#     console.print("Generating visualization...")
-#     # Calculate actual frame indices for THIS specific segment
-#     spike_frame = frame_indices[seg_idx]  # Spike frame for this segment
-#     seg_length = len(test_seg)
-#     frames_each_side = (seg_length - 1) // 2  # Frames on each side of spike
-#     start_frame = spike_frame - frames_each_side
-#     span_of_frames = list(range(start_frame, start_frame + seg_length))
-
-#     visualize_clustering_results(test_seg, clustered_frames, spike_trace, span_of_frames, seg_index=seg_idx)
-
-# else:
-#     console.print("No segments available for clustering analysis")
 
 # Z-score normalization using baseline frames (all frames before spike)
 console.print("\n=== Z-score Normalization ===")
