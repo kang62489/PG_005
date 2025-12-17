@@ -8,7 +8,8 @@
       "WebFetch(domain:code.claude.com)",
       "WebSearch",
       "Bash(python cluster_analysis.py:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(python -m py_compile:*)"
     ],
     "deny": []
   }
