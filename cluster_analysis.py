@@ -235,16 +235,16 @@ console.print(f"Maximum positive z-score: {max_zscore:.3f}")
 
 # Define fixed tier ranges: 0-0.5, 0.5-1, 1-1.5, 1.5-2, >2
 tier_ranges = [
-    (0.0, 0.5),    # Tier 0
-    (0.5, 1.0),    # Tier 1
-    (1.0, 1.5),    # Tier 2
-    (1.5, 2.0),    # Tier 3
-    (2.0, np.inf)  # Tier 4
+    (0.0, 0.5),  # Tier 0
+    (0.5, 1.0),  # Tier 1
+    (1.0, 1.5),  # Tier 2
+    (1.5, 2.0),  # Tier 3
+    (2.0, np.inf),  # Tier 4
 ]
 n_tiers = len(tier_ranges)
 
 console.print(f"Number of tiers: {n_tiers}")
-console.print(f"Tier ranges:")
+console.print("Tier ranges:")
 for tier, (lower, upper) in enumerate(tier_ranges):
     if np.isinf(upper):
         console.print(f"  Tier {tier}: {lower:.1f} < z")
@@ -254,7 +254,9 @@ for tier, (lower, upper) in enumerate(tier_ranges):
 # Classify pixels into tiers for all segments
 # For each pixel position, track which tier it belongs to in each segment
 img_shape = frame_0_list[0].shape
-pixel_tier_tracker = np.zeros((len(frame_0_list), img_shape[0], img_shape[1]), dtype=int) - 1  # -1 means not positive or no tier
+pixel_tier_tracker = (
+    np.zeros((len(frame_0_list), img_shape[0], img_shape[1]), dtype=int) - 1
+)  # -1 means not positive or no tier
 
 for seg_idx, frame_0 in enumerate(frame_0_list):
     # Classify each pixel
@@ -272,235 +274,460 @@ for seg_idx, frame_0 in enumerate(frame_0_list):
 
 console.print(f"Classified pixels into tiers for all {len(frame_0_list)} segments")
 
-# Find pixels that are ALWAYS in tier 4 (z > 2.0) across all segments
-tier_4 = 4
-always_tier_4_mask = np.ones(img_shape, dtype=bool)
+# Frequency-based approach: Find pixels with z > 0.5 and count how often they appear
+console.print("\n=== Frequency-based analysis (z > 0.5) ===")
 
-for seg_idx in range(len(frame_0_list)):
-    # Check if this pixel is in tier 4 in this segment
-    is_tier_4 = pixel_tier_tracker[seg_idx] == tier_4
-    always_tier_4_mask = always_tier_4_mask & is_tier_4
+z_threshold = 0.5
+n_segments = len(frame_0_list)
 
-n_always_tier_4 = np.sum(always_tier_4_mask)
-console.print(f"Found {n_always_tier_4} pixels that are ALWAYS in tier 4 (z > 2.0)")
+# Count how many segments each pixel appears in (with z > threshold)
+pixel_frequency = np.zeros(img_shape, dtype=int)
 
-# Find pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0) across all segments
-tier_3 = 3
-always_tier_3_mask = np.ones(img_shape, dtype=bool)
+for seg_idx, frame_0 in enumerate(frame_0_list):
+    # Find pixels above threshold in this segment
+    above_threshold = frame_0 > z_threshold
+    pixel_frequency += above_threshold.astype(int)
 
-for seg_idx in range(len(frame_0_list)):
-    # Check if this pixel is in tier 3 in this segment
-    is_tier_3 = pixel_tier_tracker[seg_idx] == tier_3
-    always_tier_3_mask = always_tier_3_mask & is_tier_3
+# Report pixels at different frequency thresholds
+frequency_percentages = [50, 60, 70, 80, 90, 99, 100]
+console.print(f"\nTotal segments: {n_segments}")
+console.print(f"Threshold: z > {z_threshold}\n")
 
-n_always_tier_3 = np.sum(always_tier_3_mask)
-console.print(f"Found {n_always_tier_3} pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0)")
+pixel_masks = {}
+for freq_pct in frequency_percentages:
+    freq_threshold = int(np.ceil(n_segments * freq_pct / 100))
+    mask = pixel_frequency >= freq_threshold
+    n_pixels = np.sum(mask)
+    pixel_masks[freq_pct] = mask
+    console.print(f"Pixels appearing in >={freq_pct}% of segments (>={freq_threshold}/{n_segments}): {n_pixels}")
 
-# Find pixels that are ALWAYS in tier 2 (1.0 < z <= 1.5) across all segments
-tier_2 = 2
-always_tier_2_mask = np.ones(img_shape, dtype=bool)
+# Create visualizations for frequency-based analysis
+console.print("\n[cyan]Creating frequency-based visualizations...[/cyan]")
 
-for seg_idx in range(len(frame_0_list)):
-    is_tier_2 = pixel_tier_tracker[seg_idx] == tier_2
-    always_tier_2_mask = always_tier_2_mask & is_tier_2
-
-n_always_tier_2 = np.sum(always_tier_2_mask)
-console.print(f"Found {n_always_tier_2} pixels that are ALWAYS in tier 2 (1.0 < z <= 1.5)")
-
-# Find pixels that are ALWAYS in tier 1 (0.5 < z <= 1.0) across all segments
-tier_1 = 1
-always_tier_1_mask = np.ones(img_shape, dtype=bool)
-
-for seg_idx in range(len(frame_0_list)):
-    is_tier_1 = pixel_tier_tracker[seg_idx] == tier_1
-    always_tier_1_mask = always_tier_1_mask & is_tier_1
-
-n_always_tier_1 = np.sum(always_tier_1_mask)
-console.print(f"Found {n_always_tier_1} pixels that are ALWAYS in tier 1 (0.5 < z <= 1.0)")
-
-# Find pixels that are ALWAYS in tier 0 (0.0 < z <= 0.5) across all segments
-tier_0 = 0
-always_tier_0_mask = np.ones(img_shape, dtype=bool)
-
-for seg_idx in range(len(frame_0_list)):
-    is_tier_0 = pixel_tier_tracker[seg_idx] == tier_0
-    always_tier_0_mask = always_tier_0_mask & is_tier_0
-
-n_always_tier_0 = np.sum(always_tier_0_mask)
-console.print(f"Found {n_always_tier_0} pixels that are ALWAYS in tier 0 (0.0 < z <= 0.5)")
-
-# Create visualization
-fig_tier, ax_tier = plt.subplots(figsize=(10, 8))
-
-# Use the averaged Frame 0 as background
+# Calculate average Frame 0 for background
 avg_frame_0 = np.mean(frame_0_list, axis=0)
-im = ax_tier.imshow(avg_frame_0, cmap='gray', interpolation='nearest')
-plt.colorbar(im, ax=ax_tier, label='Average Z-Score (Frame 0)')
 
-# Create overlay for all tiers
-overlay = np.zeros((*img_shape, 4))  # RGBA
+# Create a multi-panel figure showing different frequency thresholds
+fig_freq, axes = plt.subplots(2, 4, figsize=(20, 10))
+axes = axes.flatten()
 
-# Tier 0 pixels in green
-if n_always_tier_0 > 0:
-    overlay[always_tier_0_mask] = [0, 1, 0, 0.7]  # Green with 70% opacity
+# Color scheme for frequency thresholds
+colors = {
+    50: [0, 1, 0, 0.6],  # Green - 50%
+    60: [0, 1, 1, 0.6],  # Cyan - 60%
+    70: [0, 0, 1, 0.6],  # Blue - 70%
+    80: [1, 1, 0, 0.6],  # Yellow - 80%
+    90: [1, 0.5, 0, 0.7],  # Orange - 90%
+    99: [1, 0, 0, 0.8],  # Red - 99%
+    100: [1, 0, 1, 0.9],  # Magenta - 100%
+}
 
-# Tier 1 pixels in blue
-if n_always_tier_1 > 0:
-    overlay[always_tier_1_mask] = [0, 0, 1, 0.7]  # Blue with 70% opacity
+for idx, freq_pct in enumerate(frequency_percentages):
+    ax = axes[idx]
 
-# Tier 2 pixels in cyan
-if n_always_tier_2 > 0:
-    overlay[always_tier_2_mask] = [0, 1, 1, 0.7]  # Cyan with 70% opacity
+    # Show average Frame 0 as background
+    ax.imshow(avg_frame_0, cmap="gray", interpolation="nearest", vmin=0, vmax=np.percentile(avg_frame_0, 99))
 
-# Tier 3 pixels in yellow
-if n_always_tier_3 > 0:
-    overlay[always_tier_3_mask] = [1, 1, 0, 0.7]  # Yellow with 70% opacity
+    # Create overlay for this frequency threshold
+    overlay = np.zeros((*img_shape, 4))
+    mask = pixel_masks[freq_pct]
+    overlay[mask] = colors[freq_pct]
 
-# Tier 4 pixels in red (will overlay other tiers if there's any overlap)
-if n_always_tier_4 > 0:
-    overlay[always_tier_4_mask] = [1, 0, 0, 0.7]  # Red with 70% opacity
+    # Display overlay
+    ax.imshow(overlay, interpolation="nearest")
 
-# Display overlay if there are any pixels
-if n_always_tier_0 > 0 or n_always_tier_1 > 0 or n_always_tier_2 > 0 or n_always_tier_3 > 0 or n_always_tier_4 > 0:
-    ax_tier.imshow(overlay, interpolation='nearest')
+    freq_threshold = int(np.ceil(n_segments * freq_pct / 100))
+    n_pixels = np.sum(mask)
+    ax.set_title(f"≥{freq_pct}% (≥{freq_threshold}/{n_segments} segments)\n{n_pixels:,} pixels", fontsize=10)
+    ax.axis("off")
 
-title = f'Frame 0: Pixels Always in Tiers 0-4\n'
-title += f'Red (T4, z>2.0): {n_always_tier_4} | '
-title += f'Yellow (T3, 1.5-2.0): {n_always_tier_3} | '
-title += f'Cyan (T2, 1.0-1.5): {n_always_tier_2} | '
-title += f'Blue (T1, 0.5-1.0): {n_always_tier_1} | '
-title += f'Green (T0, 0.0-0.5): {n_always_tier_0}'
-ax_tier.set_title(title)
+# Remove the extra subplot
+axes[7].axis("off")
 
-ax_tier.set_xlabel('X (pixels)')
-ax_tier.set_ylabel('Y (pixels)')
-
-# Show the tier analysis plot
+fig_freq.suptitle(
+    f"Frequency-Based Seed Pixels (z > {z_threshold} in Frame 0)\nFile: {img_file}", fontsize=14, fontweight="bold"
+)
+plt.tight_layout()
 plt.show()
 
-# Save Frame 0 clean image (only colored pixels, transparent background)
-fig_clean_f0, ax_clean_f0 = plt.subplots(figsize=(10, 10))
-ax_clean_f0.imshow(overlay, interpolation='nearest')
-ax_clean_f0.axis('off')
-fig_clean_f0.patch.set_alpha(0)  # Transparent figure background
-ax_clean_f0.patch.set_alpha(0)   # Transparent axes background
-fig_clean_f0.savefig(output_dir / f"{img_base}_frame0_tiers_clean.png", dpi=300, bbox_inches='tight', pad_inches=0, transparent=True)
-plt.close(fig_clean_f0)
-console.print(f"Saved clean Frame 0 image: {img_base}_frame0_tiers_clean.png")
+# Save the frequency analysis figure
+fig_freq.savefig(output_dir / f"{img_base}_frequency_analysis.png", dpi=300, bbox_inches="tight")
+console.print(f"Saved frequency analysis: {img_base}_frequency_analysis.png")
 
-console.print("[bold green]Frame 0 analysis completed![/bold green]")
+# Create a combined overlay showing all thresholds in one plot
+fig_combined, ax_combined = plt.subplots(figsize=(12, 10))
+
+# Show average Frame 0 as background
+im_bg = ax_combined.imshow(
+    avg_frame_0, cmap="gray", interpolation="nearest", vmin=0, vmax=np.percentile(avg_frame_0, 99)
+)
+plt.colorbar(im_bg, ax=ax_combined, label="Average Z-Score (Frame 0)", fraction=0.046)
+
+# Create overlay showing highest frequency pixels on top
+overlay_combined = np.zeros((*img_shape, 4))
+
+# Layer from lowest to highest frequency (so highest is on top)
+for freq_pct in [50, 60, 70, 80, 90, 99, 100]:
+    mask = pixel_masks[freq_pct]
+    overlay_combined[mask] = colors[freq_pct]
+
+ax_combined.imshow(overlay_combined, interpolation="nearest")
+
+# Create legend
+from matplotlib.patches import Patch
+
+legend_elements = [
+    Patch(facecolor=colors[100], label=f"100% ({np.sum(pixel_masks[100]):,} px)"),
+    Patch(facecolor=colors[99], label=f"99% ({np.sum(pixel_masks[99]):,} px)"),
+    Patch(facecolor=colors[90], label=f"90% ({np.sum(pixel_masks[90]):,} px)"),
+    Patch(facecolor=colors[80], label=f"80% ({np.sum(pixel_masks[80]):,} px)"),
+    Patch(facecolor=colors[70], label=f"70% ({np.sum(pixel_masks[70]):,} px)"),
+    Patch(facecolor=colors[60], label=f"60% ({np.sum(pixel_masks[60]):,} px)"),
+    Patch(facecolor=colors[50], label=f"50% ({np.sum(pixel_masks[50]):,} px)"),
+]
+ax_combined.legend(handles=legend_elements, loc="upper right", fontsize=10, title="Frequency Threshold")
+
+ax_combined.set_title(
+    f"Combined Frequency Analysis (z > {z_threshold} in Frame 0)\nFile: {img_file}", fontsize=12, fontweight="bold"
+)
+ax_combined.set_xlabel("X (pixels)")
+ax_combined.set_ylabel("Y (pixels)")
+
+plt.tight_layout()
+plt.show()
+
+# Save the combined figure
+fig_combined.savefig(output_dir / f"{img_base}_frequency_combined.png", dpi=300, bbox_inches="tight")
+console.print(f"Saved combined frequency plot: {img_base}_frequency_combined.png")
+
+# Save the 100% frequency mask as a clean overlay (transparent background)
+fig_clean_100, ax_clean_100 = plt.subplots(figsize=(10, 10))
+overlay_100 = np.zeros((*img_shape, 4))
+overlay_100[pixel_masks[100]] = [1, 0, 1, 1]  # Magenta, full opacity
+ax_clean_100.imshow(overlay_100, interpolation="nearest")
+ax_clean_100.axis("off")
+fig_clean_100.patch.set_alpha(0)
+ax_clean_100.patch.set_alpha(0)
+fig_clean_100.savefig(
+    output_dir / f"{img_base}_seeds_100pct_clean.png", dpi=300, bbox_inches="tight", pad_inches=0, transparent=True
+)
+plt.close(fig_clean_100)
+console.print(f"Saved 100% seed pixels (clean): {img_base}_seeds_100pct_clean.png")
+
+console.print("[bold green]Frequency-based analysis completed![/bold green]")
 
 # ============================================================================
-# Analyze Frame 1 (first frame after spike)
+# Analyze individual segment contributions
 # ============================================================================
-console.print("\n=== Frame 1 Positive Z-Score Analysis ===")
+console.print("\n=== Individual Segment Analysis ===")
 
-# Extract Frame 1 from all segments
-frame_1_list = []
-for i, segment in enumerate(lst_img_segments_zscore):
-    seg_length = len(segment)
-    spike_frame_idx = seg_length // 2  # Central frame is Frame 0
-    frame_1_idx = spike_frame_idx + 1  # Frame 1 is one frame after spike
+# For each segment, analyze how many pixels have z > threshold
+segment_stats = []
+for seg_idx, frame_0 in enumerate(frame_0_list):
+    above_threshold = frame_0 > z_threshold
+    n_pixels_above = np.sum(above_threshold)
 
-    if frame_1_idx < seg_length:
-        frame_1 = segment[frame_1_idx]
-        frame_1_list.append(frame_1)
-    else:
-        console.print(f"[yellow]Warning: Segment {i} too short to have Frame 1[/yellow]")
+    # Check overlap with 100% frequency pixels
+    overlap_with_100pct = np.sum(above_threshold & pixel_masks[100])
 
-console.print(f"Extracted Frame 1 from {len(frame_1_list)} segments")
+    # Check how many 100% pixels this segment is MISSING
+    missing_100pct = np.sum(pixel_masks[100] & ~above_threshold)
 
-# Find maximum z-score value in Frame 1
-max_zscore_f1 = 0
-for frame_1 in frame_1_list:
-    positive_pixels = frame_1[frame_1 > 0]
-    if len(positive_pixels) > 0:
-        max_zscore_f1 = max(max_zscore_f1, np.max(positive_pixels))
+    segment_stats.append(
+        {
+            "Segment": seg_idx,
+            "Pixels > threshold": n_pixels_above,
+            "Overlap w/ 100% seeds": overlap_with_100pct,
+            "Missing 100% seeds": missing_100pct,
+        }
+    )
 
-console.print(f"Maximum positive z-score in Frame 1: {max_zscore_f1:.3f}")
+# Create DataFrame for better display
+df_segments = pd.DataFrame(segment_stats)
 
-# Classify pixels into tiers for Frame 1
-pixel_tier_tracker_f1 = np.zeros((len(frame_1_list), img_shape[0], img_shape[1]), dtype=int) - 1
+# Sort by missing 100% seeds (descending) to find problematic segments
+df_segments_sorted = df_segments.sort_values("Missing 100% seeds", ascending=False)
 
-for seg_idx, frame_1 in enumerate(frame_1_list):
-    tier_map = np.zeros(img_shape, dtype=int) - 1
+console.print("\n[bold cyan]Segments sorted by missing 100% seed pixels:[/bold cyan]")
+print(tabulate(df_segments_sorted, headers="keys", showindex=False, tablefmt="pretty"))
 
-    for tier, (lower, upper) in enumerate(tier_ranges):
-        if np.isinf(upper):
-            mask = frame_1 > lower
+# Identify segments that are missing ANY of the 100% seed pixels
+problematic_segments = df_segments_sorted[df_segments_sorted["Missing 100% seeds"] > 0]["Segment"].tolist()
+
+if len(problematic_segments) > 0:
+    console.print(
+        f"\n[yellow]WARNING: {len(problematic_segments)} segments are missing some 100% seed pixels![/yellow]"
+    )
+    console.print(f"Problematic segments: {problematic_segments}")
+else:
+    console.print("\n[bold green]All segments contain all 100% seed pixels![/bold green]")
+
+# Additional analysis: Find which segments would most reduce the seed count if removed
+console.print("\n=== Segment Removal Impact Analysis ===")
+
+removal_impact = []
+for seg_to_remove in range(n_segments):
+    # Recompute frequency without this segment
+    pixel_freq_without = np.zeros(img_shape, dtype=int)
+
+    for seg_idx, frame_0 in enumerate(frame_0_list):
+        if seg_idx == seg_to_remove:
+            continue
+        above_threshold = frame_0 > z_threshold
+        pixel_freq_without += above_threshold.astype(int)
+
+    # Count pixels that appear in ALL remaining segments
+    new_100pct_count = np.sum(pixel_freq_without >= (n_segments - 1))
+
+    removal_impact.append(
+        {
+            "Removed Segment": seg_to_remove,
+            "100% pixels after removal": new_100pct_count,
+            "Gain in 100% pixels": new_100pct_count - np.sum(pixel_masks[100]),
+        }
+    )
+
+df_removal = pd.DataFrame(removal_impact)
+df_removal_sorted = df_removal.sort_values("Gain in 100% pixels", ascending=False)
+
+console.print("\n[bold cyan]Impact of removing each segment (top 10 by gain):[/bold cyan]")
+print(tabulate(df_removal_sorted.head(10), headers="keys", showindex=False, tablefmt="pretty"))
+
+# Identify the worst offender
+worst_segment = df_removal_sorted.iloc[0]["Removed Segment"]
+max_gain = df_removal_sorted.iloc[0]["Gain in 100% pixels"]
+
+if max_gain > 0:
+    console.print(f"\n[bold yellow]Segment {int(worst_segment)} is the biggest outlier![/bold yellow]")
+    console.print(f"Removing it would increase 100% seed pixels by {int(max_gain)} pixels")
+    console.print(
+        f"From {np.sum(pixel_masks[100]):,} to {int(df_removal_sorted.iloc[0]['100% pixels after removal']):,} pixels"
+    )
+else:
+    console.print("\n[bold green]No single segment is a significant outlier.[/bold green]")
+
+console.print("[bold green]Segment analysis completed![/bold green]")
+
+# ============================================================================
+# Exclude outlier segments and recompute frequency analysis
+# ============================================================================
+console.print("\n=== Auto-detecting Highest Survival Rate ===")
+
+# Automatically find the highest frequency threshold that has pixels
+reference_freq_pct = None
+for freq_pct in reversed(frequency_percentages):  # Check from 100%, 99%, 90%, etc.
+    n_pixels_at_freq = np.sum(pixel_masks[freq_pct])
+    if n_pixels_at_freq > 0:
+        reference_freq_pct = freq_pct
+        console.print(f"Highest survival rate with pixels: {freq_pct}% ({n_pixels_at_freq} pixels)")
+        break
+
+if reference_freq_pct is None:
+    console.print("[bold red]No frequency threshold has any pixels! Cannot proceed with filtering.[/bold red]")
+else:
+    console.print(f"\n=== Excluding Outlier Segments Based on {reference_freq_pct}% Frequency Pixels ===")
+
+    reference_mask = pixel_masks[reference_freq_pct]
+    n_reference_pixels = np.sum(reference_mask)
+
+    console.print(f"Reference: {reference_freq_pct}% frequency mask with {n_reference_pixels} pixels")
+
+    # Find segments that are missing ANY of the reference pixels
+    segments_to_exclude = []
+    for seg_idx, frame_0 in enumerate(frame_0_list):
+        above_threshold = frame_0 > z_threshold
+        # Check how many reference pixels this segment is missing
+        missing_reference = np.sum(reference_mask & ~above_threshold)
+
+        if missing_reference > 0:
+            segments_to_exclude.append(seg_idx)
+            console.print(
+                f"Segment {seg_idx}: missing {missing_reference}/{n_reference_pixels} reference pixels - EXCLUDED"
+            )
+
+    console.print(f"\nTotal segments to exclude: {len(segments_to_exclude)}")
+    console.print(f"Excluded segments: {segments_to_exclude}")
+
+    if len(segments_to_exclude) > 0:
+        console.print(
+            f"\n[yellow]Excluding {len(segments_to_exclude)} segments that are missing {reference_freq_pct}% frequency pixels[/yellow]"
+        )
+
+        # Create filtered frame list
+        frame_0_list_filtered = [frame_0_list[i] for i in range(len(frame_0_list)) if i not in segments_to_exclude]
+        n_segments_filtered = len(frame_0_list_filtered)
+
+        # Check if we have enough segments left
+        if n_segments_filtered == 0:
+            console.print(
+                f"[bold red]All {n_segments} segments were excluded! No segments left for analysis.[/bold red]"
+            )
         else:
-            mask = (frame_1 > lower) & (frame_1 <= upper)
-        tier_map[mask] = tier
+            # Recompute frequency analysis without outlier segments
+            console.print("\n[cyan]Recomputing frequency analysis without outliers...[/cyan]")
+            console.print(f"Analyzing {n_segments_filtered} segments (excluded {len(segments_to_exclude)} outliers)")
 
-    pixel_tier_tracker_f1[seg_idx] = tier_map
+            # Recompute pixel frequency without outliers
+            pixel_frequency_filtered = np.zeros(img_shape, dtype=int)
 
-console.print(f"Classified Frame 1 pixels into tiers for all {len(frame_1_list)} segments")
+            for frame_0 in frame_0_list_filtered:
+                above_threshold = frame_0 > z_threshold
+                pixel_frequency_filtered += above_threshold.astype(int)
 
-# Find pixels that are ALWAYS in tier 4 in Frame 1
-always_tier_4_mask_f1 = np.ones(img_shape, dtype=bool)
+            # Report pixels at different frequency thresholds
+            console.print(f"\nFiltered analysis - Total segments: {n_segments_filtered}")
+            console.print(f"Threshold: z > {z_threshold}\n")
 
-for seg_idx in range(len(frame_1_list)):
-    is_tier_4 = pixel_tier_tracker_f1[seg_idx] == tier_4
-    always_tier_4_mask_f1 = always_tier_4_mask_f1 & is_tier_4
+            pixel_masks_filtered = {}
+            for freq_pct in frequency_percentages:
+                freq_threshold = int(np.ceil(n_segments_filtered * freq_pct / 100))
+                mask = pixel_frequency_filtered >= freq_threshold
+                n_pixels = np.sum(mask)
+                pixel_masks_filtered[freq_pct] = mask
+                console.print(
+                    f"Pixels appearing in >={freq_pct}% of segments (>={freq_threshold}/{n_segments_filtered}): {n_pixels}"
+                )
 
-n_always_tier_4_f1 = np.sum(always_tier_4_mask_f1)
-console.print(f"Found {n_always_tier_4_f1} pixels that are ALWAYS in tier 4 (z > 2.0) in Frame 1")
+            # Compare with original
+            original_100pct = np.sum(pixel_masks[100])
+            filtered_100pct = np.sum(pixel_masks_filtered[100])
+            improvement = filtered_100pct - original_100pct
 
-# Find pixels that are ALWAYS in tier 3 in Frame 1
-always_tier_3_mask_f1 = np.ones(img_shape, dtype=bool)
+            console.print("\n[bold green]Improvement:[/bold green]")
+            console.print(f"Original 100% seeds: {original_100pct:,} pixels")
+            console.print(f"Filtered 100% seeds: {filtered_100pct:,} pixels")
+            console.print(f"Gain: {improvement:,} pixels ({improvement / original_100pct * 100:.1f}% increase)")
 
-for seg_idx in range(len(frame_1_list)):
-    is_tier_3 = pixel_tier_tracker_f1[seg_idx] == tier_3
-    always_tier_3_mask_f1 = always_tier_3_mask_f1 & is_tier_3
+            # Create visualization for filtered analysis
+            console.print("\n[cyan]Creating filtered frequency visualizations...[/cyan]")
 
-n_always_tier_3_f1 = np.sum(always_tier_3_mask_f1)
-console.print(f"Found {n_always_tier_3_f1} pixels that are ALWAYS in tier 3 (1.5 < z <= 2.0) in Frame 1")
+            # Calculate average Frame 0 for filtered segments
+            avg_frame_0_filtered = np.mean(frame_0_list_filtered, axis=0)
 
-# Create visualization for Frame 1
-fig_tier_f1, ax_tier_f1 = plt.subplots(figsize=(10, 8))
+            # Create a multi-panel figure for filtered analysis
+            fig_freq_filt, axes_filt = plt.subplots(2, 4, figsize=(20, 10))
+            axes_filt = axes_filt.flatten()
 
-# Use the averaged Frame 1 as background
-avg_frame_1 = np.mean(frame_1_list, axis=0)
-im_f1 = ax_tier_f1.imshow(avg_frame_1, cmap='gray', interpolation='nearest')
-plt.colorbar(im_f1, ax=ax_tier_f1, label='Average Z-Score (Frame 1)')
+            for idx, freq_pct in enumerate(frequency_percentages):
+                ax = axes_filt[idx]
 
-# Create overlay for both tiers
-overlay_f1 = np.zeros((*img_shape, 4))  # RGBA
+                # Show average Frame 0 as background
+                ax.imshow(
+                    avg_frame_0_filtered,
+                    cmap="gray",
+                    interpolation="nearest",
+                    vmin=0,
+                    vmax=np.percentile(avg_frame_0_filtered, 99),
+                )
 
-# Tier 3 pixels in yellow
-if n_always_tier_3_f1 > 0:
-    overlay_f1[always_tier_3_mask_f1] = [1, 1, 0, 0.7]  # Yellow with 70% opacity
+                # Create overlay for this frequency threshold
+                overlay = np.zeros((*img_shape, 4))
+                mask = pixel_masks_filtered[freq_pct]
+                overlay[mask] = colors[freq_pct]
 
-# Tier 4 pixels in red (will overlay tier 3 if there's any overlap)
-if n_always_tier_4_f1 > 0:
-    overlay_f1[always_tier_4_mask_f1] = [1, 0, 0, 0.7]  # Red with 70% opacity
+                # Display overlay
+                ax.imshow(overlay, interpolation="nearest")
 
-# Display overlay if there are any pixels
-if n_always_tier_3_f1 > 0 or n_always_tier_4_f1 > 0:
-    ax_tier_f1.imshow(overlay_f1, interpolation='nearest')
+                freq_threshold = int(np.ceil(n_segments_filtered * freq_pct / 100))
+                n_pixels = np.sum(mask)
+                ax.set_title(
+                    f"≥{freq_pct}% (≥{freq_threshold}/{n_segments_filtered} segments)\n{n_pixels:,} pixels", fontsize=10
+                )
+                ax.axis("off")
 
-title_f1 = f'Frame 1: Pixels Always in Tier 3 or Tier 4\n'
-title_f1 += f'Red (Tier 4, z > 2.0): {n_always_tier_4_f1} pixels | '
-title_f1 += f'Yellow (Tier 3, 1.5 < z <= 2.0): {n_always_tier_3_f1} pixels'
-ax_tier_f1.set_title(title_f1)
+            # Remove the extra subplot
+            axes_filt[7].axis("off")
 
-ax_tier_f1.set_xlabel('X (pixels)')
-ax_tier_f1.set_ylabel('Y (pixels)')
+            fig_freq_filt.suptitle(
+                f"Filtered Frequency-Based Seed Pixels (z > {z_threshold} in Frame 0)\nFile: {img_file}\nExcluded segments: {segments_to_exclude}",
+                fontsize=14,
+                fontweight="bold",
+            )
+            plt.tight_layout()
+            plt.show()
 
-# Show the Frame 1 tier analysis plot
-plt.show()
+            # Save the filtered frequency analysis figure
+            fig_freq_filt.savefig(
+                output_dir / f"{img_base}_frequency_analysis_filtered.png", dpi=300, bbox_inches="tight"
+            )
+            console.print(f"Saved filtered frequency analysis: {img_base}_frequency_analysis_filtered.png")
 
-# Save Frame 1 clean image (only colored pixels, transparent background)
-fig_clean_f1, ax_clean_f1 = plt.subplots(figsize=(10, 10))
-ax_clean_f1.imshow(overlay_f1, interpolation='nearest')
-ax_clean_f1.axis('off')
-fig_clean_f1.patch.set_alpha(0)  # Transparent figure background
-ax_clean_f1.patch.set_alpha(0)   # Transparent axes background
-fig_clean_f1.savefig(output_dir / f"{img_base}_frame1_tiers_clean.png", dpi=300, bbox_inches='tight', pad_inches=0, transparent=True)
-plt.close(fig_clean_f1)
-console.print(f"Saved clean Frame 1 image: {img_base}_frame1_tiers_clean.png")
+            # Create a combined overlay for filtered analysis
+            fig_combined_filt, ax_combined_filt = plt.subplots(figsize=(12, 10))
 
-console.print("[bold green]Frame 1 analysis completed![/bold green]")
+            # Show average Frame 0 as background
+            im_bg_filt = ax_combined_filt.imshow(
+                avg_frame_0_filtered,
+                cmap="gray",
+                interpolation="nearest",
+                vmin=0,
+                vmax=np.percentile(avg_frame_0_filtered, 99),
+            )
+            plt.colorbar(im_bg_filt, ax=ax_combined_filt, label="Average Z-Score (Frame 0)", fraction=0.046)
+
+            # Create overlay showing highest frequency pixels on top
+            overlay_combined_filt = np.zeros((*img_shape, 4))
+
+            # Layer from lowest to highest frequency
+            for freq_pct in [50, 60, 70, 80, 90, 99, 100]:
+                mask = pixel_masks_filtered[freq_pct]
+                overlay_combined_filt[mask] = colors[freq_pct]
+
+            ax_combined_filt.imshow(overlay_combined_filt, interpolation="nearest")
+
+            # Create legend
+            legend_elements_filt = [
+                Patch(facecolor=colors[100], label=f"100% ({np.sum(pixel_masks_filtered[100]):,} px)"),
+                Patch(facecolor=colors[99], label=f"99% ({np.sum(pixel_masks_filtered[99]):,} px)"),
+                Patch(facecolor=colors[90], label=f"90% ({np.sum(pixel_masks_filtered[90]):,} px)"),
+                Patch(facecolor=colors[80], label=f"80% ({np.sum(pixel_masks_filtered[80]):,} px)"),
+                Patch(facecolor=colors[70], label=f"70% ({np.sum(pixel_masks_filtered[70]):,} px)"),
+                Patch(facecolor=colors[60], label=f"60% ({np.sum(pixel_masks_filtered[60]):,} px)"),
+                Patch(facecolor=colors[50], label=f"50% ({np.sum(pixel_masks_filtered[50]):,} px)"),
+            ]
+            ax_combined_filt.legend(
+                handles=legend_elements_filt, loc="upper right", fontsize=10, title="Frequency Threshold"
+            )
+
+            ax_combined_filt.set_title(
+                f"Filtered Combined Frequency Analysis (z > {z_threshold} in Frame 0)\nFile: {img_file}\nExcluded segments: {segments_to_exclude}",
+                fontsize=12,
+                fontweight="bold",
+            )
+            ax_combined_filt.set_xlabel("X (pixels)")
+            ax_combined_filt.set_ylabel("Y (pixels)")
+
+            plt.tight_layout()
+            plt.show()
+
+            # Save the filtered combined figure
+            fig_combined_filt.savefig(
+                output_dir / f"{img_base}_frequency_combined_filtered.png", dpi=300, bbox_inches="tight"
+            )
+            console.print(f"Saved filtered combined frequency plot: {img_base}_frequency_combined_filtered.png")
+
+            # Save the filtered 100% frequency mask as a clean overlay
+            fig_clean_100_filt, ax_clean_100_filt = plt.subplots(figsize=(10, 10))
+            overlay_100_filt = np.zeros((*img_shape, 4))
+            overlay_100_filt[pixel_masks_filtered[100]] = [1, 0, 1, 1]  # Magenta, full opacity
+            ax_clean_100_filt.imshow(overlay_100_filt, interpolation="nearest")
+            ax_clean_100_filt.axis("off")
+            fig_clean_100_filt.patch.set_alpha(0)
+            ax_clean_100_filt.patch.set_alpha(0)
+            fig_clean_100_filt.savefig(
+                output_dir / f"{img_base}_seeds_100pct_filtered_clean.png",
+                dpi=300,
+                bbox_inches="tight",
+                pad_inches=0,
+                transparent=True,
+            )
+            plt.close(fig_clean_100_filt)
+            console.print(f"Saved filtered 100% seed pixels (clean): {img_base}_seeds_100pct_filtered_clean.png")
+
+            console.print("[bold green]Filtered analysis completed![/bold green]")
+    else:
+        console.print(f"[bold green]All segments contain all {reference_freq_pct}% frequency pixels![/bold green]")
+        console.print("No segments need to be excluded - all are consistent.")
 
 # ============================================================================
 # K-means clustering section - DISABLED
