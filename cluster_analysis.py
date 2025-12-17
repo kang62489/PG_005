@@ -26,15 +26,15 @@ app = QApplication(sys.argv)
 
 
 ## Load ABF and Tiff file for truncation
-exp_date = "2025_12_15"
+exp_date = "2025_06_11"
 
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = f"{exp_date}-0035.abf"
+abf_file = f"{exp_date}-0004.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
 magnification: str = "10X"  # Options: "10X", "40X", "60X" - for area calculation
 img_path = Path(__file__).parent
-img_file = f"{exp_date}-0043_Gauss.tif"
+img_file = f"{exp_date}-0003_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX
@@ -277,7 +277,7 @@ console.print(f"Classified pixels into tiers for all {len(frame_0_list)} segment
 # Frequency-based approach: Find pixels with z > 0.5 and count how often they appear
 console.print("\n=== Frequency-based analysis (z > 0.5) ===")
 
-z_threshold = 0.5
+z_threshold = 1  # Changed back to 2 to get the 140 seeds
 n_segments = len(frame_0_list)
 
 # Count how many segments each pixel appears in (with z > threshold)
@@ -348,7 +348,6 @@ fig_freq.suptitle(
     f"Frequency-Based Seed Pixels (z > {z_threshold} in Frame 0)\nFile: {img_file}", fontsize=14, fontweight="bold"
 )
 plt.tight_layout()
-plt.show()
 
 # Save the frequency analysis figure
 fig_freq.savefig(output_dir / f"{img_base}_frequency_analysis.png", dpi=300, bbox_inches="tight")
@@ -394,7 +393,6 @@ ax_combined.set_xlabel("X (pixels)")
 ax_combined.set_ylabel("Y (pixels)")
 
 plt.tight_layout()
-plt.show()
 
 # Save the combined figure
 fig_combined.savefig(output_dir / f"{img_base}_frequency_combined.png", dpi=300, bbox_inches="tight")
@@ -462,272 +460,310 @@ if len(problematic_segments) > 0:
 else:
     console.print("\n[bold green]All segments contain all 100% seed pixels![/bold green]")
 
-# Additional analysis: Find which segments would most reduce the seed count if removed
-console.print("\n=== Segment Removal Impact Analysis ===")
-
-removal_impact = []
-for seg_to_remove in range(n_segments):
-    # Recompute frequency without this segment
-    pixel_freq_without = np.zeros(img_shape, dtype=int)
-
-    for seg_idx, frame_0 in enumerate(frame_0_list):
-        if seg_idx == seg_to_remove:
-            continue
-        above_threshold = frame_0 > z_threshold
-        pixel_freq_without += above_threshold.astype(int)
-
-    # Count pixels that appear in ALL remaining segments
-    new_100pct_count = np.sum(pixel_freq_without >= (n_segments - 1))
-
-    removal_impact.append(
-        {
-            "Removed Segment": seg_to_remove,
-            "100% pixels after removal": new_100pct_count,
-            "Gain in 100% pixels": new_100pct_count - np.sum(pixel_masks[100]),
-        }
-    )
-
-df_removal = pd.DataFrame(removal_impact)
-df_removal_sorted = df_removal.sort_values("Gain in 100% pixels", ascending=False)
-
-console.print("\n[bold cyan]Impact of removing each segment (top 10 by gain):[/bold cyan]")
-print(tabulate(df_removal_sorted.head(10), headers="keys", showindex=False, tablefmt="pretty"))
-
-# Identify the worst offender
-worst_segment = df_removal_sorted.iloc[0]["Removed Segment"]
-max_gain = df_removal_sorted.iloc[0]["Gain in 100% pixels"]
-
-if max_gain > 0:
-    console.print(f"\n[bold yellow]Segment {int(worst_segment)} is the biggest outlier![/bold yellow]")
-    console.print(f"Removing it would increase 100% seed pixels by {int(max_gain)} pixels")
-    console.print(
-        f"From {np.sum(pixel_masks[100]):,} to {int(df_removal_sorted.iloc[0]['100% pixels after removal']):,} pixels"
-    )
-else:
-    console.print("\n[bold green]No single segment is a significant outlier.[/bold green]")
-
 console.print("[bold green]Segment analysis completed![/bold green]")
 
 # ============================================================================
-# Exclude outlier segments and recompute frequency analysis
+# ACh Clearance Analysis - Area decay over time
 # ============================================================================
-console.print("\n=== Auto-detecting Highest Survival Rate ===")
+console.print("\n=== ACh Clearance Analysis ===")
+console.print("Measuring active area across frame positions to test clearance hypothesis")
 
-# Automatically find the highest frequency threshold that has pixels
-reference_freq_pct = None
-for freq_pct in reversed(frequency_percentages):  # Check from 100%, 99%, 90%, etc.
-    n_pixels_at_freq = np.sum(pixel_masks[freq_pct])
-    if n_pixels_at_freq > 0:
-        reference_freq_pct = freq_pct
-        console.print(f"Highest survival rate with pixels: {freq_pct}% ({n_pixels_at_freq} pixels)")
-        break
+# Define z-score threshold for "active" pixels
+clearance_z_threshold = 1.0
+console.print(f"Using z-score threshold: {clearance_z_threshold}")
 
-if reference_freq_pct is None:
-    console.print("[bold red]No frequency threshold has any pixels! Cannot proceed with filtering.[/bold red]")
-else:
-    console.print(f"\n=== Excluding Outlier Segments Based on {reference_freq_pct}% Frequency Pixels ===")
+# For each segment, measure active area at each frame position
+# Frame positions: relative to spike frame (0 = spike frame, +1, +2, etc.)
+area_by_frame_position = []
 
-    reference_mask = pixel_masks[reference_freq_pct]
-    n_reference_pixels = np.sum(reference_mask)
+for seg_idx, segment in enumerate(lst_img_segments):
+    seg_length = len(segment)
+    spike_frame_idx = seg_length // 2  # Center frame is the spike
 
-    console.print(f"Reference: {reference_freq_pct}% frequency mask with {n_reference_pixels} pixels")
+    # For this segment, measure area at each frame position
+    segment_areas = []
+    for frame_idx in range(seg_length):
+        # Calculate frame position relative to spike (negative = before spike, 0 = spike, positive = after)
+        frame_position = frame_idx - spike_frame_idx
 
-    # Find segments that are missing ANY of the reference pixels
-    segments_to_exclude = []
-    for seg_idx, frame_0 in enumerate(frame_0_list):
-        above_threshold = frame_0 > z_threshold
-        # Check how many reference pixels this segment is missing
-        missing_reference = np.sum(reference_mask & ~above_threshold)
+        # Count pixels above threshold in this frame
+        frame = segment[frame_idx]
+        active_pixels = np.sum(frame > clearance_z_threshold)
 
-        if missing_reference > 0:
-            segments_to_exclude.append(seg_idx)
-            console.print(
-                f"Segment {seg_idx}: missing {missing_reference}/{n_reference_pixels} reference pixels - EXCLUDED"
-            )
+        segment_areas.append({"segment": seg_idx, "frame_position": frame_position, "active_pixels": active_pixels})
 
-    console.print(f"\nTotal segments to exclude: {len(segments_to_exclude)}")
-    console.print(f"Excluded segments: {segments_to_exclude}")
+    area_by_frame_position.extend(segment_areas)
 
-    if len(segments_to_exclude) > 0:
-        console.print(
-            f"\n[yellow]Excluding {len(segments_to_exclude)} segments that are missing {reference_freq_pct}% frequency pixels[/yellow]"
-        )
+# Convert to DataFrame for easier analysis
+df_areas = pd.DataFrame(area_by_frame_position)
 
-        # Create filtered frame list
-        frame_0_list_filtered = [frame_0_list[i] for i in range(len(frame_0_list)) if i not in segments_to_exclude]
-        n_segments_filtered = len(frame_0_list_filtered)
+console.print(f"Analyzed {len(lst_img_segments)} segments")
+console.print(f"Frame positions range: {df_areas['frame_position'].min()} to {df_areas['frame_position'].max()}")
 
-        # Check if we have enough segments left
-        if n_segments_filtered == 0:
-            console.print(
-                f"[bold red]All {n_segments} segments were excluded! No segments left for analysis.[/bold red]"
-            )
-        else:
-            # Recompute frequency analysis without outlier segments
-            console.print("\n[cyan]Recomputing frequency analysis without outliers...[/cyan]")
-            console.print(f"Analyzing {n_segments_filtered} segments (excluded {len(segments_to_exclude)} outliers)")
+# Calculate mean and std of active area for each frame position
+area_stats = df_areas.groupby("frame_position")["active_pixels"].agg(["mean", "std", "count"]).reset_index()
+area_stats["sem"] = area_stats["std"] / np.sqrt(area_stats["count"])  # Standard error of mean
 
-            # Recompute pixel frequency without outliers
-            pixel_frequency_filtered = np.zeros(img_shape, dtype=int)
+console.print("\nActive area by frame position:")
+print(tabulate(area_stats, headers="keys", showindex=False, tablefmt="pretty", floatfmt=".1f"))
 
-            for frame_0 in frame_0_list_filtered:
-                above_threshold = frame_0 > z_threshold
-                pixel_frequency_filtered += above_threshold.astype(int)
+# Plot area vs. frame position
+fig_clearance, axes_clearance = plt.subplots(2, 1, figsize=(12, 10))
 
-            # Report pixels at different frequency thresholds
-            console.print(f"\nFiltered analysis - Total segments: {n_segments_filtered}")
-            console.print(f"Threshold: z > {z_threshold}\n")
+# Top panel: Mean area with error bars
+ax1 = axes_clearance[0]
+ax1.errorbar(
+    area_stats["frame_position"],
+    area_stats["mean"],
+    yerr=area_stats["sem"],
+    marker="o",
+    markersize=8,
+    capsize=5,
+    capthick=2,
+    linewidth=2,
+    color="blue",
+    alpha=0.7,
+)
+ax1.axvline(x=0, color="red", linestyle="--", linewidth=2, alpha=0.5, label="Spike Frame")
+ax1.set_xlabel("Frame Position (relative to spike)", fontsize=12)
+ax1.set_ylabel("Active Area (number of pixels)", fontsize=12)
+ax1.set_title(
+    f"ACh Clearance: Active Area vs. Frame Position (z > {clearance_z_threshold})", fontsize=14, fontweight="bold"
+)
+ax1.grid(True, alpha=0.3)
+ax1.legend()
 
-            pixel_masks_filtered = {}
-            for freq_pct in frequency_percentages:
-                freq_threshold = int(np.ceil(n_segments_filtered * freq_pct / 100))
-                mask = pixel_frequency_filtered >= freq_threshold
-                n_pixels = np.sum(mask)
-                pixel_masks_filtered[freq_pct] = mask
-                console.print(
-                    f"Pixels appearing in >={freq_pct}% of segments (>={freq_threshold}/{n_segments_filtered}): {n_pixels}"
-                )
+# Add annotation for peak frame
+peak_frame_pos = area_stats.loc[area_stats["mean"].idxmax(), "frame_position"]
+peak_area = area_stats["mean"].max()
+ax1.annotate(
+    f"Peak: Frame {int(peak_frame_pos)}\n{peak_area:.0f} pixels",
+    xy=(peak_frame_pos, peak_area),
+    xytext=(peak_frame_pos + 0.5, peak_area * 1.1),
+    arrowprops=dict(arrowstyle="->", color="red", lw=2),
+    fontsize=10,
+    color="red",
+    fontweight="bold",
+)
 
-            # Compare with original
-            original_100pct = np.sum(pixel_masks[100])
-            filtered_100pct = np.sum(pixel_masks_filtered[100])
-            improvement = filtered_100pct - original_100pct
+# Bottom panel: Individual segment traces (to see variability)
+ax2 = axes_clearance[1]
+for seg_idx in range(len(lst_img_segments)):
+    seg_data = df_areas[df_areas["segment"] == seg_idx]
+    ax2.plot(seg_data["frame_position"], seg_data["active_pixels"], alpha=0.3, linewidth=1, color="gray")
 
-            console.print("\n[bold green]Improvement:[/bold green]")
-            console.print(f"Original 100% seeds: {original_100pct:,} pixels")
-            console.print(f"Filtered 100% seeds: {filtered_100pct:,} pixels")
-            console.print(f"Gain: {improvement:,} pixels ({improvement / original_100pct * 100:.1f}% increase)")
+# Overlay mean on top
+ax2.plot(
+    area_stats["frame_position"],
+    area_stats["mean"],
+    marker="o",
+    markersize=6,
+    linewidth=3,
+    color="blue",
+    label="Mean",
+    zorder=10,
+)
+ax2.axvline(x=0, color="red", linestyle="--", linewidth=2, alpha=0.5, label="Spike Frame")
+ax2.set_xlabel("Frame Position (relative to spike)", fontsize=12)
+ax2.set_ylabel("Active Area (number of pixels)", fontsize=12)
+ax2.set_title("Individual Segments (gray) with Mean (blue)", fontsize=12, fontweight="bold")
+ax2.grid(True, alpha=0.3)
+ax2.legend()
 
-            # Create visualization for filtered analysis
-            console.print("\n[cyan]Creating filtered frequency visualizations...[/cyan]")
+plt.tight_layout()
 
-            # Calculate average Frame 0 for filtered segments
-            avg_frame_0_filtered = np.mean(frame_0_list_filtered, axis=0)
+# Save the clearance analysis figure
+fig_clearance.savefig(output_dir / f"{img_base}_clearance_analysis.png", dpi=300, bbox_inches="tight")
+console.print(f"Saved clearance analysis: {img_base}_clearance_analysis.png")
 
-            # Create a multi-panel figure for filtered analysis
-            fig_freq_filt, axes_filt = plt.subplots(2, 4, figsize=(20, 10))
-            axes_filt = axes_filt.flatten()
+# Check if hypothesis is supported: is Frame 0 the peak, and does area decrease after?
+frame_0_area = area_stats[area_stats["frame_position"] == 0]["mean"].values[0]
+post_spike_frames = area_stats[area_stats["frame_position"] > 0]
 
-            for idx, freq_pct in enumerate(frequency_percentages):
-                ax = axes_filt[idx]
+console.print("\n=== Hypothesis Test ===")
+console.print(f"Frame 0 (spike) area: {frame_0_area:.1f} pixels")
 
-                # Show average Frame 0 as background
-                ax.imshow(
-                    avg_frame_0_filtered,
-                    cmap="gray",
-                    interpolation="nearest",
-                    vmin=0,
-                    vmax=np.percentile(avg_frame_0_filtered, 99),
-                )
+if len(post_spike_frames) > 0:
+    console.print("\nPost-spike frames:")
+    for _, row in post_spike_frames.iterrows():
+        frame_pos = int(row["frame_position"])
+        area = row["mean"]
+        change_pct = (area - frame_0_area) / frame_0_area * 100
+        console.print(f"  Frame +{frame_pos}: {area:.1f} pixels ({change_pct:+.1f}% vs Frame 0)")
 
-                # Create overlay for this frequency threshold
-                overlay = np.zeros((*img_shape, 4))
-                mask = pixel_masks_filtered[freq_pct]
-                overlay[mask] = colors[freq_pct]
+    # Check if area is decreasing
+    post_spike_areas = post_spike_frames["mean"].values
+    is_decreasing = all(post_spike_areas[i] <= post_spike_areas[i - 1] for i in range(1, len(post_spike_areas)))
 
-                # Display overlay
-                ax.imshow(overlay, interpolation="nearest")
-
-                freq_threshold = int(np.ceil(n_segments_filtered * freq_pct / 100))
-                n_pixels = np.sum(mask)
-                ax.set_title(
-                    f"≥{freq_pct}% (≥{freq_threshold}/{n_segments_filtered} segments)\n{n_pixels:,} pixels", fontsize=10
-                )
-                ax.axis("off")
-
-            # Remove the extra subplot
-            axes_filt[7].axis("off")
-
-            fig_freq_filt.suptitle(
-                f"Filtered Frequency-Based Seed Pixels (z > {z_threshold} in Frame 0)\nFile: {img_file}\nExcluded segments: {segments_to_exclude}",
-                fontsize=14,
-                fontweight="bold",
-            )
-            plt.tight_layout()
-            plt.show()
-
-            # Save the filtered frequency analysis figure
-            fig_freq_filt.savefig(
-                output_dir / f"{img_base}_frequency_analysis_filtered.png", dpi=300, bbox_inches="tight"
-            )
-            console.print(f"Saved filtered frequency analysis: {img_base}_frequency_analysis_filtered.png")
-
-            # Create a combined overlay for filtered analysis
-            fig_combined_filt, ax_combined_filt = plt.subplots(figsize=(12, 10))
-
-            # Show average Frame 0 as background
-            im_bg_filt = ax_combined_filt.imshow(
-                avg_frame_0_filtered,
-                cmap="gray",
-                interpolation="nearest",
-                vmin=0,
-                vmax=np.percentile(avg_frame_0_filtered, 99),
-            )
-            plt.colorbar(im_bg_filt, ax=ax_combined_filt, label="Average Z-Score (Frame 0)", fraction=0.046)
-
-            # Create overlay showing highest frequency pixels on top
-            overlay_combined_filt = np.zeros((*img_shape, 4))
-
-            # Layer from lowest to highest frequency
-            for freq_pct in [50, 60, 70, 80, 90, 99, 100]:
-                mask = pixel_masks_filtered[freq_pct]
-                overlay_combined_filt[mask] = colors[freq_pct]
-
-            ax_combined_filt.imshow(overlay_combined_filt, interpolation="nearest")
-
-            # Create legend
-            legend_elements_filt = [
-                Patch(facecolor=colors[100], label=f"100% ({np.sum(pixel_masks_filtered[100]):,} px)"),
-                Patch(facecolor=colors[99], label=f"99% ({np.sum(pixel_masks_filtered[99]):,} px)"),
-                Patch(facecolor=colors[90], label=f"90% ({np.sum(pixel_masks_filtered[90]):,} px)"),
-                Patch(facecolor=colors[80], label=f"80% ({np.sum(pixel_masks_filtered[80]):,} px)"),
-                Patch(facecolor=colors[70], label=f"70% ({np.sum(pixel_masks_filtered[70]):,} px)"),
-                Patch(facecolor=colors[60], label=f"60% ({np.sum(pixel_masks_filtered[60]):,} px)"),
-                Patch(facecolor=colors[50], label=f"50% ({np.sum(pixel_masks_filtered[50]):,} px)"),
-            ]
-            ax_combined_filt.legend(
-                handles=legend_elements_filt, loc="upper right", fontsize=10, title="Frequency Threshold"
-            )
-
-            ax_combined_filt.set_title(
-                f"Filtered Combined Frequency Analysis (z > {z_threshold} in Frame 0)\nFile: {img_file}\nExcluded segments: {segments_to_exclude}",
-                fontsize=12,
-                fontweight="bold",
-            )
-            ax_combined_filt.set_xlabel("X (pixels)")
-            ax_combined_filt.set_ylabel("Y (pixels)")
-
-            plt.tight_layout()
-            plt.show()
-
-            # Save the filtered combined figure
-            fig_combined_filt.savefig(
-                output_dir / f"{img_base}_frequency_combined_filtered.png", dpi=300, bbox_inches="tight"
-            )
-            console.print(f"Saved filtered combined frequency plot: {img_base}_frequency_combined_filtered.png")
-
-            # Save the filtered 100% frequency mask as a clean overlay
-            fig_clean_100_filt, ax_clean_100_filt = plt.subplots(figsize=(10, 10))
-            overlay_100_filt = np.zeros((*img_shape, 4))
-            overlay_100_filt[pixel_masks_filtered[100]] = [1, 0, 1, 1]  # Magenta, full opacity
-            ax_clean_100_filt.imshow(overlay_100_filt, interpolation="nearest")
-            ax_clean_100_filt.axis("off")
-            fig_clean_100_filt.patch.set_alpha(0)
-            ax_clean_100_filt.patch.set_alpha(0)
-            fig_clean_100_filt.savefig(
-                output_dir / f"{img_base}_seeds_100pct_filtered_clean.png",
-                dpi=300,
-                bbox_inches="tight",
-                pad_inches=0,
-                transparent=True,
-            )
-            plt.close(fig_clean_100_filt)
-            console.print(f"Saved filtered 100% seed pixels (clean): {img_base}_seeds_100pct_filtered_clean.png")
-
-            console.print("[bold green]Filtered analysis completed![/bold green]")
+    if frame_0_area == area_stats["mean"].max() and is_decreasing:
+        console.print("\n[bold green]✓ Hypothesis SUPPORTED: Frame 0 is peak, area decreases post-spike[/bold green]")
     else:
-        console.print(f"[bold green]All segments contain all {reference_freq_pct}% frequency pixels![/bold green]")
-        console.print("No segments need to be excluded - all are consistent.")
+        console.print("\n[bold yellow]✗ Hypothesis NOT fully supported - see detailed results above[/bold yellow]")
+else:
+    console.print("[yellow]No post-spike frames available for comparison[/yellow]")
+
+console.print("\n[bold green]ACh clearance analysis completed![/bold green]")
+
+# ============================================================================
+# Enhanced Spatial Visualization - Stretch/Shrinkage relative to Seeds
+# ============================================================================
+console.print("\n=== Creating Stretch/Shrinkage Visualization ===")
+
+# Check if we have seed pixels - find highest non-empty frequency
+seed_freq_threshold = 100
+if "pixel_masks" in globals():
+    # Try to find highest frequency threshold with seeds
+    for freq in [100, 99, 90, 80, 70, 60, 50]:
+        if freq in pixel_masks and np.sum(pixel_masks[freq]) > 0:
+            seed_freq_threshold = freq
+            break
+
+    n_seeds = np.sum(pixel_masks[seed_freq_threshold])
+    if n_seeds == 0:
+        console.print("[red]WARNING: No seed pixels found at any frequency threshold![/red]")
+    elif seed_freq_threshold < 100:
+        console.print(
+            f"[yellow]No pixels at 100% frequency, using {seed_freq_threshold}% instead ({n_seeds} seeds)[/yellow]"
+        )
+    else:
+        console.print(f"[green]Seed pixels available: {n_seeds} seeds at {seed_freq_threshold}% frequency[/green]")
+else:
+    console.print("[red]ERROR: No seed pixels found![/red]")
+
+# Create averaged frames for each frame position
+avg_frames_by_position = {}
+for frame_pos in sorted(df_areas["frame_position"].unique()):
+    # Collect all frames at this position across all segments
+    frames_at_position = []
+    for seg_idx, segment in enumerate(lst_img_segments):
+        seg_length = len(segment)
+        spike_frame_idx = seg_length // 2
+        frame_idx = spike_frame_idx + frame_pos
+
+        # Check if this frame position exists in this segment
+        if 0 <= frame_idx < seg_length:
+            frames_at_position.append(segment[frame_idx])
+
+    # Average across all segments
+    if len(frames_at_position) > 0:
+        avg_frames_by_position[frame_pos] = np.mean(frames_at_position, axis=0)
+
+console.print(f"Created averaged frames for {len(avg_frames_by_position)} frame positions")
+
+# Determine which frame positions to display (focus on spike and post-spike)
+# Try to show: -2, -1, 0 (spike), +1, +2, +3, +4
+display_positions = [pos for pos in [-2, -1, 0, 1, 2, 3, 4] if pos in avg_frames_by_position]
+console.print(f"Displaying frames at positions: {display_positions}")
+
+# Create multi-panel figure showing spatial evolution
+n_frames = len(display_positions)
+n_cols = min(4, n_frames)
+n_rows = int(np.ceil(n_frames / n_cols))
+
+# Create a clearer visualization showing active area relative to seed pixels
+fig_stretch, axes_stretch = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
+if n_frames == 1:
+    axes_stretch = np.array([axes_stretch])
+axes_stretch = axes_stretch.flatten()
+
+for idx, frame_pos in enumerate(display_positions):
+    ax = axes_stretch[idx]
+    avg_frame = avg_frames_by_position[frame_pos]
+
+    # Create RGB image to show different zones
+    rgb_image = np.zeros((*img_shape, 3))
+
+    # Identify active pixels (above threshold)
+    active_mask = avg_frame > clearance_z_threshold
+
+    # First, fill in the active area (yellow)
+    rgb_image[active_mask] = [1, 0.9, 0.5]  # Light yellow for all active pixels
+
+    # Debug: Check if pixel_masks exists
+    if frame_pos == 0:
+        console.print("[cyan]Checking for seeds...[/cyan]")
+        console.print(f"  'pixel_masks' in globals(): {'pixel_masks' in globals()}")
+        console.print(f"  'pixel_masks' in locals(): {'pixel_masks' in locals()}")
+        if "pixel_masks" in globals():
+            console.print(f"  pixel_masks keys: {list(globals()['pixel_masks'].keys())}")
+
+    # NOW draw seed pixels DIRECTLY in the rgb_image as BRIGHT MAGENTA - this ensures they show up!
+    # Use globals() dictionary directly to access pixel_masks
+    try:
+        seed_mask = globals()["pixel_masks"][seed_freq_threshold]
+        has_seeds = True
+    except (KeyError, NameError):
+        has_seeds = False
+
+    if has_seeds:
+        from scipy.ndimage import binary_dilation
+
+        # Make seeds slightly larger for visibility (dilate by 3 pixels)
+        seed_dilated = binary_dilation(seed_mask, iterations=3)
+
+        # Draw dilated seeds DIRECTLY in rgb_image as BRIGHT MAGENTA
+        rgb_image[seed_dilated] = [1, 0, 1]  # Bright magenta - overwrites any yellow
+
+        # Print debug for Frame 0
+        if frame_pos == 0:
+            n_seeds = np.sum(seed_mask)
+            n_dilated = np.sum(seed_dilated)
+            console.print(f"[yellow]Frame 0: {n_seeds} seeds → {n_dilated} pixels after dilation[/yellow]")
+
+    # Display the RGB image (seeds are already embedded as magenta)
+    ax.imshow(rgb_image, interpolation="nearest")
+
+    # Add contour around active area
+    ax.contour(active_mask.astype(float), levels=[0.5], colors="cyan", linewidths=2, alpha=0.9)
+
+    # Calculate area for this frame
+    frame_area = area_stats[area_stats["frame_position"] == frame_pos]["mean"].values[0]
+
+    # Title with area info
+    if frame_pos == 0:
+        title = f"Frame 0 (SPIKE)\n{frame_area:.0f} pixels"
+        ax.set_title(title, fontsize=11, fontweight="bold", color="red")
+    elif frame_pos < 0:
+        title = f"Frame {frame_pos}\n{frame_area:.0f} pixels"
+        ax.set_title(title, fontsize=11)
+    else:
+        title = f"Frame +{frame_pos}\n{frame_area:.0f} pixels"
+        ax.set_title(title, fontsize=11, fontweight="bold")
+
+    ax.axis("off")
+
+# Remove extra subplots
+for idx in range(n_frames, len(axes_stretch)):
+    axes_stretch[idx].axis("off")
+
+# Create custom legend
+from matplotlib.patches import Patch
+
+legend_elements = [
+    Patch(facecolor=[1, 0, 1], label=f"Seed Pixels {seed_freq_threshold}% (enlarged 3x)"),
+    Patch(facecolor=[1, 0.9, 0.5], label="Active Area"),
+    Patch(facecolor="cyan", label="Active Area Boundary"),
+]
+fig_stretch.legend(
+    handles=legend_elements, loc="upper center", ncol=4, fontsize=11, bbox_to_anchor=(0.5, 0.98), frameon=True
+)
+
+fig_stretch.suptitle(
+    f"ACh Signal: Expansion and Contraction Relative to Seed Pixels\nMagenta = seed pixels {seed_freq_threshold}% (enlarged 3x), Yellow = active area",
+    fontsize=14,
+    fontweight="bold",
+    y=0.95,
+)
+plt.tight_layout(rect=[0, 0, 1, 0.93])
+
+# Display all figures at once
+plt.show()
+
+# Save the enhanced visualization
+fig_stretch.savefig(output_dir / f"{img_base}_stretch_shrinkage.png", dpi=300, bbox_inches="tight")
+console.print(f"Saved stretch/shrinkage visualization: {img_base}_stretch_shrinkage.png")
+
+console.print("[bold green]Stretch/shrinkage visualization completed![/bold green]")
 
 # ============================================================================
 # K-means clustering section - DISABLED
