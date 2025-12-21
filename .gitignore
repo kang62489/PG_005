@@ -8,5 +8,6 @@ wheels/
 raw_images/
 *output/
 *.tif
+*.abf
 # Virtual environments
 .venv
