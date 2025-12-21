@@ -16,7 +16,7 @@ class MplCanvas(FigureCanvasQTAgg):
     def __init__(
         self,
         parent: QWidget | None = None,
-        width: int = 5,
+        width: int = 14,
         height: int = 4,
         dpi: int = 100,
     ) -> None:
@@ -54,6 +54,7 @@ class PlotResults(QMainWindow):
 
         # Set the central widget of the Window.
         self.setCentralWidget(w_main)
+        self.setWindowTitle(self.title)  # Set window title
         self.show()
 
     def plotting(self) -> QWidget:
@@ -70,8 +71,8 @@ class PlotResults(QMainWindow):
             kind="line",
             color="blue",
             title=self.title,
-            xlabel="Time (ms)",
-            ylabel=r"Voltage ($\mu V$)",
+            xlabel=self.xlabel,
+            ylabel=self.ylabel,
             label="Vm",
         )
         self.df_list[1].plot(

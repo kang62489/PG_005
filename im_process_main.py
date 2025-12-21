@@ -89,8 +89,8 @@ if cuda_available:
 if not cuda_available:
     console.print("[yellow]Falling back to CPU processing...")
 
-date = "2025_12_15"
-serials = ["0043"]
+date = "2025_12_18"
+serials = ["0026", "0027"]
 file_list = [f"{date}-{serial}.tif" for serial in serials]
 for file in file_list:
     main(file)
