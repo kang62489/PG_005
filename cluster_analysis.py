@@ -26,15 +26,15 @@ app = QApplication(sys.argv)
 
 
 ## Load ABF and Tiff file for truncation
-exp_date = "2025_12_18"
+exp_date = "2025_12_15"
 
 abf_path = Path(__file__).parent / "raw_abfs"
-abf_file = f"{exp_date}-0023.abf"
+abf_file = f"{exp_date}-0029.abf"
 loaded_abf = pyabf.ABF(abf_path / abf_file)
 
 magnification: str = "10X"  # Options: "10X", "40X", "60X" - for area calculation
 img_path = Path(__file__).parent
-img_file = f"{exp_date}-0027_Gauss.tif"
+img_file = f"{exp_date}-0037_Gauss.tif"
 loaded_img = imageio.volread(img_path / img_file).astype(np.uint16)
 
 time = loaded_abf.sweepX

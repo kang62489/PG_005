@@ -9,7 +9,12 @@
       "WebSearch",
       "Bash(python cluster_analysis.py:*)",
       "Bash(pip install:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(dir:*)",
+      "Bash(git checkout:*)",
+      "Bash(python test_optimized_cuda.py:*)",
+      "Bash(python:*)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\":*)"
     ],
     "deny": []
   }
