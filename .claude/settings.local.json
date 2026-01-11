@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:docs.anthropic.com)"
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(rm:*)",
+      "Bash(claude config --help)",
+      "Bash(find:*)",
+      "WebFetch(domain:code.claude.com)",
+      "WebSearch",
+      "Bash(python cluster_analysis.py:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(dir:*)",
+      "Bash(git checkout:*)",
+      "Bash(python test_optimized_cuda.py:*)",
+      "Bash(python:*)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\":*)"
     ],
     "deny": []
   }
