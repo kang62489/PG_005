@@ -32,7 +32,7 @@ def generate_normalized_gaussian_kernel(kernel_out: np.ndarray, sigma: float, si
 
     Thread Index Examples (for kernel size=7):
         Thread 0: handles kernel[0] (leftmost, distance=-3 from center)
-        Thread 1: handles kernel[1] (distance=-2 from center)  
+        Thread 1: handles kernel[1] (distance=-2 from center)
         Thread 2: handles kernel[2] (distance=-1 from center)
         Thread 3: handles kernel[3] (center, distance=0, peak value)
         Thread 4: handles kernel[4] (distance=+1 from center)
@@ -75,8 +75,6 @@ def generate_normalized_gaussian_kernel(kernel_out: np.ndarray, sigma: float, si
         # Normalize each element to make total sum = 1.0
         for i in range(size):
             kernel_out[i] /= kernel_sum
-
-
 
 
 @cuda.jit

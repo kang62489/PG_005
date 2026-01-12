@@ -1,9 +1,11 @@
+# Modules
+# Third-party imports
 import numpy as np
 from numba import jit, prange
 
 
 @jit(nopython=True, parallel=True)
-def compute_spatial_averages(image_stack: np.ndarray, roi_size: int) -> np.ndarray:
+def spatial_bin_jitted(image_stack: np.ndarray, roi_size: int) -> np.ndarray:
     """
     Compute spatial averages for each ROI in parallel using Numba JIT.
 

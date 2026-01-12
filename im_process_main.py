@@ -5,15 +5,15 @@ import time
 from pathlib import Path
 
 # Third-party imports
-import imageio.v2 as imageio
 import numpy as np
-from numba import cuda  # noqa: F401
+import tifffile
+from numba import cuda
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 # Local application imports
-from functions import (  # noqa: F401
+from functions import (
     check_cuda,
     get_memory_usage,
     process_on_cpu,
@@ -41,56 +41,58 @@ def main(file: str) -> None:
     for output_file in [output_name_1, output_name_2]:
         Path(output_file).unlink(missing_ok=True)
 
-    # Set a progressbar to show image loading progress
-    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
-        # Load image stack
-        task1 = progress.add_task("[cyan]Loading image stack...", total=1)
+    # Load image stack with spinner and elapsed time
+    with Progress(SpinnerColumn(), TextColumn("[cyan]{task.description}"), TimeElapsedColumn(), console=console) as progress:
+        task1 = progress.add_task("Loading image stack...", total=None)
         t_start = time.time()
-        img_raw = imageio.volread(raw_path / filename).astype(np.uint16)
-        progress.update(task1, advance=1)
+        img_raw = tifffile.imread(raw_path / filename).astype(np.uint16)
+        progress.remove_task(task1)
 
     log.info("Loading time: %s seconds", f"{time.time() - t_start:.2f}")
     log.info("Image shape: %s", f"{img_raw.shape}")
     log.info("Memory usage: %s GB", f"{get_memory_usage():.2f}")
 
-    # Process on either GPU or CPU
+    # Process on either GPU or CPU with automatic fallback
     console.print("[bold green]Processing data...")
     t_start = time.time()
 
-    if cuda.is_available():
-        detrended, gaussian = process_on_gpu(img_raw)
-    else:
-        detrended, averaged, gaussian = process_on_cpu(img_raw)
+    try:
+        if cuda.is_available():
+            detrended, gaussian = process_on_gpu(img_raw)
+        else:
+            detrended, _averaged, gaussian = process_on_cpu(img_raw)
+    except (cuda.cudadrv.driver.CudaAPIError, RuntimeError, Exception) as e:
+        console.print(f"[yellow]GPU processing failed: {e}[/yellow]")
+        console.print("[yellow]Falling back to CPU processing...[/yellow]")
+        detrended, _averaged, gaussian = process_on_cpu(img_raw)
+
     # detrended, gaussian = process_on_cpu(img_raw)
     console.print(f"Total processing time: {time.time() - t_start:.2f} seconds")
 
-    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
-        # Save results
-        task2 = progress.add_task("[cyan]Saving results...", total=1)
+    # Save results with spinner and elapsed time
+    with Progress(SpinnerColumn(), TextColumn("[cyan]{task.description}"), TimeElapsedColumn(), console=console) as progress:
+        task2 = progress.add_task("Saving results...", total=None)
+        t_start = time.time()
         detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
         gaussian_uint16 = np.clip(gaussian, 0, 65535).astype(np.uint16)
 
-        imageio.volwrite(output_name_1, detrended_uint16)
-        imageio.volwrite(output_name_2, gaussian_uint16)
+        tifffile.imwrite(output_name_1, detrended_uint16)
+        tifffile.imwrite(output_name_2, gaussian_uint16)
+        progress.remove_task(task2)
 
-        progress.update(task2, advance=1)
-
+    log.info("Saving time: %s seconds", f"{time.time() - t_start:.2f}")
     log.info("Results %s and %s saved!", output_name_1, output_name_2)
     console.print("[bold green]Processing completed successfully!")
 
 
-# Check CUDA availability with diagnostics
-cuda_available = check_cuda()
+if __name__ == "__main__":
+    # Check CUDA availability with diagnostics
+    check_cuda()
+    test_cuda()
 
-if cuda_available:
-    # Verify GPU functionality
-    cuda_available = test_cuda()
-
-if not cuda_available:
-    console.print("[yellow]Falling back to CPU processing...")
-
-date = "2025_12_18"
-serials = ["0026", "0027"]
-file_list = [f"{date}-{serial}.tif" for serial in serials]
-for file in file_list:
-    main(file)
+    # Process files
+    date = "2025_12_18"
+    serials = ["0026", "0027"]
+    file_list = [f"{date}-{serial}.tif" for serial in serials]
+    for file in file_list:
+        main(file)

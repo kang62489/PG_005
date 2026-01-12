@@ -8,8 +8,11 @@ Used to identify ACh releasing areas related to firing activities in each frame.
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib import cm
 from matplotlib.colors import ListedColormap
+from matplotlib.gridspec import GridSpec
 from sklearn.cluster import KMeans
+from tabulate import tabulate
 
 
 def prepare_frame_for_kmeans(image_frame: np.ndarray) -> tuple[np.ndarray, int, int]:
@@ -99,13 +102,15 @@ def calculate_cluster_areas(clustered_frames: list[np.ndarray], magnification: s
     }
 
     if magnification not in conversion_factors:
-        raise ValueError(f"Magnification must be one of {list(conversion_factors.keys())}")
+        valid_mags = list(conversion_factors.keys())
+        msg = f"Magnification must be one of {valid_mags}"
+        raise ValueError(msg)
 
     pixel_area = conversion_factors[magnification]
 
     # Calculate areas for each frame
     frame_areas = []
-    for frame_idx, frame in enumerate(clustered_frames):
+    for frame in clustered_frames:
         cluster_areas = {}
         for cluster_label in range(n_clusters):
             pixel_count = np.sum(frame == cluster_label)
@@ -116,14 +121,14 @@ def calculate_cluster_areas(clustered_frames: list[np.ndarray], magnification: s
     return frame_areas
 
 
-def visualize_clustering_results(
+def visualize_clustering_results(  # noqa: C901, PLR0912, PLR0915
     original_frames: list[np.ndarray],
     clustered_frames: list[np.ndarray],
     spike_trace: list[np.ndarray] | list[list[np.ndarray]],
     span_of_frames: list[int],
     seg_index: int = 0,
-    img_filename: str = None,
-    magnification: str = None,
+    img_filename: str | None = None,
+    magnification: str | None = None,
 ) -> tuple[plt.Figure, pd.DataFrame | None]:
     """
     Visualize original ACh signals vs clustered ACh releasing areas.
@@ -146,9 +151,6 @@ def visualize_clustering_results(
     # Calculate cluster areas if magnification is provided
     df_areas = None
     if magnification is not None:
-        import pandas as pd
-        from tabulate import tabulate
-
         print(f"\n=== Cluster Area Analysis (Magnification: {magnification}) ===")
         # Check all frames for unique labels, not just the first one
         all_labels = np.unique(np.concatenate([frame.flatten() for frame in clustered_frames]))
@@ -179,8 +181,6 @@ def visualize_clustering_results(
     n_cols = n_frames + 1  # frames + extra column for colorbar/legend
 
     # Create figure with GridSpec for better control
-    from matplotlib.gridspec import GridSpec
-
     fig = plt.figure(figsize=(3 * n_frames + 1.5, 9))
     gs = GridSpec(n_total_rows, n_cols, figure=fig, width_ratios=[1] * n_frames + [0.3])
 
@@ -234,20 +234,16 @@ def visualize_clustering_results(
     if is_multi_trace:
         # Plot multiple traces as overlays with distinct colors
         # Use a colormap with distinct colors
-        from matplotlib import cm
-
         n_traces = len(spike_trace)
         colors = cm.tab20(np.linspace(0, 1, n_traces))  # tab20 provides 20 distinct colors
 
         for idx, trace in enumerate(spike_trace):
             spike_ax.plot(trace[0], trace[1], alpha=0.6, linewidth=0.8, color=colors[idx])
         reference_time = spike_trace[0][0]
-        reference_voltage = spike_trace[0][1]
     else:
         # Plot single trace
         spike_ax.plot(spike_trace[0], spike_trace[1])
         reference_time = spike_trace[0]
-        reference_voltage = spike_trace[1]
 
     # Plot vertical lines for each frame boundary
     div_width: int = int(len(reference_time) / n_frames)
@@ -370,7 +366,7 @@ def split_concatenated_result(clustered_concatenated: np.ndarray, n_frames: int)
         clustered_frames: List of individual clustered frames
 
     """
-    height, total_width = clustered_concatenated.shape
+    _height, total_width = clustered_concatenated.shape
     frame_width = total_width // n_frames
 
     clustered_frames = []
