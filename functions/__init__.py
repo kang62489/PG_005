@@ -19,6 +19,14 @@ from .CPU_gauss import cpu_gaussian_blur
 from .CPU_process import process_on_cpu
 from .get_memory_use import get_memory_usage
 
+# Spatial categorization functions (new)
+from .spatial_categorization import (
+    categorize_spatial_connected,
+    categorize_spatial_morphological,
+    process_segment_spatial,
+    quick_spatial_categorize,
+)
+
 __all__ = [
     "check_cuda",
     "cpu_detrend_jitted",
@@ -30,4 +38,9 @@ __all__ = [
     "process_on_gpu",
     "test_cuda",
     "CUDA_AVAILABLE",
+    # Spatial categorization
+    "categorize_spatial_connected",
+    "categorize_spatial_morphological",
+    "process_segment_spatial",
+    "quick_spatial_categorize",
 ]
