@@ -1,45 +1,33 @@
-# ============================================================================
-# CLUSTER ANALYSIS - NEURONAL SPIKE-TRIGGERED IMAGING ANALYSIS
-# ============================================================================
-# This script performs comprehensive analysis of neuronal spike-triggered imaging data:
-# 1. Loads ABF (electrophysiology) and TIFF (imaging) files
-# 2. Detects neuronal spikes and synchronizes with imaging frames
-# 3. Segments data around each spike
-# 4. Performs z-score normalization
-# 5. Identifies seed pixels using frequency-based analysis
-# 6. Analyzes ACh clearance dynamics
-# 7. Performs k-means clustering analysis
-# 8. Generates comprehensive visualizations
-# ============================================================================
-
-# ============================================================================
-# IMPORTS AND SETUP
-# ============================================================================
-
+## Modules
 # Standard library imports
 import sys
 
 # Third-party imports
+import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib import gridspec
+from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch
 from PySide6.QtWidgets import QApplication
 from scipy.ndimage import binary_dilation
 
 # Local application imports
 from classes import AbfClip, PlotPeaks, PlotSegs
+from functions.imaging_segments_zscore_normalization import img_seg_zscore_norm
 from functions.kmeans import process_segment_kmeans_concatenated, visualize_clustering_results
-from functions.zscore_norm import zscore_normalize_segments
+from functions.spatial_categorization import process_segment_spatial
+from functions.spike_triggered_average import spike_trig_avg
 
 # Setup QApplication
 app = QApplication(sys.argv)
 
 # Switch on plotting
-PLOT_PEAKS = True
+PLOT_PEAKS = False
 PLOT_SEGS = False
 
 abf_clip = AbfClip()
 
-lst_img_segments_zscore = zscore_normalize_segments(abf_clip.lst_img_segments)
+lst_img_segments_zscore = img_seg_zscore_norm(abf_clip.lst_img_segments)
 
 if PLOT_PEAKS:
     plt_peaks = PlotPeaks([abf_clip.df_Vm, abf_clip.df_peaks], title="Peak Detection", ylabel="Vm (mV)")
@@ -48,6 +36,13 @@ if PLOT_SEGS:
     plt_segs = PlotSegs(
         lst_img_segments_zscore, abf_clip.lst_time_segments, abf_clip.lst_abf_segments, abf_clip.df_picked_spikes
     )
+
+avg_img_segment_zscore = spike_trig_avg(lst_img_segments_zscore)
+
+# Apply spatial connected analysis to averaged segment (auto thresholding)
+categorized_frames, frame_stats = process_segment_spatial(
+    avg_img_segment_zscore, method="connected", plot=True, threshold_method="li_double", min_region_size=20
+)
 
 app.exec()
 sys.exit()
@@ -812,45 +807,9 @@ sys.exit()
 
 # console.print("\n=== K-means Clustering Analysis ===")
 
-# # Spike-triggered averaging before k-means
-# min_length = min(len(seg) for seg in lst_img_segments)
-# target_frames = maximum_allowed_frames * 2 + 1
-# console.print(
-#     f"Minimum segment length: {min_length}, using maximum allowed frames {maximum_allowed_frames}, total {target_frames} frames"
-# )
-
-# # Simple averaging: take center frames from each segment
-# averaged_frames = []
-# for frame_idx in range(target_frames):
-#     # Collect same frame position from all segments
-#     frame_stack = []
-#     for segment in lst_img_segments:
-#         seg_length = len(segment)
-#         if seg_length >= target_frames:
-#             # Long enough: extract normally
-#             center_start = (seg_length - target_frames) // 2
-#             frame_stack.append(segment[center_start + frame_idx])
-#         else:
-#             # Short segment: pad into target template
-#             seg_center_in_target = target_frames // 2  # Position 4 in 9-frame array
-#             seg_start_in_target = seg_center_in_target - seg_length // 2
-
-#             # Check if this frame_idx falls within the segment's range
-#             if seg_start_in_target <= frame_idx < seg_start_in_target + seg_length:
-#                 seg_frame_idx = frame_idx - seg_start_in_target
-#                 frame_stack.append(segment[seg_frame_idx])
-#             # If outside range, skip this segment for this frame position
-
-#     # Average all frames at this position
-#     averaged_frame = np.mean(frame_stack, axis=0)
-#     averaged_frames.append(averaged_frame)
-
-# averaged_segment = np.array(averaged_frames)
-# console.print(f"Created averaged segment with shape: {averaged_segment.shape}")
-
 # # Apply k-means to averaged segment using concatenated approach
-# clustered_frames, cluster_centers = process_segment_kmeans_concatenated(averaged_segment, n_clusters=3)
-# console.print("Concatenated k-means completed on averaged data")
+#     clustered_frames, cluster_centers = process_segment_kmeans_concatenated(averaged_segment, n_clusters=3)
+#     console.print("Concatenated k-means completed on averaged data")
 
 # # Show cluster centers from concatenated analysis
 # console.print(f"Concatenated cluster centers: {cluster_centers}")

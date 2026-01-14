@@ -3,7 +3,7 @@
 import numpy as np
 
 
-def zscore_normalize_segments(lst_img_segments: list[np.ndarray]) -> list[np.ndarray]:
+def img_seg_zscore_norm(lst_img_segments: list[np.ndarray]) -> list[np.ndarray]:
     """
     Apply z-score normalization to each image segment.
 

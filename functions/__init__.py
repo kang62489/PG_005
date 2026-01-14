@@ -19,7 +19,8 @@ from .cpu_detrend import cpu_detrend_jitted
 from .cpu_gauss import cpu_gaussian_blur
 from .cpu_process import process_on_cpu
 from .get_memory_use import get_memory_usage
-from .zscore_norm import zscore_normalize_segments
+from .imaging_segments_zscore_normalization import img_seg_zscore_norm
+from .spike_triggered_average import spike_trig_avg
 
 __all__ = [
     "CUDA_AVAILABLE",
@@ -29,8 +30,9 @@ __all__ = [
     "get_memory_usage",
     "gpu_detrend_jitted",
     "gpu_gaussian_blur",
+    "img_seg_zscore_norm",
     "process_on_cpu",
     "process_on_gpu",
+    "spike_trig_avg",
     "test_cuda",
-    "zscore_normalize_segments",
 ]

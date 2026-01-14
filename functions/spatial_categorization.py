@@ -10,15 +10,19 @@ Use these functions to:
 3. Categorize regions based on intensity (background/dim/bright)
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import ListedColormap
 from scipy.ndimage import label, binary_erosion, binary_dilation, generate_binary_structure
+from skimage.filters import threshold_multiotsu, threshold_li, threshold_otsu, threshold_yen
 
 
 def categorize_spatial_connected(
     image: np.ndarray,
-    threshold_dim: float = 0.5,
-    threshold_bright: float = 1.5,
-    min_region_size: int = 20
+    threshold_dim: float | None = 0.5,
+    threshold_bright: float | None = 1.5,
+    min_region_size: int = 20,
+    threshold_method: str = "manual",
 ) -> dict:
     """
     Categorize pixels into background/dim/bright using spatial connectivity.
@@ -33,9 +37,17 @@ def categorize_spatial_connected(
 
     Args:
         image: 2D z-scored array (frame from your imaging data)
-        threshold_dim: Z-score threshold for dim signal (default: 0.5)
-        threshold_bright: Z-score threshold for bright signal (default: 1.5)
+        threshold_dim: Z-score threshold for dim signal (default: 0.5, ignored if threshold_method != "manual")
+        threshold_bright: Z-score threshold for bright signal (default: 1.5, ignored if threshold_method != "manual")
         min_region_size: Minimum pixels in region (removes noise, default: 20)
+        threshold_method: Thresholding method to use:
+            - "manual": Use provided threshold_dim and threshold_bright values
+            - "multiotsu": Auto-detect 2 thresholds using Multi-Otsu
+            - "li_double": Two-pass Li (1st: background, 2nd: dim/bright) - recommended
+            - "otsu_double": Two-pass Otsu (1st: background, 2nd: dim/bright)
+            - "li": Single Li threshold (no dim/bright distinction)
+            - "otsu": Single Otsu threshold (no dim/bright distinction)
+            - "yen": Single Yen threshold (no dim/bright distinction)
 
     Returns:
         dict with:
@@ -43,15 +55,55 @@ def categorize_spatial_connected(
             'regions': 2D array with region labels (1, 2, 3, ...)
             'stats': List of dicts with region info
             'num_regions': Number of valid regions found
+            'thresholds': Tuple of (threshold_dim, threshold_bright) used
 
     Example:
         >>> frame = zscore_normalized_frame  # Your z-scored data
-        >>> result = categorize_spatial_connected(frame, min_region_size=20)
-        >>> categorized_frame = result['categorized']
-        >>> print(f"Found {result['num_regions']} ACh regions")
+        >>> # Manual thresholds:
+        >>> result = categorize_spatial_connected(frame, threshold_dim=1.0, threshold_bright=2.0)
+        >>> # Auto thresholds (recommended):
+        >>> result = categorize_spatial_connected(frame, threshold_method="multiotsu")
+        >>> print(f"Auto thresholds: {result['thresholds']}")
     """
+    # Determine thresholds based on method
+    if threshold_method == "manual":
+        thresh_dim = threshold_dim
+        thresh_bright = threshold_bright
+    elif threshold_method == "multiotsu":
+        # Multi-Otsu finds optimal thresholds for n classes
+        thresholds = threshold_multiotsu(image, classes=3)
+        thresh_dim = thresholds[0]  # Lower threshold (background vs dim)
+        thresh_bright = thresholds[1]  # Upper threshold (dim vs bright)
+    elif threshold_method == "li":
+        thresh_dim = threshold_li(image)
+        thresh_bright = thresh_dim  # Single threshold, all signal is same category
+    elif threshold_method == "otsu":
+        thresh_dim = threshold_otsu(image)
+        thresh_bright = thresh_dim
+    elif threshold_method == "yen":
+        thresh_dim = threshold_yen(image)
+        thresh_bright = thresh_dim
+    elif threshold_method == "li_double":
+        # Two-pass Li: 1st separates background, 2nd separates dim/bright
+        thresh_dim = threshold_li(image)
+        signal_pixels = image[image > thresh_dim]
+        if len(signal_pixels) > 0:
+            thresh_bright = threshold_li(signal_pixels)
+        else:
+            thresh_bright = thresh_dim
+    elif threshold_method == "otsu_double":
+        # Two-pass Otsu: 1st separates background, 2nd separates dim/bright
+        thresh_dim = threshold_otsu(image)
+        signal_pixels = image[image > thresh_dim]
+        if len(signal_pixels) > 0:
+            thresh_bright = threshold_otsu(signal_pixels)
+        else:
+            thresh_bright = thresh_dim
+    else:
+        raise ValueError(f"Unknown threshold_method: {threshold_method}")
+
     # Find pixels above threshold
-    signal_mask = image > threshold_dim
+    signal_mask = image > thresh_dim
 
     # Find spatially connected regions (8-connectivity)
     labeled_regions, num_regions = label(signal_mask)
@@ -80,7 +132,7 @@ def categorize_spatial_connected(
         valid_regions[region_mask] = valid_region_id
 
         # Categorize based on mean intensity
-        if mean_intensity > threshold_bright:
+        if mean_intensity > thresh_bright:
             category = 2  # Bright
             category_name = "bright"
         else:
@@ -106,7 +158,8 @@ def categorize_spatial_connected(
         'categorized': categorized,
         'regions': valid_regions,
         'stats': region_stats,
-        'num_regions': len(region_stats)
+        'num_regions': len(region_stats),
+        'thresholds': (thresh_dim, thresh_bright)
     }
 
 
@@ -179,6 +232,7 @@ def categorize_spatial_morphological(
 def process_segment_spatial(
     image_segment: np.ndarray,
     method: str = "connected",
+    plot: bool = False,
     **kwargs
 ) -> tuple[list[np.ndarray], list[dict]]:
     """
@@ -189,6 +243,7 @@ def process_segment_spatial(
     Args:
         image_segment: 3D array (frames, height, width) or list of 2D arrays
         method: 'connected' or 'morphological'
+        plot: If True, display visualization of results
         **kwargs: Additional parameters for the chosen method
 
     Returns:
@@ -210,14 +265,18 @@ def process_segment_spatial(
     categorized_frames = []
     all_stats = []
 
+    thresholds_used = None  # Track thresholds for plotting
+
     for frame_idx, frame in enumerate(frames):
         if method == "connected":
             result = categorize_spatial_connected(frame, **kwargs)
             categorized_frames.append(result['categorized'])
+            thresholds_used = result['thresholds']  # Get thresholds from result
             all_stats.append({
                 'frame_idx': frame_idx,
                 'num_regions': result['num_regions'],
-                'region_details': result['stats']
+                'region_details': result['stats'],
+                'thresholds': result['thresholds']
             })
 
         elif method == "morphological":
@@ -232,6 +291,50 @@ def process_segment_spatial(
 
         else:
             raise ValueError(f"Unknown method: {method}. Use 'connected' or 'morphological'")
+
+    # Plot if requested
+    if plot:
+        n_frames = len(frames)
+        fig, axes = plt.subplots(2, n_frames, figsize=(3 * n_frames, 6))
+
+        # Custom colormap: black=background, green=dim, yellow=bright
+        cmap_cat = ListedColormap(['black', 'green', 'yellow'])
+
+        # Calculate global vmin/vmax for consistent z-score display
+        all_data = np.concatenate([f.flatten() for f in frames])
+        vmin, vmax = np.percentile(all_data, [1, 99])
+
+        for i, (orig, cat) in enumerate(zip(frames, categorized_frames)):
+            # Top row: original z-scored
+            ax_orig = axes[0, i] if n_frames > 1 else axes[0]
+            ax_orig.imshow(orig, cmap='gray', vmin=vmin, vmax=vmax)
+            ax_orig.set_title(f'Frame {i}\n(Z-score)', fontsize=9)
+            ax_orig.axis('off')
+
+            # Bottom row: categorized
+            ax_cat = axes[1, i] if n_frames > 1 else axes[1]
+            ax_cat.imshow(cat, cmap=cmap_cat, vmin=0, vmax=2)
+            n_regions = all_stats[i].get('num_regions', 0)
+            ax_cat.set_title(f'Categorized\n({n_regions} regions)', fontsize=9)
+            ax_cat.axis('off')
+
+        # Add legend
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='black', edgecolor='white', label='Background'),
+            Patch(facecolor='green', label='Dim'),
+            Patch(facecolor='yellow', label='Bright')
+        ]
+        fig.legend(handles=legend_elements, loc='upper right', fontsize=9)
+
+        # Build title with threshold info
+        title = 'Spatial Categorization Results'
+        if thresholds_used is not None:
+            thresh_dim, thresh_bright = thresholds_used
+            title += f'\nThresholds: dim>{thresh_dim:.2f}, bright>{thresh_bright:.2f}'
+        plt.suptitle(title, fontweight='bold')
+        plt.tight_layout()
+        plt.show()
 
     return categorized_frames, all_stats
 
