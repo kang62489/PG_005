@@ -10,11 +10,12 @@ dependencies = [
     "numba-cuda>=0.23.0",
     "numpy==1.26.4",
     "nvidia-ml-py>=13.590.44",
+    "openpyxl>=3.1.5",
     "pandas>=2.3.3",
     "pathlib>=1.0.1",
     "psutil>=7.2.1",
     "pyabf>=2.3.8",
-    "pyside6>=6.10.1",
+    "pyside6==6.8",
     "rich>=14.2.0",
     "scikit-image>=0.26.0",
     "scikit-learn>=1.8.0",
@@ -33,7 +34,7 @@ lint.extend-select = [
     "W",    # Pycodestyle warnings (style issues)
     "C90",  # McCabe – complexity metric for functions
     "I",    # isort – import ordering checks
-    "N",    # PEP8 Naming – naming conventions
+    #"N",    # PEP8 Naming – naming conventions
     #"D",    # Pydocstyle – docstring formatting
     "UP",   # Pyupgrade – upgrades syntax to newer Python versions
     "YTT",  # Flake8-2020 – checks for Python 2020 best practices
