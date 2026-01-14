@@ -15,7 +15,7 @@ from scipy.ndimage import binary_dilation
 from classes import AbfClip, PlotPeaks, PlotSegs
 from functions.imaging_segments_zscore_normalization import img_seg_zscore_norm
 from functions.kmeans import process_segment_kmeans_concatenated, visualize_clustering_results
-from functions.spatial_categorization import process_segment_spatial
+from functions.spatial_categorization import SpatialCategorizer
 from functions.spike_triggered_average import spike_trig_avg
 
 # Setup QApplication
@@ -25,7 +25,7 @@ app = QApplication(sys.argv)
 PLOT_PEAKS = False
 PLOT_SEGS = False
 
-abf_clip = AbfClip()
+abf_clip = AbfClip(exp_date="2025_12_15", abf_serial="0009", img_serial="0013")
 
 lst_img_segments_zscore = img_seg_zscore_norm(abf_clip.lst_img_segments)
 
@@ -37,12 +37,16 @@ if PLOT_SEGS:
         lst_img_segments_zscore, abf_clip.lst_time_segments, abf_clip.lst_abf_segments, abf_clip.df_picked_spikes
     )
 
-avg_img_segment_zscore = spike_trig_avg(lst_img_segments_zscore)
+avg_img_segment_zscore = spike_trig_avg(lst_img_segments_zscore, method="median")
 
-# Apply spatial connected analysis to averaged segment (auto thresholding)
-categorized_frames, frame_stats = process_segment_spatial(
-    avg_img_segment_zscore, method="connected", plot=True, threshold_method="li_double", min_region_size=20
+# Apply spatial categorization to averaged segment
+categorizer = SpatialCategorizer(
+    method="morphological",  # Options: connected, watershed, dbscan, morphological, region_growing
+    threshold_method="li_double",  # Options: manual, multiotsu, li_double, otsu_double, li, otsu, yen
+    min_region_size=20,
 )
+categorizer.fit(avg_img_segment_zscore)
+categorizer.show()
 
 app.exec()
 sys.exit()

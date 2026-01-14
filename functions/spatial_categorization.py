@@ -1,454 +1,567 @@
 """
 Spatial-aware intensity categorization for ACh imaging.
 
-This module provides methods that consider both intensity AND spatial connectivity,
-addressing the limitation of k-means which treats pixels independently.
+This module provides a class-based interface for spatial categorization methods
+that consider both intensity AND spatial connectivity.
 
-Use these functions to:
-1. Identify spatially connected ACh release regions
-2. Filter out isolated noise pixels
-3. Categorize regions based on intensity (background/dim/bright)
+Methods available:
+1. connected: Connected components analysis (fast, simple)
+2. watershed: Watershed segmentation (good for overlapping regions)
+3. dbscan: DBSCAN clustering (handles complex patterns)
+4. morphological: Morphological cleanup (erosion/dilation)
+5. region_growing: Region growing from seeds (grows from bright peaks)
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import ListedColormap
-from scipy.ndimage import label, binary_erosion, binary_dilation, generate_binary_structure
-from skimage.filters import threshold_multiotsu, threshold_li, threshold_otsu, threshold_yen
+from matplotlib.patches import Patch
+from scipy import ndimage
+from scipy.ndimage import binary_dilation, binary_erosion, generate_binary_structure, label
+from skimage.feature import peak_local_max
+from skimage.filters import threshold_li, threshold_multiotsu, threshold_otsu, threshold_yen
+from skimage.segmentation import watershed
+from sklearn.cluster import DBSCAN
 
 
-def categorize_spatial_connected(
-    image: np.ndarray,
-    threshold_dim: float | None = 0.5,
-    threshold_bright: float | None = 1.5,
-    min_region_size: int = 20,
-    threshold_method: str = "manual",
-) -> dict:
+class SpatialCategorizer:
     """
-    Categorize pixels into background/dim/bright using spatial connectivity.
+    Spatial-aware intensity categorization for image segments.
 
-    This is a drop-in replacement for k-means that considers spatial relationships.
+    This class provides multiple methods for categorizing pixels into
+    background/dim/bright while considering spatial connectivity.
 
-    Process:
-    1. Threshold image into potential signal regions
-    2. Find spatially connected components
-    3. Filter out small regions (noise)
-    4. Categorize by mean intensity
-
-    Args:
-        image: 2D z-scored array (frame from your imaging data)
-        threshold_dim: Z-score threshold for dim signal (default: 0.5, ignored if threshold_method != "manual")
-        threshold_bright: Z-score threshold for bright signal (default: 1.5, ignored if threshold_method != "manual")
-        min_region_size: Minimum pixels in region (removes noise, default: 20)
-        threshold_method: Thresholding method to use:
-            - "manual": Use provided threshold_dim and threshold_bright values
-            - "multiotsu": Auto-detect 2 thresholds using Multi-Otsu
-            - "li_double": Two-pass Li (1st: background, 2nd: dim/bright) - recommended
-            - "otsu_double": Two-pass Otsu (1st: background, 2nd: dim/bright)
-            - "li": Single Li threshold (no dim/bright distinction)
-            - "otsu": Single Otsu threshold (no dim/bright distinction)
-            - "yen": Single Yen threshold (no dim/bright distinction)
-
-    Returns:
-        dict with:
-            'categorized': 2D array (0=background, 1=dim, 2=bright)
-            'regions': 2D array with region labels (1, 2, 3, ...)
-            'stats': List of dicts with region info
-            'num_regions': Number of valid regions found
-            'thresholds': Tuple of (threshold_dim, threshold_bright) used
+    Attributes:
+        method: Categorization method ('connected', 'watershed', 'dbscan', 'morphological', 'region_growing')
+        threshold_method: Auto-thresholding method ('manual', 'multiotsu', 'li_double', etc.)
+        threshold_dim: Manual threshold for dim signal
+        threshold_bright: Manual threshold for bright signal
+        min_region_size: Minimum pixels per region
+        global_threshold: Whether to use global thresholds across all frames
 
     Example:
-        >>> frame = zscore_normalized_frame  # Your z-scored data
-        >>> # Manual thresholds:
-        >>> result = categorize_spatial_connected(frame, threshold_dim=1.0, threshold_bright=2.0)
-        >>> # Auto thresholds (recommended):
-        >>> result = categorize_spatial_connected(frame, threshold_method="multiotsu")
-        >>> print(f"Auto thresholds: {result['thresholds']}")
+        >>> categorizer = SpatialCategorizer(method="connected", threshold_method="li_double")
+        >>> categorizer.fit(image_segment)  # 3D array (frames, H, W)
+        >>> categorizer.plot()
     """
-    # Determine thresholds based on method
-    if threshold_method == "manual":
-        thresh_dim = threshold_dim
-        thresh_bright = threshold_bright
-    elif threshold_method == "multiotsu":
-        # Multi-Otsu finds optimal thresholds for n classes
-        thresholds = threshold_multiotsu(image, classes=3)
-        thresh_dim = thresholds[0]  # Lower threshold (background vs dim)
-        thresh_bright = thresholds[1]  # Upper threshold (dim vs bright)
-    elif threshold_method == "li":
-        thresh_dim = threshold_li(image)
-        thresh_bright = thresh_dim  # Single threshold, all signal is same category
-    elif threshold_method == "otsu":
-        thresh_dim = threshold_otsu(image)
-        thresh_bright = thresh_dim
-    elif threshold_method == "yen":
-        thresh_dim = threshold_yen(image)
-        thresh_bright = thresh_dim
-    elif threshold_method == "li_double":
-        # Two-pass Li: 1st separates background, 2nd separates dim/bright
-        thresh_dim = threshold_li(image)
-        signal_pixels = image[image > thresh_dim]
-        if len(signal_pixels) > 0:
-            thresh_bright = threshold_li(signal_pixels)
+
+    METHODS = ["connected", "watershed", "dbscan", "morphological", "region_growing"]
+    THRESHOLD_METHODS = ["manual", "multiotsu", "li_double", "otsu_double", "li", "otsu", "yen"]
+
+    def __init__(
+        self,
+        method: str = "connected",
+        threshold_method: str = "li_double",
+        threshold_dim: float = 0.5,
+        threshold_bright: float = 1.5,
+        min_region_size: int = 20,
+        global_threshold: bool = True,
+        # Watershed parameters
+        min_distance: int = 10,
+        # DBSCAN parameters
+        eps: float = 3.0,
+        min_samples: int = 10,
+        intensity_scale: float = 10.0,
+        # Morphological parameters
+        kernel_size: int = 3,
+        # Region growing parameters
+        seed_threshold: float = 2.0,
+        growth_threshold: float = 0.5,
+        max_diff: float = 0.5,
+    ) -> None:
+        """Initialize the SpatialCategorizer."""
+        if method not in self.METHODS:
+            raise ValueError(f"Unknown method: {method}. Choose from {self.METHODS}")
+        if threshold_method not in self.THRESHOLD_METHODS:
+            raise ValueError(f"Unknown threshold_method: {threshold_method}. Choose from {self.THRESHOLD_METHODS}")
+
+        self.method = method
+        self.threshold_method = threshold_method
+        self.threshold_dim = threshold_dim
+        self.threshold_bright = threshold_bright
+        self.min_region_size = min_region_size
+        self.global_threshold = global_threshold
+
+        # Method-specific parameters
+        self.min_distance = min_distance  # watershed
+        self.eps = eps  # dbscan
+        self.min_samples = min_samples  # dbscan
+        self.intensity_scale = intensity_scale  # dbscan
+        self.kernel_size = kernel_size  # morphological
+        self.seed_threshold = seed_threshold  # region_growing
+        self.growth_threshold = growth_threshold  # region_growing
+        self.max_diff = max_diff  # region_growing
+
+        # Results (populated after fit)
+        self.frames: list[np.ndarray] = []
+        self.categorized_frames: list[np.ndarray] = []
+        self.frame_stats: list[dict] = []
+        self.thresholds_used: tuple | None = None
+
+    def fit(self, image_segment: np.ndarray) -> "SpatialCategorizer":
+        """
+        Fit the categorizer to an image segment.
+
+        Args:
+            image_segment: 3D array (frames, height, width) or 2D array (single frame)
+
+        Returns:
+            self (for method chaining)
+        """
+        # Convert to list of frames
+        if image_segment.ndim == 2:
+            self.frames = [image_segment]
         else:
-            thresh_bright = thresh_dim
-    elif threshold_method == "otsu_double":
-        # Two-pass Otsu: 1st separates background, 2nd separates dim/bright
-        thresh_dim = threshold_otsu(image)
-        signal_pixels = image[image > thresh_dim]
-        if len(signal_pixels) > 0:
-            thresh_bright = threshold_otsu(signal_pixels)
+            self.frames = [image_segment[i] for i in range(image_segment.shape[0])]
+
+        # Calculate global thresholds if needed
+        if self.global_threshold and self.threshold_method != "manual":
+            self._calculate_global_thresholds()
         else:
-            thresh_bright = thresh_dim
-    else:
-        raise ValueError(f"Unknown threshold_method: {threshold_method}")
+            self.thresholds_used = (self.threshold_dim, self.threshold_bright)
 
-    # Find pixels above threshold
-    signal_mask = image > thresh_dim
+        # Process each frame
+        self.categorized_frames = []
+        self.frame_stats = []
 
-    # Find spatially connected regions (8-connectivity)
-    labeled_regions, num_regions = label(signal_mask)
+        for frame_idx, frame in enumerate(self.frames):
+            categorized, stats = self._categorize_frame(frame, frame_idx)
+            self.categorized_frames.append(categorized)
+            self.frame_stats.append(stats)
 
-    # Filter regions by size and categorize
-    categorized = np.zeros_like(image, dtype=int)
-    valid_regions = np.zeros_like(image, dtype=int)
-    region_stats = []
+        return self
 
-    valid_region_id = 1
-    for region_id in range(1, num_regions + 1):
-        region_mask = labeled_regions == region_id
-        region_size = np.sum(region_mask)
+    def _calculate_global_thresholds(self) -> None:
+        """Calculate thresholds using all frames combined."""
+        all_pixels = np.concatenate([f.flatten() for f in self.frames])
 
-        # Skip small regions (likely noise)
-        if region_size < min_region_size:
-            continue
-
-        # Calculate region statistics
-        region_pixels = image[region_mask]
-        mean_intensity = np.mean(region_pixels)
-        max_intensity = np.max(region_pixels)
-        min_intensity = np.min(region_pixels)
-
-        # Store region
-        valid_regions[region_mask] = valid_region_id
-
-        # Categorize based on mean intensity
-        if mean_intensity > thresh_bright:
-            category = 2  # Bright
-            category_name = "bright"
+        if self.threshold_method == "multiotsu":
+            thresholds = threshold_multiotsu(all_pixels, classes=3)
+            self.thresholds_used = (thresholds[0], thresholds[1])
+        elif self.threshold_method == "li_double":
+            thresh_dim = threshold_li(all_pixels)
+            signal_pixels = all_pixels[all_pixels > thresh_dim]
+            thresh_bright = threshold_li(signal_pixels) if len(signal_pixels) > 0 else thresh_dim
+            self.thresholds_used = (thresh_dim, thresh_bright)
+        elif self.threshold_method == "otsu_double":
+            thresh_dim = threshold_otsu(all_pixels)
+            signal_pixels = all_pixels[all_pixels > thresh_dim]
+            thresh_bright = threshold_otsu(signal_pixels) if len(signal_pixels) > 0 else thresh_dim
+            self.thresholds_used = (thresh_dim, thresh_bright)
+        elif self.threshold_method == "li":
+            thresh = threshold_li(all_pixels)
+            self.thresholds_used = (thresh, thresh)
+        elif self.threshold_method == "otsu":
+            thresh = threshold_otsu(all_pixels)
+            self.thresholds_used = (thresh, thresh)
+        elif self.threshold_method == "yen":
+            thresh = threshold_yen(all_pixels)
+            self.thresholds_used = (thresh, thresh)
         else:
-            category = 1  # Dim
-            category_name = "dim"
+            self.thresholds_used = (self.threshold_dim, self.threshold_bright)
 
-        categorized[region_mask] = category
+    def _categorize_frame(self, frame: np.ndarray, frame_idx: int) -> tuple[np.ndarray, dict]:
+        """Categorize a single frame using the selected method."""
+        thresh_dim, thresh_bright = self.thresholds_used
 
-        # Store statistics
-        region_stats.append({
-            'region_id': valid_region_id,
-            'size': region_size,
-            'mean_z': mean_intensity,
-            'max_z': max_intensity,
-            'min_z': min_intensity,
-            'category': category,
-            'category_name': category_name
-        })
+        if self.method == "connected":
+            return self._method_connected(frame, frame_idx, thresh_dim, thresh_bright)
+        elif self.method == "watershed":
+            return self._method_watershed(frame, frame_idx, thresh_dim, thresh_bright)
+        elif self.method == "dbscan":
+            return self._method_dbscan(frame, frame_idx, thresh_dim, thresh_bright)
+        elif self.method == "morphological":
+            return self._method_morphological(frame, frame_idx, thresh_dim, thresh_bright)
+        elif self.method == "region_growing":
+            return self._method_region_growing(frame, frame_idx, thresh_dim, thresh_bright)
+        else:
+            raise ValueError(f"Unknown method: {self.method}")
 
-        valid_region_id += 1
+    def _method_connected(
+        self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
+    ) -> tuple[np.ndarray, dict]:
+        """Connected components analysis."""
+        signal_mask = frame > thresh_dim
+        labeled_regions, num_regions = label(signal_mask)
 
-    return {
-        'categorized': categorized,
-        'regions': valid_regions,
-        'stats': region_stats,
-        'num_regions': len(region_stats),
-        'thresholds': (thresh_dim, thresh_bright)
-    }
+        categorized = np.zeros_like(frame, dtype=int)
+        region_stats = []
+        valid_region_id = 1
+
+        for region_id in range(1, num_regions + 1):
+            region_mask = labeled_regions == region_id
+            region_size = np.sum(region_mask)
+
+            if region_size < self.min_region_size:
+                continue
+
+            region_pixels = frame[region_mask]
+            mean_intensity = np.mean(region_pixels)
+
+            if mean_intensity > thresh_bright:
+                category = 2
+                category_name = "bright"
+            else:
+                category = 1
+                category_name = "dim"
+
+            categorized[region_mask] = category
+            region_stats.append({
+                "region_id": valid_region_id,
+                "size": region_size,
+                "mean_z": mean_intensity,
+                "max_z": np.max(region_pixels),
+                "category": category,
+                "category_name": category_name,
+            })
+            valid_region_id += 1
+
+        return categorized, {
+            "frame_idx": frame_idx,
+            "num_regions": len(region_stats),
+            "region_details": region_stats,
+            "thresholds": self.thresholds_used,
+        }
+
+    def _method_watershed(
+        self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
+    ) -> tuple[np.ndarray, dict]:
+        """Watershed segmentation."""
+        smoothed = ndimage.gaussian_filter(frame, sigma=1.5)
+        mask = smoothed > thresh_dim
+        distance = ndimage.distance_transform_edt(mask)
+
+        local_max = peak_local_max(distance, min_distance=self.min_distance, labels=mask, exclude_border=False)
+
+        markers = np.zeros_like(frame, dtype=int)
+        for idx, (y, x) in enumerate(local_max):
+            markers[y, x] = idx + 1
+
+        labels = watershed(-smoothed, markers, mask=mask)
+
+        categorized = np.zeros_like(frame, dtype=int)
+        region_stats = []
+
+        for region_id in np.unique(labels):
+            if region_id == 0:
+                continue
+            region_mask = labels == region_id
+            region_size = np.sum(region_mask)
+
+            if region_size < self.min_region_size:
+                continue
+
+            mean_intensity = np.mean(frame[region_mask])
+
+            if mean_intensity > thresh_bright:
+                categorized[region_mask] = 2
+                category_name = "bright"
+            elif mean_intensity > thresh_dim:
+                categorized[region_mask] = 1
+                category_name = "dim"
+            else:
+                continue
+
+            region_stats.append({
+                "region_id": region_id,
+                "size": region_size,
+                "mean_z": mean_intensity,
+                "category_name": category_name,
+            })
+
+        return categorized, {
+            "frame_idx": frame_idx,
+            "num_regions": len(region_stats),
+            "num_peaks": len(local_max),
+            "region_details": region_stats,
+            "thresholds": self.thresholds_used,
+        }
+
+    def _method_dbscan(
+        self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
+    ) -> tuple[np.ndarray, dict]:
+        """DBSCAN spatial clustering."""
+        mask = frame > thresh_dim
+        coords = np.argwhere(mask)
+        intensities = frame[mask].reshape(-1, 1)
+
+        if len(coords) == 0:
+            return np.zeros_like(frame, dtype=int), {
+                "frame_idx": frame_idx,
+                "num_regions": 0,
+                "region_details": [],
+                "thresholds": self.thresholds_used,
+            }
+
+        features = np.hstack([coords, intensities * self.intensity_scale])
+        clustering = DBSCAN(eps=self.eps, min_samples=self.min_samples)
+        cluster_labels = clustering.fit_predict(features)
+
+        labeled_image = np.zeros_like(frame, dtype=int)
+        for idx, (y, x) in enumerate(coords):
+            if cluster_labels[idx] != -1:
+                labeled_image[y, x] = cluster_labels[idx] + 1
+
+        categorized = np.zeros_like(frame, dtype=int)
+        region_stats = []
+
+        for cluster_id in np.unique(cluster_labels):
+            if cluster_id == -1:
+                continue
+            cluster_mask = labeled_image == (cluster_id + 1)
+            cluster_size = np.sum(cluster_mask)
+
+            if cluster_size < self.min_region_size:
+                continue
+
+            mean_intensity = np.mean(frame[cluster_mask])
+
+            if mean_intensity > thresh_bright:
+                categorized[cluster_mask] = 2
+                category_name = "bright"
+            else:
+                categorized[cluster_mask] = 1
+                category_name = "dim"
+
+            region_stats.append({
+                "cluster_id": cluster_id,
+                "size": cluster_size,
+                "mean_z": mean_intensity,
+                "category_name": category_name,
+            })
+
+        return categorized, {
+            "frame_idx": frame_idx,
+            "num_regions": len(region_stats),
+            "num_noise_pixels": np.sum(cluster_labels == -1),
+            "region_details": region_stats,
+            "thresholds": self.thresholds_used,
+        }
+
+    def _method_morphological(
+        self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
+    ) -> tuple[np.ndarray, dict]:
+        """Morphological cleanup."""
+        categorized = np.zeros_like(frame, dtype=int)
+        categorized[frame > thresh_dim] = 1
+        categorized[frame > thresh_bright] = 2
+
+        struct = generate_binary_structure(2, 2)
+        if self.kernel_size > 1:
+            struct = ndimage.iterate_structure(struct, self.kernel_size)
+
+        dim_mask = categorized == 1
+        bright_mask = categorized == 2
+
+        # Opening then closing for each category
+        dim_cleaned = binary_erosion(dim_mask, structure=struct)
+        dim_cleaned = binary_dilation(dim_cleaned, structure=struct)
+        dim_cleaned = binary_dilation(dim_cleaned, structure=struct)
+        dim_cleaned = binary_erosion(dim_cleaned, structure=struct)
+
+        bright_cleaned = binary_erosion(bright_mask, structure=struct)
+        bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
+        bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
+        bright_cleaned = binary_erosion(bright_cleaned, structure=struct)
+
+        result = np.zeros_like(frame, dtype=int)
+        result[dim_cleaned] = 1
+        result[bright_cleaned] = 2
+
+        return result, {
+            "frame_idx": frame_idx,
+            "num_regions": 0,  # Not tracked for morphological
+            "before_dim": np.sum(dim_mask),
+            "after_dim": np.sum(dim_cleaned),
+            "before_bright": np.sum(bright_mask),
+            "after_bright": np.sum(bright_cleaned),
+            "thresholds": self.thresholds_used,
+        }
+
+    def _method_region_growing(
+        self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
+    ) -> tuple[np.ndarray, dict]:
+        """Region growing from seeds."""
+        seeds = frame > self.seed_threshold
+        labeled_seeds, num_seeds = label(seeds)
+
+        regions = np.zeros_like(frame, dtype=int)
+        visited = np.zeros_like(frame, dtype=bool)
+
+        region_id = 1
+        for seed_label in range(1, num_seeds + 1):
+            seed_coords = np.argwhere(labeled_seeds == seed_label)
+            if len(seed_coords) == 0:
+                continue
+
+            seed_y, seed_x = seed_coords[0]
+            seed_value = frame[seed_y, seed_x]
+
+            to_check = [(seed_y, seed_x)]
+            regions[seed_y, seed_x] = region_id
+            visited[seed_y, seed_x] = True
+
+            while to_check:
+                y, x = to_check.pop(0)
+
+                for dy in [-1, 0, 1]:
+                    for dx in [-1, 0, 1]:
+                        if dy == 0 and dx == 0:
+                            continue
+
+                        ny, nx = y + dy, x + dx
+
+                        if ny < 0 or ny >= frame.shape[0] or nx < 0 or nx >= frame.shape[1]:
+                            continue
+
+                        if visited[ny, nx]:
+                            continue
+
+                        neighbor_value = frame[ny, nx]
+                        if neighbor_value > self.growth_threshold and abs(neighbor_value - seed_value) < self.max_diff:
+                            regions[ny, nx] = region_id
+                            visited[ny, nx] = True
+                            to_check.append((ny, nx))
+
+            region_id += 1
+
+        # Categorize regions by intensity
+        categorized = np.zeros_like(frame, dtype=int)
+        region_stats = []
+
+        for rid in range(1, region_id):
+            region_mask = regions == rid
+            region_size = np.sum(region_mask)
+
+            if region_size < self.min_region_size:
+                continue
+
+            mean_intensity = np.mean(frame[region_mask])
+
+            if mean_intensity > thresh_bright:
+                categorized[region_mask] = 2
+                category_name = "bright"
+            else:
+                categorized[region_mask] = 1
+                category_name = "dim"
+
+            region_stats.append({
+                "region_id": rid,
+                "size": region_size,
+                "mean_z": mean_intensity,
+                "category_name": category_name,
+            })
+
+        return categorized, {
+            "frame_idx": frame_idx,
+            "num_regions": len(region_stats),
+            "num_seeds": num_seeds,
+            "region_details": region_stats,
+            "thresholds": self.thresholds_used,
+        }
+
+    def plot(self, figsize_per_frame: tuple[int, int] = (3, 6)) -> plt.Figure:
+        """
+        Plot the categorization results.
+
+        Args:
+            figsize_per_frame: Figure size per frame (width, height)
+
+        Returns:
+            matplotlib Figure object
+        """
+        if not self.categorized_frames:
+            raise RuntimeError("No results to plot. Call fit() first.")
+
+        n_frames = len(self.frames)
+        fig, axes = plt.subplots(2, n_frames, figsize=(figsize_per_frame[0] * n_frames, figsize_per_frame[1]))
+
+        # Handle single frame case
+        if n_frames == 1:
+            axes = axes.reshape(2, 1)
+
+        cmap_cat = ListedColormap(["black", "green", "yellow"])
+
+        all_data = np.concatenate([f.flatten() for f in self.frames])
+        vmin, vmax = np.percentile(all_data, [1, 99])
+
+        for i, (orig, cat) in enumerate(zip(self.frames, self.categorized_frames)):
+            # Top row: original z-scored
+            axes[0, i].imshow(orig, cmap="gray", vmin=vmin, vmax=vmax)
+            axes[0, i].set_title(f"Frame {i}\n(Z-score)", fontsize=9)
+            axes[0, i].axis("off")
+
+            # Bottom row: categorized
+            axes[1, i].imshow(cat, cmap=cmap_cat, vmin=0, vmax=2)
+            n_regions = self.frame_stats[i].get("num_regions", 0)
+            axes[1, i].set_title(f"Categorized\n({n_regions} regions)", fontsize=9)
+            axes[1, i].axis("off")
+
+        # Legend
+        legend_elements = [
+            Patch(facecolor="black", edgecolor="white", label="Background"),
+            Patch(facecolor="green", label="Dim"),
+            Patch(facecolor="yellow", label="Bright"),
+        ]
+        fig.legend(handles=legend_elements, loc="upper right", fontsize=9)
+
+        # Title
+        title = f"Spatial Categorization: {self.method.upper()}"
+        if self.thresholds_used:
+            thresh_dim, thresh_bright = self.thresholds_used
+            title += f"\nThresholds: dim>{thresh_dim:.2f}, bright>{thresh_bright:.2f}"
+        title += f" (method: {self.threshold_method})"
+        plt.suptitle(title, fontweight="bold")
+        plt.tight_layout()
+
+        return fig
+
+    def show(self) -> None:
+        """Plot and display the results."""
+        self.plot()
+        plt.show()
+
+    def get_results(self) -> dict:
+        """
+        Get all results as a dictionary.
+
+        Returns:
+            dict with categorized_frames, frame_stats, thresholds_used
+        """
+        return {
+            "categorized_frames": self.categorized_frames,
+            "frame_stats": self.frame_stats,
+            "thresholds_used": self.thresholds_used,
+            "method": self.method,
+            "threshold_method": self.threshold_method,
+        }
 
 
-def categorize_spatial_morphological(
-    image: np.ndarray,
-    threshold_dim: float = 0.5,
-    threshold_bright: float = 1.5,
-    cleanup_size: int = 2
-) -> np.ndarray:
-    """
-    Quick spatial cleanup using morphological operations.
-
-    This is the FASTEST spatial method - good for enhancing existing k-means results.
-
-    Process:
-    1. Threshold into categories
-    2. Morphological opening: Remove isolated pixels
-    3. Morphological closing: Fill small holes
-
-    Args:
-        image: 2D z-scored array
-        threshold_dim: Z-score threshold for dim signal
-        threshold_bright: Z-score threshold for bright signal
-        cleanup_size: Size of morphological structuring element (default: 2)
-
-    Returns:
-        categorized: 2D array (0=background, 1=dim, 2=bright)
-
-    Example:
-        >>> # Add after your k-means to clean up results
-        >>> kmeans_result = apply_kmeans_to_frame(frame)
-        >>> cleaned = categorize_spatial_morphological(frame)
-    """
-    # Initial categorization
-    categorized = np.zeros_like(image, dtype=int)
-    categorized[image > threshold_dim] = 1
-    categorized[image > threshold_bright] = 2
-
-    # Create structuring element
-    struct = generate_binary_structure(2, 2)  # 8-connectivity
-    if cleanup_size > 1:
-        struct = binary_dilation(struct, iterations=cleanup_size - 1)
-
-    # Clean up each category
-    dim_mask = categorized == 1
-    bright_mask = categorized == 2
-
-    # Opening: erosion followed by dilation (removes small objects)
-    dim_cleaned = binary_erosion(dim_mask, structure=struct)
-    dim_cleaned = binary_dilation(dim_cleaned, structure=struct)
-
-    bright_cleaned = binary_erosion(bright_mask, structure=struct)
-    bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
-
-    # Closing: dilation followed by erosion (fills small holes)
-    dim_cleaned = binary_dilation(dim_cleaned, structure=struct)
-    dim_cleaned = binary_erosion(dim_cleaned, structure=struct)
-
-    bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
-    bright_cleaned = binary_erosion(bright_cleaned, structure=struct)
-
-    # Combine
-    result = np.zeros_like(image, dtype=int)
-    result[dim_cleaned] = 1
-    result[bright_cleaned] = 2
-
-    return result
-
-
+# Convenience function for backward compatibility
 def process_segment_spatial(
     image_segment: np.ndarray,
     method: str = "connected",
     plot: bool = False,
-    **kwargs
+    global_threshold: bool = True,
+    **kwargs,
 ) -> tuple[list[np.ndarray], list[dict]]:
     """
-    Process entire image segment (multiple frames) using spatial methods.
-
-    This is a replacement for process_segment_kmeans() from kmeans.py
+    Process image segment using spatial methods (backward compatible function).
 
     Args:
-        image_segment: 3D array (frames, height, width) or list of 2D arrays
-        method: 'connected' or 'morphological'
-        plot: If True, display visualization of results
-        **kwargs: Additional parameters for the chosen method
+        image_segment: 3D array (frames, height, width)
+        method: Categorization method
+        plot: If True, display visualization
+        global_threshold: If True, use global thresholds
+        **kwargs: Additional parameters
 
     Returns:
-        categorized_frames: List of categorized frames
-        frame_stats: List of statistics dicts (one per frame)
-
-    Example:
-        >>> # Replace your k-means call:
-        >>> # clustered, centers = process_segment_kmeans(segment)
-        >>> # With:
-        >>> clustered, stats = process_segment_spatial(segment, method='connected')
+        categorized_frames, frame_stats
     """
-    if not isinstance(image_segment, list):
-        # Convert 3D array to list of 2D frames
-        frames = [image_segment[i] for i in range(image_segment.shape[0])]
-    else:
-        frames = image_segment
+    categorizer = SpatialCategorizer(method=method, global_threshold=global_threshold, **kwargs)
+    categorizer.fit(image_segment)
 
-    categorized_frames = []
-    all_stats = []
-
-    thresholds_used = None  # Track thresholds for plotting
-
-    for frame_idx, frame in enumerate(frames):
-        if method == "connected":
-            result = categorize_spatial_connected(frame, **kwargs)
-            categorized_frames.append(result['categorized'])
-            thresholds_used = result['thresholds']  # Get thresholds from result
-            all_stats.append({
-                'frame_idx': frame_idx,
-                'num_regions': result['num_regions'],
-                'region_details': result['stats'],
-                'thresholds': result['thresholds']
-            })
-
-        elif method == "morphological":
-            categorized = categorize_spatial_morphological(frame, **kwargs)
-            categorized_frames.append(categorized)
-            # Simple stats for morphological method
-            all_stats.append({
-                'frame_idx': frame_idx,
-                'dim_pixels': np.sum(categorized == 1),
-                'bright_pixels': np.sum(categorized == 2)
-            })
-
-        else:
-            raise ValueError(f"Unknown method: {method}. Use 'connected' or 'morphological'")
-
-    # Plot if requested
     if plot:
-        n_frames = len(frames)
-        fig, axes = plt.subplots(2, n_frames, figsize=(3 * n_frames, 6))
+        categorizer.show()
 
-        # Custom colormap: black=background, green=dim, yellow=bright
-        cmap_cat = ListedColormap(['black', 'green', 'yellow'])
-
-        # Calculate global vmin/vmax for consistent z-score display
-        all_data = np.concatenate([f.flatten() for f in frames])
-        vmin, vmax = np.percentile(all_data, [1, 99])
-
-        for i, (orig, cat) in enumerate(zip(frames, categorized_frames)):
-            # Top row: original z-scored
-            ax_orig = axes[0, i] if n_frames > 1 else axes[0]
-            ax_orig.imshow(orig, cmap='gray', vmin=vmin, vmax=vmax)
-            ax_orig.set_title(f'Frame {i}\n(Z-score)', fontsize=9)
-            ax_orig.axis('off')
-
-            # Bottom row: categorized
-            ax_cat = axes[1, i] if n_frames > 1 else axes[1]
-            ax_cat.imshow(cat, cmap=cmap_cat, vmin=0, vmax=2)
-            n_regions = all_stats[i].get('num_regions', 0)
-            ax_cat.set_title(f'Categorized\n({n_regions} regions)', fontsize=9)
-            ax_cat.axis('off')
-
-        # Add legend
-        from matplotlib.patches import Patch
-        legend_elements = [
-            Patch(facecolor='black', edgecolor='white', label='Background'),
-            Patch(facecolor='green', label='Dim'),
-            Patch(facecolor='yellow', label='Bright')
-        ]
-        fig.legend(handles=legend_elements, loc='upper right', fontsize=9)
-
-        # Build title with threshold info
-        title = 'Spatial Categorization Results'
-        if thresholds_used is not None:
-            thresh_dim, thresh_bright = thresholds_used
-            title += f'\nThresholds: dim>{thresh_dim:.2f}, bright>{thresh_bright:.2f}'
-        plt.suptitle(title, fontweight='bold')
-        plt.tight_layout()
-        plt.show()
-
-    return categorized_frames, all_stats
-
-
-def apply_spatial_to_concatenated(
-    frames: list[np.ndarray],
-    threshold_dim: float = 0.5,
-    threshold_bright: float = 1.5,
-    min_region_size: int = 50
-) -> tuple[list[np.ndarray], dict]:
-    """
-    Spatial version of process_segment_kmeans_concatenated().
-
-    Instead of concatenating frames, this finds regions that appear
-    consistently across multiple frames (spatial + temporal consistency).
-
-    Args:
-        frames: List of 2D arrays (frames to analyze)
-        threshold_dim: Z-score threshold for dim signal
-        threshold_bright: Z-score threshold for bright signal
-        min_region_size: Minimum pixels per region
-
-    Returns:
-        categorized_frames: List of categorized frames
-        consistency_stats: Dict with cross-frame statistics
-    """
-    n_frames = len(frames)
-
-    # Find regions in each frame
-    frame_results = []
-    for frame in frames:
-        result = categorize_spatial_connected(
-            frame,
-            threshold_dim=threshold_dim,
-            threshold_bright=threshold_bright,
-            min_region_size=min_region_size
-        )
-        frame_results.append(result)
-
-    # Find spatially consistent regions across frames
-    # (Pixels that are active in same location across multiple frames)
-    activation_map = np.zeros_like(frames[0], dtype=int)
-    for result in frame_results:
-        activation_map[result['categorized'] > 0] += 1
-
-    # Pixels active in >50% of frames are considered consistent
-    consistent_threshold = n_frames // 2
-    consistent_mask = activation_map >= consistent_threshold
-
-    # Apply consistency filter to each frame
-    filtered_frames = []
-    for result in frame_results:
-        filtered = result['categorized'].copy()
-        filtered[~consistent_mask] = 0  # Remove inconsistent pixels
-        filtered_frames.append(filtered)
-
-    # Statistics
-    stats = {
-        'total_frames': n_frames,
-        'consistent_threshold': consistent_threshold,
-        'num_consistent_pixels': np.sum(consistent_mask),
-        'consistency_map': activation_map
-    }
-
-    return filtered_frames, stats
-
-
-# ============================================================================
-# CONVENIENCE FUNCTIONS FOR QUICK INTEGRATION
-# ============================================================================
-
-def quick_spatial_categorize(zscore_frame: np.ndarray) -> np.ndarray:
-    """
-    Simplest function: Just give me categorized frame!
-
-    Uses sensible defaults for ACh imaging.
-
-    Args:
-        zscore_frame: Your z-score normalized frame
-
-    Returns:
-        categorized: 0=background, 1=dim ACh, 2=bright ACh
-    """
-    return categorize_spatial_connected(
-        zscore_frame,
-        threshold_dim=0.5,
-        threshold_bright=1.5,
-        min_region_size=20
-    )['categorized']
-
-
-def compare_kmeans_vs_spatial(frame: np.ndarray) -> dict:
-    """
-    Compare k-means (your current method) vs spatial method.
-
-    Returns dict with both results for comparison.
-    """
-    from .kmeans import apply_kmeans_to_frame
-
-    # K-means (current)
-    kmeans_result, _ = apply_kmeans_to_frame(frame, n_clusters=3)
-
-    # Spatial (new)
-    spatial_result = categorize_spatial_connected(frame)
-
-    # Calculate differences
-    different_pixels = np.sum(kmeans_result != spatial_result['categorized'])
-    total_pixels = frame.size
-
-    return {
-        'kmeans': kmeans_result,
-        'spatial': spatial_result['categorized'],
-        'difference_pixels': different_pixels,
-        'difference_percent': different_pixels / total_pixels * 100,
-        'spatial_regions': spatial_result['num_regions'],
-        'spatial_stats': spatial_result['stats']
-    }
+    return categorizer.categorized_frames, categorizer.frame_stats
