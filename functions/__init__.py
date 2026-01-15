@@ -20,7 +20,7 @@ from .cpu_gauss import cpu_gaussian_blur
 from .cpu_process import process_on_cpu
 from .get_memory_use import get_memory_usage
 from .imaging_segments_zscore_normalization import img_seg_zscore_norm
-from .spike_triggered_average import spike_trig_avg
+from .spike_centered_processes import spike_centered_avg, spike_centered_median
 
 __all__ = [
     "CUDA_AVAILABLE",
@@ -33,6 +33,7 @@ __all__ = [
     "img_seg_zscore_norm",
     "process_on_cpu",
     "process_on_gpu",
-    "spike_trig_avg",
+    "spike_centered_avg",
+    "spike_centered_median",
     "test_cuda",
 ]

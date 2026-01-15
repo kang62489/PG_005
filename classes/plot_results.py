@@ -1,22 +1,38 @@
 ## Modules
+# Standard library imports
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from classes.spatial_categorization import SpatialCategorizer
+
 # Third-party imports
 import matplotlib as mpl
 import numpy as np
 import pandas as pd
+from matplotlib import cm
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
+from matplotlib.patches import Patch
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import Qt
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 from rich.console import Console
+
+# Local application imports
 
 # Set backend to QtAgg for interactive plotting
 mpl.use("QtAgg")
 
 # Set rich console
 cs = Console()
+
+
+# customized toolbar
+class CustomToolbar(NavigationToolbar):
+    toolitems: ClassVar[list[tuple[str, str, str, str]]] = [("Save", "Save the figure", "filesave", "save_figure")]
 
 
 class MplCanvas(FigureCanvasQTAgg):
@@ -277,3 +293,130 @@ class PlotSegs(QMainWindow):
             # Add canvas as a new PAGE in the stacked widget
             self.sw_plots.addWidget(canvas)
             cs.print(f"Added segment {idx} to stacked widget")
+
+
+class PlotSpatialDist(QMainWindow):
+    def __init__(
+        self,
+        categorizor: "SpatialCategorizer",
+        spike_traces: list[tuple[np.ndarray, np.ndarray]],
+        title: str = "Spatial Distribution",
+    ) -> None:
+        super().__init__()
+        self.setWindowTitle(title)
+        self.sc_ins = categorizor
+        self.spike_traces = spike_traces
+
+        self.lo_main = QVBoxLayout()
+
+        self.w_main = QWidget()
+        self.w_main.setLayout(self.lo_main)
+        self.setCentralWidget(self.w_main)
+
+        self.plotting()
+
+        self.show()
+        center_on_screen(self)
+
+    def plotting(self) -> None:  # noqa: PLR0915
+        if not self.sc_ins.categorized_frames:
+            msg = "No results to plot. Call fit() first."
+            raise RuntimeError(msg)
+
+        # Get number of frames in this segment
+        n_frames = len(self.sc_ins.frames)
+
+        # Create figure with custom canvas
+        fig = Figure(figsize=(8 * n_frames, 8), dpi=100)
+        canvas = FigureCanvasQTAgg(fig)
+        canvas.setMinimumSize(1400, 800)
+        mpl_toolbar = CustomToolbar(canvas, self)
+
+        gs = GridSpec(4, n_frames, figure=fig, height_ratios=[1, 1, 0.1, 0.8], hspace=0.4, wspace=0)
+
+        cmap_cat = ListedColormap(["black", "limegreen", "yellow"])
+        all_data = np.concatenate([f.flatten() for f in self.sc_ins.frames])
+        vmin, vmax = np.percentile(all_data, [1, 99])
+
+        for frame_idx, (orig, cat) in enumerate(zip(self.sc_ins.frames, self.sc_ins.categorized_frames, strict=True)):
+            # Top row: original z-scored frames (median)
+            ax_img = fig.add_subplot(gs[0, frame_idx])
+            ax_img.imshow(orig, cmap="gray", vmin=vmin, vmax=vmax, interpolation="nearest")
+
+            # Frame number title (only on top row)
+            centered_frame_idx = frame_idx - n_frames // 2
+            if centered_frame_idx == 0:
+                ax_img.set_title(
+                    f"(SPIKE)\nZ-Scored\nFrame {centered_frame_idx}", fontweight="bold", color="red", fontsize=9
+                )
+            else:
+                ax_img.set_title(f"Z-Scored\nFrame {centered_frame_idx}", fontweight="bold", fontsize=9)
+            ax_img.axis("off")
+
+            # Bottom row: categorized frames (median)
+            ax_cat = fig.add_subplot(gs[1, frame_idx])
+            ax_cat.imshow(cat, cmap=cmap_cat, vmin=0, vmax=2)
+            # Frame number title (only on top row)
+            if centered_frame_idx == 0:
+                ax_cat.set_title(
+                    f"(SPIKE)\nSpatial Dist\nFrame {centered_frame_idx}", fontweight="bold", color="red", fontsize=9
+                )
+            else:
+                ax_cat.set_title(f"Spatial Dist\nFrame {centered_frame_idx}", fontweight="bold", fontsize=9)
+            ax_cat.axis("off")
+
+        self.lo_main.addWidget(mpl_toolbar)
+        self.lo_main.addWidget(canvas)
+
+        ax_legend = fig.add_subplot(gs[2, :])
+        ax_legend.axis("off")
+
+        legend_elements = [
+            Patch(facecolor="black", edgecolor="white", label="Background"),
+            Patch(facecolor="limegreen", label="Dim"),
+            Patch(facecolor="yellow", label="Bright"),
+        ]
+        ax_legend.legend(handles=legend_elements, loc="upper center", ncol=3, fontsize=9)
+
+        # Bottom row: Plot voltage trace (spans all columns)
+        ax_vm = fig.add_subplot(gs[3, :])
+
+        # Plot all traces - each trace is (time_centered, voltage)
+        n_traces = len(self.spike_traces)
+        colors = cm.tab20(np.linspace(0, 1, n_traces))
+
+        for idx, (time_centered, voltage) in enumerate(self.spike_traces):
+            ax_vm.plot(time_centered, voltage, alpha=0.8, linewidth=0.8, color=colors[idx])
+
+        ax_vm.set_xlabel("Time (ms)")
+        ax_vm.set_ylabel("Vm (mV)")
+        ax_vm.set_title("All Spikes Overlay (centered at Frame 0)")
+
+        # Calculate time limits based on number of frames (50ms per frame)
+        half_frames = n_frames // 2
+        frame_duration = 50.0  # ms
+        time_min = -half_frames * frame_duration
+        time_max = (n_frames - half_frames) * frame_duration
+        ax_vm.set_xlim(time_min, time_max)
+
+        # Draw vertical lines at frame boundaries
+        for i in range(n_frames + 1):
+            t = (i - half_frames) * frame_duration
+            if i == half_frames:  # Spike frame start
+                ax_vm.axvline(x=t, color="red", linestyle="-", linewidth=2, alpha=0.6, label="Spike Frame")
+            else:
+                ax_vm.axvline(x=t, color="black", linestyle="--", linewidth=3, alpha=0.8)
+
+        ax_vm.legend()
+        ax_vm.minorticks_on()
+        ax_vm.grid(True, which="major")
+        ax_vm.grid(True, which="minor", alpha=0.3)
+
+        # Main title with threshold info
+        title = f"Spatial Categorization: {self.sc_ins.method.upper()}"
+        if self.sc_ins.thresholds_used:
+            thresh_dim, thresh_bright = self.sc_ins.thresholds_used
+            title += f" | Thresholds: dim>{thresh_dim:.2f}, bright>{thresh_bright:.2f}"
+        fig.suptitle(title, fontweight="bold", fontsize=11)
+
+        fig.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.15, hspace=0.1, wspace=0)

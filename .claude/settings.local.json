@@ -15,7 +15,9 @@
       "Bash(python test_optimized_cuda.py:*)",
       "Bash(python:*)",
       "Bash(\".venv\\\\Scripts\\\\python.exe\":*)",
-      "Bash(cmd.exe /c \"dir *detrend*.py /b\")"
+      "Bash(cmd.exe /c \"dir *detrend*.py /b\")",
+      "Bash(ls:*)",
+      "Bash(ruff check:*)"
     ],
     "deny": []
   }

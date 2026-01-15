@@ -1,13 +1,13 @@
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                       PROJECT DEPENDENCY DIAGRAM                             ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+     ╔══════════════════════════════════════════════════════════════════════════════╗
+     ║                       PROJECT DEPENDENCY DIAGRAM                             ║
+     ╚══════════════════════════════════════════════════════════════════════════════╝
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         WORKFLOW 1: IMAGE PREPROCESSING                     │
 └─────────────────────────────────────────────────────────────────────────────┘
 
     ┌─────────────────────────┐
-    │  im_process_main.py     │  ← Main Script (97 lines)
+    │  im_preprocess.py       │  ← Main Script
     │  ─────────────────────  │
     │  - Load raw TIFF        │
     │  - Check CUDA           │
@@ -34,13 +34,13 @@
         │  GPU Pipeline        │                    │  CPU Pipeline        │
         │  ─────────────       │                    │  ─────────────       │
         │  functions/          │                    │  functions/          │
-        │  GPU_process.py      │                    │  CPU_process.py      │
+        │  gpu_process.py      │                    │  cpu_process.py      │
         └───────────┬──────────┘                    └─────────┬────────────┘
                     │                                         │
          ┌──────────┴───────────┐                  ┌──────────┴──────────┐
          ▼                      ▼                  ▼                     ▼
     ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-    │ GPU_detrend │    │ GPU_gauss   │    │ CPU_detrend │    │ CPU_gauss   │
+    │ gpu_detrend │    │ gpu_gauss   │    │ cpu_detrend │    │ cpu_gauss   │
     │  (CUDA)     │    │  (CUDA)     │    │  (Numba)    │    │  (Numba)    │
     └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 
@@ -48,38 +48,42 @@
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    WORKFLOW 2: CLUSTER ANALYSIS                             │
+│                    WORKFLOW 2: SPIKE-TRIGGERED ANALYSIS                     │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-    ┌──────────────────────────────┐
-    │  cluster_analysis.py         │  ← Main Script (1500 lines!)
-    │  ──────────────────────────  │
-    │  [SECTION 1: Loading]        │
-    │  [SECTION 2: Spike Detection]│
-    │  [SECTION 3: Segmentation]   │
-    │  [SECTION 4: Normalization]  │
-    │  [SECTION 5: Freq Analysis]  │
-    │  [SECTION 6: Clearance]      │
-    │  [SECTION 7: K-means]        │
-    │  [SECTION 8: Visualization]  │
-    └──────────────┬───────────────┘
+    ┌────────────────────────────────┐
+    │  im_dynamics.py                │  ← Main Script
+    │  ────────────────────────────  │
+    │  - Load processed TIFF + ABF   │
+    │  - Detect spikes               │
+    │  - Extract image segments      │
+    │  - Z-score normalization       │
+    │  - Spike-aligned median        │
+    │  - Spatial categorization      │
+    │  - Visualization               │
+    └──────────────┬─────────────────┘
                    │
-                   ├────────────────────────────────┐
-                   │                                │
-                   ▼                                ▼
-        ┌──────────────────────┐      ┌──────────────────────────┐
-        │  Interactive Plotting│      │  K-means Analysis        │
-        │  ─────────────────── │      │  ────────────────────    │
-        │  classes/            │      │  functions/kmeans.py     │
-        │  PlotResults         │      │  ───────────────────     │
-        │  ├─ Qt GUI           │      │  • prepare_frame         │
-        │  └─ Matplotlib       │      │  • apply_kmeans          │
-        └──────────────────────┘      │  • calculate_areas       │
-                                      │  • visualize_results     │
-                                      │  • concatenated_kmeans   │
-                                      └──────────────────────────┘
+       ┌───────────┼───────────┬───────────────────┐
+       │           │           │                   │
+       ▼           ▼           ▼                   ▼
+┌────────────┐ ┌────────────┐ ┌─────────────────┐ ┌─────────────────────┐
+│  classes/  │ │ Spike-Trig │ │ Z-Score         │ │ Spatial             │
+│ PlotResults│ │ Average    │ │ Normalization   │ │ Categorization      │
+│ ─────────  │ │ ────────── │ │ ─────────────── │ │ ─────────────────── │
+│ Interactive│ │ functions/ │ │ functions/      │ │ functions/          │
+│ Qt viewer  │ │ spike_     │ │ imaging_        │ │ spatial_            │
+│            │ │ triggered_ │ │ segments_       │ │ categorization.py   │
+│            │ │ average.py │ │ zscore_         │ │                     │
+│            │ │            │ │ normalization.py│ │ SpatialCategorizer  │
+└────────────┘ │            │ └─────────────────┘ │ ├─ 5 methods        │
+               │ spike_trig │                     │ ├─ 7 threshold      │
+               │ _avg()     │                     │ │   methods          │
+               │ ├─ mean    │                     │ ├─ fit()            │
+               │ └─ median  │                     │ ├─ plot()           │
+               └────────────┘                     │ └─ show()           │
+                                                  └─────────────────────┘
 
-    Output: Multiple PNG figures + Excel tables
+    Output: Figures + Statistics for ACh release analysis
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -88,10 +92,23 @@
 
     classes/
     ├── __init__.py
-    └── plot_results.py
-         ├── MplCanvas         ← Matplotlib canvas for Qt
-         └── PlotResults       ← Interactive spike detection viewer
-              └── plotting()   ← Renders Vm trace + peaks
+    ├── plot_results.py
+    │    ├── MplCanvas         ← Matplotlib canvas for Qt
+    │    └── PlotResults       ← Interactive spike detection viewer
+    │         └── plotting()   ← Renders Vm trace + peaks
+    │
+    ├── abf_clip.py
+    │    └── ABF data clipping utilities
+    │
+    └── spatial_categorization.py
+         └── SpatialCategorizer
+              ├── METHODS: connected, watershed, morphological
+              ├── THRESHOLD_METHODS: manual, multiotsu,
+              │                      li_double, otsu_double
+              ├── fit()       → Process image segment
+              ├── plot()      → Create matplotlib figure
+              ├── show()      → Display figure
+              └── get_results() → Return categorized data
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -108,27 +125,33 @@
     │   └── get_memory_use.py      → Memory usage monitoring
     │
     ├── [CPU Processing]
-    │   ├── CPU_detrend.py         → @numba.jit detrending
-    │   ├── CPU_gauss.py           → @numba.jit Gaussian blur
-    │   └── CPU_process.py         → Orchestrator (warm up → detrend → blur)
+    │   ├── cpu_detrend.py         → @numba.jit detrending
+    │   ├── cpu_gauss.py           → @numba.jit Gaussian blur
+    │   ├── cpu_binning.py         → Spatial binning
+    │   └── cpu_process.py         → Orchestrator (warm up → detrend → blur)
     │
     ├── [GPU Processing]
-    │   ├── GPU_detrend.py         → @cuda.jit detrending kernel
-    │   ├── GPU_gauss.py           → CUDA Gaussian blur
-    │   └── GPU_process.py         → Orchestrator (transfer → process → copy back)
+    │   ├── gpu_detrend.py         → @cuda.jit detrending kernel
+    │   ├── gpu_gauss.py           → CUDA Gaussian blur
+    │   └── gpu_process.py         → Orchestrator (transfer → process → copy back)
     │
-    ├── [Analysis]
-    │   └── kmeans.py              → K-means clustering suite
-    │        ├── prepare_frame_for_kmeans()
-    │        ├── apply_kmeans_to_frame()
-    │        ├── calculate_cluster_areas()
-    │        ├── visualize_clustering_results()
-    │        ├── process_segment_kmeans()
-    │        ├── process_segment_kmeans_concatenated()
-    │        ├── concatenate_frames_horizontally()
-    │        └── split_concatenated_result()
-    │
-    └── spatial_processing.py      ← ⚠️ UNUSED (dead code?)
+    └── [Analysis]
+        ├── kmeans.py              → K-means clustering suite
+        │    ├── prepare_frame_for_kmeans()
+        │    ├── apply_kmeans_to_frame()
+        │    ├── calculate_cluster_areas()
+        │    ├── visualize_clustering_results()
+        │    ├── process_segment_kmeans()
+        │    ├── process_segment_kmeans_concatenated()
+        │    ├── concatenate_frames_horizontally()
+        │    └── split_concatenated_result()
+        │
+        ├── spike_centered_processes.py  → Spike-aligned processing
+        │    ├── spike_centered_median()  (robust to outliers)
+        │    └── spike_centered_avg()     (mean, sensitive to outliers)
+        │
+        └── imaging_segments_zscore_normalization.py
+             └── Z-score normalization using pre-spike baseline
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -144,8 +167,8 @@
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ STEP 1: Image Preprocessing (im_process_main.py)                            │
-└──────────────────────────────────────────────────────────────────────────────
+│ STEP 1: Image Preprocessing (im_preprocess.py)                              │
+└─────────────────────────────────────────────────────────────────────────────┘
     │
     ├─→ Load: imageio.volread() → uint16 array (n_frames, height, width)
     │
@@ -158,37 +181,33 @@
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ STEP 2: Spike-Triggered Analysis (cluster_analysis.py)                      │
-└──────────────────────────────────────────────────────────────────────────────
+│ STEP 2: Spike-Triggered Analysis (im_dynamics.py)                           │
+└─────────────────────────────────────────────────────────────────────────────┘
     │
     ├─→ Load processed TIFF + ABF
     │
     ├─→ Detect Spikes: scipy.signal.find_peaks()
     │
     ├─→ Segment Images: Extract frames around each spike
-    │    └─→ Available frames check (min 3, max 4 frames around spike)
     │
     ├─→ Z-Score Normalization: (frame - baseline_mean) / baseline_std
     │    └─→ Baseline = all frames before spike
     │
-    ├─→ Frequency Analysis: Count pixels active in ≥X% of segments
+    ├─→ Spike-Aligned Median: Align segments by center, compute median
+    │    └─→ Robust to outliers (random bright spots removed)
     │
-    ├─→ ACh Clearance Analysis: Measure active area over time
-    │    └─→ Hypothesis: Area peaks at spike, decreases after
+    ├─→ Spatial Categorization: Identify ACh release regions
+    │    ├─→ Automatic thresholding (li_double, otsu_double, etc.)
+    │    ├─→ Connected component analysis
+    │    └─→ Min region size filtering
     │
-    ├─→ K-means Clustering: Identify ACh release zones
-    │    ├─→ Spike-triggered averaging (align all segments)
-    │    └─→ 3 clusters: Background (0), Moderate (1), High ACh (2)
-    │
-    └─→ Save: Multiple PNGs + Excel tables
+    └─→ Output: Figures + Statistics
 
 [OUTPUTS]
     │
-    ├─→ *_seeds_Xpct_clean.png           (Seed pixels)
-    ├─→ *_combined_freq_and_averaged.png (3-panel frequency analysis)
-    ├─→ *_frequency_and_clearance.png    (Combined analysis figure)
-    ├─→ *_cluster_analysis.png           (K-means results)
-    └─→ *_cluster_areas.xlsx             (Area measurements)
+    ├─→ Spike-aligned median images
+    ├─→ Spatial categorization figures
+    └─→ Region statistics (area, intensity, etc.)
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -201,7 +220,8 @@ External Dependencies:
   • imageio               → TIFF I/O
   • matplotlib            → Plotting
   • pandas                → Data tables
-  • sklearn.cluster       → K-means algorithm
+  • scikit-image          → Image processing, thresholding, morphology
+  • scikit-learn          → K-means algorithm
   • numba, numba.cuda     → JIT compilation, GPU kernels
   • PySide6               → Qt GUI for interactive plots
   • pyabf                 → ABF file reader
@@ -209,61 +229,45 @@ External Dependencies:
 
 Internal Dependencies:
 ━━━━━━━━━━━━━━━━━━━━━━
-  im_process_main.py
+  im_preprocess.py
     └─→ functions (check_cuda, test_cuda, get_memory_usage,
                    process_on_gpu, process_on_cpu)
 
-  cluster_analysis.py
+  im_dynamics.py
     ├─→ classes (PlotResults)
-    └─→ functions.kmeans (process_segment_kmeans,
-                          process_segment_kmeans_concatenated,
-                          visualize_clustering_results)
+    └─→ functions
+         ├─→ spike_triggered_average (spike_trig_avg)
+         ├─→ spatial_categorization (SpatialCategorizer)
+         └─→ imaging_segments_zscore_normalization
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    FILE SIZE & COMPLEXITY                                   │
+│                    KEY ALGORITHMS                                           │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-Script                      Lines    Complexity    Issues
-────────────────────────────────────────────────────────────────────────────
-im_process_main.py          97       Low           ✓ Well organized
-cluster_analysis.py         1500     Very High     ⚠️ Needs refactoring
-classes/plot_results.py     104      Medium        ✓ Single responsibility
-functions/kmeans.py         415      Medium        ✓ Well documented
-functions/*_process.py      ~70ea    Low           ✓ Clear orchestrators
-functions/*_detrend.py      ~50ea    Low           ✓ Focused functions
-functions/*_gauss.py        ~50ea    Low           ✓ Focused functions
+1. SPIKE-ALIGNED MEDIAN
+   ─────────────────────
+   Purpose: Find consistent signal, filter outliers
 
+   Example (one pixel across 5 segments):
+     Values: [2.0, 2.1, 15.0, 1.9, 2.0]
+     Mean:   4.6  ← contaminated by outlier
+     Median: 2.0  ← robust, true signal
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         KEY INSIGHTS                                        │
-└─────────────────────────────────────────────────────────────────────────────┘
+2. CENTER ALIGNMENT
+   ─────────────────
+   Segments of different lengths aligned by spike frame:
 
-✓ GOOD:
-  • Clear CPU/GPU separation with fallback
-  • Modular processing functions
-  • Good docstrings in kmeans.py
-  • Type hints present
+     target_center = target_frames // 2
+     seg_center = n_frames // 2
+     start = target_center - seg_center
 
-⚠️ NEEDS WORK:
-  • cluster_analysis.py is monolithic (1500 lines)
-  • Configuration scattered throughout
-  • Visualization code duplicated
-  • No clear separation of concerns
-
-🎯 QUICK WINS:
-  • Extract config to config.py
-  • Add section comments
-  • Extract long functions (>100 lines)
-  • Remove spatial_processing.py if unused
-
-📊 LONG-TERM:
-  • Reorganize functions/ into submodules
-  • Extract spike_detection/ module
-  • Extract visualization/ module
-  • Extract analysis/ module
+3. TWO-PASS THRESHOLDING (li_double, otsu_double)
+   ────────────────────────────────────────────────
+   Pass 1: Li/Otsu on all pixels → separates background
+   Pass 2: Li/Otsu on signal pixels → separates dim/bright
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Generated: 2026-01-12
+Generated: 2026-01-15
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

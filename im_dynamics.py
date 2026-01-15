@@ -3,20 +3,13 @@
 import sys
 
 # Third-party imports
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib import gridspec
-from matplotlib.colors import ListedColormap
-from matplotlib.patches import Patch
 from PySide6.QtWidgets import QApplication
-from scipy.ndimage import binary_dilation
 
 # Local application imports
-from classes import AbfClip, PlotPeaks, PlotSegs
+from classes import AbfClip, PlotPeaks, PlotSegs, PlotSpatialDist
+from classes.spatial_categorization import SpatialCategorizer
 from functions.imaging_segments_zscore_normalization import img_seg_zscore_norm
-from functions.kmeans import process_segment_kmeans_concatenated, visualize_clustering_results
-from functions.spatial_categorization import SpatialCategorizer
-from functions.spike_triggered_average import spike_trig_avg
+from functions.spike_centered_processes import spike_centered_median
 
 # Setup QApplication
 app = QApplication(sys.argv)
@@ -25,7 +18,7 @@ app = QApplication(sys.argv)
 PLOT_PEAKS = False
 PLOT_SEGS = False
 
-abf_clip = AbfClip(exp_date="2025_12_15", abf_serial="0009", img_serial="0013")
+abf_clip = AbfClip(exp_date="2025_06_11", abf_serial="0004", img_serial="0003")
 
 lst_img_segments_zscore = img_seg_zscore_norm(abf_clip.lst_img_segments)
 
@@ -37,16 +30,36 @@ if PLOT_SEGS:
         lst_img_segments_zscore, abf_clip.lst_time_segments, abf_clip.lst_abf_segments, abf_clip.df_picked_spikes
     )
 
-avg_img_segment_zscore = spike_trig_avg(lst_img_segments_zscore, method="median")
+med_img_segment_zscore = spike_centered_median(lst_img_segments_zscore)
+
+# Prepare centered spike traces for overlay plotting
+# Each trace will have time centered at frame 0 (spike frame) = 0 ms
+lst_centered_traces = []
+for time_seg, abf_seg, img_seg in zip(
+    abf_clip.lst_time_segments, abf_clip.lst_abf_segments, abf_clip.lst_img_segments, strict=True
+):
+    n_frames = len(img_seg)
+    spike_frame_idx = n_frames // 2  # Center frame is the spike
+
+    # Convert time to milliseconds
+    time_ms = time_seg * 1000
+
+    # Calculate time offset: spike frame should start at 0 ms
+    # Find the sample index where spike frame starts
+    samples_per_frame = len(time_ms) // n_frames
+    spike_start_sample = spike_frame_idx * samples_per_frame
+    time_offset = time_ms[spike_start_sample]
+
+    # Center the time array
+    time_centered = time_ms - time_offset
+
+    lst_centered_traces.append((time_centered, abf_seg))
 
 # Apply spatial categorization to averaged segment
-categorizer = SpatialCategorizer(
-    method="morphological",  # Options: connected, watershed, dbscan, morphological, region_growing
-    threshold_method="li_double",  # Options: manual, multiotsu, li_double, otsu_double, li, otsu, yen
-    min_region_size=20,
-)
-categorizer.fit(avg_img_segment_zscore)
-categorizer.show()
+categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
+categorizer.fit(med_img_segment_zscore)
+
+plt_spatial = PlotSpatialDist(categorizer, lst_centered_traces, title="Spatial Distribution")
 
 app.exec()
 sys.exit()
