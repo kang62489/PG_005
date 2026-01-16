@@ -20,6 +20,7 @@ PG_005/
 │   ├── plot_results.py              # Interactive Qt viewer for spike detection
 │   ├── abf_clip.py                  # ABF data clipping utilities
 │   ├── spatial_categorization.py    # SpatialCategorizer class
+│   ├── region_analyzer.py           # RegionAnalyzer class (area, centroid, contours)
 │   └── archived_methods.py          # Archived: dbscan, region_growing
 │
 └── functions/
@@ -138,8 +139,12 @@ categorizer = SpatialCategorizer.connected(min_region_size=30)
 categorizer = SpatialCategorizer.watershed(min_region_size=20, min_distance=5)
 categorizer = SpatialCategorizer.morphological(kernel_size=5)
 
-# Fit and show
-categorizer.fit(avg_segment).show()
+# Fit the categorizer
+categorizer.fit(avg_segment)
+
+# Get results
+results = categorizer.get_results()
+# Returns: source_frames, categorized_frames, frame_regions, thresholds_used, method, threshold_method
 
 # With manual thresholds
 categorizer = SpatialCategorizer.connected(
@@ -148,6 +153,48 @@ categorizer = SpatialCategorizer.connected(
     threshold_bright=1.5,
 )
 ```
+
+#### `RegionAnalyzer` - Post-Categorization Analysis
+- Calculates region properties: area, centroid, bounding box
+- Extracts contours for visualization
+- Supports pixel-to-micrometer conversion for objectives (10X, 40X, 60X)
+
+```python
+from classes.spatial_categorization import SpatialCategorizer
+from classes.region_analyzer import RegionAnalyzer
+
+# Step 1: Categorize
+categorizer = SpatialCategorizer.morphological()
+categorizer.fit(image_segment)
+
+# Step 2: Analyze regions
+analyzer = RegionAnalyzer(obj="10X", min_area=20)
+analyzer.fit(categorizer.categorized_frames)
+
+# Get results
+results = analyzer.get_results()
+# results["bright_regions"][frame_idx] = [{area_pixels, area_um2, centroid, bbox, label}, ...]
+# results["bright_contours"][frame_idx] = [contour_array, ...]
+
+summary = analyzer.get_summary()
+# Returns: n_frames, total_dim_regions, total_bright_regions, area stats
+
+# Draw contours on plot
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+ax.imshow(categorizer.categorized_frames[0], cmap="gray")
+for contour in results["bright_contours"][0]:
+    ax.plot(contour[:, 1], contour[:, 0], 'r-', linewidth=2)
+plt.show()
+```
+
+### Pixel Scaling Factors
+
+| Objective | pixel/um | um/pixel |
+|-----------|----------|----------|
+| 10X | 0.75 | 1.333 |
+| 40X | 3.0 | 0.333 |
+| 60X | 4.5 | 0.222 |
 
 ---
 
@@ -199,27 +246,31 @@ start = target_center - seg_center
 
 ---
 
-## Post-Processing with skimage
+## Post-Processing with RegionAnalyzer
 
-After spatial categorization, you can use skimage to clean and measure regions:
+After spatial categorization, use `RegionAnalyzer` for region analysis:
 
 ```python
-from skimage.morphology import remove_small_objects, remove_small_holes
-from skimage.measure import label, regionprops
+from classes.spatial_categorization import SpatialCategorizer
+from classes.region_analyzer import RegionAnalyzer
 
-# Extract binary mask for one category
-bright_mask = (categorized_frame == 2)
+# Categorize
+categorizer = SpatialCategorizer.morphological()
+categorizer.fit(image_segment)
 
-# Clean up
-bright_mask = remove_small_objects(bright_mask, min_size=50)
-bright_mask = remove_small_holes(bright_mask, area_threshold=20)
+# Analyze regions with pixel scaling
+analyzer = RegionAnalyzer(obj="10X", min_area=50)
+analyzer.fit(categorizer.categorized_frames)
 
-# Label connected components
-labeled = label(bright_mask)
+# Get per-frame results
+frame_result = analyzer.get_frame_results(0)
+for region in frame_result["bright_regions"]:
+    print(f"Area: {region['area_um2']:.2f} um², Centroid: {region['centroid']}")
 
-# Measure properties
-for region in regionprops(labeled):
-    print(f"Area: {region.area}, Centroid: {region.centroid}")
+# Get summary across all frames
+summary = analyzer.get_summary()
+print(f"Total bright regions: {summary['total_bright_regions']}")
+print(f"Mean bright area: {summary['bright_area_um2_mean']:.2f} um²")
 ```
 
 ### Categorical vs Labeled Images
@@ -254,6 +305,17 @@ python im_dynamics.py
 | `.morphological()` | `kernel_size` | Morphological operations |
 
 All methods also accept: `threshold_method`, `global_threshold`, `threshold_dim`, `threshold_bright`
+
+### RegionAnalyzer Methods
+
+| Method | Returns |
+|--------|---------|
+| `.fit(categorized_frames)` | self (for chaining) |
+| `.get_frame_results(idx)` | dict with dim/bright regions and contours |
+| `.get_results()` | dict with all per-frame data |
+| `.get_summary()` | dict with aggregated statistics |
+| `.pixel_to_um(pixels)` | distance in micrometers |
+| `.area_pixel_to_um2(area)` | area in um² |
 
 ### Threshold Methods
 

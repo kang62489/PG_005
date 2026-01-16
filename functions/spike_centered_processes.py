@@ -9,7 +9,7 @@ console = Console()
 
 def spike_centered_median(
     lst_img_segments: list[np.ndarray],
-) -> np.ndarray:
+) -> tuple[np.ndarray, tuple[float, float]]:
     """
     Compute spike-centered median across all segments.
     Segments are aligned by their central frame (spike frame).
@@ -19,7 +19,9 @@ def spike_centered_median(
         lst_img_segments: List of 3D arrays (frames, height, width)
 
     Returns:
-        Median segment with shape (target_frames, height, width)
+        (median_segment, zscore_range) where:
+        - median_segment: shape (target_frames, height, width)
+        - zscore_range: (vmin, vmax) tuple for consistent color scaling
     """
     target_frames = max(seg.shape[0] for seg in lst_img_segments)
     target_center = target_frames // 2
@@ -42,13 +44,17 @@ def spike_centered_median(
     # Median along segment axis, ignoring NaN
     result = np.nanmedian(stacked, axis=0)
 
-    console.print(f"Output shape: {result.shape}")
-    return result
+    # Calculate z-score range (1st and 99th percentile) for consistent color scaling
+    vmin, vmax = np.percentile(result, [1, 99])
+    zscore_range = (float(vmin), float(vmax))
+
+    console.print(f"Output shape: {result.shape}, Z-score range: [{vmin:.2f}, {vmax:.2f}]")
+    return result, zscore_range
 
 
 def spike_centered_avg(
     lst_img_segments: list[np.ndarray],
-) -> np.ndarray:
+) -> tuple[np.ndarray, tuple[float, float]]:
     """
     Compute spike-centered average (mean) across all segments.
     Segments are aligned by their central frame (spike frame).
@@ -58,7 +64,9 @@ def spike_centered_avg(
         lst_img_segments: List of 3D arrays (frames, height, width)
 
     Returns:
-        Averaged segment with shape (target_frames, height, width)
+        (avg_segment, zscore_range) where:
+        - avg_segment: shape (target_frames, height, width)
+        - zscore_range: (vmin, vmax) tuple for consistent color scaling
     """
     target_frames = max(seg.shape[0] for seg in lst_img_segments)
     target_center = target_frames // 2
@@ -83,5 +91,9 @@ def spike_centered_avg(
     # Average
     result = frame_sum / frame_count[:, None, None]
 
-    console.print(f"Output shape: {result.shape}")
-    return result
+    # Calculate z-score range (1st and 99th percentile) for consistent color scaling
+    vmin, vmax = np.percentile(result, [1, 99])
+    zscore_range = (float(vmin), float(vmax))
+
+    console.print(f"Output shape: {result.shape}, Z-score range: [{vmin:.2f}, {vmax:.2f}]")
+    return result, zscore_range
