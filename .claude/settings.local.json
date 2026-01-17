@@ -17,7 +17,9 @@
       "Bash(\".venv\\\\Scripts\\\\python.exe\":*)",
       "Bash(cmd.exe /c \"dir *detrend*.py /b\")",
       "Bash(ls:*)",
-      "Bash(ruff check:*)"
+      "Bash(ruff check:*)",
+      "Bash(git mv:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": []
   }

@@ -17,7 +17,7 @@ from tabulate import tabulate
 class AbfClip:
     def __init__(
         self,
-        root_dir: str = "D:\\MyDB\\2_Programs\\PG_005",
+        root_dir: str = Path(__file__).parent.parent,
         exp_date: str = "2025_12_15",
         abf_serial: str = "0029",
         img_serial: str = "0037",
