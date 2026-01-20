@@ -5,12 +5,26 @@ build/
 dist/
 wheels/
 *.egg-info
-raw_images/
-*output/
-*.tif
-*.abf
+
+# other caches
+*cache/
+
 # Virtual environments
 .venv
+
+# VS Code and temporary files
 .vscode/
+
+# Claude Code temporary files
+.claude/
 *tmp
 
+# Large data files
+raw_images/
+raw_abfs/
+processed_images/
+results/
+output/
+
+*.abf
+*.tif

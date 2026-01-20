@@ -6,7 +6,16 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 # Local application imports
-from classes import AbfClip, PlotPeaks, PlotRegion, PlotSegs, PlotSpatialDist, RegionAnalyzer, SpatialCategorizer
+from classes import (
+    AbfClip,
+    PlotPeaks,
+    PlotRegion,
+    PlotSegs,
+    PlotSpatialDist,
+    RegionAnalyzer,
+    ResultsExporter,
+    SpatialCategorizer,
+)
 from functions.imaging_segments_zscore_normalization import img_seg_zscore_norm
 from functions.spike_centered_processes import spike_centered_median
 
@@ -15,8 +24,8 @@ app = QApplication(sys.argv)
 
 # Switch on plotting
 PLOT_PEAKS = False
-PLOT_SEGS = False
-PLOT_SPATIAL = False
+PLOT_SEGS = True
+PLOT_SPATIAL = True
 PLOT_REGION = True
 
 abf_clip = AbfClip()
@@ -56,6 +65,16 @@ categorizer.fit(med_img_segment_zscore)
 region_analyzer = RegionAnalyzer(obj="10X")
 region_analyzer.fit(categorizer.categorized_frames)
 
+# Export results
+# exporter = ResultsExporter()
+# exp_dir = exporter.export_all(
+#     abf_clip=abf_clip,
+#     categorizer=categorizer,
+#     region_analyzer=region_analyzer,
+#     zscore_stack=med_img_segment_zscore,
+#     img_segments_zscore=lst_img_segments_zscore,
+# )
+
 if PLOT_PEAKS:
     plt_peaks = PlotPeaks([abf_clip.df_Vm, abf_clip.df_peaks], title="Peak Detection", ylabel="Vm (mV)")
 
@@ -73,6 +92,7 @@ if PLOT_REGION:
     plt_region = PlotRegion(
         categorizer, region_analyzer, lst_centered_traces, title="Region Detail View", zscore_range=zscore_range
     )
+    # exporter.export_figure(exp_dir, plt_region.grab())
 
 app.exec()
 sys.exit()

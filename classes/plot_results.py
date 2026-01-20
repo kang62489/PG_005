@@ -134,9 +134,7 @@ def _add_scale_bar(
     y_pos = img_height - padding - bar_height
 
     # Draw scale bar rectangle
-    rect = Rectangle(
-        (x_pos, y_pos), scale_bar_px, bar_height, linewidth=0, edgecolor=None, facecolor="yellow", zorder=15
-    )
+    rect = Rectangle((x_pos, y_pos), scale_bar_px, bar_height, linewidth=0, edgecolor=None, facecolor="lime", zorder=15)
     ax.add_patch(rect)
 
     # Use provided font_size or auto-scale
@@ -147,8 +145,9 @@ def _add_scale_bar(
         x_pos + scale_bar_px / 2,
         y_pos - 1,
         f"{scale_bar_um} µm",
-        color="yellow",
+        color="lime",
         fontsize=font_size,
+        weight="bold",
         ha="center",
         va="bottom",
         zorder=15,
@@ -393,6 +392,8 @@ class PlotSegs(QMainWindow):
             # Add canvas as a new PAGE in the stacked widget
             self.sw_plots.addWidget(canvas)
             cs.print(f"Added segment {idx} to stacked widget")
+
+            fig.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.15, hspace=0.1, wspace=0)
 
 
 class PlotSpatialDist(QMainWindow):
@@ -681,14 +682,14 @@ class PlotRegion(QMainWindow):
         bright_largest = frame_result["bright_largest"]
         if dim_largest is not None:
             y, x = dim_largest["centroid"]
-            ax_z.scatter(x, y, c="red", s=60, marker="x", linewidths=2, zorder=20)
+            ax_z.scatter(x, y, c="black", s=60, marker="x", linewidths=2, zorder=20)
             dim_centroid_str = f"({x * self.ra_ins.um_per_pixel:.1f} µm, {y * self.ra_ins.um_per_pixel:.1f} µm)"
         else:
             dim_centroid_str = "(None)"
 
         if bright_largest is not None:
             y, x = bright_largest["centroid"]
-            ax_z.scatter(x, y, c="red", s=80, marker="+", linewidths=2, zorder=20)
+            ax_z.scatter(x, y, c="black", s=80, marker="+", linewidths=2, zorder=20)
             bright_centroid_str = f"({x * self.ra_ins.um_per_pixel:.1f} µm, {y * self.ra_ins.um_per_pixel:.1f} µm)"
         else:
             bright_centroid_str = "(None)"
@@ -711,9 +712,11 @@ class PlotRegion(QMainWindow):
         # Add legend for contours and centroids
         ax_z.plot([], [], color="cyan", linewidth=1.5, label="Dim contour")
         ax_z.plot([], [], color="magenta", linewidth=1.5, label="Bright contour")
-        ax_z.plot([], [], marker="x", color="red", linestyle="", markersize=6, markeredgewidth=2, label="Dim centroid")
         ax_z.plot(
-            [], [], marker="+", color="red", linestyle="", markersize=8, markeredgewidth=2, label="Bright centroid"
+            [], [], marker="x", color="black", linestyle="", markersize=6, markeredgewidth=2, label="Dim centroid"
+        )
+        ax_z.plot(
+            [], [], marker="+", color="black", linestyle="", markersize=8, markeredgewidth=2, label="Bright centroid"
         )
         ax_z.legend(loc="lower left", fontsize=7)
 

@@ -75,7 +75,46 @@ CPU Path   GPU Path
 ### Processing Steps
 
 1. **Detrending**: Remove baseline drift using moving average subtraction
-2. **Gaussian Filtering**: Spatial smoothing for noise reduction
+2. **Gaussian Filtering**: Spatial smoothing for signal extraction (see below)
+
+### Gaussian Filtering for ACh Signal Extraction
+
+Fluorescence images of acetylcholine (ACh) release exhibit substantial high-frequency noise arising from photon shot noise and camera readout noise, which obscures the underlying ACh release signals. To extract spatially coherent ACh signals, we apply Gaussian filtering.
+
+**Why Gaussian filtering works:**
+
+Gaussian filtering performs a spatially weighted average centered on each pixel, with weights following a 2D Gaussian distribution. This operation exploits the fundamental difference between signal and noise:
+
+- **Noise**: Spatially uncorrelated (random per pixel). When weighted-averaged, random values cancel out.
+- **Signal**: Spatially coherent—neighboring pixels detecting the same ACh release event show correlated intensity changes because ACh diffuses from physical release sites, creating spatial concentration gradients.
+
+**Parameter selection (σ):**
+
+The critical parameter σ determines the spatial scale of averaging:
+- Features smaller than σ are attenuated
+- Features larger than σ are preserved
+
+Selection rule based on **spatial autocorrelation**:
+```
+noise_correlation_length < σ < signal_correlation_length
+```
+
+| Component | Correlation Length | Basis |
+|-----------|-------------------|-------|
+| Noise | ~1-2 pixels | Camera/shot noise is uncorrelated |
+| Signal | >50 pixels | ACh release sites are cellular-scale |
+
+**Example at 60X (0.22 µm/pixel):**
+```
+σ = 6 pixels = 1.3 µm
+
+Noise correlation:  ~0.2-0.4 µm (1-2 pixels)
+Signal correlation: >10 µm (cellular-scale ACh release)
+
+0.4 µm < 1.3 µm < 10 µm  ✓
+```
+
+This ensures effective noise suppression without distorting the spatial extent or morphology of ACh release regions.
 
 ### Data Transformations
 
@@ -589,4 +628,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Updated: 2026-01-16*
+*Updated: 2026-01-20*

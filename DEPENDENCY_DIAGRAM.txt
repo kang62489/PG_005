@@ -55,12 +55,14 @@
     │  im_dynamics.py                │  ← Main Script
     │  ────────────────────────────  │
     │  - Load processed TIFF + ABF   │
-    │  - Detect spikes               │
+    │  - Detect spikes (AbfClip)     │
     │  - Extract image segments      │
     │  - Z-score normalization       │
     │  - Spike-aligned median        │
     │  - Spatial categorization      │
-    │  - Visualization               │
+    │  - Region analysis             │
+    │  - Export results (SQLite+NPZ) │
+    │  - Visualization (Qt)          │
     └──────────────┬─────────────────┘
                    │
        ┌───────────┼───────────┬───────────────────┐
@@ -94,21 +96,37 @@
     ├── __init__.py
     ├── plot_results.py
     │    ├── MplCanvas         ← Matplotlib canvas for Qt
-    │    └── PlotResults       ← Interactive spike detection viewer
-    │         └── plotting()   ← Renders Vm trace + peaks
+    │    ├── PlotResults       ← Interactive spike detection viewer
+    │    ├── PlotSegs          ← Segment viewer
+    │    ├── PlotSpatialDist   ← Spatial categorization overview
+    │    └── PlotRegion        ← Detailed region viewer with contours
     │
     ├── abf_clip.py
-    │    └── ABF data clipping utilities
+    │    └── AbfClip           ← ABF data clipping + spike detection
     │
-    └── spatial_categorization.py
-         └── SpatialCategorizer
-              ├── METHODS: connected, watershed, morphological
-              ├── THRESHOLD_METHODS: manual, multiotsu,
-              │                      li_double, otsu_double
-              ├── fit()       → Process image segment
-              ├── plot()      → Create matplotlib figure
-              ├── show()      → Display figure
-              └── get_results() → Return categorized data
+    ├── spatial_categorization.py
+    │    └── SpatialCategorizer
+    │         ├── METHODS: connected, watershed, morphological
+    │         ├── THRESHOLD_METHODS: manual, multiotsu,
+    │         │                      li_double, otsu_double
+    │         ├── fit()         → Process image segment
+    │         ├── plot()        → Create matplotlib figure
+    │         ├── show()        → Display figure
+    │         └── get_results() → Return categorized data
+    │
+    ├── region_analyzer.py
+    │    └── RegionAnalyzer
+    │         ├── fit()              → Analyze categorized frames
+    │         ├── get_results()      → Per-frame region data + contours
+    │         ├── get_summary()      → Aggregate statistics
+    │         ├── get_frame_results()→ Single frame results
+    │         └── Supports 10X, 40X, 60X pixel scaling
+    │
+    └── results_exporter.py
+         └── ResultsExporter
+              ├── export_all()     → Save TIFF, NPZ, update SQLite
+              ├── export_figure()  → Save window screenshot
+              └── Output: results/results.db + data/{date}/abf{}_img{}/
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -174,7 +192,11 @@
     │
     ├─→ Detrend: Remove baseline drift (moving average subtraction)
     │
-    ├─→ Gaussian: Spatial smoothing (reduce noise)
+    ├─→ Gaussian Blur (σ=6): Extract spatially coherent ACh signals
+    │    • Noise (spatially uncorrelated) → cancels out via weighted averaging
+    │    • Signal (spatially coherent) → preserved across neighboring pixels
+    │    • Selection: noise_corr_length < σ < signal_corr_length
+    │    •   Example@60X: 0.4 µm < 1.3 µm < 10 µm ✓
     │
     └─→ Save: *_Cal.tif, *_Gauss.tif
          │
@@ -201,13 +223,33 @@
     │    ├─→ Connected component analysis
     │    └─→ Min region size filtering
     │
-    └─→ Output: Figures + Statistics
+    ├─→ Region Analysis: Quantify properties (RegionAnalyzer)
+    │    ├─→ Area calculation (pixels → µm²)
+    │    ├─→ Centroid extraction
+    │    ├─→ Contour detection
+    │    └─→ Summary statistics
+    │
+    ├─→ Export Results: Save to disk (ResultsExporter)
+    │    ├─→ SQLite: metadata + summaries (results/results.db)
+    │    ├─→ TIFF: zscore_stack.tif, categorized_stack.tif
+    │    ├─→ NPZ: img_segments.npz, abf_segments.npz
+    │    └─→ PNG: region_plot.png (Qt window screenshot)
+    │
+    └─→ Visualization: Interactive Qt windows
+         ├─→ PlotSegs: Browse individual spike segments
+         ├─→ PlotSpatialDist: Overview of categorization
+         └─→ PlotRegion: Frame-by-frame detail with contours
 
 [OUTPUTS]
     │
-    ├─→ Spike-aligned median images
-    ├─→ Spatial categorization figures
-    └─→ Region statistics (area, intensity, etc.)
+    ├─→ results/results.db           (SQLite database)
+    ├─→ results/data/{date}/abf{}_img{}/
+    │    ├─→ zscore_stack.tif        (spike-centered median)
+    │    ├─→ categorized_stack.tif   (0=bg, 1=dim, 2=bright)
+    │    ├─→ img_segments.npz        (individual spike segments)
+    │    ├─→ abf_segments.npz        (time + voltage traces)
+    │    └─→ region_plot.png         (PlotRegion screenshot)
+    └─→ Interactive figures (PlotSegs, PlotSpatialDist, PlotRegion)
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -234,11 +276,15 @@ Internal Dependencies:
                    process_on_gpu, process_on_cpu)
 
   im_dynamics.py
-    ├─→ classes (PlotResults)
+    ├─→ classes
+    │    ├─→ AbfClip
+    │    ├─→ PlotPeaks, PlotSegs, PlotSpatialDist, PlotRegion
+    │    ├─→ SpatialCategorizer
+    │    ├─→ RegionAnalyzer
+    │    └─→ ResultsExporter
     └─→ functions
-         ├─→ spike_triggered_average (spike_trig_avg)
-         ├─→ spatial_categorization (SpatialCategorizer)
-         └─→ imaging_segments_zscore_normalization
+         ├─→ spike_centered_processes (spike_centered_median)
+         └─→ imaging_segments_zscore_normalization (img_seg_zscore_norm)
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -270,4 +316,5 @@ Internal Dependencies:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
+Updated: 2026-01-20 (Added Gaussian blur explanation, RegionAnalyzer, ResultsExporter)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
