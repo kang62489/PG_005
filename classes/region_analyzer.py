@@ -248,6 +248,19 @@ class RegionAnalyzer:
             "um_per_pixel": self.um_per_pixel,
         }
 
+    def get_export_data(self) -> dict:
+        """Get region analysis data for export (contours removed)."""
+        region_data = self.get_results()
+        region_data.pop("dim_contours", None)
+        region_data.pop("bright_contours", None)
+
+        return {
+            "objective": self.obj,
+            "um_per_pixel": self.um_per_pixel,
+            "region_summary": self.get_summary(),
+            "region_data": region_data,
+        }
+
     def get_summary(self) -> dict:
         """
         Get summary statistics across all frames.

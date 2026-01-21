@@ -206,3 +206,15 @@ class AbfClip:
         self.cs.print(
             f"Total segments created: Image {len(self.lst_img_segments)}, Time {len(self.lst_time_segments)}, ABF {len(self.lst_abf_segments)}"
         )
+
+    def get_export_data(self) -> dict:
+        """Get ABF data for export."""
+        return {
+            "exp_date": self.exp_date,
+            "abf_serial": self.abf_serial,
+            "img_serial": self.img_serial,
+            "num_found_spikes": self.num_found_spikes,
+            "n_spikes_analyzed": len(self.df_picked_spikes),
+            "lst_time_segments": self.lst_time_segments,
+            "lst_abf_segments": self.lst_abf_segments,
+        }

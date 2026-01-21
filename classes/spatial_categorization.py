@@ -392,6 +392,13 @@ class SpatialCategorizer:
             "threshold_method": self.threshold_method,
         }
 
+    def get_export_data(self) -> dict:
+        """Get categorizer data for export."""
+        return {
+            "threshold_method": self.threshold_method,
+            "categorized_frames": self.categorized_frames,
+        }
+
 
 # Convenience function for backward compatibility
 def process_segment_spatial(

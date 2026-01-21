@@ -404,6 +404,8 @@ class PlotSpatialDist(QMainWindow):
         title: str = "Spatial Distribution",
         obj: str = "10X",
         zscore_range: tuple[float, float] | None = None,
+        *,
+        show: bool = True,
     ) -> None:
         super().__init__()
         self.setWindowTitle(title)
@@ -424,8 +426,9 @@ class PlotSpatialDist(QMainWindow):
 
         self.plotting()
 
-        self.show()
-        center_on_screen(self)
+        if show:
+            self.show()
+            center_on_screen(self)
 
     def plotting(self) -> None:  # noqa: PLR0915
         if not self.sc_ins.categorized_frames:
@@ -575,6 +578,8 @@ class PlotRegion(QMainWindow):
         title: str = "Region Detail View",
         obj: str = "10X",
         zscore_range: tuple[float, float] | None = None,
+        *,
+        show: bool = True,
     ) -> None:
         super().__init__()
         self.setWindowTitle(title)
@@ -635,8 +640,9 @@ class PlotRegion(QMainWindow):
 
         # Set window size to accommodate all three stacks
         self.resize(1400, 480)
-        self.show()
-        center_on_screen(self)
+        if show:
+            self.show()
+            center_on_screen(self)
 
     def switch_frame(self, idx: int) -> None:
         """Switch all three stacks to the selected frame."""

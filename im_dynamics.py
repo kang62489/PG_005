@@ -28,7 +28,7 @@ PLOT_SEGS = True
 PLOT_SPATIAL = True
 PLOT_REGION = True
 
-abf_clip = AbfClip()
+abf_clip = AbfClip(exp_date="2025_12_15", abf_serial="0034", img_serial="0042")
 
 lst_img_segments_zscore = img_seg_zscore_norm(abf_clip.lst_img_segments)
 
@@ -66,15 +66,33 @@ region_analyzer = RegionAnalyzer(obj="10X")
 region_analyzer.fit(categorizer.categorized_frames)
 
 # Export results
-# exporter = ResultsExporter()
-# exp_dir = exporter.export_all(
-#     abf_clip=abf_clip,
-#     categorizer=categorizer,
-#     region_analyzer=region_analyzer,
-#     zscore_stack=med_img_segment_zscore,
-#     img_segments_zscore=lst_img_segments_zscore,
-# )
+exporter = ResultsExporter()
 
+exp_dir = exporter.export_all(
+    **abf_clip.get_export_data(),
+    **categorizer.get_export_data(),
+    **region_analyzer.get_export_data(),
+    zscore_stack=med_img_segment_zscore,
+    img_segments_zscore=lst_img_segments_zscore,
+)
+
+# Always create and save spatial and region plots (conditionally show based on flags)
+plt_spatial = PlotSpatialDist(
+    categorizer, lst_centered_traces, title="Spatial Distribution", zscore_range=zscore_range, show=PLOT_SPATIAL
+)
+exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
+
+plt_region = PlotRegion(
+    categorizer,
+    region_analyzer,
+    lst_centered_traces,
+    title="Region Detail View",
+    zscore_range=zscore_range,
+    show=PLOT_REGION,
+)
+exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
+
+# Conditional plots that are only created when flags are True
 if PLOT_PEAKS:
     plt_peaks = PlotPeaks([abf_clip.df_Vm, abf_clip.df_peaks], title="Peak Detection", ylabel="Vm (mV)")
 
@@ -82,17 +100,6 @@ if PLOT_SEGS:
     plt_segs = PlotSegs(
         lst_img_segments_zscore, abf_clip.lst_time_segments, abf_clip.lst_abf_segments, abf_clip.df_picked_spikes
     )
-
-if PLOT_SPATIAL:
-    plt_spatial = PlotSpatialDist(
-        categorizer, lst_centered_traces, title="Spatial Distribution", zscore_range=zscore_range
-    )
-
-if PLOT_REGION:
-    plt_region = PlotRegion(
-        categorizer, region_analyzer, lst_centered_traces, title="Region Detail View", zscore_range=zscore_range
-    )
-    # exporter.export_figure(exp_dir, plt_region.grab())
 
 app.exec()
 sys.exit()
