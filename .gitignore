@@ -22,6 +22,7 @@ wheels/
 # Large data files
 raw_images/
 raw_abfs/
+rec_summary/
 processed_images/
 results/
 output/
