@@ -1,0 +1,69 @@
+================================================================================
+                        BATCH PROCESSING - QUICK START
+================================================================================
+
+STEP 1: CHECK YOUR DATA
+-----------------------
+How many pairs will be processed?
+  > .venv/Scripts/python -c "from utils.xlsx_reader import get_picked_pairs; print(f'{len(get_picked_pairs())} pairs')"
+
+
+STEP 2: RUN BATCH PROCESSING
+-----------------------------
+Full batch (all pairs):
+  > .venv/Scripts/python batch_process.py
+
+Test with 3 pairs first:
+  > .venv/Scripts/python -c "from batch_process import *; import batch_process; original=batch_process.get_picked_pairs; batch_process.get_picked_pairs=lambda: original()[:3]; main()"
+
+
+STEP 3: CHECK RESULTS
+---------------------
+How many processed?
+  > .venv/Scripts/python -c "import sqlite3; c=sqlite3.connect('results/results.db').cursor(); c.execute('SELECT COUNT(*) FROM experiments'); print(f'Total: {c.fetchone()[0]}')"
+
+View summary:
+  > .venv/Scripts/python -c "import sqlite3; c=sqlite3.connect('results/results.db'); c.row_factory=sqlite3.Row; rows=c.execute('SELECT exp_date, COUNT(*) n FROM experiments GROUP BY exp_date').fetchall(); [print(f\"{r['exp_date']}: {r['n']} pairs\") for r in rows]"
+
+Export to CSV:
+  > .venv/Scripts/python -c "import pandas as pd, sqlite3; pd.read_sql_query('SELECT * FROM experiments', sqlite3.connect('results/results.db')).to_csv('results.csv', index=False); print('Saved to results.csv')"
+
+
+INTERRUPT & RESUME
+------------------
+- Press Ctrl+C to stop anytime
+- Run the same command again to resume
+- Already processed pairs are automatically skipped
+
+
+COMMON ISSUES
+-------------
+No pairs found?
+  Check PICK column in rec_summary/*.xlsx files
+
+File not found?
+  Verify file names match exactly: {date}-{serial}.tif and {date}_{serial}.abf
+
+Slow processing?
+  Check GPU: .venv/Scripts/python -c "from numba import cuda; print('GPU:', cuda.is_available())"
+
+
+FILES CREATED
+-------------
+results/results.db              - SQLite database with all results
+results/{date}/abf*_img*/       - Per-experiment directories
+processed_images/*_Cal.tif      - Detrended images
+processed_images/*_Gauss.tif    - Smoothed images
+
+
+ESTIMATED TIME
+--------------
+~160 pairs = ~5.8 hours (run overnight)
+~3 pairs = ~15 minutes (quick test)
+
+
+FOR MORE DETAILS
+----------------
+See: BATCH_PROCESSING_GUIDE.md
+
+================================================================================
