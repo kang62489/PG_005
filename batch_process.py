@@ -1,9 +1,13 @@
 #!/usr/bin/env python
 """Batch process all tiff/abf pairs from rec_summary metadata."""
 
+from __future__ import annotations
+
 import sqlite3
 import sys
+import traceback
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import tifffile
@@ -15,8 +19,11 @@ from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
 from functions import img_seg_zscore_norm, process_on_cpu, process_on_gpu, spike_centered_median
 from utils.xlsx_reader import get_picked_pairs
 
+if TYPE_CHECKING:
+    from collections.abc import Set
 
-def preprocess_single(date, serial):
+
+def preprocess_single(date: str, serial: str) -> bool:
     """
     Preprocess single tiff (logic from im_preprocess.py).
 
@@ -45,7 +52,7 @@ def preprocess_single(date, serial):
                 detrended, gaussian = process_on_gpu(img)
             else:
                 detrended, _averaged, gaussian = process_on_cpu(img)
-        except (cuda.cudadrv.driver.CudaAPIError, RuntimeError, Exception):
+        except (cuda.cudadrv.driver.CudaAPIError, RuntimeError):
             detrended, _averaged, gaussian = process_on_cpu(img)
 
         # Clip and save
@@ -57,12 +64,12 @@ def preprocess_single(date, serial):
         tifffile.imwrite(output_path / f"{base_name}_Gauss.tif", gaussian_uint16)
         return True
 
-    except Exception as e:
-        print(f"  ✗ Error preprocessing {file}: {e}")
+    except Exception:
+        print(f"  ✗ Error preprocessing {file}")
         return False
 
 
-def analyze_pair(exp_date, abf_serial, img_serial, objective):
+def analyze_pair(exp_date: str, abf_serial: str, img_serial: str, objective: str) -> bool:
     """
     Analyze single pair (logic from im_dynamics.py, NO PLOTTING).
 
@@ -83,7 +90,7 @@ def analyze_pair(exp_date, abf_serial, img_serial, objective):
         lst_img_segments_zscore = img_seg_zscore_norm(abf_clip.lst_img_segments)
 
         # 3. Spike-centered median
-        med_img_segment_zscore, zscore_range = spike_centered_median(lst_img_segments_zscore)
+        med_img_segment_zscore, _ = spike_centered_median(lst_img_segments_zscore)
 
         # 4. Spatial categorization
         categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
@@ -98,7 +105,7 @@ def analyze_pair(exp_date, abf_serial, img_serial, objective):
 
         # 6. Export to database (NO PLOTS)
         exporter = ResultsExporter()
-        exp_dir = exporter.export_all(
+        exporter.export_all(
             exp_date=exp_date,
             abf_serial=abf_serial,
             img_serial=img_serial,
@@ -118,15 +125,13 @@ def analyze_pair(exp_date, abf_serial, img_serial, objective):
 
         return True
 
-    except Exception as e:
-        print(f"  ✗ Error analyzing {exp_date} abf{abf_serial}_img{img_serial}: {e}")
-        import traceback
-
+    except Exception:
+        print(f"  ✗ Error analyzing {exp_date} abf{abf_serial}_img{img_serial}")
         traceback.print_exc()
         return False
 
 
-def get_processed_pairs():
+def get_processed_pairs() -> set[tuple[str, str, str]]:
     """Get list of already processed pairs from database."""
     db_path = Path("results/results.db")
     if not db_path.exists():
@@ -139,12 +144,12 @@ def get_processed_pairs():
         processed = {(row[0], row[1], row[2]) for row in cursor.fetchall()}
         conn.close()
         return processed
-    except Exception as e:
-        print(f"Warning: Could not read existing results from database: {e}")
+    except Exception:
+        print("Warning: Could not read existing results from database")
         return set()
 
 
-def main(skip_existing=True):
+def main(skip_existing: bool = True) -> None:
     """Main batch processing workflow."""
     print("=" * 80)
     print("BATCH PROCESSING")

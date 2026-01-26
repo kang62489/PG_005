@@ -1,21 +1,24 @@
 BATCH PROCESSING - HOW TO RUN
 =============================
 
-STEP 1: Run the batch process
-------------------------------
+TEST FIRST (2-3 pairs, ~15 minutes)
+------------------------------------
+.venv/Scripts/python test_batch.py
+
+
+FULL BATCH (all pairs, ~6 hours)
+---------------------------------
 .venv/Scripts/python batch_process.py
 
-That's it! It will:
+It will:
 - Find all pairs from rec_summary/*.xlsx (PICK column)
 - Preprocess images
 - Analyze everything
 - Save to results/results.db
 
-Time: ~6 hours for 160 pairs
 
-
-STEP 2: Check results
-----------------------
+CHECK RESULTS
+-------------
 .venv/Scripts/python -c "import sqlite3; c=sqlite3.connect('results/results.db').cursor(); c.execute('SELECT COUNT(*) FROM experiments'); print(f'Done: {c.fetchone()[0]} pairs')"
 
 
