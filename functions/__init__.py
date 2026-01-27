@@ -7,7 +7,13 @@ try:
     from .test_cuda import test_cuda
 
     CUDA_AVAILABLE = True
-except (ImportError, ModuleNotFoundError):
+except (ImportError, ModuleNotFoundError) as e:
+    import sys
+
+    print(f"Warning: Failed to import GPU functions: {e}", file=sys.stderr)
+    import traceback
+
+    traceback.print_exc()
     CUDA_AVAILABLE = False
     check_cuda = None
     gpu_detrend_jitted = None
