@@ -48,21 +48,7 @@ echo ""
 
 # Test CUDA availability in Python
 echo "Testing CUDA in Python..."
-python -c "
-from numba import cuda
-import sys
-try:
-    if cuda.is_available():
-        print('✓ Numba CUDA is available')
-        print(f'  Device: {cuda.get_current_device().name.decode()}')
-        print(f'  Compute capability: {cuda.get_current_device().compute_capability}')
-    else:
-        print('✗ Numba CUDA is not available')
-        print('  Will use CPU processing')
-except Exception as e:
-    print(f'✗ CUDA check failed: {e}')
-    print('  Will use CPU processing')
-"
+python test_cuda.py
 echo ""
 
 # Run test batch processing
