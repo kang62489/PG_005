@@ -17,8 +17,8 @@ echo "Running on node: $(hostname)"
 echo "Job ID: $SLURM_JOB_ID"
 echo "=========================================="
 
-# Load CUDA 11.1 module (compatible with driver 455.32.00)
-module load cuda/11.1
+# Load CUDA 11.3 module (Numba requires 11.2+, driver supports up to 11.1 but 11.3 should work)
+module load cuda/11.3
 
 # Check if GPU is available
 if command -v nvidia-smi &> /dev/null; then
