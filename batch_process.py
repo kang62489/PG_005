@@ -71,10 +71,13 @@ def preprocess_single(date: str, serial: str) -> bool:
         # Process on either GPU or CPU with automatic fallback
         try:
             if cuda.is_available():
+                print(f"    Using GPU acceleration")
                 detrended, gaussian = process_on_gpu(img)
             else:
+                print(f"    Using CPU (GPU not available)")
                 detrended, _averaged, gaussian = process_on_cpu(img)
-        except (cuda.cudadrv.driver.CudaAPIError, RuntimeError):
+        except (cuda.cudadrv.driver.CudaAPIError, RuntimeError) as e:
+            print(f"    GPU failed ({e}), falling back to CPU")
             detrended, _averaged, gaussian = process_on_cpu(img)
 
         # Clip and save
@@ -82,12 +85,19 @@ def preprocess_single(date: str, serial: str) -> bool:
         detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
         gaussian_uint16 = np.clip(gaussian, 0, 65535).astype(np.uint16)
 
-        tifffile.imwrite(output_path / f"{base_name}_Cal.tif", detrended_uint16)
-        tifffile.imwrite(output_path / f"{base_name}_Gauss.tif", gaussian_uint16)
+        cal_path = output_path / f"{base_name}_Cal.tif"
+        gauss_path = output_path / f"{base_name}_Gauss.tif"
+
+        print(f"    Saving to {output_path}")
+        tifffile.imwrite(cal_path, detrended_uint16)
+        tifffile.imwrite(gauss_path, gaussian_uint16)
+        print(f"    ✓ Saved {cal_path.name} and {gauss_path.name}")
         return True
 
-    except Exception:
+    except Exception as e:
         print(f"  ✗ Error preprocessing {file}")
+        print(f"     Error: {e}")
+        traceback.print_exc()
         return False
 
 
