@@ -22,8 +22,8 @@ echo "Running on node: $(hostname)"
 echo "Job ID: $SLURM_JOB_ID"
 echo "=========================================="
 
-# Load custom CUDA installation (no need to load python module, venv has it!)
-export CUDA_HOME=/apps/unit/WickensU/kang-chu/cuda/12.6
+# Load CUDA 11.1 (compatible with driver 455.32.00)
+export CUDA_HOME=/apps/unit/WickensU/kang-chu/cuda/11.1
 export PATH=${CUDA_HOME}/bin:$PATH
 export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
 

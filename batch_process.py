@@ -71,17 +71,16 @@ def preprocess_single(date: str, serial: str, use_gpu: bool = True) -> bool:
         img = tifffile.imread(file).astype(np.uint16)
 
         # Process on either GPU or CPU with automatic fallback
-        if use_gpu:
+        if use_gpu and cuda.is_available():
             try:
-                if cuda.is_available():
-                    detrended, gaussian = process_on_gpu(img)
-                else:
-                    print("    CUDA not available, using CPU")
-                    detrended, _averaged, gaussian = process_on_cpu(img)
+                print("    Using GPU acceleration")
+                detrended, gaussian = process_on_gpu(img)
             except (cuda.cudadrv.driver.CudaAPIError, RuntimeError, Exception) as e:
                 print(f"    GPU failed ({e}), falling back to CPU")
                 detrended, _averaged, gaussian = process_on_cpu(img)
         else:
+            if use_gpu:
+                print("    CUDA not available, using CPU")
             detrended, _averaged, gaussian = process_on_cpu(img)
 
         # Clip and save

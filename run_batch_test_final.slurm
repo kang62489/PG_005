@@ -17,18 +17,21 @@ echo "Running on node: $(hostname)"
 echo "Job ID: $SLURM_JOB_ID"
 echo "=========================================="
 
-# Load custom CUDA installation (no need to load python module, venv has it!)
-export CUDA_HOME=/apps/unit/WickensU/kang-chu/cuda/12.6
+# Load CUDA 11.1 (compatible with driver 455.32.00)
+export CUDA_HOME=/apps/unit/WickensU/kang-chu/cuda/11.1
 export PATH=${CUDA_HOME}/bin:$PATH
 export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
 
-# Check if GPU is available (won't fail if not)
+# Check if GPU is available
 if command -v nvidia-smi &> /dev/null; then
     echo "GPU Information:"
     nvidia-smi
     echo ""
+    echo "CUDA Toolkit: $(nvcc --version | grep release)"
+    echo "CUDA_HOME: $CUDA_HOME"
+    echo ""
 else
-    echo "No GPU detected - using CPU mode (this is fine!)"
+    echo "No GPU detected - using CPU mode"
     echo ""
 fi
 
@@ -41,6 +44,25 @@ source .venv/bin/activate
 # Verify Python environment
 echo "Python version: $(python --version)"
 echo "Python path: $(which python)"
+echo ""
+
+# Test CUDA availability in Python
+echo "Testing CUDA in Python..."
+python -c "
+from numba import cuda
+import sys
+try:
+    if cuda.is_available():
+        print('✓ Numba CUDA is available')
+        print(f'  Device: {cuda.get_current_device().name.decode()}')
+        print(f'  Compute capability: {cuda.get_current_device().compute_capability}')
+    else:
+        print('✗ Numba CUDA is not available')
+        print('  Will use CPU processing')
+except Exception as e:
+    print(f'✗ CUDA check failed: {e}')
+    print('  Will use CPU processing')
+"
 echo ""
 
 # Run test batch processing
