@@ -5,20 +5,28 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 
-def get_picked_pairs(rec_summary_dir="rec_summary"):
+def get_picked_pairs(rec_summary_dir: str | Path | None = None) -> list[dict]:
     """
     Read all REC_*.xlsx files and return list of picked pairs.
 
     Args:
         rec_summary_dir: Directory containing REC_*.xlsx files
+                         If None, uses path from config_paths
 
     Returns:
         list of dict: [{'exp_date': '2025_12_18', 'img_serial': '0026',
                         'abf_serial': '0023', 'objective': '10X'}, ...]
     """
+    # Default to config path
+    if rec_summary_dir is None:
+        from config_paths import PATHS
+        rec_summary_dir = PATHS["rec_summary"]
+    else:
+        rec_summary_dir = Path(rec_summary_dir)
+
     pairs = []
 
-    for xlsx_file in Path(rec_summary_dir).glob("REC_*.xlsx"):
+    for xlsx_file in rec_summary_dir.glob("REC_*.xlsx"):
         # Extract date from filename: REC_2025_12_18.xlsx → 2025_12_18
         exp_date = xlsx_file.stem.replace("REC_", "")
 

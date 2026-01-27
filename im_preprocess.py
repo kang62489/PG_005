@@ -27,7 +27,7 @@ log = logging.getLogger("rich")
 def main(file: str) -> None:
     # Parameters
     filename = file
-    raw_path = Path(__file__).parent / "raw_images"
+    raw_path = Path("/bucket/WickensU/Kang/datasets/raw_images")
     output_name_1 = f"{Path(filename).stem}_Cal.tif"
     output_name_2 = f"{Path(filename).stem}_Gauss.tif"
 
@@ -74,8 +74,8 @@ def main(file: str) -> None:
         detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
         gaussian_uint16 = np.clip(gaussian, 0, 65535).astype(np.uint16)
 
-        tifffile.imwrite("processed_images//" + output_name_1, detrended_uint16)
-        tifffile.imwrite("processed_images//" + output_name_2, gaussian_uint16)
+        tifffile.imwrite("/bucket/WickensU/Kang/datasets/processed_images/" + output_name_1, detrended_uint16)
+        tifffile.imwrite("/bucket/WickensU/Kang/datasets/processed_images/" + output_name_2, gaussian_uint16)
         progress.remove_task(task2)
 
     log.info("Saving time: %s seconds", f"{time.time() - t_start:.2f}")

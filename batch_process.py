@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 import traceback
@@ -12,19 +13,36 @@ from typing import TYPE_CHECKING
 import numpy as np
 import tifffile
 from numba import cuda
-from PySide6.QtWidgets import QApplication
 from tqdm import tqdm
 
 # Import existing modules
-from classes import AbfClip, PlotRegion, PlotSpatialDist, RegionAnalyzer, ResultsExporter, SpatialCategorizer
+from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
+from config_paths import PATHS
 from functions import img_seg_zscore_norm, process_on_cpu, process_on_gpu, spike_centered_median
 from utils.xlsx_reader import get_picked_pairs
 
 if TYPE_CHECKING:
     from collections.abc import Set
 
-# Setup QApplication for plot rendering (needed even without showing GUI)
-app = QApplication.instance() or QApplication(sys.argv)
+# Check if we're in headless/batch mode (no display available)
+# This prevents PySide6 from trying to initialize and causing memory errors
+IS_HEADLESS = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or not os.environ.get("DISPLAY")
+
+# Try to import PySide6 and plot classes (only if not headless)
+HAS_QT = False
+if not IS_HEADLESS:
+    try:
+        from PySide6.QtWidgets import QApplication
+        from classes.plot_results import PlotRegion, PlotSpatialDist
+
+        # Setup QApplication for plot rendering (needed even without showing GUI)
+        app = QApplication.instance() or QApplication(sys.argv)
+        HAS_QT = True
+    except (ImportError, RuntimeError):
+        pass
+
+if not HAS_QT:
+    print("Running in headless mode (no plots will be saved)")
 
 
 def preprocess_single(date: str, serial: str) -> bool:
@@ -38,9 +56,9 @@ def preprocess_single(date: str, serial: str) -> bool:
     Returns:
         bool: True if successful, False otherwise
     """
-    input_path = Path("raw_images")
-    output_path = Path("processed_images")
-    output_path.mkdir(exist_ok=True)
+    input_path = PATHS["raw_images"]
+    output_path = PATHS["processed_images"]
+    output_path.mkdir(parents=True, exist_ok=True)
 
     file = input_path / f"{date}-{serial}.tif"
     if not file.exists():
@@ -151,25 +169,26 @@ def analyze_pair(exp_date: str, abf_serial: str, img_serial: str, objective: str
             region_data=region_data,
         )
 
-        # 8. Create and save plots as PNG (without showing them)
-        plt_spatial = PlotSpatialDist(
-            categorizer,
-            lst_centered_traces,
-            title="Spatial Distribution",
-            zscore_range=zscore_range,
-            show=False,
-        )
-        exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
+        # 8. Create and save plots as PNG (only if Qt is available)
+        if HAS_QT:
+            plt_spatial = PlotSpatialDist(
+                categorizer,
+                lst_centered_traces,
+                title="Spatial Distribution",
+                zscore_range=zscore_range,
+                show=False,
+            )
+            exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
 
-        plt_region = PlotRegion(
-            categorizer,
-            region_analyzer,
-            lst_centered_traces,
-            title="Region Detail View",
-            zscore_range=zscore_range,
-            show=False,
-        )
-        exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
+            plt_region = PlotRegion(
+                categorizer,
+                region_analyzer,
+                lst_centered_traces,
+                title="Region Detail View",
+                zscore_range=zscore_range,
+                show=False,
+            )
+            exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
 
         return True
 
@@ -181,7 +200,7 @@ def analyze_pair(exp_date: str, abf_serial: str, img_serial: str, objective: str
 
 def get_processed_pairs() -> set[tuple[str, str, str]]:
     """Get list of already processed pairs from database."""
-    db_path = Path("results/results.db")
+    db_path = PATHS["db_path"]
     if not db_path.exists():
         return set()
 
@@ -204,12 +223,12 @@ def main(skip_existing: bool = True) -> None:
     print("=" * 80)
 
     # 1. Read metadata from xlsx files
-    print("\n[1/4] Reading metadata from rec_summary/*.xlsx...")
+    print(f"\n[1/4] Reading metadata from {PATHS['rec_summary']}/*.xlsx...")
     pairs = get_picked_pairs()
     print(f"Found {len(pairs)} pairs to process")
 
     if len(pairs) == 0:
-        print("No pairs found! Make sure rec_summary/*.xlsx files have PICK column filled.")
+        print(f"No pairs found! Make sure {PATHS['rec_summary']}/*.xlsx files have PICK column filled.")
         sys.exit(1)
 
     # Check for already processed pairs
@@ -237,8 +256,8 @@ def main(skip_existing: bool = True) -> None:
 
     for exp_date, img_serial in tqdm(sorted(unique_images), desc="Preprocessing"):
         # Check if preprocessed files already exist
-        cal_file = Path("processed_images") / f"{exp_date}-{img_serial}_Cal.tif"
-        gauss_file = Path("processed_images") / f"{exp_date}-{img_serial}_Gauss.tif"
+        cal_file = PATHS["processed_images"] / f"{exp_date}-{img_serial}_Cal.tif"
+        gauss_file = PATHS["processed_images"] / f"{exp_date}-{img_serial}_Gauss.tif"
 
         if cal_file.exists() and gauss_file.exists():
             preprocess_skipped += 1
@@ -267,11 +286,16 @@ def main(skip_existing: bool = True) -> None:
     print("=" * 80)
     print("DONE!")
     print("=" * 80)
-    print(f"Results saved to: results/results.db")
+    print(f"Results saved to: {PATHS['db_path']}")
 
     # Final summary
     all_processed = get_processed_pairs()
     print(f"Total experiments in database: {len(all_processed)}")
+
+    # Show paths for copying to bucket if in batch mode
+    if "bucket_results" in PATHS:
+        print("\nNOTE: Results are in temporary directory.")
+        print(f"Will be copied to bucket at end of job.")
 
 
 if __name__ == "__main__":

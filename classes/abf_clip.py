@@ -12,6 +12,7 @@ from scipy.signal import find_peaks
 from tabulate import tabulate
 
 # Local application imports
+from config_paths import PATHS
 
 
 class AbfClip:
@@ -52,12 +53,12 @@ class AbfClip:
         # self.plot_segments()
 
     def load_abf(self) -> None:
-        abf_file_path = Path(self.root_dir) / "raw_abfs" / f"{self.exp_date}_{self.abf_serial}.abf"
+        abf_file_path = PATHS["raw_abfs"] / f"{self.exp_date}_{self.abf_serial}.abf"
         self.loaded_abf = pyabf.ABF(abf_file_path)
 
     def load_img(self, filter_type: str = "Gauss") -> None:
         img_file_path = (
-            Path(self.root_dir) / "processed_images" / f"{self.exp_date}-{self.img_serial}_{filter_type}.tif"
+            PATHS["processed_images"] / f"{self.exp_date}-{self.img_serial}_{filter_type}.tif"
         )
         self.loaded_img = imageio.volread(img_file_path).astype(np.uint16)
         self.loaded_img_frames = self.loaded_img.shape[0]

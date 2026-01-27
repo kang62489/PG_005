@@ -20,6 +20,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import tifffile
 
+# Local imports
+from config_paths import PATHS
+
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
@@ -51,13 +54,15 @@ class ResultsExporter:
                 └── region_plot.png
     """
 
-    def __init__(self, results_root: Path = Path(__file__).parent.parent / "results") -> None:
+    def __init__(self, results_root: Path | None = None) -> None:
         """
         Initialize the ResultsExporter.
 
         Args:
-            results_root: Root directory for results (default: "results")
+            results_root: Root directory for results (default: from config_paths)
         """
+        if results_root is None:
+            results_root = PATHS["results"]
         self.results_root = Path(results_root)
         self.db_path = self.results_root / "results.db"
         self._init_db()
