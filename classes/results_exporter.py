@@ -148,7 +148,7 @@ class ResultsExporter:
         # Save binary files
         self._export_zscore_stack(exp_dir, zscore_stack)
         self._export_img_segments(exp_dir, img_segments_zscore)
-        self._export_categorized_stack(exp_dir, categorized_frames)
+        # NOTE: categorized_stack.tif removed - use PNG plots instead
         self._export_abf_segments(exp_dir, lst_time_segments, lst_abf_segments)
 
         # Insert/update database record

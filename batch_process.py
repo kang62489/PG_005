@@ -12,15 +12,19 @@ from typing import TYPE_CHECKING
 import numpy as np
 import tifffile
 from numba import cuda
+from PySide6.QtWidgets import QApplication
 from tqdm import tqdm
 
 # Import existing modules
-from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
+from classes import AbfClip, PlotRegion, PlotSpatialDist, RegionAnalyzer, ResultsExporter, SpatialCategorizer
 from functions import img_seg_zscore_norm, process_on_cpu, process_on_gpu, spike_centered_median
 from utils.xlsx_reader import get_picked_pairs
 
 if TYPE_CHECKING:
     from collections.abc import Set
+
+# Setup QApplication for plot rendering (needed even without showing GUI)
+app = QApplication.instance() or QApplication(sys.argv)
 
 
 def preprocess_single(date: str, serial: str) -> bool:
@@ -90,22 +94,46 @@ def analyze_pair(exp_date: str, abf_serial: str, img_serial: str, objective: str
         lst_img_segments_zscore = img_seg_zscore_norm(abf_clip.lst_img_segments)
 
         # 3. Spike-centered median
-        med_img_segment_zscore, _ = spike_centered_median(lst_img_segments_zscore)
+        med_img_segment_zscore, zscore_range = spike_centered_median(lst_img_segments_zscore)
 
-        # 4. Spatial categorization
+        # 4. Prepare centered spike traces for plotting
+        lst_centered_traces = []
+        for time_seg, abf_seg, img_seg in zip(
+            abf_clip.lst_time_segments,
+            abf_clip.lst_abf_segments,
+            abf_clip.lst_img_segments,
+            strict=True,
+        ):
+            n_frames = len(img_seg)
+            spike_frame_idx = n_frames // 2  # Center frame is the spike
+
+            # Convert time to milliseconds
+            time_ms = time_seg * 1000
+
+            # Calculate time offset: spike frame should start at 0 ms
+            samples_per_frame = len(time_ms) // n_frames
+            spike_start_sample = spike_frame_idx * samples_per_frame
+            time_offset = time_ms[spike_start_sample]
+
+            # Center the time array
+            time_centered = time_ms - time_offset
+
+            lst_centered_traces.append((time_centered, abf_seg))
+
+        # 5. Spatial categorization
         categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
         categorizer.fit(med_img_segment_zscore)
         categorized_frames = categorizer.categorized_frames
 
-        # 5. Region analysis
+        # 6. Region analysis
         region_analyzer = RegionAnalyzer(obj=objective)
         region_analyzer.fit(categorized_frames)
         region_summary = region_analyzer.get_summary()
         region_data = region_analyzer.get_results()
 
-        # 6. Export to database (NO PLOTS)
+        # 7. Export to database
         exporter = ResultsExporter()
-        exporter.export_all(
+        exp_dir = exporter.export_all(
             exp_date=exp_date,
             abf_serial=abf_serial,
             img_serial=img_serial,
@@ -122,6 +150,26 @@ def analyze_pair(exp_date: str, abf_serial: str, img_serial: str, objective: str
             region_summary=region_summary,
             region_data=region_data,
         )
+
+        # 8. Create and save plots as PNG (without showing them)
+        plt_spatial = PlotSpatialDist(
+            categorizer,
+            lst_centered_traces,
+            title="Spatial Distribution",
+            zscore_range=zscore_range,
+            show=False,
+        )
+        exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
+
+        plt_region = PlotRegion(
+            categorizer,
+            region_analyzer,
+            lst_centered_traces,
+            title="Region Detail View",
+            zscore_range=zscore_range,
+            show=False,
+        )
+        exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
 
         return True
 
