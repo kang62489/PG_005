@@ -76,11 +76,15 @@ def preprocess_single(date: str, serial: str, use_gpu: bool = True) -> bool:
         if use_gpu and cuda.is_available():
             try:
                 print("    Using GPU acceleration")
+                print(f"    process_on_gpu function: {process_on_gpu}")
                 result = process_on_gpu(img)
                 print(f"    GPU returned {len(result)} values")
                 detrended, gaussian = result
             except (cuda.cudadrv.driver.CudaAPIError, RuntimeError, Exception) as e:
-                print(f"    GPU failed ({e}), falling back to CPU")
+                print(f"    GPU failed ({type(e).__name__}: {e}), falling back to CPU")
+                import traceback
+
+                traceback.print_exc()
                 result = process_on_cpu(img)
                 print(f"    CPU returned {len(result)} values")
                 detrended, _averaged, gaussian = result
