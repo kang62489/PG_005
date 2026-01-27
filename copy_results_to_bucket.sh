@@ -33,8 +33,18 @@ echo "Bucket directory: $BUCKET_DIR"
 echo ""
 
 # Create bucket directories if they don't exist
+mkdir -p "$BUCKET_DIR/raw_images"
 mkdir -p "$BUCKET_DIR/processed_images"
 mkdir -p "$BUCKET_DIR/results"
+
+# Copy raw images
+if [ -d "$WORK_DIR/raw_images" ]; then
+    echo "Copying raw images..."
+    rsync -av --progress "$WORK_DIR/raw_images/" "$BUCKET_DIR/raw_images/"
+    echo "✓ Raw images copied"
+else
+    echo "⚠ No raw_images directory found"
+fi
 
 # Copy processed images
 if [ -d "$WORK_DIR/processed_images" ]; then
@@ -58,6 +68,7 @@ echo ""
 echo "=========================================="
 echo "Summary:"
 ls -lh "$BUCKET_DIR/results/results.db" 2>/dev/null && echo "✓ Database: $BUCKET_DIR/results/results.db" || echo "⚠ No database found"
+echo "Raw images: $(ls $BUCKET_DIR/raw_images/*.tif 2>/dev/null | wc -l) files"
 echo "Processed images: $(ls $BUCKET_DIR/processed_images/*.tif 2>/dev/null | wc -l) files"
 echo "Result directories: $(ls -d $BUCKET_DIR/results/*/ 2>/dev/null | wc -l)"
 echo "=========================================="

@@ -15,7 +15,11 @@ import tifffile
 from numba import cuda
 from tqdm import tqdm
 
-# Import existing modules
+# Check if we're in headless/batch mode BEFORE importing Qt
+# This prevents PySide6 from trying to initialize and causing memory errors
+IS_HEADLESS = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or not os.environ.get("DISPLAY")
+
+# Import existing modules (but NOT plot classes yet)
 from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
 from config_paths import PATHS
 from functions import img_seg_zscore_norm, process_on_cpu, process_on_gpu, spike_centered_median
@@ -24,15 +28,12 @@ from utils.xlsx_reader import get_picked_pairs
 if TYPE_CHECKING:
     from collections.abc import Set
 
-# Check if we're in headless/batch mode (no display available)
-# This prevents PySide6 from trying to initialize and causing memory errors
-IS_HEADLESS = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or not os.environ.get("DISPLAY")
-
 # Try to import PySide6 and plot classes (only if not headless)
 HAS_QT = False
 if not IS_HEADLESS:
     try:
         from PySide6.QtWidgets import QApplication
+
         from classes.plot_results import PlotRegion, PlotSpatialDist
 
         # Setup QApplication for plot rendering (needed even without showing GUI)
@@ -45,13 +46,14 @@ if not HAS_QT:
     print("Running in headless mode (no plots will be saved)")
 
 
-def preprocess_single(date: str, serial: str) -> bool:
+def preprocess_single(date: str, serial: str, use_gpu: bool = True) -> bool:
     """
     Preprocess single tiff (logic from im_preprocess.py).
 
     Args:
         date: Experiment date (e.g., '2025_12_18')
         serial: Image serial number (e.g., '0026')
+        use_gpu: Whether to attempt GPU processing (default: True)
 
     Returns:
         bool: True if successful, False otherwise
@@ -69,19 +71,22 @@ def preprocess_single(date: str, serial: str) -> bool:
         img = tifffile.imread(file).astype(np.uint16)
 
         # Process on either GPU or CPU with automatic fallback
-        try:
-            if cuda.is_available():
-                print(f"    Using GPU acceleration")
-                detrended, gaussian = process_on_gpu(img)
-            else:
-                print(f"    Using CPU (GPU not available)")
+        if use_gpu:
+            try:
+                if cuda.is_available():
+                    detrended, gaussian = process_on_gpu(img)
+                else:
+                    print("    CUDA not available, using CPU")
+                    detrended, _averaged, gaussian = process_on_cpu(img)
+            except (cuda.cudadrv.driver.CudaAPIError, RuntimeError, Exception) as e:
+                print(f"    GPU failed ({e}), falling back to CPU")
                 detrended, _averaged, gaussian = process_on_cpu(img)
-        except (cuda.cudadrv.driver.CudaAPIError, RuntimeError) as e:
-            print(f"    GPU failed ({e}), falling back to CPU")
+        else:
             detrended, _averaged, gaussian = process_on_cpu(img)
 
         # Clip and save
         base_name = file.stem
+        print("    Converting to uint16...")
         detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
         gaussian_uint16 = np.clip(gaussian, 0, 65535).astype(np.uint16)
 
@@ -89,14 +94,17 @@ def preprocess_single(date: str, serial: str) -> bool:
         gauss_path = output_path / f"{base_name}_Gauss.tif"
 
         print(f"    Saving to {output_path}")
-        tifffile.imwrite(cal_path, detrended_uint16)
-        tifffile.imwrite(gauss_path, gaussian_uint16)
+        print(f"      Writing {cal_path.name}...")
+        tifffile.imwrite(str(cal_path), detrended_uint16)
+        print(f"      Writing {gauss_path.name}...")
+        tifffile.imwrite(str(gauss_path), gaussian_uint16)
         print(f"    ✓ Saved {cal_path.name} and {gauss_path.name}")
         return True
 
     except Exception as e:
         print(f"  ✗ Error preprocessing {file}")
-        print(f"     Error: {e}")
+        print(f"     Error type: {type(e).__name__}")
+        print(f"     Error message: {e}")
         traceback.print_exc()
         return False
 
@@ -127,10 +135,7 @@ def analyze_pair(exp_date: str, abf_serial: str, img_serial: str, objective: str
         # 4. Prepare centered spike traces for plotting
         lst_centered_traces = []
         for time_seg, abf_seg, img_seg in zip(
-            abf_clip.lst_time_segments,
-            abf_clip.lst_abf_segments,
-            abf_clip.lst_img_segments,
-            strict=True,
+            abf_clip.lst_time_segments, abf_clip.lst_abf_segments, abf_clip.lst_img_segments, strict=True
         ):
             n_frames = len(img_seg)
             spike_frame_idx = n_frames // 2  # Center frame is the spike
@@ -182,11 +187,7 @@ def analyze_pair(exp_date: str, abf_serial: str, img_serial: str, objective: str
         # 8. Create and save plots as PNG (only if Qt is available)
         if HAS_QT:
             plt_spatial = PlotSpatialDist(
-                categorizer,
-                lst_centered_traces,
-                title="Spatial Distribution",
-                zscore_range=zscore_range,
-                show=False,
+                categorizer, lst_centered_traces, title="Spatial Distribution", zscore_range=zscore_range, show=False
             )
             exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
 
@@ -232,8 +233,24 @@ def main(skip_existing: bool = True) -> None:
     print("BATCH PROCESSING")
     print("=" * 80)
 
+    # Check GPU availability
+    print("\n[0/4] Checking GPU availability...")
+    try:
+        if cuda.is_available():
+            print(f"✓ GPU detected: {cuda.get_current_device().name.decode()}")
+            print(f"  CUDA version: {cuda.runtime.get_version()}")
+            use_gpu = True
+        else:
+            print("⚠ No GPU detected - will use CPU processing")
+            use_gpu = False
+    except Exception as e:
+        print(f"⚠ GPU check failed: {e}")
+        print("  Will use CPU processing")
+        use_gpu = False
+    print()
+
     # 1. Read metadata from xlsx files
-    print(f"\n[1/4] Reading metadata from {PATHS['rec_summary']}/*.xlsx...")
+    print(f"[1/4] Reading metadata from {PATHS['rec_summary']}/*.xlsx...")
     pairs = get_picked_pairs()
     print(f"Found {len(pairs)} pairs to process")
 
@@ -246,9 +263,7 @@ def main(skip_existing: bool = True) -> None:
         processed_pairs = get_processed_pairs()
         print(f"Already processed: {len(processed_pairs)} pairs")
         pairs_to_process = [
-            p
-            for p in pairs
-            if (p["exp_date"], p["abf_serial"], p["img_serial"]) not in processed_pairs
+            p for p in pairs if (p["exp_date"], p["abf_serial"], p["img_serial"]) not in processed_pairs
         ]
         print(f"Remaining to process: {len(pairs_to_process)} pairs")
     else:
@@ -272,7 +287,7 @@ def main(skip_existing: bool = True) -> None:
         if cal_file.exists() and gauss_file.exists():
             preprocess_skipped += 1
             preprocess_success += 1
-        elif preprocess_single(exp_date, img_serial):
+        elif preprocess_single(exp_date, img_serial, use_gpu=use_gpu):
             preprocess_success += 1
 
     print(f"Preprocessed: {preprocess_success}/{len(unique_images)} (skipped {preprocess_skipped} already done)")
@@ -305,7 +320,7 @@ def main(skip_existing: bool = True) -> None:
     # Show paths for copying to bucket if in batch mode
     if "bucket_results" in PATHS:
         print("\nNOTE: Results are in temporary directory.")
-        print(f"Will be copied to bucket at end of job.")
+        print("Will be copied to bucket at end of job.")
 
 
 if __name__ == "__main__":
