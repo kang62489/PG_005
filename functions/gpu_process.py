@@ -13,8 +13,9 @@ from rich.logging import RichHandler
 # Reduce CUDA memory allocation logging verbosity
 os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "30")  # WARNING level
 
-# Local application imports
-from functions import gpu_detrend_jitted, gpu_gaussian_blur
+# Local application imports (use relative imports to avoid circular dependency)
+from .gpu_detrend import gpu_detrend_jitted
+from .gpu_gauss import gpu_gaussian_blur
 
 # Setup rich console and logging
 console = Console()
