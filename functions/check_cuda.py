@@ -8,7 +8,13 @@ import sys
 from pathlib import Path
 
 # Third-party imports
-import pynvml
+try:
+    import pynvml
+
+    HAS_PYNVML = True
+except ImportError:
+    HAS_PYNVML = False
+
 from rich.console import Console
 
 console = Console()
@@ -25,7 +31,7 @@ def _setup_cuda_environment() -> tuple[bool, str]:
         tuple: (success: bool, message: str)
     """
     # Check if we're on Windows
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         # For Linux/Mac, let numba auto-detect
         return True, "Non-Windows system - using default CUDA detection"
 
@@ -50,7 +56,7 @@ def _setup_cuda_environment() -> tuple[bool, str]:
         version_name = version_path.name  # e.g., "v11.8", "v12.0"
         try:
             # Extract major version number
-            major_version = int(version_name.split('.')[0].replace('v', ''))
+            major_version = int(version_name.split(".")[0].replace("v", ""))
             if major_version == 11:
                 cuda_11_versions.append(version_path)
             elif major_version == 12:
@@ -74,8 +80,8 @@ def _setup_cuda_environment() -> tuple[bool, str]:
     cuda_path = str(preferred_version)
 
     # Set CUDA environment variables
-    os.environ['CUDA_PATH'] = cuda_path
-    os.environ['CUDA_HOME'] = cuda_path
+    os.environ["CUDA_PATH"] = cuda_path
+    os.environ["CUDA_HOME"] = cuda_path
 
     # Set Numba-specific CUDA environment variables
     nvvm_path = Path(cuda_path) / "nvvm" / "bin"
@@ -86,35 +92,35 @@ def _setup_cuda_environment() -> tuple[bool, str]:
         break
 
     if nvvm_dll:
-        os.environ['NUMBAPRO_NVVM'] = nvvm_dll
+        os.environ["NUMBAPRO_NVVM"] = nvvm_dll
 
     libdevice_path = Path(cuda_path) / "nvvm" / "libdevice"
     if libdevice_path.exists():
-        os.environ['NUMBAPRO_LIBDEVICE'] = str(libdevice_path)
+        os.environ["NUMBAPRO_LIBDEVICE"] = str(libdevice_path)
 
     # Set CUDA driver path
     nvcuda_dll = Path(r"C:\Windows\System32\nvcuda.dll")
     if nvcuda_dll.exists():
-        os.environ['NUMBA_CUDA_DRIVER'] = str(nvcuda_dll)
+        os.environ["NUMBA_CUDA_DRIVER"] = str(nvcuda_dll)
 
     # Update PATH to prioritize selected CUDA version
     cuda_bin = Path(cuda_path) / "bin"
     cuda_libnvvp = Path(cuda_path) / "libnvvp"
 
-    current_path = os.environ.get('PATH', '')
+    current_path = os.environ.get("PATH", "")
 
     # Remove other CUDA versions from PATH to avoid conflicts
-    path_parts = current_path.split(';')
+    path_parts = current_path.split(";")
     cleaned_path = []
     for part in path_parts:
         # Skip paths containing other CUDA versions
-        if 'CUDA\\v' in part and cuda_path not in part:
+        if "CUDA\\v" in part and cuda_path not in part:
             continue
         cleaned_path.append(part)
 
     # Add selected CUDA paths at the beginning
     new_path_parts = [str(cuda_bin), str(cuda_libnvvp)] + cleaned_path
-    os.environ['PATH'] = ';'.join(new_path_parts)
+    os.environ["PATH"] = ";".join(new_path_parts)
 
     version_name = preferred_version.name
     return True, f"CUDA environment configured for {version_name} at {cuda_path}"
@@ -129,7 +135,6 @@ _SETUP_SUCCESS, _SETUP_MESSAGE = _setup_cuda_environment()
 # ============================================================================
 
 from numba import cuda
-
 
 # ============================================================================
 # PART 3: CUDA checking function
@@ -149,7 +154,7 @@ def check_cuda() -> bool:
         if cuda.is_available():
             device = cuda.get_current_device()
             # Handle both bytes and str for device name (compatibility with different numba versions)
-            device_name = device.name.decode('utf-8') if isinstance(device.name, bytes) else device.name
+            device_name = device.name.decode("utf-8") if isinstance(device.name, bytes) else device.name
             console.print(f"[green]CUDA is available. Using device: {device_name}[/green]")
             console.print(f"[green]Compute Capability: {device.compute_capability}[/green]")
             console.print(f"[green]Max threads per block: {device.MAX_THREADS_PER_BLOCK}[/green]")
@@ -157,28 +162,31 @@ def check_cuda() -> bool:
 
         console.print("[bold red]CUDA is not available through Numba. Checking why...[/bold red]")
 
-        # Check NVIDIA driver
-        try:
-            pynvml.nvmlInit()
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            device_name = pynvml.nvmlDeviceGetName(handle)
-            driver_version = pynvml.nvmlSystemGetDriverVersion()
-            console.print("[yellow]NVIDIA driver is installed[/yellow]")
-            console.print(f"[yellow]GPU: {device_name}[/yellow]")
-            console.print(f"[yellow]Driver Version: {driver_version}[/yellow]")
-            pynvml.nvmlShutdown()
-        except (
-            pynvml.NVMLError_DriverNotLoaded,
-            pynvml.NVMLError_Uninitialized,
-            pynvml.NVMLError_LibraryNotFound,
-        ) as e:
-            console.print(f"[bold red]NVIDIA driver not found or not properly installed: {e!s}[/bold red]")
-            return False
+        # Check NVIDIA driver (only if pynvml is available)
+        if HAS_PYNVML:
+            try:
+                pynvml.nvmlInit()
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                device_name = pynvml.nvmlDeviceGetName(handle)
+                driver_version = pynvml.nvmlSystemGetDriverVersion()
+                console.print("[yellow]NVIDIA driver is installed[/yellow]")
+                console.print(f"[yellow]GPU: {device_name}[/yellow]")
+                console.print(f"[yellow]Driver Version: {driver_version}[/yellow]")
+                pynvml.nvmlShutdown()
+            except (
+                pynvml.NVMLError_DriverNotLoaded,
+                pynvml.NVMLError_Uninitialized,
+                pynvml.NVMLError_LibraryNotFound,
+            ) as e:
+                console.print(f"[bold red]NVIDIA driver not found or not properly installed: {e!s}[/bold red]")
+                return False
+        else:
+            console.print("[yellow]pynvml not available - skipping detailed driver check[/yellow]")
 
         # Print current environment variables for debugging
         console.print("\n[yellow]Current CUDA environment variables:[/yellow]")
         for key in ["CUDA_PATH", "CUDA_HOME", "NUMBAPRO_NVVM", "NUMBAPRO_LIBDEVICE"]:
-            value = os.environ.get(key, 'Not set')
+            value = os.environ.get(key, "Not set")
             # Truncate long paths for readability
             if len(value) > 100:
                 value = value[:100] + "..."
