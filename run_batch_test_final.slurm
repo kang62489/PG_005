@@ -17,15 +17,16 @@ echo "Running on node: $(hostname)"
 echo "Job ID: $SLURM_JOB_ID"
 echo "=========================================="
 
-# Load CUDA 11.1 (compatible with driver 455.32.00)
-export CUDA_HOME=/apps/unit/WickensU/kang-chu/cuda/11.1
-export PATH=${CUDA_HOME}/bin:$PATH
-export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
+# Load CUDA 11.1 module (compatible with driver 455.32.00)
+module load cuda/11.1
 
 # Check if GPU is available
 if command -v nvidia-smi &> /dev/null; then
     echo "GPU Information:"
     nvidia-smi
+    echo ""
+    echo "Loaded modules:"
+    module list
     echo ""
     echo "CUDA Toolkit: $(nvcc --version | grep release)"
     echo "CUDA_HOME: $CUDA_HOME"
