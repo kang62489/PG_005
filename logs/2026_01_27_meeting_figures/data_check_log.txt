@@ -1,0 +1,487 @@
+Analysis: Meeting figures
+Purpose: Discuss the figures using in paper
+Started: 2026-01-26
+
+Common fixes applied to most folders (2024-2025_04):
+  - Renamed abf files: -00** -> _00**
+  - Moved abf out of abfs/ subfolder
+
+================================================================================
+DATA CHECK
+================================================================================
+
+2024_10_03/ (10 tiffs, 31 abfs)
+  sensor: iAChSnFR
+  status: SKIPPED - no usable abfs for PG_005
+
+--------------------------------------------------------------------------------
+
+2024_10_11/ (31 tiffs, 34 abfs)
+  sensor: iAChSnFR
+  status: PICKED 7 pairs
+  picked:
+    2024_10_11-0009.tif	13:38:18	10X	LED_BLUE	LV4	40ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	0008
+    2024_10_11-0010.tif	13:42:38	10X	LED_BLUE	LV4	40ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	0009
+    2024_10_11-0013.tif	13:59:07	60X	LED_BLUE	LV4	40ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	0012
+    2024_10_11-0014.tif	14:02:48	60X	LED_BLUE	LV4	40ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	0013
+    2024_10_11-0020.tif	17:33:41	60X	LED_BLUE	LV4	40ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0019
+    2024_10_11-0029.tif	18:19:56	60X	LED_BLUE	LV4	40ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0028
+    2024_10_11-0030.tif	18:23:42	60X	LED_BLUE	LV4	40ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0029
+
+--------------------------------------------------------------------------------
+
+2024_12_19/ (22 tiffs, 19 abfs)
+  sensor: iAChSnFR
+  status: PICKED 6 pairs
+  picked:
+    2024_12_19-0010.tif	19:48:57	60X	LED_BLUE	MAX	39ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	0001
+    2024_12_19-0011.tif	19:52:25	60X	LED_BLUE	MAX	39ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	0002
+    2024_12_19-0012.tif	19:56:48	60X	LED_BLUE	MAX	40ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	0003
+    2024_12_19-0013.tif	19:59:11	60X	LED_BLUE	MAX	40ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	0004
+    2024_12_19-0020.tif	21:08:37	60X	LED_BLUE	MAX	40ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_1	0012
+    2024_12_19-0021.tif	21:11:15	60X	LED_BLUE	MAX	40ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_1	0013
+
+--------------------------------------------------------------------------------
+
+2025_01_01/ (62 tiffs, 42 abfs)
+  sensor: iAChSnFR
+  status: PICKED 11 pairs
+  picked:
+    2025_01_01-0012.tif	14:11:32	60X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_2	0007
+    2025_01_01-0013.tif	14:14:05	60X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_2	0008
+    2025_01_01-0014.tif	14:16:26	60X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_2	0009
+    2025_01_01-0020.tif	14:52:35	60X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_3	0013
+    2025_01_01-0021.tif	14:55:16	60X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_3	0014
+    2025_01_01-0022.tif	14:57:45	60X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_3	0015
+    2025_01_01-0029.tif	15:17:21	10X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_3	0019
+    2025_01_01-0030.tif	15:20:01	10X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_3	0020
+    2025_01_01-0031.tif	15:23:08	10X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	2	CELL_3	0021
+    2025_01_01-0057.tif	17:37:12	10X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	3	CELL_2	0036
+    2025_01_01-0058.tif	17:39:24	10X	LED_BLUE	LV8	40ms	GREEN	1400p	20Hz	EXT_EXP_START	3	CELL_2	0037
+
+--------------------------------------------------------------------------------
+
+2025_02_05/ (53 tiffs, 40 abfs)
+  sensor: GACh3.0
+  status: PICKED 15 pairs
+  picked:
+    2025_02_05-0006.tif	13:04:05	60X	LED_BLUE	LV8	GREEN	1	CELL_1	10	0003		
+    2025_02_05-0007.tif	13:06:43	60X	LED_BLUE	LV8	GREEN	1	CELL_1	10	0004		
+    2025_02_05-0008.tif	13:18:47	60X	LED_BLUE	LV8	GREEN	1	CELL_1	10	0005	0mv	
+    2025_02_05-0016.tif	14:28:36	60X	LED_BLUE	LV8	GREEN	1	CELL_2	10	0010		-40pA
+    2025_02_05-0017.tif	14:32:40	60X	LED_BLUE	LV8	GREEN	1	CELL_2	10	0011		-40pA
+    2025_02_05-0026.tif	15:35:01	60X	LED_BLUE	LV8	GREEN	2	CELL_1	10	0017		-30pA
+    2025_02_05-0032.tif	16:01:14	60X	LED_BLUE	LV8	GREEN	2	CELL_1	10	0023		-30pA
+    2025_02_05-0041.tif	18:19:42	60X	LED_BLUE	LV8	GREEN	3	CELL_2	10	0027		0
+    2025_02_05-0046.tif	18:37:39	60X	LED_BLUE	LV8	GREEN	3	CELL_2	10	0032		0
+    2025_02_05-0047.tif	18:40:18	60X	LED_BLUE	LV8	GREEN	3	CELL_2	10	0033		0
+    2025_02_05-0048.tif	18:42:52	60X	LED_BLUE	LV8	GREEN	3	CELL_2	10	0034		0
+    2025_02_05-0049.tif	18:46:07	60X	LED_BLUE	LV8	GREEN	3	CELL_2	10	0035		0
+    2025_02_05-0050.tif	18:48:34	60X	LED_BLUE	LV8	GREEN	3	CELL_2	10	0036		0
+    2025_02_05-0051.tif	18:51:03	60X	LED_BLUE	LV8	GREEN	3	CELL_2	10	0037		0
+    2025_02_05-0052.tif	18:53:54	60X	LED_BLUE	LV8	GREEN	3	CELL_2	10	0038		0
+
+--------------------------------------------------------------------------------
+
+2025_02_27/ (48 tiffs, 38 abfs)
+  sensor: GACh3.0
+  tested:
+    - tiff_0012 + abf_0009: ✗ only 3 triggered spikes, gaps don't fit PG_005 clipping
+  status: PICKED 1 pair (abf 0002 has spontaneous spikes)
+  picked:
+    2025_02_27-0005.tif	13:00:52	60X	LED_BLUE	LV6	40ms	GREEN	1400p	20Hz		1	CELL_1		10ms 1000pA	0002	100pA
+
+--------------------------------------------------------------------------------
+
+2025_03_21/ (26 tiffs, 12 abfs)
+  sensor: GACh3.0 and iAChSnFR
+  status: SKIPPED - no usable abfs
+
+--------------------------------------------------------------------------------
+
+2025_04_03/ (41 tiffs, 30 abfs)
+  sensor: GACh3.0
+  note: Protocol kang_pulse_train removed gaps in camera triggering (CH 14) → compatible with PG_005
+  status: PICKED 12 pairs
+  picked:
+    2025_04_03-0015.tif	16:49:35	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	1	CELL1	GACh3.0		0008
+    2025_04_03-0024.tif	17:43:38	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	1	CELL2	GACh3.0		0017
+    2025_04_03-0025.tif	17:46:39	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	1	CELL2	GACh3.0		0018
+    2025_04_03-0032.tif	18:35:23	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0022
+    2025_04_03-0033.tif	19:00:19	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0023
+    2025_04_03-0034.tif	19:03:15	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0024
+    2025_04_03-0035.tif	19:05:59	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0025
+    2025_04_03-0036.tif	19:29:01	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0026
+    2025_04_03-0037.tif	19:31:39	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0027
+    2025_04_03-0038.tif	19:34:27	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0028
+    2025_04_03-0039.tif	19:37:14	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0029
+    2025_04_03-0040.tif	19:40:14	60X	LED_BLUE	LV6	GREEN	40ms	1200p	20Hz	2	CELL_1	GACh3.0		0030
+
+--------------------------------------------------------------------------------
+
+2025_06_11/ (14 tiffs, 15 abfs)
+  sensor: GACh3.0
+  status: PICKED 13 pairs
+  picked:
+    2025_06_11-0000.tif	10:49:14	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0001	
+    2025_06_11-0001.tif	10:52:26	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0002	
+    2025_06_11-0002.tif	10:56:11	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0003	
+    2025_06_11-0003.tif	10:59:39	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0004	
+    2025_06_11-0004.tif	11:02:42	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0005	
+    2025_06_11-0005.tif	11:08:06	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0006	
+    2025_06_11-0006.tif	11:14:30	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0007	
+    2025_06_11-0008.tif	11:18:51	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0008	20pA
+    2025_06_11-0009.tif	11:21:24	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0009	100pA
+    2025_06_11-0010.tif	11:26:25	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0010	200pA
+    2025_06_11-0011.tif	11:31:41	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0012	300pA
+    2025_06_11-0012.tif	11:37:14	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0013	-300pA@200ms
+    2025_06_11-0013.tif	12:15:51	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	0014	-300pA@200ms
+
+--------------------------------------------------------------------------------
+
+2025_06_12/ (18 tiffs, 0 abfs)
+  sensor: GACh3.0
+  status: SKIPPED - no abfs
+
+--------------------------------------------------------------------------------
+
+2025_07_17/ (18 tiffs, 14 abfs)
+  sensor: rACh1h
+  status: PICKED 2 pairs
+  picked:
+    2025_07_17-0013.tif	14:21:00	60X	LED_GREEN	MAX	50ms	RED	1200p	20Hz	EXT_EXP_START	1	CELL_1	0008
+    2025_07_17-0014.tif	14:23:29	60X	LED_GREEN	MAX	50ms	RED	1200p	20Hz	EXT_EXP_START	1	CELL_1	0009
+
+--------------------------------------------------------------------------------
+
+2025_07_19/ (24 tiffs, 25 abfs)
+  sensor: rACh1h
+  status: PICKED 5 pairs
+  picked:
+    2025_07_19-0005.tif	13:19:26	60X	LED_GREEN	MAX	50ms	RED	1200p	20Hz	EXT_EXP_START	1	CELL_1		53.62pf	87.5MOhm	36.6MOhm	1.4	-258.pA	0002
+    2025_07_19-0006.tif	13:21:57	60X	LED_GREEN	MAX	50ms	RED	1200p	20Hz	EXT_EXP_START	1	CELL_1		53.62pf	87.5MOhm	36.6MOhm	1.4	-258.pA	0003
+    2025_07_19-0007.tif	13:23:45	60X	LED_BLUE	MAX	50ms	GREEN	1200p	20Hz	EXT_EXP_START	1	CELL_1		53.62pf	87.5MOhm	36.6MOhm	1.4	-258.pA	0004
+    2025_07_19-0008.tif	13:29:38	60X	LED_GREEN	MAX	50ms	RED	1200p	20Hz	EXT_EXP_START	1	CELL_1		53.62pf	87.5MOhm	36.6MOhm	1.4	-258.pA	0005
+    2025_07_19-0009.tif	13:33:00	60X	LED_BLUE	MAX	50ms	GREEN	1200p	20Hz	EXT_EXP_START	1	CELL_1		53.62pf	87.5MOhm	36.6MOhm	1.4	-258.pA	0006
+
+--------------------------------------------------------------------------------
+
+2025_07_24/ (20 tiffs, 27 abfs)
+  sensor: none
+  status: SKIPPED - no ACh sensors
+
+--------------------------------------------------------------------------------
+
+2025_07_25/ (48 tiffs, 0 abfs)
+  sensor: rdLight1.0 and GACh3.0
+  status: SKIPPED - no abfs
+
+--------------------------------------------------------------------------------
+
+2025_09_22/ (13 tiffs, 3 abfs)
+  sensor: GACh3.0
+  status: SKIPPED - bad labelling of tdTomato, could not successfully patched any ChIs
+
+--------------------------------------------------------------------------------
+
+2025_09_26/ (20 tiffs, 23 abfs)
+  sensor: GACh3.0
+  status: PICKED 2 pairs
+  picked:
+    2025_09_26-0018.tif	16:37:32	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2				5.1M		2000pA		0020
+    2025_09_26-0019.tif	16:42:04	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2				5.1M		2000pA		0021
+
+--------------------------------------------------------------------------------
+
+2025_10_02/ (19 tiffs, 17 abfs)
+  sensor: none
+  status: SKIPPED - no ACh sensors
+
+--------------------------------------------------------------------------------
+
+2025_10_03/ (11 tiffs, 1 abfs)
+  sensor: GACh3.0
+  status: SKIPPED - no successful patched ChIs, no abfs
+
+--------------------------------------------------------------------------------
+
+2025_10_13/ (60 tiffs, 40 abfs)
+  sensor: GACh 3.0
+  status: PICKED 6 pairs
+  picked:
+    2025_10_13-0007.tif	12:21:56	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	1	CELL_2	L	143+121922	0008	0pA
+    2025_10_13-0013.tif	12:39:15	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	1	CELL_2	L	143+121922_POS2	0014	0pA
+    2025_10_13-0030.tif	13:58:49	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	L	143+121922_POS2	0027	0pA
+    2025_10_13-0035.tif	14:13:55	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	L	143+121922_POS2	0032	0pA
+    2025_10_13-0038.tif	14:33:18	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	SITE_1	L	143+121922	0035	
+    2025_10_13-0047.tif	14:51:16	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	SITE_2	R	144+121922	0036	
+
+--------------------------------------------------------------------------------
+
+2025_11_08/ (37 tiffs, 21 abfs)
+  sensor: GACh3.0
+  fixed:
+    - 0030.rec: remove abf serial (should be empty)
+    - 0031.rec: remove abf serial (should be empty)
+    - 0032.rec: correct abf serial from 0015 to 0016
+    - 0033.rec: correct abf serial from 0015 to 0017
+    - 0034.rec: correct abf serial from 0015 to 0018
+    - m_0011-0014, m_0017.tiff: removed (non-used)
+    - m_0018-0020, m_0025-0029, m_0032-0035.tiff: removed first/last frames for PG_005 clipping
+  status: PICKED 11 pairs
+  picked:
+    2025_11_08-0018.tif	14:23:05	60X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	0006		-20pA
+    2025_11_08-0019.tif	14:33:14	60X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	0007	focus up	-20pA
+    2025_11_08-0020.tif	14:38:08	60X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	0008	focus down	-20pA
+    2025_11_08-0026.tif	15:34:52	60X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	0012		0
+    2025_11_08-0027.tif	15:41:03	60X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	0013	focus up	0
+    2025_11_08-0028.tif	15:51:44	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	0014	10X	0
+    2025_11_08-0029.tif	15:56:36	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	0015	10X	0
+    2025_11_08-0032.tif	16:05:58	10X	LED_GREEN	LVMAX	50ms	RED	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	0016	MAX OUT RED 1200p	0
+    2025_11_08-0033.tif	16:08:31	10X	LED_GREEN	LVMAX	50ms	RED	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	0017	MAX OUT RED 1200p	0
+    2025_11_08-0034.tif	16:12:07	10X	LED_BLUE	LVMAX	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	0018		0
+    2025_11_08-0035.tif	16:14:16	10X	LED_BLUE	LVMAX	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	0019		0
+
+--------------------------------------------------------------------------------
+
+2025_11_13/ (44 tiffs, 32 abfs)
+  sensor: GACh3.0
+  fixed:
+    - m_0006-0008, m_0016, m_0020-0021, m_0025, m_0031, m_0034, m_0036, m_0039.tiff: removed (non-used)
+    - m_0009-0013, m_0017-0019, m_0022-0024, m_0026, m_0035, m_0037-0038, m_0040-0043.tiff: removed first/last frames for PG_005 clipping
+  status: PICKED 19 pairs
+  picked:
+    2025_11_13-0009.tif	13:15:43	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	1000pA	0004	
+    2025_11_13-0010.tif	13:19:47	40X	LED_BLUE	LV4	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	1000pA, reduce light to LV4	0005	
+    2025_11_13-0011.tif	13:22:32	40X	LED_BLUE	LV4	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	1000pA, reduce light to LV3	0006	
+    2025_11_13-0012.tif	13:28:59	10X	LED_BLUE	LV5	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	1000pA	0007	
+    2025_11_13-0013.tif	13:34:16	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	1000pA	0008	
+    2025_11_13-0017.tif	14:06:01	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_2	R		0011	200pA
+    2025_11_13-0018.tif	14:13:03	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_2	R		0012	100pA
+    2025_11_13-0019.tif	14:18:08	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_2	R		0013	300pA
+    2025_11_13-0022.tif	14:26:51	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_2	R	1000pA pulses	0016	
+    2025_11_13-0023.tif	14:30:28	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_2	R	adjust FOV	0017	300pA
+    2025_11_13-0024.tif	14:32:59	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_2	R	adjust FOV 1000pA	0018	0
+    2025_11_13-0026.tif	14:43:38	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_2	R	10X 1000pA	0020	0
+    2025_11_13-0035.tif	16:43:37	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	100pA not enough now	0023	100pA
+    2025_11_13-0037.tif	16:48:48	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	300pA not enough now	0025	300pA
+    2025_11_13-0038.tif	16:50:48	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	500pA not working	0026	500pA
+    2025_11_13-0040.tif	16:55:48	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	1000pA 50 pulses	0028	
+    2025_11_13-0041.tif	17:08:01	40X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	1000pA 50 pulses adjust postion bleach longer	0029	
+    2025_11_13-0042.tif	17:15:35	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	1000pA 50 pulses	0030	
+    2025_11_13-0043.tif	17:19:37	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	2	CELL_1	R	1000pA 50 pulses refocusing	0031	
+
+--------------------------------------------------------------------------------
+
+2025_11_27/ (37 tiffs, 26 abfs)
+  sensor: GACh3.0
+  status: PICKED 14 pairs
+  picked:
+    2025_11_27-0001.tif	10:50:50	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	0001	1000pA
+    2025_11_27-0005.tif	12:04:12	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R		100pA	0004	
+    2025_11_27-0007.tif	12:10:07	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R		0	0006	300pA
+    2025_11_27-0008.tif	12:12:15	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R		0	0007	500pA
+    2025_11_27-0009.tif	12:16:41	10X	LED_BLUE	LV6	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	wait a bit.	0	0008	500pA
+    2025_11_27-0010.tif	12:19:07	10X	LED_BLUE	LV8	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	increase light	0	0009	500pA
+    2025_11_27-0011.tif	13:01:27	10X	LED_BLUE	LV9	50ms	GREEN	1202p	20Hz	EXT_EXP_START	1	CELL_1	R	increase light	0	0011	500pA
+    2025_11_27-0021.tif	14:40:04	10X	LED_BLUE	LV8	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R			0015	1000pA
+    2025_11_27-0026.tif	15:30:55	10X	LED_BLUE	LV8	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_1	R			0017	
+    2025_11_27-0027.tif	15:33:40	10X	LED_BLUE	LV8	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_1	R	reposition		0018	
+    2025_11_27-0028.tif	15:39:26	10X	LED_BLUE	LV3	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_1	R	decrease light		0019	
+    2025_11_27-0033.tif	16:20:18	10X	LED_BLUE	LV4	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_2	R		100pA	0021	
+    2025_11_27-0034.tif	16:25:04	10X	LED_BLUE	LV4	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_2	R			0022	200pA
+    2025_11_27-0035.tif	16:28:38	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_2	R			0023	200pA
+    2025_11_27-0036.tif	16:31:17	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_2	R	refocusing		0024	200pA
+
+--------------------------------------------------------------------------------
+
+2025_12_14/ (41 tiffs, 37 abfs)
+  sensor: GACh3.0
+  status: PICKED 17 pairs
+  picked:
+    2025_12_14-0002.tif	10:41:47	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	1	CELL_1	R			100pA	0002
+    2025_12_14-0005.tif	10:50:47	60X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	1	CELL_1	R		1000pA 20 pulses		0005
+    2025_12_14-0008.tif	10:59:48	10X	LED_BLUE	LV7	50ms	GREEN	1200p	20Hz	EXT_EXP_START	1	CELL_1	R	no spontaneous firing		500pA	0006
+    2025_12_14-0009.tif	11:02:29	10X	LED_BLUE	LV7	50ms	GREEN	1200p	20Hz	EXT_EXP_START	1	CELL_1	R		1000pA 20 pulses		0007
+    2025_12_14-0015.tif	12:01:33	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R			150pA	0012
+    2025_12_14-0016.tif	12:03:53	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R			200pA	0013
+    2025_12_14-0020.tif	12:17:59	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R	period 10ms	500pA 20 pulses		0017
+    2025_12_14-0021.tif	12:23:19	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R	period 6ms	500pA 20 pulses		0018
+    2025_12_14-0022.tif	12:42:26	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R	period 6ms, focus down	500pA 20 pulses		0020
+    2025_12_14-0023.tif	12:45:27	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R	period 6ms, focus up	500pA 20 pulses		0021
+    2025_12_14-0029.tif	13:43:40	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	R			100pA	0023
+    2025_12_14-0035.tif	13:58:17	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	R		500pA 20pulses		0029
+    2025_12_14-0036.tif	14:07:03	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	R	focus up	500pA 20pulses		0030
+    2025_12_14-0037.tif	14:09:42	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	R	focus down	500pA 20pulses		0031
+    2025_12_14-0038.tif	14:21:36	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	R	pulse width 120ms	100pA 20pulses		0033
+    2025_12_14-0039.tif	14:24:10	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	R	pulse width 100ms	100pA 20pulses		0034
+    2025_12_14-0040.tif	14:27:31	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_2	R	pulse width 100ms, auto bridge	100pA 20pulses		0035
+
+--------------------------------------------------------------------------------
+
+2025_12_15/ (40 tiffs, 30 abfs)
+  sensor: GACh3.0
+  note: two-step injection (ST+RO)
+  status: PICKED 12 pairs
+  picked:
+    2025_12_15-0012.tif	09:10:26	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_1	R		1000pA 20pulses 6ms		0008
+    2025_12_15-0013.tif	09:12:46	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_1	R		1200pA 20pulses 6ms		0009
+    2025_12_15-0014.tif	09:14:45	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	3	CELL_1	R		1200pA 20pulses 6ms		0010
+    2025_12_15-0024.tif	11:19:16	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	R		300pA 20pulses 6ms		0018
+    2025_12_15-0025.tif	11:21:14	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_1	R		300pA 20pulses 6ms		0019
+    2025_12_15-0030.tif	12:13:44	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2	R			20pA	0022
+    2025_12_15-0031.tif	12:15:58	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2	R			40pA	0023
+    2025_12_15-0032.tif	12:18:20	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2	R			40pA	0024
+    2025_12_15-0037.tif	12:34:32	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2	R		100pA 20 pulses 120ms		0029
+    2025_12_15-0041.tif	12:44:26	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2	R		500pA 20 pulses 6ms		0033
+    2025_12_15-0042.tif	12:46:29	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2	R		600pA 20 pulses 6ms		0034
+    2025_12_15-0043.tif	12:48:20	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	4	CELL_2	R		600pA 20 pulses 6ms		0035
+
+--------------------------------------------------------------------------------
+
+2025_12_18/ (44 tiffs, 34 abfs)
+  sensor: GACh3.0
+  status: PICKED 5 pairs
+  picked:
+    2025_12_18-0023.tif	13:09:20	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R	bursting	700pA 40 pulses 120ms		0019
+    2025_12_18-0024.tif	13:11:43	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R		300pA 40 pulses 120ms		0020
+    2025_12_18-0025.tif	13:14:04	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R		300pA 40 pulses 50ms		0021
+    2025_12_18-0026.tif	13:16:37	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R		300pA 40 pulses 10ms		0022
+    2025_12_18-0027.tif	13:18:52	10X	LED_BLUE	LV6	50ms	GREEN	1200p	20Hz	EXT_EXP_START	2	CELL_1	R		300pA 40 pulses 10ms		0023
+
+--------------------------------------------------------------------------------
+
+2026_01_08/ (38 tiffs, 34 abfs)
+  sensor: GACh3.0
+  fixed:
+    - 0016.rec: correct abf serial from 0012 to 0014
+  status: PICKED 15 pairs
+  picked:
+    2026_01_08-0005.tif	10:24:13	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_1		0pA	50pA	0003	
+    2026_01_08-0012.tif	11:00:46	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_1	Filter6	600pA 40pulses 10ms	0pA	0010	OK
+    2026_01_08-0013.tif	11:03:42	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_1	Filter2	600pA 40pulses 10ms	0pA	0011	OK
+    2026_01_08-0014.tif	11:13:55	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_1	Filter2	600pA 40pulses 10ms	0pA	0012	OK
+    2026_01_08-0016.tif	11:21:46	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_1	Filter6	1200pA 40pulses 10ms	0pA	0014	OK
+    2026_01_08-0021.tif	12:43:19	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_2	Filter1 (Original 2)	0pA	0pA	0017	OK
+    2026_01_08-0022.tif	12:46:15	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_2	Filter2	0pA	0pA	0018	OK
+    2026_01_08-0023.tif	12:51:15	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_2	Filter1 (Original 2)	0pA	0pA	0019	OK
+    2026_01_08-0024.tif	12:53:44	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	2R	CELL_2	Filter2	0pA	0pA	0020	OK
+    2026_01_08-0032.tif	14:27:22	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	3R	CELL_1	Filter1	300pA 20Pulses 8ms	0pA	0027	OK
+    2026_01_08-0033.tif	14:29:34	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	3R	CELL_1	Filter2	300pA 20Pulses 8ms	0pA	0028	OK
+    2026_01_08-0034.tif	14:41:39	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	3R	CELL_1	Filter1	0pA	0pA	0029	OK
+    2026_01_08-0035.tif	14:43:51	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	3R	CELL_1	Filter2	0pA	0pA	0030	OK
+    2026_01_08-0036.tif	14:46:37	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	3R	CELL_1	Filter1	300pA 20Pulses 8ms	0pA	0031	OK
+    2026_01_08-0037.tif	14:48:45	10X	LED_BLUE	7	50ms	GREEN	1200	20Hz	3R	CELL_1	Filter2	300pA 20Pulses 8ms	0pA	0032	OK
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+Total folders checked: 26
+Picked: 18 folders
+Skipped: 8 folders
+
+Pairs per folder:
+  2024_10_11: 7       2025_06_11: 13      2025_11_27: 14
+  2024_12_19: 6       2025_07_17: 2       2025_12_14: 17
+  2025_01_01: 11      2025_07_19: 5       2025_12_15: 12
+  2025_02_05: 15      2025_09_26: 2       2025_12_18: 5
+  2025_02_27: 1       2025_10_13: 6       2026_01_08: 15
+  2025_04_03: 12      2025_11_08: 11
+                      2025_11_13: 19
+  
+Total pairs: ~173
+
+Sensors used:
+  - iAChSnFR (3): 2024_10_11, 2024_12_19, 2025_01_01
+  - GACh3.0 (13): 2025_02_05, 2025_02_27, 2025_04_03, 2025_06_11, 2025_09_26, 
+                  2025_10_13, 2025_11_08, 2025_11_13, 2025_11_27, 2025_12_14, 
+                  2025_12_15, 2025_12_18, 2026_01_08
+  - rACh1h (2): 2025_07_17, 2025_07_19
+
+
+================================================================================
+ANALYSIS PROGRESS
+================================================================================
+
+--- 2026-01-27 ---
+fixed:
+  - Renamed 2024_10_11_summary.xlsx to REC_2024_10_11
+  - Renamed 2024_12_19_summary.xlsx to REC_2024_12_19
+  - Renamed 2025_01_01_summary.xlsx to REC_2025_01_01
+  - Renamed 2025_02_27_summary.xlsx to REC_2025_02_27
+  - Renamed 2025_04_03_summary.xlsx to REC_2025_04_03
+xlsx copied to rec_summary folder in PG_005:
+  - REC_2024_10_11.xlsx
+  - REC_2024_12_19.xlsx
+  - REC_2025_01_01.xlsx
+  - REC_2025_02_05.xlsx
+  - REC_2025_02_27.xlsx
+  - REC_2025_04_03.xlsx
+  - REC_2025_06_11.xlsx
+  - REC_2025_07_17.xlsx
+  - REC_2025_07_19.xlsx
+  - REC_2025_09_26.xlsx
+  - REC_2025_10_13.xlsx
+  - REC_2025_11_08.xlsx
+  - REC_2025_11_13.xlsx
+  - REC_2025_11_27.xlsx
+  - REC_2025_12_14.xlsx
+  - REC_2025_12_15.xlsx
+  - REC_2025_12_18.xlsx
+  - REC_2026_01_08.xlsx
+
+
+--- 2026-01-28 ~ 2026-01-29 ---
+problems from the results:
+  - No 2024 pairs got analyzed, probably because no column "PICK" with value "T".
+    - status:　updated the excelsheets. still need to update the codes.
+  - exp_data 2025_01_01
+    - All analyzed images got weird stripy lines. 
+      -This maybe caused by 
+        1. bad illuminations. 
+        2. bad expression of "iAChSnFR". 
+        3. the flow of recording solutions.
+    - status: 
+        1. dropped the analysis of the date
+    - notes: updated the 2025_01_01_expinfo.md
+  - exp_data 2025_02_05
+    - pair abf0011_img0017 has no visible ACh response in spatial_plot
+    _ pair abf0027_img0041 invisible (darkened) area due to decreasing ACh concentration
+    - pair abf0036_img0050 has no visible ACh response in spatial_plot
+    - status: 
+        1. may need to considering showing descreaing ACh
+  - exp_data 2025_02_27
+    - pair abf0002_img0005 has no visible ACh response in spatioal_plot
+    - status: 
+        1. dropped the analysis of the date
+  - exp_data 2025_04_03
+    - pair abf0008_img0015 has no visible ACh response in spatial_plot
+    - pair abf0017_img0024 has no visible ACh response in spatial_plot
+    - pair abf0018_img0025 has no visible ACh response in spatial_plot
+  - exp_data 2025_07_17
+    - pair abf0011_img0016 has no visible ACh response in spatial_plot
+    - pair abf0012_img0017 has no visible ACh response in spatial_plot
+    - status: 
+        1. dropped the analysis of the date
+  - exp_date 2025_07_19
+    - pair abf0002_img0005 has no visible ACh response in spatial_plot
+    - pair abf0003_img0006 has no visible ACh response in spatial_plot
+    - pair abf0004_img0007 has no visible ACh response in spatial_plot
+    - pair abf0005_img0008 has no visible ACh response in spatial_plot
+    - pair abf0006_img0009 has no visible ACh response in spatial_plot
+    - status:
+        1. dropped the analysis of the date
+  - exp_date 2025_09_26
+    - pair abf0008_img0007 looked like decreasing ACh
+    - pair abf0014_img0013 has no visible ACh response in spatial_plot
+  - exp_date 2025_10_13
+    - pair abf0007_img0008 has no visible ACh response in spatial_plot
+    - pair abf0008_img0009 has no visible ACh response in spatial_plot
+    - pair abf0035_img0038 & pair abf0036_img0047, abnormal picking of abf files (no spikes but all > 0)
+        - status:
+            1. should drop the two pairs
+  
+
+

@@ -17,35 +17,52 @@ PG_005/
 │
 ├── classes/
 │   ├── __init__.py
-│   ├── plot_results.py              # Interactive Qt viewer for spike detection
-│   ├── abf_clip.py                  # ABF data clipping utilities
+│   ├── plot_results.py              # Interactive Qt viewers (PlotPeaks, PlotSegs, PlotSpatialDist, PlotRegion)
+│   ├── abf_clip.py                  # ABF data clipping + spike detection utilities
 │   ├── spatial_categorization.py    # SpatialCategorizer class
 │   ├── region_analyzer.py           # RegionAnalyzer class (area, centroid, contours)
+│   ├── results_exporter.py          # ResultsExporter (SQLite + NPZ + TIFF exporter)
 │   └── archived_methods.py          # Archived: dbscan, region_growing
 │
-└── functions/
-    ├── __init__.py
-    │
-    ├── [Hardware/CUDA]
-    │   ├── check_cuda.py            # Verify CUDA availability
-    │   ├── test_cuda.py             # Test CUDA functionality
-    │   └── get_memory_use.py        # Memory usage monitoring
-    │
-    ├── [CPU Processing]
-    │   ├── cpu_detrend.py           # Numba JIT detrending
-    │   ├── cpu_gauss.py             # Numba JIT Gaussian blur
-    │   ├── cpu_binning.py           # Spatial binning
-    │   └── cpu_process.py           # CPU processing orchestrator
-    │
-    ├── [GPU Processing]
-    │   ├── gpu_detrend.py           # CUDA kernel detrending
-    │   ├── gpu_gauss.py             # CUDA Gaussian blur
-    │   └── gpu_process.py           # GPU processing orchestrator
-    │
-    └── [Analysis]
-        ├── kmeans.py                            # K-means clustering
-        ├── spike_centered_processes.py          # Spike-aligned median/mean
-        └── imaging_segments_zscore_normalization.py  # Z-score normalization
+├── functions/
+│   ├── __init__.py
+│   │
+│   ├── [Hardware/CUDA]
+│   │   ├── check_cuda.py            # Verify CUDA availability
+│   │   ├── test_cuda.py             # Test CUDA functionality
+│   │   └── get_memory_use.py        # Memory usage monitoring
+│   │
+│   ├── [CPU Processing]
+│   │   ├── cpu_detrend.py           # Numba JIT detrending
+│   │   ├── cpu_gauss.py             # Numba JIT Gaussian blur
+│   │   ├── cpu_binning.py           # Spatial binning
+│   │   └── cpu_process.py           # CPU processing orchestrator
+│   │
+│   ├── [GPU Processing]
+│   │   ├── gpu_detrend.py           # CUDA kernel detrending
+│   │   ├── gpu_gauss.py             # CUDA Gaussian blur
+│   │   └── gpu_process.py           # GPU processing orchestrator
+│   │
+│   └── [Analysis]
+│       ├── kmeans.py                            # K-means clustering
+│       ├── spike_centered_processes.py          # Spike-aligned median/mean
+│       └── imaging_segments_zscore_normalization.py  # Z-score normalization
+│
+├── doc/
+│   ├── PROJECT_SUMMARY.md           # This file
+│   ├── DEPENDENCY_DIAGRAM.md        # Architecture diagram
+│   └── examples/                    # Usage examples
+│
+├── raw_images/                      # Raw TIFF stacks (input)
+├── raw_abfs/                        # ABF files (electrophysiology input)
+├── processed_images/                # Preprocessed TIFFs (*_Cal.tif, *_Gauss.tif)
+├── results/                         # Analysis results
+│   ├── results.db                   # SQLite database
+│   └── {exp_date}/                  # Date-organized results
+│       └── abf{}_img{}/             # Experiment-specific data
+├── rec_summary/                     # Recording summary Excel files
+├── logs/                            # Processing logs
+└── utils/                           # Utility scripts (currently unused)
 ```
 
 ---
@@ -120,9 +137,10 @@ This ensures effective noise suppression without distorting the spatial extent o
 
 | Stage | Shape | Data Type |
 |-------|-------|-----------|
-| Load | (n_frames, height, width) | float32 |
+| Load | (n_frames, height, width) | uint16 |
 | Processing | (n_frames, height, width) | float32 |
-| Save | (n_frames, height, width) | float16 |
+| Save (preprocessed) | (n_frames, height, width) | uint16 (clipped to 0-65535) |
+| Save (analysis results) | (n_frames, height, width) | float32 (zscore), uint8 (categorized) |
 
 ---
 
@@ -133,7 +151,7 @@ This ensures effective noise suppression without distorting the spatial extent o
 ```
 Processed TIFF + ABF (electrophysiology)
               ↓
-        Load & Align Data
+        Load & Align Data (AbfClip)
               ↓
         Detect Spikes (scipy.signal.find_peaks)
               ↓
@@ -143,9 +161,13 @@ Processed TIFF + ABF (electrophysiology)
               ↓
         Spike-Aligned Median (robust to outliers)
               ↓
-        Spatial Categorization (identify ACh release regions)
+        Spatial Categorization (SpatialCategorizer)
               ↓
-        Output: Figures + Statistics
+        Region Analysis (RegionAnalyzer)
+              ↓
+        Export Results (ResultsExporter)
+              ↓
+        Output: SQLite DB + TIFF + NPZ + PNG figures
 ```
 
 ### Key Analysis Functions
@@ -364,6 +386,81 @@ All methods also accept: `threshold_method`, `global_threshold`, `threshold_dim`
 | multiotsu | Multi-level Otsu |
 | li_double | Two-pass Li thresholding |
 | otsu_double | Two-pass Otsu thresholding |
+
+---
+
+## Export Workflow
+
+### Data Export Structure
+
+Analysis results are organized by date and experiment:
+
+```
+results/
+├── results.db                              # SQLite database with metadata
+└── {exp_date}/                             # e.g., "2025_12_15"
+    └── abf{abf_serial}_img{img_serial}/    # e.g., "abf0034_img0042"
+        ├── zscore_stack.tif                # Spike-centered median (float32)
+        ├── categorized_stack.tif           # Categorized frames (uint8: 0=bg, 1=dim, 2=bright)
+        ├── img_segments.npz                # Individual z-score segments
+        ├── abf_segments.npz                # Time + voltage traces
+        ├── spatial_plot.png                # Spatial distribution figure
+        └── region_plot.png                 # Region detail figure
+```
+
+### Using get_export_data()
+
+Each analysis class provides a `get_export_data()` method for easy export:
+
+```python
+from classes import AbfClip, SpatialCategorizer, RegionAnalyzer, ResultsExporter
+
+# Step 1: Load and process data
+abf_clip = AbfClip(exp_date="2025_12_15", abf_serial="0034", img_serial="0042")
+categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
+categorizer.fit(spike_centered_median_segment)
+analyzer = RegionAnalyzer(obj="10X")
+analyzer.fit(categorizer.categorized_frames)
+
+# Step 2: Export all results
+exporter = ResultsExporter()
+exp_dir = exporter.export_all(
+    **abf_clip.get_export_data(),        # Experiment metadata + ABF segments
+    **categorizer.get_export_data(),     # Categorized frames + threshold method
+    **analyzer.get_export_data(),        # Region analysis + summary statistics
+    zscore_stack=med_img_segment_zscore,
+    img_segments_zscore=lst_img_segments_zscore,
+)
+
+# Step 3: Export figures
+exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
+exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
+```
+
+### SQLite Database Schema
+
+The `results.db` file contains experiment metadata:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| exp_date | TEXT | Experiment date (YYYY_MM_DD) |
+| abf_serial | TEXT | ABF file serial number |
+| img_serial | TEXT | Image file serial number |
+| timestamp | TEXT | Analysis timestamp (ISO format) |
+| objective | TEXT | Microscope objective (10X, 40X, 60X) |
+| um_per_pixel | REAL | Pixel scale factor |
+| threshold_method | TEXT | Threshold method used |
+| n_spikes_detected | INTEGER | Total spikes found |
+| n_spikes_analyzed | INTEGER | Spikes included in analysis |
+| n_frames | INTEGER | Number of frames in segment |
+| total_dim_regions | INTEGER | Total dim regions found |
+| total_bright_regions | INTEGER | Total bright regions found |
+| dim_area_um2_mean | REAL | Mean area of dim regions (µm²) |
+| dim_area_um2_std | REAL | Std of dim region areas |
+| bright_area_um2_mean | REAL | Mean area of bright regions (µm²) |
+| bright_area_um2_std | REAL | Std of bright region areas |
+| region_analysis | TEXT | JSON with detailed region data |
+| data_dir | TEXT | Relative path to data directory |
 
 ---
 
@@ -628,4 +725,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Updated: 2026-01-20*
+*Last updated: 2026-01-30*

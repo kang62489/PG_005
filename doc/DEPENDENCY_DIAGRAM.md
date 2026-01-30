@@ -180,7 +180,9 @@
     │
     ├─→ Raw TIFF Stack (raw_images/*.tif)
     │
-    └─→ ABF File (raw_abfs/*.abf) - Electrophysiology data
+    ├─→ ABF File (raw_abfs/*.abf) - Electrophysiology data
+    │
+    └─→ Recording summaries (rec_summary/*.xlsx) - Experiment metadata
          │
          │
          ▼
@@ -230,26 +232,38 @@
     │    └─→ Summary statistics
     │
     ├─→ Export Results: Save to disk (ResultsExporter)
-    │    ├─→ SQLite: metadata + summaries (results/results.db)
-    │    ├─→ TIFF: zscore_stack.tif, categorized_stack.tif
-    │    ├─→ NPZ: img_segments.npz, abf_segments.npz
-    │    └─→ PNG: region_plot.png (Qt window screenshot)
+    │    │
+    │    ├─→ collect export data using get_export_data():
+    │    │    • abf_clip.get_export_data() → experiment IDs + ABF segments
+    │    │    • categorizer.get_export_data() → categorized frames + threshold method
+    │    │    • analyzer.get_export_data() → region analysis + summary stats
+    │    │
+    │    ├─→ exporter.export_all() saves:
+    │    │    • SQLite: metadata + summaries (results/results.db)
+    │    │    • TIFF: zscore_stack.tif (float32), categorized_stack.tif (uint8)
+    │    │    • NPZ: img_segments.npz, abf_segments.npz
+    │    │
+    │    └─→ exporter.export_figure() saves:
+    │         • PNG: spatial_plot.png, region_plot.png (Qt window screenshots)
     │
     └─→ Visualization: Interactive Qt windows
+         ├─→ PlotPeaks: View spike detection on voltage trace
          ├─→ PlotSegs: Browse individual spike segments
-         ├─→ PlotSpatialDist: Overview of categorization
-         └─→ PlotRegion: Frame-by-frame detail with contours
+         ├─→ PlotSpatialDist: Overview of categorization with overlay traces
+         └─→ PlotRegion: Frame-by-frame detail with region contours
 
 [OUTPUTS]
     │
-    ├─→ results/results.db           (SQLite database)
-    ├─→ results/data/{date}/abf{}_img{}/
-    │    ├─→ zscore_stack.tif        (spike-centered median)
-    │    ├─→ categorized_stack.tif   (0=bg, 1=dim, 2=bright)
+    ├─→ results/results.db           (SQLite database - experiment metadata)
+    ├─→ results/{exp_date}/abf{abf_serial}_img{img_serial}/
+    │    ├─→ zscore_stack.tif        (spike-centered median, float32)
+    │    ├─→ categorized_stack.tif   (0=bg, 1=dim, 2=bright, uint8)
     │    ├─→ img_segments.npz        (individual spike segments)
     │    ├─→ abf_segments.npz        (time + voltage traces)
+    │    ├─→ spatial_plot.png        (PlotSpatialDist screenshot)
     │    └─→ region_plot.png         (PlotRegion screenshot)
-    └─→ Interactive figures (PlotSegs, PlotSpatialDist, PlotRegion)
+    ├─→ processed_images/            (*_Cal.tif, *_Gauss.tif from preprocessing)
+    └─→ Interactive figures (PlotPeaks, PlotSegs, PlotSpatialDist, PlotRegion)
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -316,5 +330,5 @@ Internal Dependencies:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-01-20 (Added Gaussian blur explanation, RegionAnalyzer, ResultsExporter)
+Updated: 2026-01-30 (Updated export workflow, data structure paths, PlotPeaks addition)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

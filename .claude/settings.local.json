@@ -1,0 +1,22 @@
+{
+  "env": {
+    "EDITOR": "code"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(.venvScriptspython.exe -c \"import sqlite3; conn = sqlite3.connect\\(''results/results.db''\\); cursor = conn.cursor\\(\\); cursor.execute\\(\"\"SELECT name FROM sqlite_master WHERE type=''table'';\"\"\\); tables = [t[0] for t in cursor.fetchall\\(\\)]; print\\(''Tables:''\\); [print\\(f''  - {t}''\\) for t in tables]; print\\(\\); [print\\(f''{t}:''\\) or cursor.execute\\(f''PRAGMA table_info\\({t}\\)''\\) or [print\\(f''  {row}''\\) for row in cursor.fetchall\\(\\)] for t in tables]\")",
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(python:*)",
+      "Bash(test:*)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(\".venv/Scripts/pip.exe\" install tqdm)",
+      "Bash(ls:*)",
+      "Bash(uv add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: add batch processing automation\n\n- Add utils/xlsx_reader.py to read metadata from REC_*.xlsx files\n- Add batch_process.py for automated processing of all pairs\n- Supports resumable execution \\(skips already processed pairs\\)\n- Automatically deduplicates image preprocessing\n- Processes ~160 pairs in ~5.8 hours \\(overnight\\)\n- Add tqdm dependency for progress bars\n- Add RUN_BATCH.md documentation\n- Update .gitignore to exclude rec_summary/\n\nImplementation:\n- Zero modifications to existing analysis code\n- Only two new files \\(utils/xlsx_reader.py, batch_process.py\\)\n- Handles inconsistent Excel column names across dates\n- Exports all results to results.db and individual directories\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(dos2unix:*)",
+      "Bash(tree:*)"
+    ]
+  }
+}
