@@ -1,10 +1,12 @@
-# PG_005 Project Summary
+# RADIO - Response Associated Distribution Imaging Observer
+
+**Project Code**: PG_005
 
 ## Project Overview
 
-This project performs **acetylcholine (ACh) imaging analysis** with two main workflows:
+**RADIO** is an imaging analysis platform for studying neurotransmitter release dynamics. The system performs **acetylcholine (ACh) imaging analysis** with two main workflows:
 1. **Image Preprocessing**: Raw TIFF stack preprocessing (detrending, Gaussian filtering)
-2. **Spike-Triggered Analysis**: Spike-aligned imaging analysis with spatial categorization to identify ACh release patterns
+2. **Spike-Aligned Analysis**: Spike-centered imaging analysis with spatial categorization to identify chemical release distribution patterns
 
 ---
 
@@ -51,16 +53,23 @@ PG_005/
 ├── doc/
 │   ├── PROJECT_SUMMARY.md           # This file
 │   ├── DEPENDENCY_DIAGRAM.md        # Architecture diagram
+│   ├── DATABASE_STRUCTURE.md        # Database schema and optimization details
 │   └── examples/                    # Usage examples
+│
+├── scripts/
+│   ├── migrate_database.py          # Database migration script (completed 2026-02-10)
+│   └── __init__.py
 │
 ├── raw_images/                      # Raw TIFF stacks (input)
 ├── raw_abfs/                        # ABF files (electrophysiology input)
 ├── processed_images/                # Preprocessed TIFFs (*_Cal.tif, *_Gauss.tif)
 ├── results/                         # Analysis results
-│   ├── results.db                   # SQLite database
+│   ├── results.db                   # SQLite database (optimized, <1 MB)
+│   ├── results_backup.db            # Pre-migration backup (680 MB)
+│   ├── export_experiment_to_excel.py # Export to Excel script
 │   └── {exp_date}/                  # Date-organized results
 │       └── abf{}_img{}/             # Experiment-specific data
-├── rec_summary/                     # Recording summary Excel files
+├── rec_summary/                     # Recording summary Excel files (REC_YYYY_MM_DD.xlsx)
 ├── logs/                            # Processing logs
 └── utils/                           # Utility scripts (currently unused)
 ```
@@ -144,7 +153,7 @@ This ensures effective noise suppression without distorting the spatial extent o
 
 ---
 
-## Workflow 2: Spike-Triggered Analysis
+## Workflow 2: Spike-Aligned Analysis
 
 **Script**: `im_dynamics.py`
 
@@ -439,7 +448,7 @@ exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
 
 ### SQLite Database Schema
 
-The `results.db` file contains experiment metadata:
+The `results.db` file contains experiment metadata (optimized 2026-02-10):
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -459,8 +468,25 @@ The `results.db` file contains experiment metadata:
 | dim_area_um2_std | REAL | Std of dim region areas |
 | bright_area_um2_mean | REAL | Mean area of bright regions (µm²) |
 | bright_area_um2_std | REAL | Std of bright region areas |
-| region_analysis | TEXT | JSON with detailed region data |
+| region_analysis | TEXT | JSON with **largest regions only** (optimized) |
 | data_dir | TEXT | Relative path to data directory |
+| SLICE | INTEGER | Slice number (from Excel metadata) |
+| AT | TEXT | Cell/site identifier (from Excel metadata) |
+
+**Note**: Database optimized to store only largest regions per frame in `region_analysis`, reducing size from 680 MB to <1 MB while retaining essential data. See `doc/DATABASE_STRUCTURE.md` for details.
+
+### Exporting to Excel
+
+Export the database to Excel format for easy analysis and sharing:
+
+```bash
+python results/export_experiment_to_excel.py
+```
+
+**Output**: `results/experiment_table.xlsx` with 3 sheets:
+- **experiments** - All experiment records with metadata (SLICE, AT, summary stats)
+- **dim_largest** - Largest dim regions across all experiments
+- **bright_largest** - Largest bright regions across all experiments
 
 ---
 
@@ -725,4 +751,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-01-30*
+*Last updated: 2026-02-05 (Added RADIO project name, updated terminology to spike-aligned)*

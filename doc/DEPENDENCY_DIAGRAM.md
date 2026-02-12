@@ -1,4 +1,6 @@
      ╔══════════════════════════════════════════════════════════════════════════════╗
+     ║                                   RADIO                                      ║
+     ║         Response Associated Distribution Imaging Observer (PG_005)          ║
      ║                       PROJECT DEPENDENCY DIAGRAM                             ║
      ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -48,7 +50,7 @@
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    WORKFLOW 2: SPIKE-TRIGGERED ANALYSIS                     │
+│                     WORKFLOW 2: SPIKE-ALIGNED ANALYSIS                      │
 └─────────────────────────────────────────────────────────────────────────────┘
 
     ┌────────────────────────────────┐
@@ -205,7 +207,7 @@
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ STEP 2: Spike-Triggered Analysis (im_dynamics.py)                           │
+│ STEP 2: Spike-Aligned Analysis (im_dynamics.py)                             │
 └─────────────────────────────────────────────────────────────────────────────┘
     │
     ├─→ Load processed TIFF + ABF
@@ -330,5 +332,5 @@ Internal Dependencies:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-01-30 (Updated export workflow, data structure paths, PlotPeaks addition)
+Updated: 2026-02-05 (Added RADIO project name, updated terminology to spike-aligned)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
