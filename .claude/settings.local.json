@@ -12,7 +12,11 @@
       "Bash(uv add:*)",
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: add batch processing automation\n\n- Add utils/xlsx_reader.py to read metadata from REC_*.xlsx files\n- Add batch_process.py for automated processing of all pairs\n- Supports resumable execution \\(skips already processed pairs\\)\n- Automatically deduplicates image preprocessing\n- Processes ~160 pairs in ~5.8 hours \\(overnight\\)\n- Add tqdm dependency for progress bars\n- Add RUN_BATCH.md documentation\n- Update .gitignore to exclude rec_summary/\n\nImplementation:\n- Zero modifications to existing analysis code\n- Only two new files \\(utils/xlsx_reader.py, batch_process.py\\)\n- Handles inconsistent Excel column names across dates\n- Exports all results to results.db and individual directories\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(dos2unix:*)"
+      "Bash(dos2unix:*)",
+      "Bash(tree:*)",
+      "Bash(ruff check:*)",
+      "Bash(sqlite3:*)",
+      "Bash(.venv/Scripts/python.exe:*)"
     ]
   },
   "env":{
