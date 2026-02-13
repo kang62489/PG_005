@@ -14,30 +14,30 @@ This document analyzes the current database schema and identifies potential redu
 
 ### Table: `experiments`
 
-| Column | Type | Description | Source |
-|--------|------|-------------|--------|
-| `id` | INTEGER | Primary key (auto-increment) | Database |
-| `exp_date` | TEXT | Experiment date (YYYY_MM_DD) | User input |
-| `abf_serial` | TEXT | ABF file serial number | User input |
-| `img_serial` | TEXT | Image file serial number | User input |
-| `timestamp` | TEXT | Analysis timestamp (ISO format) | Auto-generated |
-| `objective` | TEXT | Microscope objective (10X/40X/60X) | Processing metadata |
-| `um_per_pixel` | REAL | Pixel scale factor | Processing metadata |
-| `threshold_method` | TEXT | Threshold method used | Processing metadata |
-| `n_spikes_detected` | INTEGER | Total spikes found in ABF | `AbfClip` |
-| `n_spikes_analyzed` | INTEGER | Spikes included in analysis | `AbfClip` |
-| `n_frames` | INTEGER | Number of frames in segment | `RegionAnalyzer.get_summary()` |
-| `total_dim_regions` | INTEGER | Total dim regions across all frames | `RegionAnalyzer.get_summary()` |
-| `total_bright_regions` | INTEGER | Total bright regions across all frames | `RegionAnalyzer.get_summary()` |
-| `dim_area_um2_mean` | REAL | Mean area of dim regions (µm²) | `RegionAnalyzer.get_summary()` |
-| `dim_area_um2_std` | REAL | Std dev of dim region areas | `RegionAnalyzer.get_summary()` |
-| `bright_area_um2_mean` | REAL | Mean area of bright regions (µm²) | `RegionAnalyzer.get_summary()` |
-| `bright_area_um2_std` | REAL | Std dev of bright region areas | `RegionAnalyzer.get_summary()` |
-| `region_analysis` | TEXT (JSON) | **Optimized: Only largest regions** (dim_largest, bright_largest) | `RegionAnalyzer.get_results()` → `optimize_region_data()` |
-| `data_dir` | TEXT | Relative path to data files | Constructed path |
-| `notes` | TEXT | User notes (currently unused) | Reserved |
-| `SLICE` | INTEGER | Slice number from experiment | Excel file (rec_summary) |
-| `AT` | TEXT | Cell/site identifier | Excel file (rec_summary) |
+| Column                 | Type        | Description                                                       | Source                                                    |
+| ---------------------- | ----------- | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| `id`                   | INTEGER     | Primary key (auto-increment)                                      | Database                                                  |
+| `exp_date`             | TEXT        | Experiment date (YYYY_MM_DD)                                      | User input                                                |
+| `abf_serial`           | TEXT        | ABF file serial number                                            | User input                                                |
+| `img_serial`           | TEXT        | Image file serial number                                          | User input                                                |
+| `timestamp`            | TEXT        | Analysis timestamp (ISO format)                                   | Auto-generated                                            |
+| `objective`            | TEXT        | Microscope objective (10X/40X/60X)                                | Processing metadata                                       |
+| `um_per_pixel`         | REAL        | Pixel scale factor                                                | Processing metadata                                       |
+| `threshold_method`     | TEXT        | Threshold method used                                             | Processing metadata                                       |
+| `n_spikes_detected`    | INTEGER     | Total spikes found in ABF                                         | `AbfClip`                                                 |
+| `n_spikes_analyzed`    | INTEGER     | Spikes included in analysis                                       | `AbfClip`                                                 |
+| `n_frames`             | INTEGER     | Number of frames in segment                                       | `RegionAnalyzer.get_summary()`                            |
+| `total_dim_regions`    | INTEGER     | Total dim regions across all frames                               | `RegionAnalyzer.get_summary()`                            |
+| `total_bright_regions` | INTEGER     | Total bright regions across all frames                            | `RegionAnalyzer.get_summary()`                            |
+| `dim_area_um2_mean`    | REAL        | Mean area of dim regions (µm²)                                    | `RegionAnalyzer.get_summary()`                            |
+| `dim_area_um2_std`     | REAL        | Std dev of dim region areas                                       | `RegionAnalyzer.get_summary()`                            |
+| `bright_area_um2_mean` | REAL        | Mean area of bright regions (µm²)                                 | `RegionAnalyzer.get_summary()`                            |
+| `bright_area_um2_std`  | REAL        | Std dev of bright region areas                                    | `RegionAnalyzer.get_summary()`                            |
+| `region_analysis`      | TEXT (JSON) | **Optimized: Only largest regions** (dim_largest, bright_largest) | `RegionAnalyzer.get_results()` → `optimize_region_data()` |
+| `data_dir`             | TEXT        | Relative path to data files                                       | Constructed path                                          |
+| `notes`                | TEXT        | User notes (currently unused)                                     | Reserved                                                  |
+| `SLICE`                | INTEGER     | Slice number from experiment                                      | Excel file (rec_summary)                                  |
+| `AT`                   | TEXT        | Cell/site identifier                                              | Excel file (rec_summary)                                  |
 
 **Unique constraint**: `(exp_date, abf_serial, img_serial)`
 

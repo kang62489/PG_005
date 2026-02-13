@@ -1,7 +1,7 @@
 # PI Meeting Preparation - ACh Imaging Analysis
 
-**Status:** Data analysis complete, ready for direction discussion
-**Last Updated:** 2026-02-10
+**Status:** Data collected, refining analysis pipeline for PI discussion
+**Last Updated:** 2026-02-12
 
 ---
 
@@ -46,25 +46,38 @@
 
 ---
 
-### 2. Spatial Targeting: Random vs Compartmentalized Broadcasting 🎯
+### 2. Spatial Targeting: What Determines Hotspot Localization? 🎯
 
-**Observation:** Individual hotspots show substantial spatial extent
+**Observation:** Volume transmission is confirmed
+- Spatial extent: 250-300 μm >> synaptic cleft (100 nm)
+- Temporal persistence: >200 ms >> spike duration (~1 ms)
 
 **Key Question:**
-> Is ACh volume transmission random diffusion or targeted to specific anatomical compartments?
+> What determines where ACh accumulates—receptor targeting or extracellular space (ECS) properties?
+
+**Two Hypotheses:**
+
+**Hypothesis 1: Receptor-Targeted Volume Transmission** 🎯
+- ACh release is **directed toward** M1-receptor-expressing regions
+- Hotspots preferentially overlap with M1+ postsynaptic targets
+- **Test:** Overlay hotspot maps with M1 receptor staining
+- **Prediction:** Hotspot boundaries align with M1+ regions
+
+**Hypothesis 2: ECS-Shaped Random Diffusion** 🌊
+- ACh spreads **randomly** from release site
+- Hotspot localization is determined by **AChE distribution** in the ECS
+- Patch regions (low AChE) → ACh accumulates → bright fluorescence
+- Matrix regions (high AChE) → ACh rapidly cleared → dim/no signal
+- **Test:** Overlay hotspot maps with patch/matrix compartments (AChE staining)
+- **Prediction:** Bright hotspots in patch (low AChE), dim in matrix (high AChE)
 
 **Approach:**
-- Overlay hotspot distributions with:
-  - Patch/matrix compartments (striatal organization)
-  - M1 receptor staining (postsynaptic targets)
-- Test if hotspots show spatial bias/preference
+- Identify anatomical compartments (patch/matrix markers)
+- Map M1 receptor distribution
+- Overlay hotspot distributions with both markers
+- Distinguish receptor-targeting vs ECS-shaping mechanisms
 
-**Predictions:**
-- Random diffusion → Uniform distribution
-- Targeted broadcasting → Enrichment in specific compartments
-- Receptor-limited → Hotspot boundaries align with M1+ regions
-
-**Requires NEW experiments:** Anatomical staining + image registration
+**Requires NEW experiments:** Anatomical/receptor staining + image registration
 
 ---
 
@@ -144,24 +157,14 @@
 
 ## 🗂️ Files & Resources
 
-### Analysis Scripts
-| File | Purpose | When to Use |
-|------|---------|-------------|
-| `analyze_results.py` | Overall dataset statistics | Quick overview |
-| `export_for_pi_meeting.py` | Export CSV for Excel | Already ran |
-| `find_best_examples.py` | Find representative experiments | Selecting examples for figures |
-
 ### Data Files
-- CSV exports for Excel analysis (if generated)
-- Database: `results/results.db`
-- Individual experiment folders in `results/{date}/abf{}_img{}/`
+- Database: `results/results.db` (all experimental results and metadata)
+- Individual experiment folders in `results/{date}/` (organized by date)
+- Gaussian filtering comparison images in `output/gaussian/`
 
-### Finding Representative Examples
-Use `find_best_examples.py` to identify experiments with:
-- Clear, well-defined hotspots
-- Good signal-to-noise ratio
-- Representative spike counts
-- Various experimental conditions
+### Available Scripts
+- `im_preprocess.py` - Image preprocessing pipeline
+- `im_dynamics.py` - Temporal dynamics analysis
 
 ### Gaussian σ Comparison Images
 See `output/gaussian/*.png` for visual comparison of different filtering scales:
@@ -241,15 +244,14 @@ See `output/gaussian/*.png` for visual comparison of different filtering scales:
 
 ## ✅ What You've Accomplished
 
-- [x] Complete analysis pipeline (preprocessing → spike detection → spatial categorization)
-- [x] 144 experiments processed and quantified
-- [x] Database with all results and metadata
-- [x] Plots and visualizations for all experiments
+- [x] Complete year of ACh imaging data collected (Jan 2025 - Jan 2026)
+- [x] Database with experimental metadata and results (`results/results.db`)
+- [x] Gaussian filtering parameter exploration (`output/gaussian/`)
+- [x] Image preprocessing pipeline (`im_preprocess.py`)
+- [x] Temporal dynamics analysis tools (`im_dynamics.py`)
 - [x] Clear mechanistic questions identified
-- [x] Analysis plan for next steps
 
-**You have a year of high-quality data and clear research directions.**
-**This is a successful project ready for the next phase!**
+**Next:** Refine analysis pipeline to extract quantitative metrics for the three research questions
 
 ---
 
@@ -259,14 +261,9 @@ See `output/gaussian/*.png` for visual comparison of different filtering scales:
 - Complete year of experiments (Jan 2025 - Jan 2026)
 - Multiple slices and cells analyzed
 - All data stored in `results/results.db`
+- Gaussian filtering examples in `output/gaussian/`
 
-### Run Quick Summary
-```bash
-python analyze_results.py
-python find_best_examples.py
-```
-
-**Note:** Verify specific statistics (spike counts, hotspot areas, etc.) by running analysis scripts before presenting numbers to PI.
+**Note:** Analysis pipeline needs to be refined to extract specific statistics (spike counts, hotspot areas, temporal dynamics) for PI presentation.
 
 ---
 
