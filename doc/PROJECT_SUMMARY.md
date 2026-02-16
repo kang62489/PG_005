@@ -343,6 +343,39 @@ print(f"Total bright regions: {summary['total_bright_regions']}")
 print(f"Mean bright area: {summary['bright_area_um2_mean']:.2f} um²")
 ```
 
+### SpatialCategorizer vs RegionAnalyzer: Understanding the Pipeline
+
+These two classes work **sequentially** and serve **different purposes**:
+
+**🔵 SpatialCategorizer** - Pixel Classification (Step 1)
+- **Input**: Raw/processed image segments (float32 intensity values)
+- **Output**: Categorized frames (uint8: 0=background, 1=dim, 2=bright)
+- **Purpose**: Label each pixel based on intensity and spatial connectivity
+- **Methods**: 3 spatial algorithms (connected/watershed/morphological)
+- **Thresholding**: 4 auto-threshold methods (manual/multiotsu/li_double/otsu_double)
+
+**🟢 RegionAnalyzer** - Region Measurement (Step 2)
+- **Input**: Categorized frames from SpatialCategorizer (uint8: 0/1/2)
+- **Output**: Region properties (area, centroid, contours, bbox)
+- **Purpose**: Extract quantitative measurements from labeled regions
+- **Features**: Connected component analysis, pixel scaling (10X/40X/60X)
+- **No thresholding**: Uses pre-categorized data from Step 1
+
+**Pipeline Flow:**
+```
+Raw Image (float32) → [SpatialCategorizer] → Categorized (0/1/2) → [RegionAnalyzer] → Measurements
+```
+
+**Data Export Comparison:**
+
+| Module | get_export_data() Returns |
+|--------|---------------------------|
+| SpatialCategorizer | `categorized_frames` (2D arrays), `threshold_method` |
+| RegionAnalyzer | `region_summary` (stats), `region_data` (areas, centroids, bbox), `objective`, `um_per_pixel` |
+
+**Shared Constants:**
+Both modules define `CATEGORY_DIM=1` and `CATEGORY_BRIGHT=2`. This is **intentional** for communication between modules, not redundant code.
+
 ### Categorical vs Labeled Images
 
 | Type | Values | Example |
@@ -751,4 +784,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-02-05 (Added RADIO project name, updated terminology to spike-aligned)*
+*Last updated: 2026-02-14 (Clarified SpatialCategorizer vs RegionAnalyzer pipeline relationship)*

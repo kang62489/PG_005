@@ -1,9 +1,10 @@
 # PG_005 - Acetylcholine Imaging Analysis
 1. Check `doc/PROJECT_SUMMARY.md` and `doc/DEPENDENCY_DIAGRAM.md` for understanding the project and getting into situation.
 2. Check `.cloud/plans` for understanding the current progress. Update the plan if necessary.
-3. Check and fix ruff problems in python files if pyproject.toml has relative settings.
+3. Check and fix ruff problems in **python files** if pyproject.toml has relative settings.
 4. Check what skills you have.
 5. Answer the questions on the basis of your understanding of this project.
+6. Use code block if necessary, especially for visualization.
 
 ### Before refactoring
 1. Always make a todo.md at the root of the project for us to track the progress.
@@ -19,4 +20,4 @@
 
 *When in doubt, check the docs. They explain the "why" behind implementation choices.*
 *Use emoji to make the text lively. *
-*Use obvious characters or symbols or lines to separate sections or paragraphs of your answers. *
+*Use obvious characters or symbols or lines (only the separators) to separate sections or paragraphs of your answers. *

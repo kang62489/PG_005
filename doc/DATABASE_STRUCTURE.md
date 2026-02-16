@@ -26,14 +26,19 @@ This document analyzes the current database schema and identifies potential redu
 | `threshold_method`     | TEXT        | Threshold method used                                             | Processing metadata                                       |
 | `n_spikes_detected`    | INTEGER     | Total spikes found in ABF                                         | `AbfClip`                                                 |
 | `n_spikes_analyzed`    | INTEGER     | Spikes included in analysis                                       | `AbfClip`                                                 |
-| `n_frames`             | INTEGER     | Number of frames in segment                                       | `RegionAnalyzer.get_summary()`                            |
-| `total_dim_regions`    | INTEGER     | Total dim regions across all frames                               | `RegionAnalyzer.get_summary()`                            |
-| `total_bright_regions` | INTEGER     | Total bright regions across all frames                            | `RegionAnalyzer.get_summary()`                            |
-| `dim_area_um2_mean`    | REAL        | Mean area of dim regions (µm²)                                    | `RegionAnalyzer.get_summary()`                            |
-| `dim_area_um2_std`     | REAL        | Std dev of dim region areas                                       | `RegionAnalyzer.get_summary()`                            |
-| `bright_area_um2_mean` | REAL        | Mean area of bright regions (µm²)                                 | `RegionAnalyzer.get_summary()`                            |
-| `bright_area_um2_std`  | REAL        | Std dev of bright region areas                                    | `RegionAnalyzer.get_summary()`                            |
+| `threshold_method`     | TEXT        | Threshold method used                                             | `SpatialCategorizer` (Step 1: Pixel classification)       |
+| `n_frames`             | INTEGER     | Number of frames in segment                                       | `RegionAnalyzer.get_summary()` (Step 2: Measurement)      |
+| `total_dim_regions`    | INTEGER     | Total dim regions across all frames                               | `RegionAnalyzer.get_summary()` (Step 2: Measurement)      |
+| `total_bright_regions` | INTEGER     | Total bright regions across all frames                            | `RegionAnalyzer.get_summary()` (Step 2: Measurement)      |
+| `dim_area_um2_mean`    | REAL        | Mean area of dim regions (µm²)                                    | `RegionAnalyzer.get_summary()` (Step 2: Measurement)      |
+| `dim_area_um2_std`     | REAL        | Std dev of dim region areas                                       | `RegionAnalyzer.get_summary()` (Step 2: Measurement)      |
+| `bright_area_um2_mean` | REAL        | Mean area of bright regions (µm²)                                 | `RegionAnalyzer.get_summary()` (Step 2: Measurement)      |
+| `bright_area_um2_std`  | REAL        | Std dev of bright region areas                                    | `RegionAnalyzer.get_summary()` (Step 2: Measurement)      |
 | `region_analysis`      | TEXT (JSON) | **Optimized: Only largest regions** (dim_largest, bright_largest) | `RegionAnalyzer.get_results()` → `optimize_region_data()` |
+
+**Note**: The analysis pipeline has two sequential steps:
+1. **SpatialCategorizer** (classes/spatial_categorization.py) - Classifies pixels into categories (0/1/2)
+2. **RegionAnalyzer** (classes/region_analyzer.py) - Measures properties of categorized regions
 | `data_dir`             | TEXT        | Relative path to data files                                       | Constructed path                                          |
 | `notes`                | TEXT        | User notes (currently unused)                                     | Reserved                                                  |
 | `SLICE`                | INTEGER     | Slice number from experiment                                      | Excel file (rec_summary)                                  |
@@ -374,4 +379,4 @@ The database has been **successfully optimized**:
 
 ---
 
-*Last updated: 2026-02-10*
+*Last updated: 2026-02-14 (Added note about SpatialCategorizer → RegionAnalyzer pipeline)*

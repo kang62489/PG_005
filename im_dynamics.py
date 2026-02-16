@@ -28,11 +28,14 @@ PLOT_SEGS = True
 PLOT_SPATIAL = True
 PLOT_REGION = True
 
+# Properly truncate the image stacks and corresponding abf files into proper segments for further analysis
+# All lists of segments are saved in the AbfClip instance
 abf_clip = AbfClip(exp_date="2025_12_15", abf_serial="0034", img_serial="0042")
 
+# Z-score normalize the image segments
 lst_img_segments_zscore = img_seg_zscore_norm(abf_clip.lst_img_segments)
 
-
+# Using median to remove outliner intensities of each pixels across all frames
 med_img_segment_zscore, zscore_range = spike_centered_median(lst_img_segments_zscore)
 
 # Prepare centered spike traces for overlay plotting
