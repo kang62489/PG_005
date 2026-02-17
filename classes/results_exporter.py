@@ -39,17 +39,17 @@ class NumpyEncoder(json.JSONEncoder):
 
 
 def optimize_region_data(region_data: dict) -> dict:
-    """Optimize region data by keeping only largest regions.
+    """Optimize region data by keeping only largest bright regions.
 
     Reduces JSON size from ~5MB to ~5KB per experiment by removing:
     - dim_regions (all regions)
     - bright_regions (all regions)
     - dim_category (category stats)
     - bright_category (category stats)
+    - dim_largest (not needed)
 
     Keeps only:
-    - dim_largest (9 largest regions per frame)
-    - bright_largest (9 largest regions per frame)
+    - bright_largest (largest bright region per frame with spans)
     - obj (microscope objective)
     - um_per_pixel (scale factor)
 
@@ -57,10 +57,9 @@ def optimize_region_data(region_data: dict) -> dict:
         region_data: Full region analysis dict from RegionAnalyzer.get_results()
 
     Returns:
-        Optimized dict with only largest regions
+        Optimized dict with only largest bright regions
     """
     return {
-        "dim_largest": region_data.get("dim_largest"),
         "bright_largest": region_data.get("bright_largest"),
         "obj": region_data.get("obj"),
         "um_per_pixel": region_data.get("um_per_pixel"),
@@ -113,10 +112,6 @@ class ResultsExporter:
                 n_frames INTEGER,
                 total_dim_regions INTEGER,
                 total_bright_regions INTEGER,
-                dim_area_um2_mean REAL,
-                dim_area_um2_std REAL,
-                bright_area_um2_mean REAL,
-                bright_area_um2_std REAL,
                 region_analysis TEXT,
                 data_dir TEXT,
                 notes TEXT,
@@ -267,10 +262,8 @@ class ResultsExporter:
                 objective, um_per_pixel, threshold_method,
                 n_spikes_detected, n_spikes_analyzed,
                 n_frames, total_dim_regions, total_bright_regions,
-                dim_area_um2_mean, dim_area_um2_std,
-                bright_area_um2_mean, bright_area_um2_std,
                 region_analysis, data_dir
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -285,10 +278,6 @@ class ResultsExporter:
                 region_summary["n_frames"],
                 region_summary["total_dim_regions"],
                 region_summary["total_bright_regions"],
-                region_summary["dim_area_um2_mean"],
-                region_summary["dim_area_um2_std"],
-                region_summary["bright_area_um2_mean"],
-                region_summary["bright_area_um2_std"],
                 json.dumps(optimized_region_data, cls=NumpyEncoder),
                 data_dir,
             ),

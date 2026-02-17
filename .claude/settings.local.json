@@ -1,4 +1,7 @@
 {
+  "env": {
+    "EDITOR": "code"
+  },
   "permissions": {
     "allow": [
       "Bash(python3:*)",
@@ -16,10 +19,9 @@
       "Bash(tree:*)",
       "Bash(ruff check:*)",
       "Bash(sqlite3:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "WebSearch",
+      "Bash(uv run ruff check:*)"
     ]
-  },
-  "env":{
-    "EDITOR": "code"
   }
 }

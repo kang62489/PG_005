@@ -24,7 +24,7 @@ app = QApplication(sys.argv)
 
 # Switch on plotting
 PLOT_PEAKS = False
-PLOT_SEGS = True
+PLOT_SEGS = False
 PLOT_SPATIAL = True
 PLOT_REGION = True
 
