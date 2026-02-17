@@ -5,7 +5,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 
-def get_picked_pairs(rec_summary_dir="rec_summary"):
+def get_picked_pairs(rec_summary_dir: str = "rec_summary") -> list[dict[str, str | int]]:
     """
     Read all REC_*.xlsx files and return list of picked pairs.
 
@@ -14,7 +14,8 @@ def get_picked_pairs(rec_summary_dir="rec_summary"):
 
     Returns:
         list of dict: [{'exp_date': '2025_12_18', 'img_serial': '0026',
-                        'abf_serial': '0023', 'objective': '10X'}, ...]
+                        'abf_serial': '0023', 'objective': '10X',
+                        'SLICE': 1, 'AT': 'A1'}, ...]
     """
     pairs = []
 
@@ -44,6 +45,10 @@ def get_picked_pairs(rec_summary_dir="rec_summary"):
         col_obj = headers.index("OBJ")
         col_pick = headers.index("PICK")
 
+        # Optional columns with defaults
+        col_slice = headers.index("SLICE") if "SLICE" in headers else None
+        col_at = headers.index("AT") if "AT" in headers else None
+
         # Read rows where PICK is not empty
         for row in ws.iter_rows(min_row=2, values_only=True):
             if row[col_pick]:  # If PICK column has value
@@ -59,8 +64,22 @@ def get_picked_pairs(rec_summary_dir="rec_summary"):
                 if not abf_serial or not objective:
                     continue
 
-                pairs.append(
-                    {"exp_date": exp_date, "img_serial": img_serial, "abf_serial": abf_serial, "objective": objective}
-                )
+                # Build pair dict with optional SLICE/AT
+                pair = {
+                    "exp_date": exp_date,
+                    "img_serial": img_serial,
+                    "abf_serial": abf_serial,
+                    "objective": objective,
+                }
+
+                # Add SLICE if column exists and has value
+                if col_slice is not None and row[col_slice] is not None:
+                    pair["SLICE"] = row[col_slice]
+
+                # Add AT if column exists and has value
+                if col_at is not None and row[col_at] is not None:
+                    pair["AT"] = row[col_at]
+
+                pairs.append(pair)
 
     return pairs

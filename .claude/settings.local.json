@@ -21,7 +21,8 @@
       "Bash(sqlite3:*)",
       "Bash(.venv/Scripts/python.exe:*)",
       "WebSearch",
-      "Bash(uv run ruff check:*)"
+      "Bash(uv run ruff check:*)",
+      "Bash(.venv/bin/ruff check:*)"
     ]
   }
 }

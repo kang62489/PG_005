@@ -114,9 +114,14 @@ class ResultsExporter:
                 total_bright_regions INTEGER,
                 region_analysis TEXT,
                 data_dir TEXT,
-                notes TEXT,
                 SLICE INTEGER,
                 AT TEXT,
+                centroid_y REAL,
+                centroid_x REAL,
+                x_span_pixels REAL,
+                y_span_pixels REAL,
+                x_span_um REAL,
+                y_span_um REAL,
                 UNIQUE(exp_date, abf_serial, img_serial)
             )
         """)
@@ -145,6 +150,9 @@ class ResultsExporter:
         # Analysis results
         region_summary: dict,
         region_data: dict,
+        # Optional metadata
+        slice_num: int | None = None,
+        at: str | None = None,
     ) -> Path:
         """
         Export all results and update database.
@@ -165,6 +173,8 @@ class ResultsExporter:
             lst_abf_segments: List of voltage segments from ABF
             region_summary: Summary statistics from region analysis
             region_data: Detailed region analysis results (with contours removed)
+            slice_num: Slice number (optional)
+            at: AT location (optional)
 
         Returns:
             Path to the experiment data directory
@@ -194,6 +204,8 @@ class ResultsExporter:
             region_summary=region_summary,
             region_data=region_data,
             data_dir=data_dir,
+            slice_num=slice_num,
+            at=at,
         )
 
         return exp_dir
@@ -245,6 +257,8 @@ class ResultsExporter:
         region_summary: dict,
         region_data: dict,
         data_dir: str,
+        slice_num: int | None = None,
+        at: str | None = None,
     ) -> None:
         """Insert or update experiment record in SQLite.
 
@@ -254,6 +268,21 @@ class ResultsExporter:
         # Optimize region_data to keep only largest regions (reduces JSON from ~5MB to ~5KB)
         optimized_region_data = optimize_region_data(region_data)
 
+        # Extract spike frame (center frame) region data for individual columns
+        n_frames = region_summary["n_frames"]
+        spike_frame_idx = n_frames // 2
+        bright_largest_list = optimized_region_data.get("bright_largest", [])
+        spike_frame_region = bright_largest_list[spike_frame_idx] if spike_frame_idx < len(bright_largest_list) else None
+
+        if spike_frame_region:
+            centroid_y, centroid_x = spike_frame_region["centroid"]
+            x_span_pixels = spike_frame_region["x_span_pixels"]
+            y_span_pixels = spike_frame_region["y_span_pixels"]
+            x_span_um = spike_frame_region["x_span_um"]
+            y_span_um = spike_frame_region["y_span_um"]
+        else:
+            centroid_y = centroid_x = x_span_pixels = y_span_pixels = x_span_um = y_span_um = None
+
         conn = sqlite3.connect(self.db_path)
         conn.execute(
             """
@@ -262,8 +291,9 @@ class ResultsExporter:
                 objective, um_per_pixel, threshold_method,
                 n_spikes_detected, n_spikes_analyzed,
                 n_frames, total_dim_regions, total_bright_regions,
-                region_analysis, data_dir
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                region_analysis, data_dir, SLICE, AT,
+                centroid_y, centroid_x, x_span_pixels, y_span_pixels, x_span_um, y_span_um
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -280,6 +310,14 @@ class ResultsExporter:
                 region_summary["total_bright_regions"],
                 json.dumps(optimized_region_data, cls=NumpyEncoder),
                 data_dir,
+                slice_num,
+                at,
+                centroid_y,
+                centroid_x,
+                x_span_pixels,
+                y_span_pixels,
+                x_span_um,
+                y_span_um,
             ),
         )
         conn.commit()

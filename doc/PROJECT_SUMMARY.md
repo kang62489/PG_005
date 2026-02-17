@@ -15,7 +15,9 @@
 ```
 PG_005/
 ├── im_preprocess.py                 # Main script: Image preprocessing (detrend + Gaussian)
-├── im_dynamics.py                   # Main script: Spike-triggered ACh analysis
+├── im_dynamics.py                   # Main script: Spike-triggered ACh analysis (interactive)
+├── batch_process.py                 # Batch processor: Process all picked pairs
+├── test_batch.py                    # Test batch processor: Process specific date
 │
 ├── classes/
 │   ├── __init__.py
@@ -28,6 +30,7 @@ PG_005/
 │
 ├── functions/
 │   ├── __init__.py
+│   ├── xlsx_reader.py               # Read metadata from REC_*.xlsx files
 │   │
 │   ├── [Hardware/CUDA]
 │   │   ├── check_cuda.py            # Verify CUDA availability
@@ -268,6 +271,74 @@ plt.show()
 
 ---
 
+## Workflow 3: Batch Processing
+
+**Scripts**: `batch_process.py`, `test_batch.py`
+
+```
+Excel Metadata (rec_summary/*.xlsx)
+              ↓
+        Read Picked Pairs
+              ↓
+        Filter by Date (test_batch only)
+              ↓
+        Check Existing Results (SQLite)
+              ↓
+        ┌─────┴─────┐
+        ↓           ↓
+   Preprocess   Analysis Only
+    Images      (--analysis-only)
+        ↓           ↓
+        └─────┬─────┘
+              ↓
+        For Each Pair:
+          - Analyze (analyze_pair)
+          - Export to DB
+          - Generate PNG plots
+              ↓
+        Summary Report
+```
+
+### Batch Scripts
+
+**batch_process.py** - Process ALL experiments:
+```bash
+python batch_process.py                # Full processing
+python batch_process.py --analysis-only # Skip preprocessing
+```
+
+**test_batch.py** - Process SPECIFIC date:
+```bash
+python test_batch.py                   # Show available dates
+python test_batch.py 2025_12_15        # Process one date
+python test_batch.py 2025_12_15 --limit 5  # Process first 5 pairs
+python test_batch.py 2025_12_15 --analysis-only  # Skip preprocessing
+```
+
+### Excel Metadata Format
+
+REC_*.xlsx files in `rec_summary/`:
+
+| Filename | ABF | OBJ | PICK | SLICE | AT |
+|----------|-----|-----|------|-------|-----|
+| 2025_12_15-0026.tif | 23 | 10X | ✓ | 1 | A1 |
+| 2025_12_15-0027.tif | 24 | 10X | ✓ | 1 | A2 |
+
+- Only rows with PICK column filled are processed
+- SLICE and AT are optional metadata
+- Multiple ABF column names supported
+
+### Performance Timing
+
+```
+⏱️  categorization: 0.234s | region analysis: 0.156s | total: 0.390s
+```
+- Cyan: labels
+- Yellow: individual times
+- Green: total time
+
+---
+
 ## Key Algorithms
 
 ### Spike-Aligned Median
@@ -497,14 +568,16 @@ The `results.db` file contains experiment metadata (optimized 2026-02-10):
 | n_frames | INTEGER | Number of frames in segment |
 | total_dim_regions | INTEGER | Total dim regions found |
 | total_bright_regions | INTEGER | Total bright regions found |
-| dim_area_um2_mean | REAL | Mean area of dim regions (µm²) |
-| dim_area_um2_std | REAL | Std of dim region areas |
-| bright_area_um2_mean | REAL | Mean area of bright regions (µm²) |
-| bright_area_um2_std | REAL | Std of bright region areas |
 | region_analysis | TEXT | JSON with **largest regions only** (optimized) |
 | data_dir | TEXT | Relative path to data directory |
 | SLICE | INTEGER | Slice number (from Excel metadata) |
 | AT | TEXT | Cell/site identifier (from Excel metadata) |
+| centroid_y | REAL | Spike frame centroid Y (pixels) |
+| centroid_x | REAL | Spike frame centroid X (pixels) |
+| x_span_pixels | REAL | Spike frame X span (pixels) |
+| y_span_pixels | REAL | Spike frame Y span (pixels) |
+| x_span_um | REAL | Spike frame X span (µm) |
+| y_span_um | REAL | Spike frame Y span (µm) |
 
 **Note**: Database optimized to store only largest regions per frame in `region_analysis`, reducing size from 680 MB to <1 MB while retaining essential data. See `doc/DATABASE_STRUCTURE.md` for details.
 
@@ -784,4 +857,6 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-02-14 (Clarified SpatialCategorizer vs RegionAnalyzer pipeline relationship)*
+---
+
+*Last updated: 2026-02-17 (Added batch processing workflows, updated database schema with SLICE/AT and centroid/span columns)*

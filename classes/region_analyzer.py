@@ -96,11 +96,11 @@ class RegionAnalyzer:
 
         for frame in categorized_frames:
             # Analyze individual regions (connected components)
-            dim_info, dim_cont = self._analyze_regions(frame, CATEGORY_DIM)
+            dim_info, dim_cont, dim_props = self._analyze_regions(frame, CATEGORY_DIM)
             self.dim_regions.append(dim_info)
             self.dim_contours.append(dim_cont)
 
-            bright_info, bright_cont = self._analyze_regions(frame, CATEGORY_BRIGHT)
+            bright_info, bright_cont, bright_props = self._analyze_regions(frame, CATEGORY_BRIGHT)
             self.bright_regions.append(bright_info)
             self.bright_contours.append(bright_cont)
 
@@ -108,14 +108,14 @@ class RegionAnalyzer:
             self.dim_category.append(self._analyze_category_combined(frame, CATEGORY_DIM))
             self.bright_category.append(self._analyze_category_combined(frame, CATEGORY_BRIGHT))
 
-            # Find largest bright region
-            self.bright_largest.append(self._get_largest_region(bright_info, frame, CATEGORY_BRIGHT))
+            # Find largest bright region using cached props
+            self.bright_largest.append(self._get_largest_region(bright_info, bright_props))
 
         return self
 
     def _analyze_regions(
         self, frame: np.ndarray, category: int
-    ) -> tuple[list[dict], list[np.ndarray]]:
+    ) -> tuple[list[dict], list[np.ndarray], list["RegionProperties"]]:
         """
         Analyze individual connected regions of a specific category.
 
@@ -124,14 +124,17 @@ class RegionAnalyzer:
             category: Category value to analyze (1=dim, 2=bright)
 
         Returns:
-            (regions_info, contours) - per connected component
+            (regions_info, contours, region_props_list) - per connected component
         """
         mask = frame == category
         labeled = label(mask)
 
         # Get region properties for each connected component
+        all_props = regionprops(labeled)
         regions_info = []
-        for region in regionprops(labeled):
+        region_props_list = []
+
+        for region in all_props:
             if region.area < self.min_area:
                 continue
 
@@ -141,11 +144,12 @@ class RegionAnalyzer:
                 "label": region.label,
                 "area": region.area,  # Temporary: needed to find largest region
             })
+            region_props_list.append(region)
 
         # Get contours
         contours = find_contours(mask, level=0.5)
 
-        return regions_info, contours
+        return regions_info, contours, region_props_list
 
     def _analyze_category_combined(self, frame: np.ndarray, category: int) -> dict:
         """
@@ -175,14 +179,15 @@ class RegionAnalyzer:
             "centroid": (centroid_y, centroid_x),  # (y, x) = (row, col)
         }
 
-    def _get_largest_region(self, regions: list[dict], frame: np.ndarray, category: int) -> dict | None:
+    def _get_largest_region(
+        self, regions: list[dict], region_props_list: list["RegionProperties"]
+    ) -> dict | None:
         """
         Get the largest region by area and calculate its spans.
 
         Args:
             regions: List of region dicts from _analyze_regions()
-            frame: Categorized 2D array
-            category: Category value to analyze (1=dim, 2=bright)
+            region_props_list: List of regionprops objects (same order as regions)
 
         Returns:
             The region dict with largest area including span measurements, or None if empty
@@ -191,25 +196,11 @@ class RegionAnalyzer:
             return None
 
         # Find largest region by area
-        largest = max(regions, key=lambda r: r["area"])
-        largest_label = largest["label"]
+        largest_idx = max(range(len(regions)), key=lambda i: regions[i]["area"])
+        largest = regions[largest_idx]
+        largest_region_props = region_props_list[largest_idx]
 
-        # Re-run regionprops to get the regionprops object for that label
-        mask = frame == category
-        labeled = label(mask)
-        regions_props = regionprops(labeled)
-
-        # Find the regionprops object matching the largest label
-        largest_region_props = None
-        for region in regions_props:
-            if region.label == largest_label:
-                largest_region_props = region
-                break
-
-        if largest_region_props is None:
-            return None
-
-        # Calculate spans
+        # Calculate spans using cached props
         span_data = self._calculate_region_spans(largest_region_props)
 
         # Return dict without area field

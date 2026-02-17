@@ -21,6 +21,7 @@ from .cpu_process import process_on_cpu
 from .get_memory_use import get_memory_usage
 from .imaging_segments_zscore_normalization import img_seg_zscore_norm
 from .spike_centered_processes import spike_centered_avg, spike_centered_median
+from .xlsx_reader import get_picked_pairs
 
 __all__ = [
     "CUDA_AVAILABLE",
@@ -28,6 +29,7 @@ __all__ = [
     "cpu_detrend_jitted",
     "cpu_gaussian_blur",
     "get_memory_usage",
+    "get_picked_pairs",
     "gpu_detrend_jitted",
     "gpu_gaussian_blur",
     "img_seg_zscore_norm",

@@ -28,9 +28,17 @@ PLOT_SEGS = False
 PLOT_SPATIAL = True
 PLOT_REGION = True
 
+# Experiment metadata
+EXP_DATE = "2025_12_15"
+ABF_SERIAL = "0034"
+IMG_SERIAL = "0042"
+OBJECTIVE = "10X"
+SLICE = 1  # Optional: set to None if not applicable
+AT = "A1"  # Optional: set to None if not applicable
+
 # Properly truncate the image stacks and corresponding abf files into proper segments for further analysis
 # All lists of segments are saved in the AbfClip instance
-abf_clip = AbfClip(exp_date="2025_12_15", abf_serial="0034", img_serial="0042")
+abf_clip = AbfClip(exp_date=EXP_DATE, abf_serial=ABF_SERIAL, img_serial=IMG_SERIAL)
 
 # Z-score normalize the image segments
 lst_img_segments_zscore = img_seg_zscore_norm(abf_clip.lst_img_segments)
@@ -65,7 +73,7 @@ for time_seg, abf_seg, img_seg in zip(
 categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
 categorizer.fit(med_img_segment_zscore)
 
-region_analyzer = RegionAnalyzer(obj="10X")
+region_analyzer = RegionAnalyzer(obj=OBJECTIVE)
 region_analyzer.fit(categorizer.categorized_frames)
 
 # Export results
@@ -77,11 +85,21 @@ exp_dir = exporter.export_all(
     **region_analyzer.get_export_data(),
     zscore_stack=med_img_segment_zscore,
     img_segments_zscore=lst_img_segments_zscore,
+    slice_num=SLICE,
+    at=AT,
 )
 
 # Always create and save spatial and region plots (conditionally show based on flags)
 plt_spatial = PlotSpatialDist(
-    categorizer, lst_centered_traces, title="Spatial Distribution", zscore_range=zscore_range, show=PLOT_SPATIAL
+    categorizer,
+    lst_centered_traces,
+    title="Spatial Distribution",
+    zscore_range=zscore_range,
+    exp_date=EXP_DATE,
+    abf_serial=ABF_SERIAL,
+    img_serial=IMG_SERIAL,
+    n_spikes=len(abf_clip.df_picked_spikes),
+    show=PLOT_SPATIAL,
 )
 exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
 
@@ -91,6 +109,7 @@ plt_region = PlotRegion(
     lst_centered_traces,
     title="Region Detail View",
     zscore_range=zscore_range,
+    n_spikes=len(abf_clip.df_picked_spikes),
     show=PLOT_REGION,
 )
 exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")

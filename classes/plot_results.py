@@ -404,6 +404,10 @@ class PlotSpatialDist(QMainWindow):
         title: str = "Spatial Distribution",
         obj: str = "10X",
         zscore_range: tuple[float, float] | None = None,
+        exp_date: str | None = None,
+        abf_serial: str | None = None,
+        img_serial: str | None = None,
+        n_spikes: int | None = None,
         *,
         show: bool = True,
     ) -> None:
@@ -413,6 +417,10 @@ class PlotSpatialDist(QMainWindow):
         self.spike_traces = spike_traces
         self.obj = obj
         self.zscore_range = zscore_range  # (vmin, vmax) for consistent color scaling
+        self.exp_date = exp_date
+        self.abf_serial = abf_serial
+        self.img_serial = img_serial
+        self.n_spikes = n_spikes
 
         # Fit RegionAnalyzer for contours, centroids, and area
         self.ra_ins = RegionAnalyzer(obj=obj)
@@ -524,7 +532,8 @@ class PlotSpatialDist(QMainWindow):
 
         ax_vm.set_xlabel("Time (ms)")
         ax_vm.set_ylabel("Vm (mV)")
-        ax_vm.set_title("All Spikes Overlay (centered at Frame 0)")
+        spike_count_str = f" (n={self.n_spikes})" if self.n_spikes is not None else ""
+        ax_vm.set_title(f"All Spikes Overlay (centered at Frame 0){spike_count_str}")
 
         # Calculate time limits based on number of frames (50ms per frame)
         half_frames = n_frames // 2
@@ -546,8 +555,10 @@ class PlotSpatialDist(QMainWindow):
         ax_vm.grid(True, which="major")
         ax_vm.grid(True, which="minor", alpha=0.3)
 
-        # Main title with threshold info
+        # Main title with threshold info and metadata
         title = f"Spatial Categorization: {self.sc_ins.method.upper()}"
+        if self.exp_date and self.abf_serial and self.img_serial:
+            title += f" | {self.exp_date} abf{self.abf_serial}_img{self.img_serial}"
         if self.sc_ins.thresholds_used:
             thresh_dim, thresh_bright = self.sc_ins.thresholds_used
             title += f" | Thresholds: dim>{thresh_dim:.2f}, bright>{thresh_bright:.2f}"
@@ -567,6 +578,7 @@ class PlotRegion(QMainWindow):
         title: str = "Region Detail View",
         obj: str = "10X",
         zscore_range: tuple[float, float] | None = None,
+        n_spikes: int | None = None,
         *,
         show: bool = True,
     ) -> None:
@@ -577,6 +589,7 @@ class PlotRegion(QMainWindow):
         self.spike_traces = spike_traces
         self.obj = obj
         self.zscore_range = zscore_range  # (vmin, vmax) for consistent color scaling
+        self.n_spikes = n_spikes
 
         # Get frame info
         self.n_frames = len(self.sc_ins.source_frames)
@@ -802,10 +815,11 @@ class PlotRegion(QMainWindow):
 
         ax_v.set_xlabel("Time (ms)")
         ax_v.set_ylabel("Vm (mV)")
+        spike_count_str = f" (n={self.n_spikes})" if self.n_spikes is not None else ""
         if centered_idx == 0:
-            ax_v.set_title(f"Voltage @ Frame {centered_idx} (SPIKE)", fontweight="bold", color="red")
+            ax_v.set_title(f"Voltage @ Frame {centered_idx} (SPIKE){spike_count_str}", fontweight="bold", color="red")
         else:
-            ax_v.set_title(f"Voltage @ Frame {centered_idx}", fontweight="bold")
+            ax_v.set_title(f"Voltage @ Frame {centered_idx}{spike_count_str}", fontweight="bold")
         ax_v.minorticks_on()
         ax_v.grid(True, which="major")
         ax_v.grid(True, which="minor", alpha=0.3)

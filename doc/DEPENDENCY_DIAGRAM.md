@@ -54,6 +54,7 @@ Output: *_Cal.tif (detrended), *_Gauss.tif (Gaussian filtered)
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                     WORKFLOW 2: SPIKE-ALIGNED ANALYSIS                      │
+│                           (Interactive - im_dynamics.py)                    │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────┐
@@ -91,6 +92,45 @@ Output: *_Cal.tif (detrended), *_Gauss.tif (Gaussian filtered)
                                                 └─────────────────────┘
 
 Output: Figures + Statistics for ACh release analysis
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     WORKFLOW 3: BATCH PROCESSING                            │
+│                     (Automated - batch_process.py / test_batch.py)          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────┐
+│  batch_process.py              │  ← Main Batch Processor (ALL pairs)
+│  test_batch.py                 │  ← Test Batch Processor (specific date)
+│  ────────────────────────────  │
+│  - Read Excel metadata         │
+│  - Filter by date (test only)  │
+│  - Check existing results      │
+│  - Preprocess images           │
+│  - Analyze all pairs           │
+│  - Export to SQLite + files    │
+│  - Generate PNG plots          │
+│  - Performance timing          │
+└──────────────┬─────────────────┘
+               │
+   ┌───────────┼───────────┬───────────────────┐
+   │           │           │                   │
+   ▼           ▼           ▼                   ▼
+┌────────────┐ ┌──────────┐ ┌─────────────────┐ ┌─────────────────────┐
+│ functions/ │ │ Workflow │ │ Same Analysis   │ │ ResultsExporter     │
+│ xlsx_reader│ │ Control  │ │ Pipeline as     │ │ ─────────────────── │
+│ ─────────  │ │ ──────── │ │ im_dynamics.py  │ │ SQLite + NPZ + PNG  │
+│ Read Excel │ │ - Skip   │ │ ─────────────── │ │                     │
+│ Get SLICE, │ │   logic  │ │ - AbfClip       │ │ New Columns:        │
+│ AT, pairs  │ │ - Timing │ │ - Z-score norm  │ │ - SLICE, AT         │
+│            │ │ - Error  │ │ - Categorizer   │ │ - centroid_x/y      │
+│            │ │   handling│ │ - RegionAnalyzer│ │ - x/y_span_*        │
+└────────────┘ └──────────┘ └─────────────────┘ └─────────────────────┘
+
+Input:  rec_summary/REC_*.xlsx (Excel metadata with PICK column)
+Output: results/results.db + {date}/abf{}_img{}/ (same as im_dynamics.py)
+
+Timing:  ⏱️  categorization: 0.234s | region analysis: 0.156s | total: 0.390s
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -146,6 +186,8 @@ classes/
 functions/
 │
 ├── __init__.py  ← Exports all functions with conditional CUDA imports
+├── xlsx_reader.py  ← Read experiment metadata from REC_*.xlsx
+│    └── get_picked_pairs() → Returns list of {exp_date, img_serial, abf_serial, objective, SLICE, AT}
 │
 ├── [Hardware/CUDA]
 │   ├── check_cuda.py          → Verify CUDA availability
@@ -348,6 +390,6 @@ im_dynamics.py
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-02-14 (Clarified SpatialCategorizer → RegionAnalyzer pipeline)
+Updated: 2026-02-17 (Added batch processing workflow, xlsx_reader, database columns)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
