@@ -49,7 +49,6 @@ class AbfClip:
         self.spike_detection()
         self.get_available_spiking_frames()
         self.clip_time_abf_img_segments()
-        # self.plot_segments()
 
     def load_abf(self) -> None:
         abf_file_path = Path(self.root_dir) / "raw_abfs" / f"{self.exp_date}_{self.abf_serial}.abf"

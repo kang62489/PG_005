@@ -15,8 +15,6 @@ wheels/
 # VS Code and temporary files
 .vscode/
 
-# Claude Code temporary files
-.claude/
 *tmp
 
 # Large data files

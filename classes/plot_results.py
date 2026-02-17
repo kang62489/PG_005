@@ -458,16 +458,9 @@ class PlotSpatialDist(QMainWindow):
         for frame_idx, (orig, cat) in enumerate(
             zip(self.sc_ins.source_frames, self.sc_ins.categorized_frames, strict=True)
         ):
-            # Get region analysis for this frame
-            frame_result = self.ra_ins.get_frame_results(frame_idx)
-
             # Top row: original z-scored frames (clean overview, no contours)
             ax_img = fig.add_subplot(gs[0, frame_idx])
             ax_img.imshow(orig, cmap="gray", vmin=vmin, vmax=vmax, interpolation="nearest")
-
-            # Get category data for area calculation
-            dim_cat = frame_result["dim_category"]
-            bright_cat = frame_result["bright_category"]
 
             # Frame number title (only on top row)
             centered_frame_idx = frame_idx - n_frames // 2
@@ -479,25 +472,21 @@ class PlotSpatialDist(QMainWindow):
                 ax_img.set_title(f"Z-Scored\nFrame {centered_frame_idx}", fontweight="bold", fontsize=9)
             ax_img.axis("off")
 
-            # Get total areas from category-level analysis
-            dim_total_area = dim_cat["total_area_um2"]
-            bright_total_area = bright_cat["total_area_um2"]
-
-            # Second row: categorized frames (median) with area info in title
+            # Second row: categorized frames (median)
             ax_cat = fig.add_subplot(gs[1, frame_idx])
             ax_cat.imshow(cat, cmap=cmap_cat, vmin=0, vmax=2)
 
-            # Title with area info
+            # Title without area info
             if centered_frame_idx == 0:
                 ax_cat.set_title(
-                    f"(SPIKE) Frame {centered_frame_idx}\nDim: {dim_total_area:.1f} µm²\nBright: {bright_total_area:.1f} µm²",
+                    f"(SPIKE)\nFrame {centered_frame_idx}",
                     fontweight="bold",
                     color="red",
                     fontsize=8,
                 )
             else:
                 ax_cat.set_title(
-                    f"Frame {centered_frame_idx}\nDim: {dim_total_area:.1f} µm²\nBright: {bright_total_area:.1f} µm²",
+                    f"Frame {centered_frame_idx}",
                     fontweight="bold",
                     fontsize=8,
                 )
@@ -677,53 +666,73 @@ class PlotRegion(QMainWindow):
         im_z = ax_z.imshow(orig, cmap="gray", vmin=vmin, vmax=vmax, interpolation="nearest")
         fig_z.colorbar(im_z, ax=ax_z, fraction=0.046, pad=0.04, label="Z-Score")
 
-        # Draw contours
-        for contour in frame_result["dim_contours"]:
-            ax_z.plot(contour[:, 1], contour[:, 0], color="cyan", linewidth=1.5)
-        for contour in frame_result["bright_contours"]:
-            ax_z.plot(contour[:, 1], contour[:, 0], color="magenta", linewidth=1.5)
-
-        # Draw centroids of largest regions
-        dim_largest = frame_result["dim_largest"]
+        # Draw contour for largest bright region only
         bright_largest = frame_result["bright_largest"]
-        if dim_largest is not None:
-            y, x = dim_largest["centroid"]
-            ax_z.scatter(x, y, c="black", s=60, marker="x", linewidths=2, zorder=20)
-            dim_centroid_str = f"({x * self.ra_ins.um_per_pixel:.1f} µm, {y * self.ra_ins.um_per_pixel:.1f} µm)"
-        else:
-            dim_centroid_str = "(None)"
-
         if bright_largest is not None:
+            # Get contour for the largest bright region
+            from classes.region_analyzer import CATEGORY_BRIGHT
+            cat_frame = self.sc_ins.categorized_frames[frame_idx]
+            contour = self.ra_ins.get_largest_region_contour(cat_frame, CATEGORY_BRIGHT, bright_largest["label"])
+            if contour is not None:
+                ax_z.plot(contour[:, 1], contour[:, 0], color="magenta", linewidth=1.5)
+
+            # Draw centroid of largest bright region
             y, x = bright_largest["centroid"]
             ax_z.scatter(x, y, c="black", s=80, marker="+", linewidths=2, zorder=20)
+
+            # Draw span lines (cross-hair from centroid)
+            x_span_px = bright_largest["x_span_pixels"]
+            y_span_px = bright_largest["y_span_pixels"]
+            x_span_um = bright_largest["x_span_um"]
+            y_span_um = bright_largest["y_span_um"]
+
+            # Calculate span extents (half span in each direction from centroid)
+            # x_span is horizontal (column direction)
+            # y_span is vertical (row direction)
+            x_west = x - x_span_px / 2
+            x_east = x + x_span_px / 2
+            y_north = y - y_span_px / 2
+            y_south = y + y_span_px / 2
+
+            # Draw x-span line (horizontal)
+            ax_z.plot([x_west, x_east], [y, y], color="yellow", linewidth=2, linestyle="-", zorder=15, alpha=0.8)
+            # Draw y-span line (vertical)
+            ax_z.plot([x, x], [y_north, y_south], color="lime", linewidth=2, linestyle="-", zorder=15, alpha=0.8)
+
             bright_centroid_str = f"({x * self.ra_ins.um_per_pixel:.1f} µm, {y * self.ra_ins.um_per_pixel:.1f} µm)"
+            span_str = f"x-span: {x_span_um:.1f} µm | y-span: {y_span_um:.1f} µm"
         else:
             bright_centroid_str = "(None)"
+            span_str = ""
 
         if centered_idx == 0:
+            title_text = f"Z-Scored Frame {centered_idx} (SPIKE)\nBright centroid: {bright_centroid_str}"
+            if span_str:
+                title_text += f"\n{span_str}"
             ax_z.set_title(
-                f"Z-Scored Frame {centered_idx} (SPIKE)\nBright centroid: {bright_centroid_str}\nDim centroid: {dim_centroid_str}",
+                title_text,
                 fontweight="bold",
                 color="red",
                 fontsize=10,
             )
         else:
+            title_text = f"Z-Scored Frame {centered_idx}\nBright centroid: {bright_centroid_str}"
+            if span_str:
+                title_text += f"\n{span_str}"
             ax_z.set_title(
-                f"Z-Scored Frame {centered_idx}\nBright centroid: {bright_centroid_str}\nDim centroid: {dim_centroid_str})",
+                title_text,
                 fontweight="bold",
                 fontsize=10,
             )
         ax_z.axis("off")
 
-        # Add legend for contours and centroids
-        ax_z.plot([], [], color="cyan", linewidth=1.5, label="Dim contour")
-        ax_z.plot([], [], color="magenta", linewidth=1.5, label="Bright contour")
-        ax_z.plot(
-            [], [], marker="x", color="black", linestyle="", markersize=6, markeredgewidth=2, label="Dim centroid"
-        )
+        # Add legend for contour, centroid, and spans
+        ax_z.plot([], [], color="magenta", linewidth=1.5, label="Largest bright contour")
         ax_z.plot(
             [], [], marker="+", color="black", linestyle="", markersize=8, markeredgewidth=2, label="Bright centroid"
         )
+        ax_z.plot([], [], color="yellow", linewidth=2, label="x-span (horizontal)")
+        ax_z.plot([], [], color="lime", linewidth=2, label="y-span (vertical)")
         ax_z.legend(loc="lower left", fontsize=7)
 
         fig_z.tight_layout()
@@ -731,9 +740,8 @@ class PlotRegion(QMainWindow):
         self.sw_zscore.addWidget(canvas_z)
 
     def _create_categorized_canvas(self, frame_idx: int) -> None:
-        """Stack 2: Categorized image + legend + area info."""
+        """Stack 2: Categorized image + legend."""
         centered_idx = frame_idx - self.half_frames
-        frame_result = self.ra_ins.get_frame_results(frame_idx)
         cat = self.sc_ins.categorized_frames[frame_idx]
 
         cmap_cat = ListedColormap(["black", "cyan", "magenta"])
@@ -743,21 +751,16 @@ class PlotRegion(QMainWindow):
         ax_c = fig_c.add_subplot(111)
         ax_c.imshow(cat, cmap=cmap_cat, vmin=0, vmax=2)
 
-        dim_cat = frame_result["dim_category"]
-        bright_cat = frame_result["bright_category"]
-        dim_area = dim_cat["total_area_um2"]
-        bright_area = bright_cat["total_area_um2"]
-
         if centered_idx == 0:
             ax_c.set_title(
-                f"Frame {centered_idx} (SPIKE)\nDim: {dim_area:.1f} µm² | Bright: {bright_area:.1f} µm²",
+                f"Frame {centered_idx} (SPIKE)",
                 fontweight="bold",
                 color="red",
                 fontsize=10,
             )
         else:
             ax_c.set_title(
-                f"Frame {centered_idx}\nDim: {dim_area:.1f} µm² | Bright: {bright_area:.1f} µm²",
+                f"Frame {centered_idx}",
                 fontweight="bold",
                 fontsize=10,
             )

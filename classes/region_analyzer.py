@@ -2,11 +2,16 @@
 Region analysis for categorized images.
 
 This module provides post-processing analysis using skimage.measure
-to calculate region properties (area, centroid) and find contours.
+to calculate region properties (centroid, spans) and find contours.
 """
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 from skimage.measure import find_contours, label, regionprops
+
+if TYPE_CHECKING:
+    from skimage.measure._regionprops import RegionProperties
 
 # Category constants
 CATEGORY_BACKGROUND = 0
@@ -65,11 +70,10 @@ class RegionAnalyzer:
         self.bright_contours: list[list[np.ndarray]] = []
 
         # Category-level analysis (ALL pixels in category combined)
-        self.dim_category: list[dict] = []  # {total_area_pixels, total_area_um2, centroid}
+        self.dim_category: list[dict] = []  # {centroid}
         self.bright_category: list[dict] = []
 
         # Largest region analysis (largest connected component per category)
-        self.dim_largest: list[dict | None] = []
         self.bright_largest: list[dict | None] = []
 
     def fit(self, categorized_frames: list[np.ndarray]) -> "RegionAnalyzer":
@@ -88,7 +92,6 @@ class RegionAnalyzer:
         self.bright_contours = []
         self.dim_category = []
         self.bright_category = []
-        self.dim_largest = []
         self.bright_largest = []
 
         for frame in categorized_frames:
@@ -105,9 +108,8 @@ class RegionAnalyzer:
             self.dim_category.append(self._analyze_category_combined(frame, CATEGORY_DIM))
             self.bright_category.append(self._analyze_category_combined(frame, CATEGORY_BRIGHT))
 
-            # Find largest region per category
-            self.dim_largest.append(self._get_largest_region(dim_info))
-            self.bright_largest.append(self._get_largest_region(bright_info))
+            # Find largest bright region
+            self.bright_largest.append(self._get_largest_region(bright_info, frame, CATEGORY_BRIGHT))
 
         return self
 
@@ -134,11 +136,10 @@ class RegionAnalyzer:
                 continue
 
             regions_info.append({
-                "area_pixels": region.area,
-                "area_um2": self.area_pixel_to_um2(region.area),
                 "centroid": region.centroid,  # (y, x) = (row, col)
                 "bbox": region.bbox,  # (min_row, min_col, max_row, max_col)
                 "label": region.label,
+                "area": region.area,  # Temporary: needed to find largest region
             })
 
         # Get contours
@@ -155,15 +156,13 @@ class RegionAnalyzer:
             category: Category value to analyze (1=dim, 2=bright)
 
         Returns:
-            dict with total_area_pixels, total_area_um2, centroid (or None if no pixels)
+            dict with centroid (or None if no pixels)
         """
         mask = frame == category
         total_pixels = np.sum(mask)
 
         if total_pixels == 0:
             return {
-                "total_area_pixels": 0,
-                "total_area_um2": 0.0,
                 "centroid": None,
             }
 
@@ -173,24 +172,121 @@ class RegionAnalyzer:
         centroid_x = np.mean(coords[:, 1])
 
         return {
-            "total_area_pixels": int(total_pixels),
-            "total_area_um2": self.area_pixel_to_um2(total_pixels),
             "centroid": (centroid_y, centroid_x),  # (y, x) = (row, col)
         }
 
-    def _get_largest_region(self, regions: list[dict]) -> dict | None:
+    def _get_largest_region(self, regions: list[dict], frame: np.ndarray, category: int) -> dict | None:
         """
-        Get the largest region by area.
+        Get the largest region by area and calculate its spans.
 
         Args:
             regions: List of region dicts from _analyze_regions()
+            frame: Categorized 2D array
+            category: Category value to analyze (1=dim, 2=bright)
 
         Returns:
-            The region dict with largest area_pixels, or None if empty
+            The region dict with largest area including span measurements, or None if empty
         """
         if not regions:
             return None
-        return max(regions, key=lambda r: r["area_pixels"])
+
+        # Find largest region by area
+        largest = max(regions, key=lambda r: r["area"])
+        largest_label = largest["label"]
+
+        # Re-run regionprops to get the regionprops object for that label
+        mask = frame == category
+        labeled = label(mask)
+        regions_props = regionprops(labeled)
+
+        # Find the regionprops object matching the largest label
+        largest_region_props = None
+        for region in regions_props:
+            if region.label == largest_label:
+                largest_region_props = region
+                break
+
+        if largest_region_props is None:
+            return None
+
+        # Calculate spans
+        span_data = self._calculate_region_spans(largest_region_props)
+
+        # Return dict without area field
+        return {
+            "centroid": largest["centroid"],
+            "bbox": largest["bbox"],
+            "label": largest["label"],
+            "x_span_pixels": span_data["x_span_pixels"],
+            "y_span_pixels": span_data["y_span_pixels"],
+            "x_span_um": span_data["x_span_um"],
+            "y_span_um": span_data["y_span_um"],
+        }
+
+    def get_largest_region_contour(self, frame: np.ndarray, category: int, label_id: int) -> np.ndarray | None:
+        """
+        Get the contour for a specific labeled region.
+
+        Args:
+            frame: Categorized 2D array
+            category: Category value (1=dim, 2=bright)
+            label_id: The label of the region to get contour for
+
+        Returns:
+            Contour array or None if not found
+        """
+        mask = frame == category
+        labeled = label(mask)
+
+        # Create mask for only this specific region
+        region_mask = labeled == label_id
+
+        if not np.any(region_mask):
+            return None
+
+        # Get contour for this region
+        contours = find_contours(region_mask, level=0.5)
+
+        # Return the first (and should be only) contour
+        return contours[0] if contours else None
+
+    def _calculate_region_spans(self, region_props: "RegionProperties") -> dict:
+        """
+        Calculate orthogonal spans from centroid of a region.
+        Uses region.coords (all pixel coordinates in the region).
+
+        Args:
+            region_props: A regionprops object from skimage.measure
+
+        Returns:
+            dict with x_span_pixels, y_span_pixels, x_span_um, y_span_um, centroid
+        """
+        centroid = region_props.centroid  # (row, col) = (y, x)
+        centroid_row, centroid_col = centroid
+
+        # Get all pixel coordinates in this region (already available from regionprops)
+        coords = region_props.coords  # (N, 2) array of [row, col]
+
+        rows = coords[:, 0]
+        cols = coords[:, 1]
+
+        # Calculate max distances in 4 orthogonal directions
+        north_dist = np.max(centroid_row - rows[rows < centroid_row]) if np.any(rows < centroid_row) else 0
+        south_dist = np.max(rows[rows > centroid_row] - centroid_row) if np.any(rows > centroid_row) else 0
+        east_dist = np.max(cols[cols > centroid_col] - centroid_col) if np.any(cols > centroid_col) else 0
+        west_dist = np.max(centroid_col - cols[cols < centroid_col]) if np.any(cols < centroid_col) else 0
+
+        # Calculate spans
+        x_span_pixels = west_dist + east_dist
+        y_span_pixels = north_dist + south_dist
+
+        return {
+            "x_span_pixels": float(x_span_pixels),
+            "y_span_pixels": float(y_span_pixels),
+            "x_span_um": self.pixel_to_um(x_span_pixels),
+            "y_span_um": self.pixel_to_um(y_span_pixels),
+            "centroid": centroid,  # (row, col)
+        }
 
     def pixel_to_um(self, pixels: float) -> float:
         """Convert pixel distance to micrometers."""
@@ -219,8 +315,7 @@ class RegionAnalyzer:
             # Category-level (ALL pixels combined)
             "dim_category": self.dim_category[frame_idx],
             "bright_category": self.bright_category[frame_idx],
-            # Largest region per category
-            "dim_largest": self.dim_largest[frame_idx],
+            # Largest bright region
             "bright_largest": self.bright_largest[frame_idx],
         }
 
@@ -240,8 +335,7 @@ class RegionAnalyzer:
             # Category-level (ALL pixels combined)
             "dim_category": self.dim_category,
             "bright_category": self.bright_category,
-            # Largest region per category
-            "dim_largest": self.dim_largest,
+            # Largest bright region
             "bright_largest": self.bright_largest,
             # Metadata
             "obj": self.obj,
@@ -266,18 +360,11 @@ class RegionAnalyzer:
         Get summary statistics across all frames.
 
         Returns:
-            dict with total counts, average areas, etc.
+            dict with total counts, etc.
         """
-        all_dim_areas = [r["area_um2"] for frame in self.dim_regions for r in frame]
-        all_bright_areas = [r["area_um2"] for frame in self.bright_regions for r in frame]
-
         return {
             "obj": self.obj,
             "n_frames": len(self.dim_regions),
             "total_dim_regions": sum(len(frame) for frame in self.dim_regions),
             "total_bright_regions": sum(len(frame) for frame in self.bright_regions),
-            "dim_area_um2_mean": np.mean(all_dim_areas) if all_dim_areas else 0,
-            "dim_area_um2_std": np.std(all_dim_areas) if all_dim_areas else 0,
-            "bright_area_um2_mean": np.mean(all_bright_areas) if all_bright_areas else 0,
-            "bright_area_um2_std": np.std(all_bright_areas) if all_bright_areas else 0,
         }
