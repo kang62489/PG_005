@@ -15,14 +15,14 @@ When user asks questions about concepts like:
 
 ## What this skill does
 
-1. **Looks for existing notes** in `doc/knowledgebase/` to see if we've talked about this before
+1. **Looks for existing notes** in `docs/knowledgebase/` to see if we've talked about this before
 2. **Merges with existing notes** if the topic already exists, or creates a new file if it's new
 3. **Organizes your questions and my answers** into clean markdown files
 4. **Adds keywords** so you can find stuff easily later
 
 ## Where files go
 
-**Save to**: `doc/knowledgebase/{topic_name}.md`
+**Save to**: `docs/knowledgebase/{topic_name}.md`
 
 **File naming** (use snake_case):
 - `gaussian_filtering.md` ✓
@@ -32,7 +32,7 @@ When user asks questions about concepts like:
 ## How to organize content
 
 First, check what's already there:
-- Look in `doc/knowledgebase/*.md` for similar topics
+- Look in `docs/knowledgebase/*.md` for similar topics
 - If you find something similar, add to that file instead of making a new one
 - If it's totally new, make a new file
 
@@ -70,7 +70,7 @@ Previous answer...
 
 ## Quick checklist
 
-- [ ] Check `doc/knowledgebase/*.md` for similar topics first
+- [ ] Check `docs/knowledgebase/*.md` for similar topics first
 - [ ] Use descriptive file names (be specific!)
 - [ ] Put newest content at the top
 - [ ] Add good keywords for searching later

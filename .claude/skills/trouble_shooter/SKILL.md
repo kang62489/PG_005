@@ -12,13 +12,13 @@ When user has just solved a tricky bug or problem
 ## What this skill does
 
 1. **Suggests a clear file title** based on the problem for you to approve
-2. **Checks if similar issues exist** in `doc/resolved_problems/`
+2. **Checks if similar issues exist** in `docs/resolved_problems/`
 3. **Organizes the debugging history** from our conversation
 4. **Creates a clean summary** with problem + solution in markdown
 
 ## Where files go
 
-**Save to**: `doc/resolved_problems/{problem_description}.md`
+**Save to**: `docs/resolved_problems/{problem_description}.md`
 
 **File naming** (use snake_case, be specific):
 - `cuda_out_of_memory_during_gaussian_blur.md` ✓
@@ -29,7 +29,7 @@ When user has just solved a tricky bug or problem
 ## How to organize content
 
 First, check what's already there:
-- Look in `doc/resolved_problems/*.md` for similar issues
+- Look in `docs/resolved_problems/*.md` for similar issues
 - If you find the same bug, add to that file (maybe it came back!)
 - If it's a new problem, create a new file
 
@@ -90,7 +90,7 @@ Previous occurrence...
 
 ## Quick checklist
 
-- [ ] Check `doc/resolved_problems/*.md` first for similar issues
+- [ ] Check `docs/resolved_problems/*.md` first for similar issues
 - [ ] Use descriptive file names that explain the actual problem
 - [ ] Include the error message or symptoms
 - [ ] Explain root cause, not just the fix

@@ -9,7 +9,6 @@ import sys
 import time
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import numpy as np
 import tifffile
@@ -20,9 +19,6 @@ from tqdm import tqdm
 # Import existing modules
 from classes import AbfClip, PlotRegion, PlotSpatialDist, RegionAnalyzer, ResultsExporter, SpatialCategorizer
 from functions import get_picked_pairs, img_seg_zscore_norm, process_on_cpu, process_on_gpu, spike_centered_median
-
-if TYPE_CHECKING:
-    from collections.abc import Set
 
 # Setup QApplication for plot rendering (needed even without showing GUI)
 app = QApplication.instance() or QApplication(sys.argv)
@@ -67,11 +63,12 @@ def preprocess_single(date: str, serial: str) -> bool:
 
         tifffile.imwrite(output_path / f"{base_name}_Cal.tif", detrended_uint16)
         tifffile.imwrite(output_path / f"{base_name}_Gauss.tif", gaussian_uint16)
-        return True
 
     except Exception:
         print(f"  ✗ Error preprocessing {file}")
         return False
+    else:
+        return True
 
 
 def analyze_pair(
@@ -102,7 +99,7 @@ def analyze_pair(
 
         # 2. Check if any segments were created
         if len(abf_clip.lst_img_segments) == 0:
-            print(f"  ⚠️  No segments created (no spikes detected or filtered out)")
+            print("  ⚠️  No segments created (no spikes detected or filtered out)")
             return False
 
         # 3. Z-score normalization
@@ -205,12 +202,12 @@ def analyze_pair(
         )
         exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
 
-        return True
-
     except Exception:
         print(f"  ✗ Error analyzing {exp_date} abf{abf_serial}_img{img_serial}")
         traceback.print_exc()
         return False
+    else:
+        return True
 
 
 def get_processed_pairs() -> set[tuple[str, str, str]]:
@@ -225,10 +222,11 @@ def get_processed_pairs() -> set[tuple[str, str, str]]:
         cursor.execute("SELECT exp_date, abf_serial, img_serial FROM experiments")
         processed = {(row[0], row[1], row[2]) for row in cursor.fetchall()}
         conn.close()
-        return processed
     except Exception:
         print("Warning: Could not read existing results from database")
         return set()
+    else:
+        return processed
 
 
 def main() -> None:
@@ -268,7 +266,7 @@ def main() -> None:
     # 2. Preprocess all unique images (unless --analysis-only)
     if not args.analysis_only:
         print("\n[2/4] Preprocessing images...")
-        unique_images = set((p["exp_date"], p["img_serial"]) for p in pairs_to_process)
+        unique_images = {(p["exp_date"], p["img_serial"]) for p in pairs_to_process}
         preprocess_success = 0
         preprocess_skipped = 0
 
@@ -310,7 +308,7 @@ def main() -> None:
     print("=" * 80)
     print("DONE!")
     print("=" * 80)
-    print(f"Results saved to: results/results.db")
+    print("Results saved to: results/results.db")
 
     # Final summary
     all_processed = get_processed_pairs()
