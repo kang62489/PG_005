@@ -1,20 +1,15 @@
 ---
 name: trouble_shooter
-description: Document bugs and problems that took effort to solve, with their solutions
+description: Document bugs and problems that took effort to solve, with their solutions when user says "save the problem and solution", "remember this", "document this", etc.
 ---
-
-## When to use this skill
-
-When user has just solved a tricky bug or problem
-
-**And** user wants to save what went wrong and how it was fixed.
 
 ## What this skill does
 
-1. **Suggests a clear file title** based on the problem for you to approve
-2. **Checks if similar issues exist** in `docs/resolved_problems/`
-3. **Organizes the debugging history** from our conversation
-4. **Creates a clean summary** with problem + solution in markdown
+1. Show that this skill is triggered.
+2. **Suggests a clear file title** based on the problem for you to approve
+3. **Checks if similar issues exist** in `docs/resolved_problems/`
+4. **Organizes the debugging history** from our conversation
+5. **Creates a clean summary** with problem + solution in markdown
 
 ## Where files go
 

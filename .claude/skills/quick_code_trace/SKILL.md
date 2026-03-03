@@ -1,10 +1,9 @@
 ---
 name: quick_code_trace
-description: Create markdown files for quickly tracing the code
+description: Create markdown files for quickly tracing the code when user asks questions like "Which file is used to create the database?", "Where are the codes related to the saving functions", "Where are the codes related to the plotting of the figure XX?", etc.
 ---
 
-## When to use this skill
-
+## Example Scenarios
 When user asking questions related to find the code:
 - Which file is used to create the database?
 - Where are the codes related to the saving functions
@@ -13,11 +12,11 @@ When user asking questions related to find the code:
 And user wants to save a indexing markdown file for quickly tracing the code in the future.
 
 ## What this skill does
-
-1. Check the code base and find the files related to the question
-2. Index the files and the related functions
-3. Save the indexing file to `docs/` folder for future reference
-4. Answer the question with the indexing file
+1. Show that this skill is triggered.
+2. Check the code base and find the files related to the question
+3. Index the files and the related functions
+4. Save the indexing file to `docs/` folder for future reference
+5. Answer the question with the indexing file
 
 ## Where files go
 

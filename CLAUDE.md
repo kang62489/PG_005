@@ -8,7 +8,7 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 ## Answering Questions
 1. Try using step-by-step approach to answer the questions.
 2. Try using simple examples with actual data/numbers for explanation.
-3. Use "-" or "=" to create separation lines for separating different points/sessions.
+3. Use `-` or `=` to create separation lines for separating different points/sessions.
 4. Use emoji to make the text lively.
 
 

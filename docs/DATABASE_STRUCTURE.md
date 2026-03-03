@@ -2,7 +2,7 @@
 
 ## Overview
 
-The RADIO project uses a hybrid storage system:
+The CD-ROM project uses a hybrid storage system:
 - **SQLite database** (`results/results.db`) - Metadata and summary statistics
 - **File system** - Large binary data (TIFF, NPZ)
 

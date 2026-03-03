@@ -1,10 +1,9 @@
 ---
 name: learn_from_code
-description: Save explanations about concepts, terms, and principles from our conversations into a knowledge base
+description: When user ask for saving the conversations about concepts, terms, and principles from our conversations into a knowledge base, usually have keywords like "save this", "remember this", "document this", "knowledge base", "concept", "term", "principle", "summarize", etc.
 ---
 
-## When to use this skill
-
+## Example Scenarios
 When user asks questions about concepts like:
 - How does Gaussian filtering work?
 - What's the difference between Otsu and Li thresholding?
@@ -15,10 +14,11 @@ When user asks questions about concepts like:
 
 ## What this skill does
 
-1. **Looks for existing notes** in `docs/knowledgebase/` to see if we've talked about this before
-2. **Merges with existing notes** if the topic already exists, or creates a new file if it's new
-3. **Organizes your questions and my answers** into clean markdown files
-4. **Adds keywords** so you can find stuff easily later
+1. Show that this skill is triggered.
+2. **Looks for existing notes** in `docs/knowledgebase/` to see if we've talked about this before
+3. **Merges with existing notes** if the topic already exists, or creates a new file if it's new
+4. **Organizes your questions and my answers** into clean markdown files
+5. **Adds keywords** so you can find stuff easily later
 
 ## Where files go
 

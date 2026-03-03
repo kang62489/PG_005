@@ -2,8 +2,8 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                                   RADIO                                      ║
-║        Response Associated Distribution Imaging Observer (PG_005)            ║
+║                                  CD-ROM                                      ║
+║          Cholinergic Domain Resolver of Morphology (PG_005)                  ║
 ║                       PROJECT DEPENDENCY DIAGRAM                             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 

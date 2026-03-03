@@ -84,7 +84,7 @@ def create_gaussian_psf(NA, wavelength, pixel_size, size=51):
 | FWHM | 0.51 × λ / NA | Full width at half maximum |
 | Relationship | FWHM ≈ 2.355 × σ | Convert between σ and FWHM |
 
-### Example for RADIO Project
+### Example for CD-ROM Project
 
 ```python
 # 60X objective with high NA
@@ -212,7 +212,7 @@ Wider spatial Gaussian (large σ) = narrower frequency response (low-pass).
 noise_correlation_length < σ < signal_correlation_length
 ```
 
-### For RADIO Project (Acetylcholine Imaging)
+### For CD-ROM Project (Acetylcholine Imaging)
 
 | Component | Correlation Length | Physical Basis |
 |-----------|-------------------|----------------|
@@ -340,7 +340,7 @@ Deconvolution should be done **early** because:
 - Corrects fundamental optical property
 - Should be applied before other spatial operations
 
-#### For RADIO Project Specifically:
+#### For CD-ROM Project Specifically:
 
 **Current pipeline**:
 ```
@@ -376,7 +376,7 @@ Raw → Detrending → Alignment → Cal → Deconvolution → Analysis
 
 4. **Deconvolution can sharpen images** but amplifies noise and changes spatial scales
 
-5. **For RADIO project**: Current σ=6 is well-justified by spatial autocorrelation analysis (see PROJECT_SUMMARY.md lines 106-143). Adding deconvolution would require re-evaluation of entire preprocessing pipeline.
+5. **For CD-ROM project**: Current σ=6 is well-justified by spatial autocorrelation analysis (see PROJECT_SUMMARY.md lines 106-143). Adding deconvolution would require re-evaluation of entire preprocessing pipeline.
 
 6. **The 0.443 coefficient** comes from solving the sinc function for the -3dB point - it's not arbitrary!
 
