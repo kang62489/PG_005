@@ -1,15 +1,14 @@
 ## Modules
-# Standard library imports
-import os
-
 # Third-party imports
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget
 from rich.console import Console
 
+from controllers import CtrlDorQuery
+
 # Local application imports
 from utils.params import APP_STATUS_MESSAGE, UISizes
-from views import ViewDorQuery, ViewPickRaws
+from views import ViewCheckList, ViewDorQuery, ViewPickRaws
 
 # Setup rich console
 console = Console()
@@ -30,21 +29,24 @@ class Main(QMainWindow):
         # Add tabs to the tab widget
         self.tab_dor_query = QWidget()
         self.tab_pick_raws = QWidget()
-        self.tab_check_pick_list = QWidget()
+        self.tab_check_list = QWidget()
         self.tab_im_preproc = QWidget()
         self.tab_spike_align = QWidget()
-        
+
         self.w_main.addTab(self.tab_dor_query, "Query by DOR")
         self.w_main.addTab(self.tab_pick_raws, "Pick Raws from REC Summary")
-        self.w_main.addTab(self.tab_check_pick_list, "Check Pick List")
+        self.w_main.addTab(self.tab_check_list, "Check Pick List")
         self.w_main.addTab(self.tab_im_preproc, "Image Preprocessing")
         self.w_main.addTab(self.tab_spike_align, "Spike Alignment Analysis")
-        
+
         # Setup tabs
         self.view_dor_query = ViewDorQuery(self.tab_dor_query)
-        
+        self.ctrl_dor_query = CtrlDorQuery(self.view_dor_query)
+
         self.view_pick_raws = ViewPickRaws(self.tab_pick_raws)
-        
+
+        self.view_check_list = ViewCheckList(self.tab_check_list)
+
         self.setCentralWidget(self.w_main)
         self.show()
 

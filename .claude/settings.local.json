@@ -25,7 +25,9 @@
       "Bash(.venv/bin/ruff check:*)",
       "Bash(file:*)",
       "Bash(source:*)",
-      "Bash(/mnt/d/MyDB/2_Programs/PG_005/.venv/Scripts/python.exe:*)"
+      "Bash(/mnt/d/MyDB/2_Programs/PG_005/.venv/Scripts/python.exe:*)",
+      "Bash(~/.local/bin/uv run:*)",
+      "Bash(/mnt/d/MyDB/2_Programs/PG_005/.venv/Scripts/ruff.exe check:*)"
     ]
   }
 }
