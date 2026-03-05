@@ -28,3 +28,6 @@ class UISizes:
 
     # Tab: DOR Query
     LW_DOR_WIDTH: int = 300
+
+    TV_ANIMALS_HEIGHT: int = 100
+    TV_INJECTIONS_HEIGHT: int = 120

@@ -1,16 +1,11 @@
-# Log of the project progress 2026-03-04 Wed 16:04:07
+# Log of the project progress 2026-03-05 Thu 17:00:00
 
 List of modified files:
-- `controllers/ctrl_dor_query.py` (refactored: QStandardItemModel → pandas + QSqlTableModel; clear tv_injections on DOR switch; resizeColumnsToContents for tv_injections)
+- `views/view_dor_query.py` (typo fix: `filter_comumns` → `filter_columns`, lines 28, 74)
+- `controllers/ctrl_dor_query.py` (typo fix: `filter_comumns` → `filter_columns`, lines 43, 65, 84, 101, 116)
 
 ## What have we done? (Summary of current progress)
-- Full rewrite of `ctrl_dor_query.py`:
-  - Replaced `QStandardItemModel`/`QStandardItem` loops with `QSqlTableModel` + column hide loop
-  - Added `QSqlDatabase` (opened once in `__init__`) shared by both animal and injection models
-  - Added `self.df_animals` / `self.df_injections` as pandas DataFrames (read via `pd.read_sql`)
-  - `load_injections` now reads `animal_id` from `df_animals.iloc[row]` instead of Qt model item
-  - `tv_injections.resizeColumnsToContents()` added after hide loop for auto column width
-  - `tv_injections.setModel(None)` + reset `df_injections` at top of `load_animals` to clear stale data on DOR switch
+- Fixed typo `filter_comumns` → `filter_columns` in 7 places across 2 files (view + controller for DOR query tab)
 
 ## What should we do next? (TODOs)
 - [ ] **Add `load_rec_summary` in `ctrl_dor_query.py`** ← start here!
@@ -23,4 +18,4 @@ List of modified files:
 - [ ] Populate filter list widgets (OBJ, EXC, EMI) with data from database
 
 ## Messages from you
-- For `load_rec_summary`: check `data/rec_data.db` schema first (tables + columns), then add widget to view, then implement controller method.
+- (none)
