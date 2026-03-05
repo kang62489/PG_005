@@ -3,15 +3,14 @@
 import sqlite3
 
 # Third-party imports
-import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtSql import QSqlDatabase, QSqlTableModel
 
 # Local application imports
-from utils.params import EXP_DB_PATH
+from utils import EXP_DB_PATH
 from views import ViewDorQuery
 
-ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Genotype", "SEX"}
+ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Genotype", "Sex"}
 INJECTIONS_KEEP = {"DOI", "Inj_Mode", "Side", "Incubated", "Virus_Full"}
 
 
@@ -21,8 +20,6 @@ class CtrlDorQuery:
         self.db = QSqlDatabase.addDatabase("QSQLITE")
         self.db.setDatabaseName(str(EXP_DB_PATH))
         self.db.open()
-        self.df_animals: pd.DataFrame = pd.DataFrame()
-        self.df_injections: pd.DataFrame = pd.DataFrame()
         self.load_dors()
         self.connect_signals()
 
@@ -39,12 +36,6 @@ class CtrlDorQuery:
     def load_animals(self, dor: str) -> None:
         # Clear injections table when switching DOR
         self.view.tv_injections.setModel(None)
-        self.df_injections = pd.DataFrame()
-
-        # Store full data as DataFrame
-        conn = sqlite3.connect(EXP_DB_PATH)
-        self.df_animals = pd.read_sql("SELECT * FROM BASIC_INFO WHERE DOR = ?", conn, params=(dor,))
-        conn.close()
 
         # Display via QSqlTableModel, hide unwanted columns
         model = QSqlTableModel(db=self.db)
@@ -61,16 +52,8 @@ class CtrlDorQuery:
         selected = self.view.tv_animals.selectionModel().selectedRows()
         if not selected:
             return
-        # Read animal_id from DataFrame (not from Qt model)
-        animal_id = self.df_animals.iloc[selected[0].row()]["Animal_ID"]
 
-        # Store full data as DataFrame
-        conn = sqlite3.connect(EXP_DB_PATH)
-        self.df_injections = pd.read_sql(
-            "SELECT * FROM INJECTION_HISTORY WHERE Animal_ID = ?", conn, params=(animal_id,)
-        )
-        conn.close()
-
+        animal_id = self.view.tv_animals.model().record(selected[0].row()).value("Animal_ID")
         # Display via QSqlTableModel, hide unwanted columns
         model = QSqlTableModel(db=self.db)
         model.setTable("INJECTION_HISTORY")

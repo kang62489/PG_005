@@ -7,7 +7,7 @@ from rich.console import Console
 from controllers import CtrlDorQuery
 
 # Local application imports
-from utils.params import APP_STATUS_MESSAGE, UISizes
+from utils import APP_STATUS_MESSAGE, UISizes
 from views import ViewCheckList, ViewDorQuery, ViewPickRaws
 
 # Setup rich console

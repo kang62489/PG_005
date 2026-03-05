@@ -16,6 +16,7 @@ BASE_DIR = Path(__file__).parent.parent
 STYLES_DIR = BASE_DIR / "styles"
 MODELS_DIR = BASE_DIR / "data"
 EXP_DB_PATH = MODELS_DIR / "exp_info.db"
+REC_DB_PATH = MODELS_DIR / "rec_data.db"
 
 
 # UI Sizes
