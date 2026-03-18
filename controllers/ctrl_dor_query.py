@@ -11,6 +11,7 @@ from rich.console import Console
 from tabulate import tabulate
 
 # Local application imports
+from classes import DialogPickList
 from utils import EXP_DB_PATH, MODELS_DIR, REC_DB_PATH
 from views import ViewDorQuery
 
@@ -33,8 +34,7 @@ class CtrlDorQuery:
         self.exp_info_db.open()
         self.rec_data_db.open()
 
-        self.df_pick_list = pd.DataFrame(dtype=str)
-
+        self.clear_pick_list()
         self.load_dors()
         self.connect_signals()
 
@@ -55,6 +55,7 @@ class CtrlDorQuery:
 
         self.view.dd_shown_cols.lw.itemChanged.connect(self.toggle_shown_columns)
         self.view.btn_pick_selected.clicked.connect(self.pick_selected)
+        self.view.btn_open_pick_list.clicked.connect(self.open_pick_list)
 
     def load_animals(self, dor: str) -> None:
         # Clear injections table when switching DOR
@@ -177,22 +178,20 @@ class CtrlDorQuery:
             if model.headerData(col, Qt.Orientation.Horizontal) not in INJECTIONS_KEEP:
                 self.view.tv_injections.hideColumn(col)
 
-    def check_pick_list(self, selected_row_data: pd.DataFrame) -> None:
-        if not (MODELS_DIR / "pick_list.json").exists():
-            self.df_pick_list = selected_row_data.sort_values(by="Filename", ignore_index=True)
-            with Path.open(MODELS_DIR / "pick_list.json", "w") as f:
-                self.df_pick_list.to_json(f, orient="records", indent=4)
-        else:
-            with Path.open(MODELS_DIR / "pick_list.json") as f:
-                self.df_pick_list = (
-                    pd.read_json(f, orient="records", dtype=str)
-                    .fillna("")
-                    .sort_values(by="Filename", ignore_index=True)
-                )
-            merged = selected_row_data.merge(self.df_pick_list, how="left", indicator=True)
+    def check_pick_list(self, df_selected: pd.DataFrame) -> None:
+        path = MODELS_DIR / "pick_list.json"
+        df_saved = pd.DataFrame(columns=COLUMNS_TO_PICK, dtype=str)
+        if path.exists():
+            with Path.open(path) as f:
+                df_saved = pd.read_json(f, orient="records", dtype=str).fillna("")
+
+        if not df_saved.empty:
+            merged = df_selected.merge(df_saved, how="left", indicator=True)
             new_rows = merged[merged["_merge"] == "left_only"].drop(columns="_merge")
-            self.df_pick_list = pd.concat([self.df_pick_list, new_rows], ignore_index=True)
-        self.df_pick_list.to_json(MODELS_DIR / "pick_list.json", orient="records", indent=4)
+            df_selected = pd.concat([df_saved, new_rows], ignore_index=True)
+
+        self.df_pick_list = df_selected.sort_values(by="Filename", ignore_index=True)
+        self.df_pick_list.to_json(path, orient="records", indent=4)
 
         console.print(
             "\n[bold green]Pick List (Latest):[/bold green]\n",
@@ -224,3 +223,11 @@ class CtrlDorQuery:
         )
 
         self.check_pick_list(df_selected)
+
+    def clear_pick_list(self) -> None:
+        self.df_pick_list = pd.DataFrame(dtype=str)
+        self.df_pick_list.to_json(MODELS_DIR / "pick_list.json", orient="records", indent=4)
+
+    def open_pick_list(self) -> None:
+        self.dlg_pick_list = DialogPickList()
+        self.dlg_pick_list.show()
