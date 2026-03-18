@@ -1,6 +1,6 @@
 ## Modules
 # Third-party imports
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QFrame, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget
 
 
@@ -13,6 +13,7 @@ class CheckableDropdown(QPushButton):
         self.popup.setLayout(QVBoxLayout())
         self.lw = QListWidget()
         self.popup.layout().addWidget(self.lw)
+        self.lw.viewport().installEventFilter(self)
         self.clicked.connect(self._show_popup)
 
     def _show_popup(self) -> None:
@@ -20,10 +21,21 @@ class CheckableDropdown(QPushButton):
         self.popup.move(pos)
         self.popup.show()
 
+    def eventFilter(self, obj: object, event: QEvent) -> bool:  # noqa: N802
+        if obj is self.lw.viewport() and event.type() == QEvent.Type.MouseButtonRelease:
+            item = self.lw.itemAt(event.position().toPoint())
+            if item:
+                if item.checkState() == Qt.CheckState.Checked:
+                    item.setCheckState(Qt.CheckState.Unchecked)
+                else:
+                    item.setCheckState(Qt.CheckState.Checked)
+                return True
+        return super().eventFilter(obj, event)
+
     def add_items(self, items: list[str]) -> None:
         for label in items:
             item = QListWidgetItem(label)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled)
             item.setCheckState(Qt.CheckState.Checked)
             self.lw.addItem(item)
 

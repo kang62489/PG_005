@@ -1,18 +1,25 @@
 ## Modules
 # Standard library imports
 import sqlite3
+from pathlib import Path
 
 # Third-party imports
+import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtSql import QSqlDatabase, QSqlTableModel
+from rich.console import Console
+from tabulate import tabulate
 
 # Local application imports
-from utils import EXP_DB_PATH, REC_DB_PATH
+from utils import EXP_DB_PATH, MODELS_DIR, REC_DB_PATH
 from views import ViewDorQuery
 
 ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Genotype", "Sex"}
 INJECTIONS_KEEP = {"DOI", "Inj_Mode", "Side", "Incubated", "Virus_Full"}
-REC_SUMMARY_KEEP = {}
+COLUMNS_TO_PICK = ("Filename", "OBJ", "EMI", "FRAMES", "SLICE", "AT", "ABF_NUMBER")
+
+# Set up rich console
+console = Console()
 
 
 class CtrlDorQuery:
@@ -25,6 +32,8 @@ class CtrlDorQuery:
 
         self.exp_info_db.open()
         self.rec_data_db.open()
+
+        self.df_pick_list = pd.DataFrame(dtype=str)
 
         self.load_dors()
         self.connect_signals()
@@ -44,6 +53,9 @@ class CtrlDorQuery:
             dropdown = getattr(self.view, f"dd_{col}")
             dropdown.lw.itemChanged.connect(self.apply_filters)
 
+        self.view.dd_shown_cols.lw.itemChanged.connect(self.toggle_shown_columns)
+        self.view.btn_pick_selected.clicked.connect(self.pick_selected)
+
     def load_animals(self, dor: str) -> None:
         # Clear injections table when switching DOR
         self.view.tv_injections.setModel(None)
@@ -62,9 +74,13 @@ class CtrlDorQuery:
     def load_rec_summary(self, dor: str) -> None:
         # Clear rec summary table when switching DOR
         self.view.tv_rec_summary.setModel(None)
+
+        # Clear filter dropdowns
         for col in self.view.filter_columns:
             dropdown = getattr(self.view, f"dd_{col}")
             dropdown.clear_items()
+
+        self.view.dd_shown_cols.clear_items()
 
         # Display via QSqlTableModel, hide unwanted columns
         model = QSqlTableModel(db=self.rec_data_db)
@@ -81,6 +97,7 @@ class CtrlDorQuery:
         self.view.lbl_rec_summary.setText(f"Table Name: {tablename}")
         self.view.lbl_rec_summary.setStyleSheet("color: black; font-weight: normal")
 
+        # Populate filter dropdowns
         for col in self.view.filter_columns:
             col_list = [model.record(row).value(col) for row in range(model.rowCount())]
             unique_col = set(col_list)
@@ -89,14 +106,18 @@ class CtrlDorQuery:
             dropdown.add_items(unique_col)
             dropdown.lw.blockSignals(False)
 
-        # for col in range(model.columnCount()):
-        #     if model.headerData(col, Qt.Orientation.Horizontal) in REC_SUMMARY_KEEP:
-        #         self.view.tv_rec_summary.hideColumn(col)
+        # Hide columns
+        self.view.dd_shown_cols.lw.blockSignals(True)
+        self.view.dd_shown_cols.add_items(
+            model.headerData(col, Qt.Orientation.Horizontal) for col in range(model.columnCount())
+        )
+        self.view.dd_shown_cols.lw.blockSignals(False)
 
     def apply_filters(self) -> None:
         model = self.view.tv_rec_summary.model()
         if model is None:
             return
+
         conditions = []
         for col in self.view.filter_columns:
             dropdown = getattr(self.view, f"dd_{col}")
@@ -119,7 +140,26 @@ class CtrlDorQuery:
             for i in range(dropdown.lw.count()):
                 dropdown.lw.item(i).setCheckState(Qt.CheckState.Checked)
             dropdown.lw.blockSignals(False)
+
+        self.view.dd_shown_cols.lw.blockSignals(True)
+        for i in range(self.view.dd_shown_cols.lw.count()):
+            self.view.dd_shown_cols.lw.item(i).setCheckState(Qt.CheckState.Checked)
+        self.view.dd_shown_cols.lw.blockSignals(False)
+
         self.apply_filters()
+        self.toggle_shown_columns()
+
+    def toggle_shown_columns(self) -> None:
+        model = self.view.tv_rec_summary.model()
+        if model is None:
+            return
+
+        checked = self.view.dd_shown_cols.checked_items()
+        for col in range(model.columnCount()):
+            if model.headerData(col, Qt.Orientation.Horizontal) in checked:
+                self.view.tv_rec_summary.showColumn(col)
+            else:
+                self.view.tv_rec_summary.hideColumn(col)
 
     def load_injections(self) -> None:
         selected = self.view.tv_animals.selectionModel().selectedRows()
@@ -136,3 +176,51 @@ class CtrlDorQuery:
         for col in range(model.columnCount()):
             if model.headerData(col, Qt.Orientation.Horizontal) not in INJECTIONS_KEEP:
                 self.view.tv_injections.hideColumn(col)
+
+    def check_pick_list(self, selected_row_data: pd.DataFrame) -> None:
+        if not (MODELS_DIR / "pick_list.json").exists():
+            self.df_pick_list = selected_row_data.sort_values(by="Filename", ignore_index=True)
+            with Path.open(MODELS_DIR / "pick_list.json", "w") as f:
+                self.df_pick_list.to_json(f, orient="records", indent=4)
+        else:
+            with Path.open(MODELS_DIR / "pick_list.json") as f:
+                self.df_pick_list = (
+                    pd.read_json(f, orient="records", dtype=str)
+                    .fillna("")
+                    .sort_values(by="Filename", ignore_index=True)
+                )
+            merged = selected_row_data.merge(self.df_pick_list, how="left", indicator=True)
+            new_rows = merged[merged["_merge"] == "left_only"].drop(columns="_merge")
+            self.df_pick_list = pd.concat([self.df_pick_list, new_rows], ignore_index=True)
+        self.df_pick_list.to_json(MODELS_DIR / "pick_list.json", orient="records", indent=4)
+
+        console.print(
+            "\n[bold green]Pick List (Latest):[/bold green]\n",
+            tabulate(self.df_pick_list, headers="keys", showindex=False, tablefmt="pretty"),
+        )
+
+    def pick_selected(self) -> None:
+        if self.view.tv_rec_summary.model() is None:
+            console.print("[bold red]No table to pick from![/bold red]")
+            return
+
+        selected = self.view.tv_rec_summary.selectionModel().selectedRows()
+        if not selected:
+            console.print("[bold red]No row selected![/bold red]")
+            return
+
+        # Create a table of dataframe for selected rows
+        selected_row_data = []
+        for idx in sorted(selected):
+            record = self.view.tv_rec_summary.model().record(idx.row())
+            selected_row_data.append(
+                {col: (str(record.value(col)) if record.value(col) is not None else "") for col in COLUMNS_TO_PICK}
+            )
+
+        df_selected = pd.DataFrame(selected_row_data, dtype=str)
+        console.print(
+            "\n[bold green]Selected Rows:[/bold green]\n",
+            tabulate(df_selected, headers="keys", showindex=False, tablefmt="pretty"),
+        )
+
+        self.check_pick_list(df_selected)

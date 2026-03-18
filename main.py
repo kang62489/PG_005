@@ -8,7 +8,7 @@ from controllers import CtrlDorQuery
 
 # Local application imports
 from utils import APP_STATUS_MESSAGE, UISizes
-from views import ViewCheckList, ViewDorQuery, ViewPickRaws
+from views import ViewCheckList, ViewDorQuery
 
 # Setup rich console
 console = Console()
@@ -17,7 +17,7 @@ console = Console()
 class Main(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Cholinergic Domain Resolver of Morphology (CD-ROM)")
+        self.setWindowTitle("Analyzer for Cholinergic Influence Domain (ACID)")
         self.setFixedSize(UISizes.MAIN_WINDOW_SIZE[0], UISizes.MAIN_WINDOW_SIZE[1])
 
         # Set status bar message
@@ -34,7 +34,6 @@ class Main(QMainWindow):
         self.tab_spike_align = QWidget()
 
         self.w_main.addTab(self.tab_dor_query, "Query by DOR")
-        self.w_main.addTab(self.tab_pick_raws, "Pick Raws from REC Summary")
         self.w_main.addTab(self.tab_check_list, "Check Pick List")
         self.w_main.addTab(self.tab_im_preproc, "Image Preprocessing")
         self.w_main.addTab(self.tab_spike_align, "Spike Alignment Analysis")
@@ -43,13 +42,10 @@ class Main(QMainWindow):
         self.view_dor_query = ViewDorQuery(self.tab_dor_query)
         self.ctrl_dor_query = CtrlDorQuery(self.view_dor_query)
 
-        self.view_pick_raws = ViewPickRaws(self.tab_pick_raws)
-
         self.view_check_list = ViewCheckList(self.tab_check_list)
 
         self.setCentralWidget(self.w_main)
         self.show()
-
 
 app = QApplication()
 app.setStyle("Fusion")

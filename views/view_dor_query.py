@@ -44,6 +44,7 @@ class ViewDorQuery:
         self.lw_dor.setFixedWidth(UISizes.LW_DOR_WIDTH)
 
     def setup_block_2(self) -> None:
+        # Animal Records
         self.lo_block_2 = QVBoxLayout()
         self.lo_tab_container.addLayout(self.lo_block_2)
 
@@ -57,6 +58,7 @@ class ViewDorQuery:
         self.tv_animals.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.tv_animals.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
+        # Injection History
         self.lbl_injections = QLabel("Injection History: ")
         self.lo_block_2.addWidget(self.lbl_injections)
 
@@ -67,8 +69,12 @@ class ViewDorQuery:
         self.tv_injections.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.tv_injections.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
+        # Filter Panel
+        self.lo_panels = QHBoxLayout()
+        self.lo_block_2.addLayout(self.lo_panels)
+
         self.gb_filter_panel = QGroupBox("Filter Panel")
-        self.lo_block_2.addWidget(self.gb_filter_panel)
+        self.lo_panels.addWidget(self.gb_filter_panel)
         self.gb_filter_panel.setLayout(QHBoxLayout())
 
         for col in self.filter_columns:
@@ -77,12 +83,24 @@ class ViewDorQuery:
             setattr(self, f"dd_{col}", dropdown)
             self.gb_filter_panel.layout().addWidget(dropdown)
 
+        self.dd_shown_cols = CheckableDropdown("Show Columns")
+        self.gb_filter_panel.layout().addWidget(self.dd_shown_cols)
+
         self.btn_reset_all_filters = QPushButton("Reset All Filters")
         self.gb_filter_panel.layout().addWidget(self.btn_reset_all_filters)
-
         self.lo_db_view = QVBoxLayout()
         self.lo_block_2.addLayout(self.lo_db_view)
 
+        # Pick List Control
+        self.gb_pick_list = QGroupBox("Pick List Control")
+        self.gb_pick_list.setLayout(QHBoxLayout())
+        self.btn_pick_selected = QPushButton("Pick Selected")
+        self.btn_open_pick_list = QPushButton("Open Pick List")
+        self.gb_pick_list.layout().addWidget(self.btn_pick_selected)
+        self.gb_pick_list.layout().addWidget(self.btn_open_pick_list)
+        self.lo_panels.addWidget(self.gb_pick_list)
+
+        # REC Summary
         self.lbl_rec_summary = QLabel("REC Summary: ")
         self.lo_db_view.addWidget(self.lbl_rec_summary)
 

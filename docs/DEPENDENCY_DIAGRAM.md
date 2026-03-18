@@ -2,8 +2,8 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                                  CD-ROM                                      ║
-║          Cholinergic Domain Resolver of Morphology (PG_005)                  ║
+║                                  ACID                                        ║
+║          Analyzer for Cholinergic Influence Domain (PG_005)                  ║
 ║                       PROJECT DEPENDENCY DIAGRAM                             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 

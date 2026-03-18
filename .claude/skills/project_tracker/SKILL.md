@@ -1,6 +1,6 @@
 ---
 name: project_tracker
-description: Create a markdown file to log and track the project's current progress and TODOs when user expresses that he/she is going to interrupt current work for a while (keywords such as "break", "sleep", "stop", "done", "wrap up", "food", "lunch", "dinner", "meal" may appear in the conversation); remind user where to continue based on continue_from_here.md when user ask "where were we left last time?", "where should I continue?", "what should I do next?", etc.
+description: Create a markdown file to log and track the project's current progress and TODOs when user expresses that he/she is going to interrupt current work for a while (keywords such as "break", "sleep", "stop", "done", "wrap up", "food", "lunch", "dinner", "meal" may appear in the conversation); remind user where to continue based on docs/continue_from_here.md when user ask "where were we left last time?", "where should I continue?", "what should I do next?", etc.
 ---
 
 ## Example Scenarios
@@ -14,17 +14,17 @@ User says:
 
 ## What this skill does
 1. Show that this skill is triggered.
-2. Check current working plan (if any)
-3. Check current TODOs (if any)
-4. Check current working files
-5. Ask user for inputing messages for what should continue next time
-6. Summarize above into a reporting sections in the log file
-7. Sumarize above into a TODO list in the log file
-8. Exit the conversation
+2. Check modified files
+3. Check and update current working plan (if any) based on modifications
+4. Check and update current TODOs (if any) based on modifications
+5. Check current working file positions
+6. Ask user for inputing messages for what should continue next time
+7. Summarize above into a reporting sections in the markdown file
+8. Sumarize above into a TODO list in the log file
 
 ## Where files go
 
-**Save to**: `continue_from_here.md`
+**Save to**: `docs/continue_from_here.md`
 
 ## Markdown format to use
 

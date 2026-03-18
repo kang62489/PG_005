@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Application Info
-APP_NAME = "CD-ROM"
+APP_NAME = "ACID"
 APP_VERSION = "beta-0.1.0"
 APP_AUTHOR = "Kang"
 APP_LAST_UPDATE = f"{datetime.datetime.now(tz=datetime.UTC):%Y-%b-%d}"

@@ -1,10 +1,10 @@
-# CD-ROM - Cholinergic Domain Resolver of Morphology
+# ACID - Analyzer for Cholinergic Influence Domain
 
 **Project Code**: PG_005
 
 ## Project Overview
 
-**CD-ROM** is an imaging analysis platform for studying neurotransmitter release dynamics. The system performs **acetylcholine (ACh) imaging analysis** with two main workflows:
+**ACID** is an imaging analysis platform for studying neurotransmitter release dynamics. The system performs **acetylcholine (ACh) imaging analysis** with two main workflows:
 1. **Image Preprocessing**: Raw TIFF stack preprocessing (detrending, Gaussian filtering)
 2. **Spike-Aligned Analysis**: Spike-centered imaging analysis with spatial categorization to identify chemical release distribution patterns
 
