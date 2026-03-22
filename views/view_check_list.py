@@ -19,11 +19,14 @@ class ViewCheckList:
         self.lo_block_1 = QVBoxLayout()
         self.lo_tab_container.addLayout(self.lo_block_1)
 
-        self.lbl_pick_list = QLabel("Pick List: ")
-        self.lo_block_1.addWidget(self.lbl_pick_list)
+        self.lbl_check_list = QLabel("Check List: ")
+        self.lo_block_1.addWidget(self.lbl_check_list)
 
-        self.tv_pick_list = QTableView()
-        self.lo_block_1.addWidget(self.tv_pick_list)
+        self.btn_load_pick_list = QPushButton("Load Pick List")
+        self.lo_block_1.addWidget(self.btn_load_pick_list)
+
+        self.tv_check_list = QTableView()
+        self.lo_block_1.addWidget(self.tv_check_list)
 
         self.lo_btn_row = QHBoxLayout()
         self.lo_block_1.addLayout(self.lo_btn_row)

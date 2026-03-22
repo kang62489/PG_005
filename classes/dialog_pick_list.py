@@ -26,6 +26,7 @@ class DialogPickList(QDialog):
 
     def setup_view(self) -> None:
         self.setWindowTitle("Pick List")
+        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)
         self.lo_main = QVBoxLayout()
         self.setLayout(self.lo_main)
 

@@ -1,25 +1,29 @@
-# Log of the project progress 2026-03-19 Wed 10:00:00
+# Log of the project progress 2026-03-20 Fri 22:16:57
 
-List of modified files:
-- classes/dialog_pick_list.py (new - Pick List dialog with QFileSystemWatcher for auto-update)
-- classes/model_from_dataframe.py (new - QAbstractTableModel wrapper for pd.DataFrame)
-- controllers/ctrl_dor_query.py (refactored check_pick_list, added _load_pick_list logic inline)
-- data/pick_list.json (updated with picked rows)
+Last working file: controllers/ctrl_check_list.py
+Last working line: 53 (end of load_pick_list method)
 
-## What have we done? (Summary of current progress)
-- Created `ModelFromDataFrame` — a thin `QAbstractTableModel` wrapper for `pd.DataFrame`
-  - Implements `rowCount`, `columnCount`, `data`, `headerData`
-  - `headerData` returns `AlignLeft | AlignVCenter` for `TextAlignmentRole` to fix header alignment
-- Created `DialogPickList` — a dialog showing the current pick list
-  - Uses `QFileSystemWatcher` to auto-reload table when `pick_list.json` changes
-  - `resize_to_table_content` sizes dialog to fit columns + accounts for scrollbar width
-- Refactored `check_pick_list` in `CtrlDorQuery`:
-  - Fixed bug: empty JSON (`[]`) caused `KeyError: 'Filename'`
-  - Flattened nested `if` → two flat blocks (load, then merge)
-  - Renamed variable to `df_saved` for clarity
+## List of modified files (this session):
+- controllers/ctrl_check_list.py (new — implemented `load_pick_list()`)
+
+## Summary of current progress (based on modified files, existing plans)
+- Implemented `load_pick_list()` in `CtrlCheckList` (Step 1 of the plan at `.claude/plans/spicy-strolling-quokka.md`)
+  - Reads `data/pick_list.json` via `pd.read_json(..., orient="records", dtype=str)`
+  - Parses `Filename` → `DOR` (date part) + `TIFF_SERIAL` (serial number, no .tif)
+  - Builds check DataFrame with columns: `DOR`, `TIFF_SERIAL`, `IMG_READY`, `PREPROC`, `PREPROC_READY`
+  - Sets `ModelFromDataFrame` on `tv_check_list`
+  - Handles empty pick list case gracefully
+
+## Completed TODOs/Tasks
+- [x] Plan for `CtrlCheckList` — approved by user (previous session)
+- [x] Implement `load_pick_list()` — Step 1 of the plan
 
 ## What should we do next? (TODOs)
-- [ ] **Complete `tab_check_list`** ← start here!
+- [ ] Test `load_pick_list()` in the GUI (load some pick list entries, click "Load Pick List")
+- [ ] Implement "Start Check" — verify file existence on disk and populate `IMG_READY`, `PREPROC`, `PREPROC_READY`
+- [ ] Implement browse directories (raw_images, raw_abfs, processed_images)
+- [ ] Implement "Remove Selected" / "Clear List" functionality
+- [ ] Consider ABF_SERIAL / ABF_READY columns (currently ignored)
 
 ## Messages from you
-- Continue to complete tab_check_list
+- (none)

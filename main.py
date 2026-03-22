@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget
 from rich.console import Console
 
-from controllers import CtrlDorQuery
+from controllers import CtrlCheckList, CtrlDorQuery
 
 # Local application imports
 from utils import APP_STATUS_MESSAGE, UISizes
@@ -43,9 +43,11 @@ class Main(QMainWindow):
         self.ctrl_dor_query = CtrlDorQuery(self.view_dor_query)
 
         self.view_check_list = ViewCheckList(self.tab_check_list)
+        self.ctrl_check_list = CtrlCheckList(self.view_check_list)
 
         self.setCentralWidget(self.w_main)
         self.show()
+
 
 app = QApplication()
 app.setStyle("Fusion")
