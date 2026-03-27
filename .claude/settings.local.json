@@ -27,7 +27,9 @@
       "Bash(source:*)",
       "Bash(/mnt/d/MyDB/2_Programs/PG_005/.venv/Scripts/python.exe:*)",
       "Bash(~/.local/bin/uv run:*)",
-      "Bash(/mnt/d/MyDB/2_Programs/PG_005/.venv/Scripts/ruff.exe check:*)"
+      "Bash(/mnt/d/MyDB/2_Programs/PG_005/.venv/Scripts/ruff.exe check:*)",
+      "Bash(conda run:*)",
+      "Bash(conda env:*)"
     ]
   }
 }

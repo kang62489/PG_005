@@ -89,8 +89,8 @@ if __name__ == "__main__":
     test_cuda()
 
     # Process files
-    date = "2025_12_15"
-    serials = ["0042"]
+    date = "2026_03_20"
+    serials = ["0013", "0029", "0041"]
     file_list = [f"{date}-{serial}.tif" for serial in serials]
     for file in file_list:
         main(file)
