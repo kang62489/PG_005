@@ -1,10 +1,35 @@
 ## Modules
 # Third-party imports
 import numpy as np
+from numba import njit, prange
 from rich.console import Console
 
 # Set up rich console
 console = Console()
+
+
+@njit(parallel=True)
+def _median_axis0(stacked: np.ndarray) -> np.ndarray:
+    """Compute median along axis-0 (segments) of a (S, F, H, W) array.
+
+    Parallelised over H rows using numba prange.
+    """
+    s_count, n_frames, height, width = stacked.shape
+    result = np.empty((n_frames, height, width), dtype=np.float64)
+    mid = s_count // 2
+
+    for h in prange(height):  # noqa: E741
+        for w in range(width):
+            for f in range(n_frames):
+                vals = np.empty(s_count, dtype=np.float64)
+                for s in range(s_count):
+                    vals[s] = stacked[s, f, h, w]
+                vals.sort()
+                if s_count % 2 == 1:
+                    result[f, h, w] = vals[mid]
+                else:
+                    result[f, h, w] = (vals[mid - 1] + vals[mid]) * 0.5
+    return result
 
 
 def spike_centered_median(
@@ -16,33 +41,20 @@ def spike_centered_median(
     Median is robust to outliers - removes random bright spots.
 
     Args:
-        lst_img_segments: List of 3D arrays (frames, height, width)
+        lst_img_segments: List of 3D arrays (frames, height, width), all identical shape.
 
     Returns:
         (median_segment, zscore_range) where:
         - median_segment: shape (target_frames, height, width)
         - zscore_range: (vmin, vmax) tuple for consistent color scaling
     """
-    target_frames = max(seg.shape[0] for seg in lst_img_segments)
-    target_center = target_frames // 2
-    img_shape = lst_img_segments[0].shape[1:]  # (height, width)
     n_segments = len(lst_img_segments)
 
     console.print(f"Spike-centered median: {n_segments} segments")
 
-    # Stack all segments into 4D array for median calculation
-    # Shape: (n_segments, target_frames, height, width)
-    stacked = np.full((n_segments, target_frames, *img_shape), np.nan, dtype=np.float64)
-
-    for seg_idx, segment in enumerate(lst_img_segments):
-        n_frames = segment.shape[0]
-        seg_center = n_frames // 2
-        start = target_center - seg_center
-        end = start + n_frames
-        stacked[seg_idx, start:end] = segment
-
-    # Median along segment axis, ignoring NaN
-    result = np.nanmedian(stacked, axis=0)
+    # All segments are identical shape — stack then run numba parallel median
+    stacked = np.stack(lst_img_segments, axis=0).astype(np.float64)  # (S, F, H, W)
+    result = _median_axis0(stacked)
 
     # Calculate z-score range (1st and 99th percentile) for consistent color scaling
     vmin, vmax = np.percentile(result, [1, 99])

@@ -438,7 +438,7 @@ class PlotSpatialDist(QMainWindow):
             self.show()
             center_on_screen(self)
 
-    def plotting(self) -> None:  # noqa: PLR0915
+    def plotting(self) -> None:  # noqa: PLR0915, C901
         if not self.sc_ins.categorized_frames:
             msg = "No results to plot. Call fit() first."
             raise RuntimeError(msg)
@@ -452,9 +452,18 @@ class PlotSpatialDist(QMainWindow):
         canvas.setMinimumSize(1400, 800)
         mpl_toolbar = CustomToolbar(canvas, self)
 
-        gs = GridSpec(3, n_frames, figure=fig, height_ratios=[1, 1, 0.8], hspace=0.4, wspace=0)
+        gs = GridSpec(
+            3,
+            n_frames + 1,
+            figure=fig,
+            height_ratios=[1, 1, 0.8],
+            width_ratios=[1] * n_frames + [0.05],
+            hspace=0.4,
+            wspace=0.05,
+        )
 
         cmap_cat = ListedColormap(["black", "cyan", "magenta"])
+        im_z_ref = None
 
         # Use provided zscore_range or calculate from data
         if self.zscore_range is not None:
@@ -468,7 +477,7 @@ class PlotSpatialDist(QMainWindow):
         ):
             # Top row: original z-scored frames (clean overview, no contours)
             ax_img = fig.add_subplot(gs[0, frame_idx])
-            ax_img.imshow(orig, cmap="gray", vmin=vmin, vmax=vmax, interpolation="nearest")
+            im_z_ref = ax_img.imshow(orig, cmap="gray", vmin=vmin, vmax=vmax, interpolation="nearest")
 
             # Frame number title (only on top row)
             centered_frame_idx = frame_idx - n_frames // 2
@@ -503,25 +512,22 @@ class PlotSpatialDist(QMainWindow):
         self.lo_main.addWidget(mpl_toolbar)
         self.lo_main.addWidget(canvas)
 
-        legend_elements = [
-            Patch(facecolor="black", edgecolor="white", label="Background"),
-            Patch(facecolor="cyan", label="Dim"),
-            Patch(facecolor="magenta", label="Bright"),
-        ]
-        fig.legend(
-            handles=legend_elements,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 0.38),
-            ncol=3,
-            fontsize=9,
-            frameon=True,
-            facecolor="white",
-            framealpha=0.7,
-            edgecolor="gray",
-        )
+        # Z-score colorbar (right of top row)
+        if im_z_ref is not None:
+            ax_cbar_z = fig.add_subplot(gs[0, n_frames])
+            fig.colorbar(im_z_ref, cax=ax_cbar_z, label="Z-score")
+
+        # Categorization colorbar (right of middle row)
+        ax_cbar_cat = fig.add_subplot(gs[1, n_frames])
+        sm = cm.ScalarMappable(cmap=cmap_cat, norm=mpl.colors.BoundaryNorm([0, 1, 2, 3], cmap_cat.N))
+        sm.set_array([])
+        cbar_cat = fig.colorbar(sm, cax=ax_cbar_cat)
+        cbar_cat.set_ticks([0.5, 1.5, 2.5])
+        cbar_cat.set_ticklabels(["BK", "Dim", "Bright"], rotation=90, va="center")
+        cbar_cat.ax.set_ylabel("Cluster", fontsize=8)
 
         # Bottom row: Plot voltage trace (spans all columns)
-        ax_vm = fig.add_subplot(gs[2, :])
+        ax_vm = fig.add_subplot(gs[2, :n_frames])
 
         # Plot all traces - each trace is (time_centered, voltage)
         n_traces = len(self.spike_traces)
@@ -562,6 +568,7 @@ class PlotSpatialDist(QMainWindow):
         if self.sc_ins.thresholds_used:
             thresh_dim, thresh_bright = self.sc_ins.thresholds_used
             title += f" | Thresholds: dim>{thresh_dim:.2f}, bright>{thresh_bright:.2f}"
+        title += f" | {self.obj}"
         fig.suptitle(title, fontweight="bold", fontsize=11)
 
         fig.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.15, hspace=0.1, wspace=0)

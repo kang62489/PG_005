@@ -1,29 +1,31 @@
-# Log of the project progress 2026-03-20 Fri 22:16:57
+# Log of the project progress 2026-03-31 Tue 02:53:10
+Last working file: classes/plot_results.py
+Last working line: 571
 
-Last working file: controllers/ctrl_check_list.py
-Last working line: 53 (end of load_pick_list method)
-
-## List of modified files (this session):
-- controllers/ctrl_check_list.py (new — implemented `load_pick_list()`)
+# List of modified files:
+- classes/abf_clip.py
+- classes/plot_results.py
+- functions/spike_centered_processes.py
+- batch_process.py
+- im_dynamics.py
+- pyproject.toml
 
 ## Summary of current progress (based on modified files, existing plans)
-- Implemented `load_pick_list()` in `CtrlCheckList` (Step 1 of the plan at `.claude/plans/spicy-strolling-quokka.md`)
-  - Reads `data/pick_list.json` via `pd.read_json(..., orient="records", dtype=str)`
-  - Parses `Filename` → `DOR` (date part) + `TIFF_SERIAL` (serial number, no .tif)
-  - Builds check DataFrame with columns: `DOR`, `TIFF_SERIAL`, `IMG_READY`, `PREPROC`, `PREPROC_READY`
-  - Sets `ModelFromDataFrame` on `tv_check_list`
-  - Handles empty pick list case gracefully
+- Raised `minimal_required_interval_frames` from 3→4 in `abf_clip.py` so all kept segments are uniform 9-frame shape
+- Replaced NaN-padded loop + `nanmedian` with a numba `@njit(parallel=True)` kernel `_median_axis0` in `spike_centered_processes.py` for faster median computation (requires `pip install "numba>=0.60.0"`)
+- Added `numba>=0.60.0` to `pyproject.toml` dependencies
+- Fixed `PlotSpatialDist` colorbar: tick labels changed to `BK/Dim/Bright` with `rotation=90`
+- Fixed Vm trace axes span: `gs[2, :]` → `gs[2, :n_frames]` so right edge aligns with Frame 4
+- Added magnification (`self.obj`) to spatial plot suptitle
+- Fixed `batch_process.py` and `im_dynamics.py` to pass the correct `objective`/`OBJECTIVE` to `PlotSpatialDist` instead of relying on the `"10X"` default
 
-## Completed TODOs/Tasks
-- [x] Plan for `CtrlCheckList` — approved by user (previous session)
-- [x] Implement `load_pick_list()` — Step 1 of the plan
+## Completed TODOs/Tasks (before new wrap-up)
+- Uniform segment length fix (A1 + A2 from plan)
+- Colorbar UI fixes (B1 + B2 from plan)
+- Magnification shown correctly in spatial plot title
 
 ## What should we do next? (TODOs)
-- [ ] Test `load_pick_list()` in the GUI (load some pick list entries, click "Load Pick List")
-- [ ] Implement "Start Check" — verify file existence on disk and populate `IMG_READY`, `PREPROC`, `PREPROC_READY`
-- [ ] Implement browse directories (raw_images, raw_abfs, processed_images)
-- [ ] Implement "Remove Selected" / "Clear List" functionality
-- [ ] Consider ABF_SERIAL / ABF_READY columns (currently ignored)
+- (none specified)
 
 ## Messages from you
 - (none)

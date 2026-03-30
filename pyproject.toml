@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "imageio>=2.37.2",
     "matplotlib>=3.10.8",
+    "numba>=0.60.0",
     "numba-cuda>=0.23.0",
     "numpy>=1.26.4",
     "nvidia-ml-py>=13.590.44",

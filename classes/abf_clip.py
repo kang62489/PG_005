@@ -133,7 +133,7 @@ class AbfClip:
         inter_spike_frames = np.append(inter_spike_frames, trailing_inverval_frames).astype(int)
 
         # Segmentation parameters
-        minimal_required_interval_frames: int = 3
+        minimal_required_interval_frames: int = 4  # match max → all kept segments are full-length
         maximum_allowed_interval_frames: int = 4
         lst_skipped_spikes = []
         lst_picked_spikes = []

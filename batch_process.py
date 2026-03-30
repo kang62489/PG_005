@@ -179,6 +179,7 @@ def analyze_pair(
             categorizer,
             lst_centered_traces,
             title="Spatial Distribution",
+            obj=objective,
             zscore_range=zscore_range,
             exp_date=exp_date,
             abf_serial=abf_serial,

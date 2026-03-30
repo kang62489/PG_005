@@ -93,6 +93,7 @@ plt_spatial = PlotSpatialDist(
     categorizer,
     lst_centered_traces,
     title="Spatial Distribution",
+    obj=OBJECTIVE,
     zscore_range=zscore_range,
     exp_date=EXP_DATE,
     abf_serial=ABF_SERIAL,
