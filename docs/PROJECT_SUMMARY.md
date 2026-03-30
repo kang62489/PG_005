@@ -25,7 +25,7 @@ PG_005/
 │   ├── abf_clip.py                  # ABF data clipping + spike detection utilities
 │   ├── spatial_categorization.py    # SpatialCategorizer class
 │   ├── region_analyzer.py           # RegionAnalyzer class (area, centroid, contours)
-│   ├── results_exporter.py          # ResultsExporter (SQLite + NPZ + TIFF exporter)
+│   ├── results_exporter.py          # ResultsExporter (SQLite + TIFF + PNG exporter)
 │   └── archived_methods.py          # Archived: dbscan, region_growing
 │
 ├── functions/
@@ -70,8 +70,7 @@ PG_005/
 │   ├── results.db                   # SQLite database (optimized, <1 MB)
 │   ├── results_backup.db            # Pre-migration backup (680 MB)
 │   ├── export_experiment_to_excel.py # Export to Excel script
-│   └── {exp_date}/                  # Date-organized results
-│       └── abf{}_img{}/             # Experiment-specific data
+│   └── files/                       # Flat directory: all TIFFs and PNGs
 ├── rec_summary/                     # Recording summary Excel files (REC_YYYY_MM_DD.xlsx)
 ├── logs/                            # Processing logs
 └── utils/                           # Utility scripts (currently unused)
@@ -179,7 +178,7 @@ Processed TIFF + ABF (electrophysiology)
               ↓
         Export Results (ResultsExporter)
               ↓
-        Output: SQLite DB + TIFF + NPZ + PNG figures
+        Output: SQLite DB + TIFF (zscore + categorized) + PNG figures
 ```
 
 ### Key Analysis Functions
@@ -506,20 +505,21 @@ All methods also accept: `threshold_method`, `global_threshold`, `threshold_dim`
 
 ### Data Export Structure
 
-Analysis results are organized by date and experiment:
+All analysis results are saved in a flat `results/files/` directory:
 
 ```
 results/
-├── results.db                              # SQLite database with metadata
-└── {exp_date}/                             # e.g., "2025_12_15"
-    └── abf{abf_serial}_img{img_serial}/    # e.g., "abf0034_img0042"
-        ├── zscore_stack.tif                # Spike-centered median (float32)
-        ├── categorized_stack.tif           # Categorized frames (uint8: 0=bg, 1=dim, 2=bright)
-        ├── img_segments.npz                # Individual z-score segments
-        ├── abf_segments.npz                # Time + voltage traces
-        ├── spatial_plot.png                # Spatial distribution figure
-        └── region_plot.png                 # Region detail figure
+├── results.db                                        # SQLite database with metadata
+└── files/
+    ├── {date}-img{img}-abf{abf}_zscore.tif           # Spike-centered median (float32)
+    ├── {date}-img{img}-abf{abf}_categorized.tif      # Categorized frames (uint8: 0=bg, 1=dim, 2=bright)
+    ├── {date}-img{img}-abf{abf}_spatial_plot.png     # Spatial distribution figure
+    └── {date}-img{img}-abf{abf}_region_plot.png      # Region detail figure
 ```
+
+The `_categorized.tif` is a uint8 multi-frame TIFF suitable for **ImageJ overlay** on red fluorescence images:
+- `0` = background, `1` = dim, `2` = bright
+- Use `Image > Adjust > Threshold` (set to 1-2 for dim+bright, 2-2 for bright only) to create a selection overlay
 
 ### Using get_export_data()
 
@@ -538,16 +538,16 @@ analyzer.fit(categorizer.categorized_frames)
 # Step 2: Export all results
 exporter = ResultsExporter()
 exp_dir = exporter.export_all(
-    **abf_clip.get_export_data(),        # Experiment metadata + ABF segments
+    **abf_clip.get_export_data(),        # Experiment metadata
     **categorizer.get_export_data(),     # Categorized frames + threshold method
     **analyzer.get_export_data(),        # Region analysis + summary statistics
     zscore_stack=med_img_segment_zscore,
-    img_segments_zscore=lst_img_segments_zscore,
 )
 
-# Step 3: Export figures
-exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
-exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
+# Step 3: Export figures (prefixed filenames → results/files/)
+exp_prefix = f"{EXP_DATE}-img{IMG_SERIAL}-abf{ABF_SERIAL}"
+exporter.export_figure(exp_dir, plt_spatial.grab(), filename=f"{exp_prefix}_spatial_plot.png")
+exporter.export_figure(exp_dir, plt_region.grab(), filename=f"{exp_prefix}_region_plot.png")
 ```
 
 ### SQLite Database Schema
@@ -859,4 +859,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-02-17 (Added batch processing workflows, updated database schema with SLICE/AT and centroid/span columns)*
+*Last updated: 2026-03-31 (Flat file structure: results/files/, removed NPZ exports, added categorized TIFF for ImageJ overlay)*

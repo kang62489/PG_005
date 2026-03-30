@@ -67,7 +67,7 @@ Output: *_Cal.tif (detrended), *_Gauss.tif (Gaussian filtered)
 │  - Spike-aligned median        │
 │  - Spatial categorization      │
 │  - Region analysis             │
-│  - Export results (SQLite+NPZ) │
+│  - Export results (SQLite+TIFF) │
 │  - Visualization (Qt)          │
 └──────────────┬─────────────────┘
                │
@@ -119,7 +119,7 @@ Output: Figures + Statistics for ACh release analysis
 ┌────────────┐ ┌──────────┐ ┌─────────────────┐ ┌─────────────────────┐
 │ functions/ │ │ Workflow │ │ Same Analysis   │ │ ResultsExporter     │
 │ xlsx_reader│ │ Control  │ │ Pipeline as     │ │ ─────────────────── │
-│ ─────────  │ │ ──────── │ │ im_dynamics.py  │ │ SQLite + NPZ + PNG  │
+│ ─────────  │ │ ──────── │ │ im_dynamics.py  │ │ SQLite + TIFF + PNG │
 │ Read Excel │ │ - Skip   │ │ ─────────────── │ │                     │
 │ Get SLICE, │ │   logic  │ │ - AbfClip       │ │ New Columns:        │
 │ AT, pairs  │ │ - Timing │ │ - Z-score norm  │ │ - SLICE, AT         │
@@ -128,7 +128,7 @@ Output: Figures + Statistics for ACh release analysis
 └────────────┘ └──────────┘ └─────────────────┘ └─────────────────────┘
 
 Input:  rec_summary/REC_*.xlsx (Excel metadata with PICK column)
-Output: results/results.db + {date}/abf{}_img{}/ (same as im_dynamics.py)
+Output: results/results.db + results/files/ (same as im_dynamics.py)
 
 Timing:  ⏱️  categorization: 0.234s | region analysis: 0.156s | total: 0.390s
 
@@ -174,9 +174,9 @@ classes/
 │
 └── results_exporter.py
      └── ResultsExporter
-          ├── export_all()     → Save TIFF, NPZ, update SQLite
+          ├── export_all()     → Save TIFF (zscore+categorized), update SQLite
           ├── export_figure()  → Save window screenshot
-          └── Output: results/results.db + data/{date}/abf{}_img{}/
+          └── Output: results/results.db + results/files/{prefix}_*.tif/png
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -300,11 +300,10 @@ functions/
 │    │
 │    ├─→ exporter.export_all() saves:
 │    │    • SQLite: metadata + summaries (results/results.db)
-│    │    • TIFF: zscore_stack.tif (float32), categorized_stack.tif (uint8)
-│    │    • NPZ: img_segments.npz, abf_segments.npz
+│    │    • TIFF: {prefix}_zscore.tif (float32), {prefix}_categorized.tif (uint8)
 │    │
 │    └─→ exporter.export_figure() saves:
-│         • PNG: spatial_plot.png, region_plot.png (Qt window screenshots)
+│         • PNG: {prefix}_spatial_plot.png, {prefix}_region_plot.png
 │
 └─→ Visualization: Interactive Qt windows
     ├─→ PlotPeaks: View spike detection on voltage trace
@@ -315,13 +314,11 @@ functions/
 [OUTPUTS]
 │
 ├─→ results/results.db           (SQLite database - experiment metadata)
-├─→ results/{exp_date}/abf{abf_serial}_img{img_serial}/
-│    ├─→ zscore_stack.tif        (spike-centered median, float32)
-│    ├─→ categorized_stack.tif   (0=bg, 1=dim, 2=bright, uint8)
-│    ├─→ img_segments.npz        (individual spike segments)
-│    ├─→ abf_segments.npz        (time + voltage traces)
-│    ├─→ spatial_plot.png        (PlotSpatialDist screenshot)
-│    └─→ region_plot.png         (PlotRegion screenshot)
+├─→ results/files/               (flat directory, all experiments)
+│    ├─→ {prefix}_zscore.tif        (spike-centered median, float32)
+│    ├─→ {prefix}_categorized.tif   (0=bg, 1=dim, 2=bright, uint8 — ImageJ overlay)
+│    ├─→ {prefix}_spatial_plot.png  (PlotSpatialDist screenshot)
+│    └─→ {prefix}_region_plot.png   (PlotRegion screenshot)
 ├─→ processed_images/            (*_Cal.tif, *_Gauss.tif from preprocessing)
 └─→ Interactive figures (PlotPeaks, PlotSegs, PlotSpatialDist, PlotRegion)
 
@@ -390,6 +387,6 @@ im_dynamics.py
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-02-17 (Added batch processing workflow, xlsx_reader, database columns)
+Updated: 2026-03-31 (Flat file structure: results/files/, removed NPZ, added categorized TIFF)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

@@ -3,9 +3,8 @@ Results exporter for saving analysis outputs.
 
 Exports analysis results to:
 - SQLite database (metadata, summaries, optimized region analysis with largest regions only)
-- TIFF files (z-score stack, categorized frames)
-- NPZ files (image segments, ABF segments)
-- PNG figure (region plot snapshot)
+- TIFF files (z-score stack, categorized frames for ImageJ overlay)
+- PNG figures (spatial plot, region plot)
 
 Note: region_analysis in database is optimized to store only largest regions per frame,
 reducing database size from ~700MB to <1MB while retaining essential data.
@@ -73,13 +72,11 @@ class ResultsExporter:
     Output structure:
         results/
         ├── results.db
-        └── {exp_date}/
-            └── abf{abf_serial}_img{img_serial}/
-                ├── zscore_stack.tif
-                ├── img_segments.npz
-                ├── categorized_stack.tif
-                ├── abf_segments.npz
-                └── region_plot.png
+        └── files/
+            ├── {date}-img{img}-abf{abf}_zscore.tif
+            ├── {date}-img{img}-abf{abf}_categorized.tif
+            ├── {date}-img{img}-abf{abf}_spatial_plot.png
+            └── {date}-img{img}-abf{abf}_region_plot.png
     """
 
     def __init__(self, results_root: Path = Path(__file__).parent.parent / "results") -> None:
@@ -143,10 +140,7 @@ class ResultsExporter:
         um_per_pixel: float,
         # Data to save
         zscore_stack: np.ndarray,
-        img_segments_zscore: list[np.ndarray],
         categorized_frames: list[np.ndarray],
-        lst_time_segments: list[np.ndarray],
-        lst_abf_segments: list[np.ndarray],
         # Analysis results
         region_summary: dict,
         region_data: dict,
@@ -167,31 +161,24 @@ class ResultsExporter:
             objective: Microscope objective used
             um_per_pixel: Micrometers per pixel scale
             zscore_stack: Spike-centered median z-score stack
-            img_segments_zscore: List of z-score normalized image segments
-            categorized_frames: List of categorized frames
-            lst_time_segments: List of time segments from ABF
-            lst_abf_segments: List of voltage segments from ABF
+            categorized_frames: List of categorized frames (0=bg, 1=dim, 2=bright)
             region_summary: Summary statistics from region analysis
             region_data: Detailed region analysis results (with contours removed)
             slice_num: Slice number (optional)
             at: AT location (optional)
 
         Returns:
-            Path to the experiment data directory
+            Path to the files directory
         """
-        # Create experiment-specific directory: {date}/abf{}_img{}/
-        exp_subdir = f"abf{abf_serial}_img{img_serial}"
-        exp_dir = self.results_root / exp_date / exp_subdir
-        exp_dir.mkdir(parents=True, exist_ok=True)
+        files_dir = self.results_root / "files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+        exp_prefix = f"{exp_date}-img{img_serial}-abf{abf_serial}"
 
-        # Save binary files
-        self._export_zscore_stack(exp_dir, zscore_stack)
-        self._export_img_segments(exp_dir, img_segments_zscore)
-        # NOTE: categorized_stack.tif removed - use PNG plots instead
-        self._export_abf_segments(exp_dir, lst_time_segments, lst_abf_segments)
+        self._export_zscore_stack(files_dir, zscore_stack, exp_prefix)
+        self._export_categorized_stack(files_dir, categorized_frames, exp_prefix)
 
         # Insert/update database record
-        data_dir = f"{exp_date}/{exp_subdir}"
+        data_dir = "files"
         self._upsert_record(
             exp_date=exp_date,
             abf_serial=abf_serial,
@@ -208,7 +195,7 @@ class ResultsExporter:
             at=at,
         )
 
-        return exp_dir
+        return files_dir
 
     def export_figure(self, exp_dir: Path, figure: "Figure", filename: str = "plot.png") -> None:
         """
@@ -221,28 +208,14 @@ class ResultsExporter:
         """
         figure.save(str(exp_dir / filename))
 
-    def _export_zscore_stack(self, exp_dir: Path, zscore_stack: np.ndarray) -> None:
+    def _export_zscore_stack(self, files_dir: Path, zscore_stack: np.ndarray, exp_prefix: str) -> None:
         """Save z-score stack as TIFF."""
-        tifffile.imwrite(exp_dir / "zscore_stack.tif", zscore_stack.astype(np.float32))
+        tifffile.imwrite(files_dir / f"{exp_prefix}_zscore.tif", zscore_stack.astype(np.float32))
 
-    def _export_img_segments(self, exp_dir: Path, img_segments_zscore: list) -> None:
-        """Save image segments as compressed NPZ."""
-        np.savez_compressed(exp_dir / "img_segments.npz", segments=np.array(img_segments_zscore, dtype=object))
-
-    def _export_categorized_stack(self, exp_dir: Path, categorized_frames: list[np.ndarray]) -> None:
-        """Save categorized frames as TIFF."""
+    def _export_categorized_stack(self, files_dir: Path, categorized_frames: list[np.ndarray], exp_prefix: str) -> None:
+        """Save categorized frames as uint8 TIFF for ImageJ overlay (0=bg, 1=dim, 2=bright)."""
         categorized = np.array(categorized_frames, dtype=np.uint8)
-        tifffile.imwrite(exp_dir / "categorized_stack.tif", categorized)
-
-    def _export_abf_segments(
-        self, exp_dir: Path, lst_time_segments: list[np.ndarray], lst_abf_segments: list[np.ndarray]
-    ) -> None:
-        """Save ABF segments as compressed NPZ."""
-        np.savez_compressed(
-            exp_dir / "abf_segments.npz",
-            time_segments=np.array(lst_time_segments, dtype=object),
-            abf_segments=np.array(lst_abf_segments, dtype=object),
-        )
+        tifffile.imwrite(files_dir / f"{exp_prefix}_categorized.tif", categorized)
 
     def _upsert_record(
         self,

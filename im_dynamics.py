@@ -84,7 +84,6 @@ exp_dir = exporter.export_all(
     **categorizer.get_export_data(),
     **region_analyzer.get_export_data(),
     zscore_stack=med_img_segment_zscore,
-    img_segments_zscore=lst_img_segments_zscore,
     slice_num=SLICE,
     at=AT,
 )
@@ -101,7 +100,7 @@ plt_spatial = PlotSpatialDist(
     n_spikes=len(abf_clip.df_picked_spikes),
     show=PLOT_SPATIAL,
 )
-exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
+exporter.export_figure(exp_dir, plt_spatial.grab(), filename=f"{EXP_DATE}-img{IMG_SERIAL}-abf{ABF_SERIAL}_spatial_plot.png")
 
 plt_region = PlotRegion(
     categorizer,
@@ -112,7 +111,7 @@ plt_region = PlotRegion(
     n_spikes=len(abf_clip.df_picked_spikes),
     show=PLOT_REGION,
 )
-exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
+exporter.export_figure(exp_dir, plt_region.grab(), filename=f"{EXP_DATE}-img{IMG_SERIAL}-abf{ABF_SERIAL}_region_plot.png")
 
 # Conditional plots that are only created when flags are True
 if PLOT_PEAKS:

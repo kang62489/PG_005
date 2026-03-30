@@ -214,6 +214,4 @@ class AbfClip:
             "img_serial": self.img_serial,
             "num_found_spikes": self.num_found_spikes,
             "n_spikes_analyzed": len(self.df_picked_spikes),
-            "lst_time_segments": self.lst_time_segments,
-            "lst_abf_segments": self.lst_abf_segments,
         }

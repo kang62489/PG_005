@@ -167,10 +167,7 @@ def analyze_pair(
             objective=objective,
             um_per_pixel=region_analyzer.um_per_pixel,
             zscore_stack=med_img_segment_zscore,
-            img_segments_zscore=lst_img_segments_zscore,
             categorized_frames=categorized_frames,
-            lst_time_segments=abf_clip.lst_time_segments,
-            lst_abf_segments=abf_clip.lst_abf_segments,
             region_summary=region_summary,
             region_data=region_data,
             slice_num=slice_num,
@@ -189,7 +186,8 @@ def analyze_pair(
             n_spikes=len(abf_clip.df_picked_spikes),
             show=False,
         )
-        exporter.export_figure(exp_dir, plt_spatial.grab(), filename="spatial_plot.png")
+        exp_prefix = f"{exp_date}-img{img_serial}-abf{abf_serial}"
+        exporter.export_figure(exp_dir, plt_spatial.grab(), filename=f"{exp_prefix}_spatial_plot.png")
 
         plt_region = PlotRegion(
             categorizer,
@@ -200,7 +198,7 @@ def analyze_pair(
             n_spikes=len(abf_clip.df_picked_spikes),
             show=False,
         )
-        exporter.export_figure(exp_dir, plt_region.grab(), filename="region_plot.png")
+        exporter.export_figure(exp_dir, plt_region.grab(), filename=f"{exp_prefix}_region_plot.png")
 
     except Exception:
         print(f"  ✗ Error analyzing {exp_date} abf{abf_serial}_img{img_serial}")

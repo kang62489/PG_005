@@ -48,13 +48,11 @@ PG_005/
 │
 └── results/                  # Output: Analysis results
     ├── results.db            # SQLite database
-    └── {exp_date}/
-        └── abf{}_img{}/
-            ├── spatial_plot.png
-            ├── region_plot.png
-            ├── zscore_stack.tif
-            ├── img_segments.npz
-            └── abf_segments.npz
+    └── files/
+        ├── {date}-img{img}-abf{abf}_zscore.tif
+        ├── {date}-img{img}-abf{abf}_categorized.tif
+        ├── {date}-img{img}-abf{abf}_spatial_plot.png
+        └── {date}-img{img}-abf{abf}_region_plot.png
 ```
 
 ---
@@ -278,18 +276,19 @@ pairs_to_process = [
 
 ### Spatial Distribution Plot
 ```python
+exp_prefix = f"{exp_date}-img{img_serial}-abf{abf_serial}"
 plt_spatial = PlotSpatialDist(
     categorizer,
     lst_centered_traces,
     zscore_range=zscore_range,
-    exp_date=exp_date,           # Added to title
-    abf_serial=abf_serial,        # Added to title
-    img_serial=img_serial,        # Added to title
-    n_spikes=len(df_picked_spikes),  # Added to voltage plot
+    exp_date=exp_date,
+    abf_serial=abf_serial,
+    img_serial=img_serial,
+    n_spikes=len(df_picked_spikes),
     show=False,  # Don't display, just render
 )
 exporter.export_figure(exp_dir, plt_spatial.grab(),
-                      filename="spatial_plot.png")
+                      filename=f"{exp_prefix}_spatial_plot.png")
 ```
 
 ### Region Detail Plot
@@ -299,11 +298,11 @@ plt_region = PlotRegion(
     region_analyzer,
     lst_centered_traces,
     zscore_range=zscore_range,
-    n_spikes=len(df_picked_spikes),  # Added to voltage plots
+    n_spikes=len(df_picked_spikes),
     show=False,
 )
 exporter.export_figure(exp_dir, plt_region.grab(),
-                      filename="region_plot.png")
+                      filename=f"{exp_prefix}_region_plot.png")
 ```
 
 **Plot Metadata**:
@@ -406,8 +405,8 @@ Pairs to process:
   - Analyzing (with plot generation)...
     ⏱️  categorization: 0.234s | region analysis: 0.156s | total: 0.390s
     ✓ Analysis done
-    ✓ Saved to: results/2025_12_15/abf0023_img0026
-    ✓ Files: spatial_plot.png, region_plot.png, zscore_stack.tif, etc.
+    ✓ Saved to: results/files/
+    ✓ Files: 2025_12_15-img0026-abf0023_zscore.tif, _categorized.tif, _spatial_plot.png, _region_plot.png
 ```
 
 ### Analysis Only Mode
@@ -506,7 +505,7 @@ for pair in pairs:
 | `processed_images/*_Cal.tif` | Output: Detrended images |
 | `processed_images/*_Gauss.tif` | Output: Gaussian filtered |
 | `results/results.db` | Output: SQLite database |
-| `results/{date}/abf{}_img{}/` | Output: Analysis results |
+| `results/files/` | Output: All TIFF and PNG results (flat structure) |
 
 ### Database Queries
 
@@ -557,4 +556,4 @@ All pairs already processed!
 
 ---
 
-**Last Updated**: 2026-02-17
+**Last Updated**: 2026-03-31 (Flat file structure: results/files/, removed NPZ exports, added categorized TIFF)

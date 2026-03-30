@@ -50,16 +50,18 @@ This document analyzes the current database schema and identifies potential redu
 
 ## File System Storage
 
-Each experiment generates files in: `results/{exp_date}/abf{abf_serial}_img{img_serial}/`
+All experiment files are saved in a flat directory: `results/files/`
+
+Filename pattern: `{date}-img{img_serial}-abf{abf_serial}_{type}`
 
 | File | Size | Content | Can Regenerate? |
 |------|------|---------|-----------------|
-| `zscore_stack.tif` | Large | Spike-centered median z-score stack (float32) | No - processed data |
-| `categorized_stack.tif` | Small | Categorized frames (uint8: 0/1/2) | **Yes** - from zscore_stack |
-| `img_segments.npz` | Large | Individual z-score segments (for each spike) | No - raw segments |
-| `abf_segments.npz` | Small | Time + voltage traces | No - from ABF |
-| `spatial_plot.png` | Small | Spatial distribution figure | Yes - visualization |
-| `region_plot.png` | Small | Region detail figure | Yes - visualization |
+| `*_zscore.tif` | Large | Spike-centered median z-score stack (float32) | No - processed data |
+| `*_categorized.tif` | Small | Categorized frames (uint8: 0=bg, 1=dim, 2=bright) | **Yes** - from zscore_stack |
+| `*_spatial_plot.png` | Small | Spatial distribution figure | Yes - visualization |
+| `*_region_plot.png` | Small | Region detail figure | Yes - visualization |
+
+**Note**: `img_segments.npz` and `abf_segments.npz` were removed (2026-03-31) as they were never used downstream.
 
 ---
 
@@ -127,7 +129,7 @@ Full region analysis can still be regenerated from `categorized_stack.tif` when 
 
 ```python
 # Regenerate full analysis if needed
-categorized = tifffile.imread("categorized_stack.tif")
+categorized = tifffile.imread("results/files/2025_12_15-img0042-abf0034_categorized.tif")
 analyzer = RegionAnalyzer(obj="60X")
 analyzer.fit(categorized)
 results = analyzer.get_results()  # Full per-region data (5,000+ regions)
@@ -208,7 +210,7 @@ What's in the database:
 import tifffile
 from classes.region_analyzer import RegionAnalyzer
 
-categorized = tifffile.imread(f"{data_dir}/categorized_stack.tif")
+categorized = tifffile.imread(f"results/files/{exp_prefix}_categorized.tif")
 analyzer = RegionAnalyzer(obj=objective)
 analyzer.fit(categorized)
 results = analyzer.get_results()  # Full per-region data (all 5,000+ regions)
@@ -379,4 +381,4 @@ The database has been **successfully optimized**:
 
 ---
 
-*Last updated: 2026-02-14 (Added note about SpatialCategorizer → RegionAnalyzer pipeline)*
+*Last updated: 2026-03-31 (Flat file structure: results/files/, removed NPZ files, added categorized TIFF)*
