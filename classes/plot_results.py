@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 # Third-party imports
 import matplotlib as mpl
 import numpy as np
-import pandas as pd
+import polars as pl
 from matplotlib import cm
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
@@ -190,27 +190,21 @@ class PlotPeaks(QMainWindow):
         canvas_0 = MplCanvas()
         self.canvas = canvas_0  # Store canvas for later access
         self.fig = canvas_0.figure  # Store figure for saving
-        self.df_list[0].plot(
-            ax=canvas_0.axes,
-            x="Time",
-            y="Vm",
-            kind="line",
-            color="blue",
-            title=self.title,
-            xlabel=self.xlabel,
-            ylabel=self.ylabel,
-            label="Vm",
-        )
-        self.df_list[1].plot(
-            ax=canvas_0.axes,
-            x="Time",
-            y="Peaks",
-            kind="scatter",
+
+        df_vm: pl.DataFrame = self.df_list[0]
+        df_peaks: pl.DataFrame = self.df_list[1]
+        canvas_0.axes.plot(df_vm["Time"].to_numpy(), df_vm["Vm"].to_numpy(), color="blue", label="Vm")
+        canvas_0.axes.scatter(
+            df_peaks["Time"].to_numpy(),
+            df_peaks["Peaks"].to_numpy(),
             marker="o",
-            c="none",
+            facecolors="none",
             edgecolors="red",
             label="Spikes",
         )
+        canvas_0.axes.set_title(self.title)
+        canvas_0.axes.set_xlabel(self.xlabel)
+        canvas_0.axes.set_ylabel(self.ylabel)
         canvas_0.axes.legend()
         canvas_0.axes.minorticks_on()
         canvas_0.axes.grid(True, which="major")
@@ -237,7 +231,7 @@ class PlotSegs(QMainWindow):
         lst_img_segments: list[np.ndarray],
         lst_time_segments: list[np.ndarray],
         lst_abf_segments: list[np.ndarray],
-        df_picked_spikes: pd.DataFrame,
+        df_picked_spikes: pl.DataFrame,
         title: str = "Aligned Segments (Image, ABF)",
     ) -> None:
         super().__init__()
@@ -255,7 +249,8 @@ class PlotSegs(QMainWindow):
 
         self.cb_seg = QComboBox()
         self.cb_seg.addItems(
-            f"Spike {idx} @ Frame {row['Spike_Frame_Index']}" for idx, row in self.df_picked_spikes.iterrows()
+            f"Spike {idx} @ Frame {row['Spike_Frame_Index']}"
+            for idx, row in enumerate(self.df_picked_spikes.iter_rows(named=True))
         )
         self.w_tools.layout().addWidget(self.cb_seg, 0, Qt.AlignCenter)
 
@@ -326,7 +321,7 @@ class PlotSegs(QMainWindow):
             zip(self.lst_img_segments, self.lst_time_segments, self.lst_abf_segments, strict=True)
         ):
             # Get the spike info for this segment
-            spike_row = self.df_picked_spikes.iloc[idx]
+            spike_row = self.df_picked_spikes.row(idx, named=True)
             spike_frame = spike_row["Spike_Frame_Index"]
             interval = spike_row["Set_Interval_Frames"]
 
@@ -438,7 +433,7 @@ class PlotSpatialDist(QMainWindow):
             self.show()
             center_on_screen(self)
 
-    def plotting(self) -> None:  # noqa: PLR0915, C901
+    def plotting(self) -> None:  # noqa: C901, PLR0915
         if not self.sc_ins.categorized_frames:
             msg = "No results to plot. Call fit() first."
             raise RuntimeError(msg)

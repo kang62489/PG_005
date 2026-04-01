@@ -7,7 +7,7 @@ Used to identify ACh releasing areas related to firing activities in each frame.
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import polars as pl
 from matplotlib import cm
 from matplotlib.colors import ListedColormap
 from matplotlib.gridspec import GridSpec
@@ -129,7 +129,7 @@ def visualize_clustering_results(  # noqa: C901, PLR0912, PLR0915
     seg_index: int = 0,
     img_filename: str | None = None,
     magnification: str | None = None,
-) -> tuple[plt.Figure, pd.DataFrame | None]:
+) -> tuple[plt.Figure, pl.DataFrame | None]:
     """
     Visualize original ACh signals vs clustered ACh releasing areas.
 
@@ -172,8 +172,8 @@ def visualize_clustering_results(  # noqa: C901, PLR0912, PLR0915
                 row[f"sqrt({color_name}) (μm) "] = f"{sqrt_area:.2f}"
             table_data.append(row)
 
-        df_areas = pd.DataFrame(table_data)
-        print("\n" + tabulate(df_areas, headers="keys", showindex=False, tablefmt="pretty"))
+        df_areas = pl.DataFrame(table_data)
+        print("\n" + tabulate(df_areas.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"))
 
     # Layout constants
     n_image_rows = 2  # Original + clustered

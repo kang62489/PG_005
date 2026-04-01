@@ -1,47 +1,92 @@
 [
     {
-        "Filename":"2025_03_21-0017.tif",
-        "OBJ":"60X",
-        "EMI":"GREEN",
-        "FRAMES":"1200p",
-        "SLICE":"1",
-        "AT":"CELL_1",
-        "ABF_NUMBER":""
+        "Filename": "2024_05_11-0000.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_1",
+        "ABF_NUMBER": ""
     },
     {
-        "Filename":"2025_03_21-0018.tif",
-        "OBJ":"60X",
-        "EMI":"GREEN",
-        "FRAMES":"1200p",
-        "SLICE":"1",
-        "AT":"CELL_1",
-        "ABF_NUMBER":""
+        "Filename": "2024_05_11-0001.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_1",
+        "ABF_NUMBER": ""
     },
     {
-        "Filename":"2025_03_21-0019.tif",
-        "OBJ":"60X",
-        "EMI":"GREEN",
-        "FRAMES":"1200p",
-        "SLICE":"1",
-        "AT":"CELL_1",
-        "ABF_NUMBER":""
+        "Filename": "2024_05_11-0002.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_1",
+        "ABF_NUMBER": ""
     },
     {
-        "Filename":"2025_03_21-0020.tif",
-        "OBJ":"60X",
-        "EMI":"GREEN",
-        "FRAMES":"1200p",
-        "SLICE":"1",
-        "AT":"CELL_1",
-        "ABF_NUMBER":""
+        "Filename": "2024_05_11-0003.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_2",
+        "ABF_NUMBER": ""
     },
     {
-        "Filename":"2025_03_21-0021.tif",
-        "OBJ":"60X",
-        "EMI":"GREEN",
-        "FRAMES":"1200p",
-        "SLICE":"1",
-        "AT":"CELL_1",
-        "ABF_NUMBER":""
+        "Filename": "2024_05_11-0004.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_2",
+        "ABF_NUMBER": ""
+    },
+    {
+        "Filename": "2024_05_11-0005.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_2",
+        "ABF_NUMBER": ""
+    },
+    {
+        "Filename": "2024_05_11-0006.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_3",
+        "ABF_NUMBER": ""
+    },
+    {
+        "Filename": "2024_05_11-0007.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_3",
+        "ABF_NUMBER": ""
+    },
+    {
+        "Filename": "2024_05_11-0008.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_3",
+        "ABF_NUMBER": ""
+    },
+    {
+        "Filename": "2024_05_11-0009.tif",
+        "OBJ": "10X",
+        "EMI": "GREEN",
+        "FRAMES": "500p",
+        "SLICE": "1",
+        "AT": "SITE_3",
+        "ABF_NUMBER": ""
     }
 ]

@@ -1,10 +1,10 @@
 ## Modules
 # Standard library imports
+import json
 import sqlite3
-from pathlib import Path
 
 # Third-party imports
-import pandas as pd
+import polars as pl
 from PySide6.QtCore import Qt
 from PySide6.QtSql import QSqlDatabase, QSqlTableModel
 from rich.console import Console
@@ -178,24 +178,22 @@ class CtrlDorQuery:
             if model.headerData(col, Qt.Orientation.Horizontal) not in INJECTIONS_KEEP:
                 self.view.tv_injections.hideColumn(col)
 
-    def check_pick_list(self, df_selected: pd.DataFrame) -> None:
+    def check_pick_list(self, df_selected: pl.DataFrame) -> None:
         path = MODELS_DIR / "pick_list.json"
-        df_saved = pd.DataFrame(columns=COLUMNS_TO_PICK, dtype=str)
+        df_saved = pl.DataFrame(schema=dict.fromkeys(COLUMNS_TO_PICK, pl.Utf8))
         if path.exists():
-            with Path.open(path) as f:
-                df_saved = pd.read_json(f, orient="records", dtype=str).fillna("")
+            df_saved = pl.read_json(path).with_columns(pl.all().cast(pl.Utf8)).fill_null("")
 
-        if not df_saved.empty:
-            merged = df_selected.merge(df_saved, how="left", indicator=True)
-            new_rows = merged[merged["_merge"] == "left_only"].drop(columns="_merge")
-            df_selected = pd.concat([df_saved, new_rows], ignore_index=True)
+        if not df_saved.is_empty():
+            new_rows = df_selected.join(df_saved, on=list(COLUMNS_TO_PICK), how="anti")
+            df_selected = pl.concat([df_saved, new_rows])
 
-        self.df_pick_list = df_selected.sort_values(by="Filename", ignore_index=True)
-        self.df_pick_list.to_json(path, orient="records", indent=4)
+        self.df_pick_list = df_selected.sort("Filename")
+        path.write_text(json.dumps(self.df_pick_list.to_dicts(), indent=4))
 
         console.print(
             "\n[bold green]Pick List (Latest):[/bold green]\n",
-            tabulate(self.df_pick_list, headers="keys", showindex=False, tablefmt="pretty"),
+            tabulate(self.df_pick_list.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"),
         )
 
     def pick_selected(self) -> None:
@@ -216,17 +214,17 @@ class CtrlDorQuery:
                 {col: (str(record.value(col)) if record.value(col) is not None else "") for col in COLUMNS_TO_PICK}
             )
 
-        df_selected = pd.DataFrame(selected_row_data, dtype=str)
+        df_selected = pl.DataFrame(selected_row_data).with_columns(pl.all().cast(pl.Utf8))
         console.print(
             "\n[bold green]Selected Rows:[/bold green]\n",
-            tabulate(df_selected, headers="keys", showindex=False, tablefmt="pretty"),
+            tabulate(df_selected.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"),
         )
 
         self.check_pick_list(df_selected)
 
     def clear_pick_list(self) -> None:
-        self.df_pick_list = pd.DataFrame(dtype=str)
-        self.df_pick_list.to_json(MODELS_DIR / "pick_list.json", orient="records", indent=4)
+        self.df_pick_list = pl.DataFrame()
+        (MODELS_DIR / "pick_list.json").write_text(json.dumps([], indent=4))
 
     def open_pick_list(self) -> None:
         self.dlg_pick_list = DialogPickList()

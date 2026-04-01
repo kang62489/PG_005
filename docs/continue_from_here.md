@@ -27,5 +27,6 @@ Last working line: 233
 - Verify `_categorized.tif` output in ImageJ: open a sample result and confirm boundary-only binary stack, compare shape to magenta contour in `region_plot.png`
 - Continue GUI development (Phase 1–5 per plan `swift-plotting-porcupine.md`)
 
+
 ## Messages from you
 - (none)

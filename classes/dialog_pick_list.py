@@ -1,6 +1,6 @@
 ## Modules
 # Third-party imports
-import pandas as pd
+import polars as pl
 from PySide6.QtCore import QFileSystemWatcher, QModelIndex, Qt
 from PySide6.QtWidgets import QAbstractItemView, QDialog, QDialogButtonBox, QHeaderView, QTableView, QVBoxLayout
 from rich.console import Console
@@ -53,9 +53,9 @@ class DialogPickList(QDialog):
             self.tv_pick_list.setModel(self.model_tv_pick_list)
             return
 
-        with json_pick_list_path.open() as f:
-            self.model_tv_pick_list = ModelFromDataFrame(pd.read_json(f, orient="records", dtype=str))
-            self.tv_pick_list.setModel(self.model_tv_pick_list)
+        df = pl.read_json(json_pick_list_path).with_columns(pl.all().cast(pl.Utf8))
+        self.model_tv_pick_list = ModelFromDataFrame(df)
+        self.tv_pick_list.setModel(self.model_tv_pick_list)
 
         self.resize_to_table_content()
 

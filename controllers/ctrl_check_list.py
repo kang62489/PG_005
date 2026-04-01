@@ -2,7 +2,7 @@
 # Standard library imports
 
 # Third-party imports
-import pandas as pd
+import polars as pl
 from rich.console import Console
 
 # Local application imports
@@ -28,24 +28,21 @@ class CtrlCheckList:
 
     def load_pick_list(self) -> None:
         """Load pick_list.json and display a check table in tv_check_list."""
-        df_pick = pd.read_json(PICK_LIST_PATH, orient="records", dtype=str)
+        df_pick = pl.read_json(PICK_LIST_PATH).with_columns(pl.all().cast(pl.Utf8))
 
-        if df_pick.empty:
+        if df_pick.is_empty():
             console.log("[yellow]Pick list is empty, nothing to load.[/yellow]")
-            model = ModelFromDataFrame(pd.DataFrame(columns=CHECK_COLUMNS))
+            model = ModelFromDataFrame(pl.DataFrame(schema=dict.fromkeys(CHECK_COLUMNS, pl.Utf8)))
             self.view.tv_check_list.setModel(model)
             return
 
         # Parse Filename → DOR and TIFF_SERIAL
-        parts = df_pick["Filename"].str.split("-", n=1)
-        df_check = pd.DataFrame(
-            {
-                "DOR": parts.str[0],
-                "TIFF_SERIAL": parts.str[1].str.replace(".tif", "", regex=False),
-                "IMG_READY": "",
-                "PREPROC": "",
-                "PREPROC_READY": "",
-            }
+        df_check = df_pick.select(
+            pl.col("Filename").str.split("-").list.first().alias("DOR"),
+            pl.col("Filename").str.split("-").list.last().str.replace(r"\.tif$", "").alias("TIFF_SERIAL"),
+            pl.lit("").alias("IMG_READY"),
+            pl.lit("").alias("PREPROC"),
+            pl.lit("").alias("PREPROC_READY"),
         )
 
         model = ModelFromDataFrame(df_check)

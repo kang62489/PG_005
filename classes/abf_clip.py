@@ -5,7 +5,7 @@ from pathlib import Path
 # Third-party imports
 import imageio
 import numpy as np
-import pandas as pd
+import polars as pl
 import pyabf
 from rich.console import Console
 from scipy.signal import find_peaks
@@ -91,10 +91,10 @@ class AbfClip:
         self.cs.print(f"Found {self.num_found_spikes} peaks")
 
         # prepare dataframes for plotting
-        self.df_Vm = pd.DataFrame({"Time": self.rec_time, "Vm": self.Vm})
+        self.df_Vm = pl.DataFrame({"Time": self.rec_time, "Vm": self.Vm})
         self.peak_times = self.rec_time[self.peak_indices]
         self.peak_values = self.Vm[self.peak_indices]
-        self.df_peaks = pd.DataFrame({"Time": self.peak_times, "Peaks": self.peak_values})
+        self.df_peaks = pl.DataFrame({"Time": self.peak_times, "Peaks": self.peak_values})
 
     def get_available_spiking_frames(self) -> None:
         if self.num_found_spikes == 0:
@@ -160,21 +160,27 @@ class AbfClip:
                 }
             )
 
-        self.df_skipped_spikes = pd.DataFrame(lst_skipped_spikes)
-        self.df_picked_spikes = pd.DataFrame(lst_picked_spikes)
+        self.df_skipped_spikes = pl.DataFrame(
+            lst_skipped_spikes,
+            schema={"Spike_Frame_Index": pl.Int64, "Min_Available_Frames": pl.Int64},
+        )
+        self.df_picked_spikes = pl.DataFrame(
+            lst_picked_spikes,
+            schema={"Spike_Frame_Index": pl.Int64, "Min_Available_Frames": pl.Int64, "Set_Interval_Frames": pl.Int64},
+        )
 
         self.cs.print("\n[bold red]" + "-" * 32 + " Skipped Spikes " + "-" * 32 + "\n[/bold red]")
         self.cs.print(
             f"[bold red]Total skipped spikes: {len(self.df_skipped_spikes)}/{self.num_found_spikes}[/bold red]"
         )
-        self.cs.print(tabulate(self.df_skipped_spikes, headers="keys", showindex=False, tablefmt="pretty"))
+        self.cs.print(tabulate(self.df_skipped_spikes.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"))
         self.cs.print("[bold red]" + "=" * 80 + "\n" + "[/bold red]")
 
         self.cs.print("\n[bold green]" + "-" * 32 + " Picked Spikes " + "-" * 32 + "\n[/bold green]")
         self.cs.print(
             f"[bold green]Total picked spikes: {len(self.df_picked_spikes)}/{self.num_found_spikes}[/bold green]"
         )
-        self.cs.print(tabulate(self.df_picked_spikes, headers="keys", showindex=False, tablefmt="pretty"))
+        self.cs.print(tabulate(self.df_picked_spikes.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"))
         self.cs.print("[bold green]" + "=" * 79 + "\n" + "[/bold green]")
 
     def clip_time_abf_img_segments(self) -> None:
@@ -182,7 +188,7 @@ class AbfClip:
             self.cs.print("[bold red]No spikes were picked! Exiting...[/bold red]")
             return
 
-        for _index, row in self.df_picked_spikes.iterrows():
+        for row in self.df_picked_spikes.iter_rows(named=True):
             # Truncate image stack, time series, and ABF data
             # left_bound and right_bound are already adjusted for dropped frames (match loaded image indices)
             left_bound: int = row["Spike_Frame_Index"] - row["Set_Interval_Frames"]
