@@ -495,18 +495,9 @@ class PlotSpatialDist(QMainWindow):
 
             # Title without area info
             if centered_frame_idx == 0:
-                ax_cat.set_title(
-                    f"(SPIKE)\nFrame {centered_frame_idx}",
-                    fontweight="bold",
-                    color="red",
-                    fontsize=8,
-                )
+                ax_cat.set_title(f"(SPIKE)\nFrame {centered_frame_idx}", fontweight="bold", color="red", fontsize=8)
             else:
-                ax_cat.set_title(
-                    f"Frame {centered_frame_idx}",
-                    fontweight="bold",
-                    fontsize=8,
-                )
+                ax_cat.set_title(f"Frame {centered_frame_idx}", fontweight="bold", fontsize=8)
             ax_cat.axis("off")
 
         self.lo_main.addWidget(mpl_toolbar)
@@ -691,6 +682,7 @@ class PlotRegion(QMainWindow):
         if bright_largest is not None:
             # Get contour for the largest bright region
             from classes.region_analyzer import CATEGORY_BRIGHT
+
             cat_frame = self.sc_ins.categorized_frames[frame_idx]
             contour = self.ra_ins.get_largest_region_contour(cat_frame, CATEGORY_BRIGHT, bright_largest["label"])
             if contour is not None:
@@ -715,9 +707,9 @@ class PlotRegion(QMainWindow):
             y_south = y + y_span_px / 2
 
             # Draw x-span line (horizontal)
-            ax_z.plot([x_west, x_east], [y, y], color="yellow", linewidth=2, linestyle="-", zorder=15, alpha=0.8)
+            ax_z.plot([x_west, x_east], [y, y], color="red", linewidth=2, linestyle="-", zorder=15, alpha=0.8)
             # Draw y-span line (vertical)
-            ax_z.plot([x, x], [y_north, y_south], color="lime", linewidth=2, linestyle="-", zorder=15, alpha=0.8)
+            ax_z.plot([x, x], [y_north, y_south], color="red", linewidth=2, linestyle="-", zorder=15, alpha=0.8)
 
             bright_centroid_str = f"({x * self.ra_ins.um_per_pixel:.1f} µm, {y * self.ra_ins.um_per_pixel:.1f} µm)"
             span_str = f"x-span: {x_span_um:.1f} µm | y-span: {y_span_um:.1f} µm"
@@ -729,21 +721,12 @@ class PlotRegion(QMainWindow):
             title_text = f"Z-Scored Frame {centered_idx} (SPIKE)\nBright centroid: {bright_centroid_str}"
             if span_str:
                 title_text += f"\n{span_str}"
-            ax_z.set_title(
-                title_text,
-                fontweight="bold",
-                color="red",
-                fontsize=10,
-            )
+            ax_z.set_title(title_text, fontweight="bold", color="red", fontsize=10)
         else:
             title_text = f"Z-Scored Frame {centered_idx}\nBright centroid: {bright_centroid_str}"
             if span_str:
                 title_text += f"\n{span_str}"
-            ax_z.set_title(
-                title_text,
-                fontweight="bold",
-                fontsize=10,
-            )
+            ax_z.set_title(title_text, fontweight="bold", fontsize=10)
         ax_z.axis("off")
 
         # Add legend for contour, centroid, and spans
@@ -772,18 +755,9 @@ class PlotRegion(QMainWindow):
         ax_c.imshow(cat, cmap=cmap_cat, vmin=0, vmax=2)
 
         if centered_idx == 0:
-            ax_c.set_title(
-                f"Frame {centered_idx} (SPIKE)",
-                fontweight="bold",
-                color="red",
-                fontsize=10,
-            )
+            ax_c.set_title(f"Frame {centered_idx} (SPIKE)", fontweight="bold", color="red", fontsize=10)
         else:
-            ax_c.set_title(
-                f"Frame {centered_idx}",
-                fontweight="bold",
-                fontsize=10,
-            )
+            ax_c.set_title(f"Frame {centered_idx}", fontweight="bold", fontsize=10)
         ax_c.axis("off")
 
         # Add legend

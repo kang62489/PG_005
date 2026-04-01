@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any
 # Third-party imports
 import numpy as np
 import tifffile
+from skimage.measure import label as sk_label
+from skimage.segmentation import find_boundaries
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -175,7 +177,7 @@ class ResultsExporter:
         exp_prefix = f"{exp_date}-img{img_serial}-abf{abf_serial}"
 
         self._export_zscore_stack(files_dir, zscore_stack, exp_prefix)
-        self._export_categorized_stack(files_dir, categorized_frames, exp_prefix)
+        self._export_categorized_stack(files_dir, categorized_frames, exp_prefix, region_data)
 
         # Insert/update database record
         data_dir = "files"
@@ -212,10 +214,25 @@ class ResultsExporter:
         """Save z-score stack as TIFF."""
         tifffile.imwrite(files_dir / f"{exp_prefix}_zscore.tif", zscore_stack.astype(np.float32))
 
-    def _export_categorized_stack(self, files_dir: Path, categorized_frames: list[np.ndarray], exp_prefix: str) -> None:
-        """Save categorized frames as uint8 TIFF for ImageJ overlay (0=bg, 1=dim, 2=bright)."""
-        categorized = np.array(categorized_frames, dtype=np.uint8)
-        tifffile.imwrite(files_dir / f"{exp_prefix}_categorized.tif", categorized)
+    def _export_categorized_stack(
+        self, files_dir: Path, categorized_frames: list[np.ndarray], exp_prefix: str, region_data: dict
+    ) -> None:
+        """Save largest bright region per frame as binary uint8 TIFF (1=largest bright, 0=rest)."""
+        bright_largest = region_data.get("bright_largest", [])
+        output_frames = []
+        for i, frame in enumerate(categorized_frames):
+            largest = bright_largest[i] if i < len(bright_largest) else None
+            if largest is None:
+                output_frames.append(np.zeros_like(frame, dtype=np.uint8))
+            else:
+                mask = frame == 2  # CATEGORY_BRIGHT
+                labeled = sk_label(mask)
+                region_mask = labeled == largest["label"]
+                output_frames.append(find_boundaries(region_mask, mode="inner").astype(np.uint8))
+        tifffile.imwrite(
+            files_dir / f"{exp_prefix}_categorized.tif",
+            np.array(output_frames, dtype=np.uint8),
+        )
 
     def _upsert_record(
         self,

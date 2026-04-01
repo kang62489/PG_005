@@ -1,29 +1,47 @@
 [
     {
-        "Filename":"2025_04_03-0002.tif",
+        "Filename":"2025_03_21-0017.tif",
         "OBJ":"60X",
         "EMI":"GREEN",
-        "FRAMES":"10p",
+        "FRAMES":"1200p",
         "SLICE":"1",
         "AT":"CELL_1",
         "ABF_NUMBER":""
     },
     {
-        "Filename":"2025_04_03-0003.tif",
+        "Filename":"2025_03_21-0018.tif",
         "OBJ":"60X",
         "EMI":"GREEN",
-        "FRAMES":"1400p",
+        "FRAMES":"1200p",
         "SLICE":"1",
-        "AT":"CELL1",
+        "AT":"CELL_1",
         "ABF_NUMBER":""
     },
     {
-        "Filename":"2025_04_03-0004.tif",
+        "Filename":"2025_03_21-0019.tif",
         "OBJ":"60X",
         "EMI":"GREEN",
-        "FRAMES":"1400p",
+        "FRAMES":"1200p",
         "SLICE":"1",
-        "AT":"CELL1",
+        "AT":"CELL_1",
+        "ABF_NUMBER":""
+    },
+    {
+        "Filename":"2025_03_21-0020.tif",
+        "OBJ":"60X",
+        "EMI":"GREEN",
+        "FRAMES":"1200p",
+        "SLICE":"1",
+        "AT":"CELL_1",
+        "ABF_NUMBER":""
+    },
+    {
+        "Filename":"2025_03_21-0021.tif",
+        "OBJ":"60X",
+        "EMI":"GREEN",
+        "FRAMES":"1200p",
+        "SLICE":"1",
+        "AT":"CELL_1",
         "ABF_NUMBER":""
     }
 ]

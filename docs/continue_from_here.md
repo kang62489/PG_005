@@ -1,31 +1,31 @@
-# Log of the project progress 2026-03-31 Tue 02:53:10
-Last working file: classes/plot_results.py
-Last working line: 571
+# Log of the project progress 2026-03-31 Tue (wrap-up)
+Last working file: classes/results_exporter.py
+Last working line: 233
 
 # List of modified files:
-- classes/abf_clip.py
 - classes/plot_results.py
-- functions/spike_centered_processes.py
-- batch_process.py
-- im_dynamics.py
-- pyproject.toml
+- classes/results_exporter.py (<- Break here, line 233)
 
 ## Summary of current progress (based on modified files, existing plans)
-- Raised `minimal_required_interval_frames` from 3→4 in `abf_clip.py` so all kept segments are uniform 9-frame shape
-- Replaced NaN-padded loop + `nanmedian` with a numba `@njit(parallel=True)` kernel `_median_axis0` in `spike_centered_processes.py` for faster median computation (requires `pip install "numba>=0.60.0"`)
-- Added `numba>=0.60.0` to `pyproject.toml` dependencies
-- Fixed `PlotSpatialDist` colorbar: tick labels changed to `BK/Dim/Bright` with `rotation=90`
-- Fixed Vm trace axes span: `gs[2, :]` → `gs[2, :n_frames]` so right edge aligns with Frame 4
-- Added magnification (`self.obj`) to spatial plot suptitle
-- Fixed `batch_process.py` and `im_dynamics.py` to pass the correct `objective`/`OBJECTIVE` to `PlotSpatialDist` instead of relying on the `"10X"` default
+
+### `classes/results_exporter.py`
+- Added imports: `from skimage.measure import label as sk_label` and `from skimage.segmentation import find_boundaries`
+- Modified `_export_categorized_stack` to accept a new `region_data: dict` parameter
+- Instead of saving raw 0/1/2 category values, it now saves **boundary lines** of the largest bright region per frame as a binary uint8 TIFF (1=boundary pixel, 0=rest)
+- Logic: for each frame → extract bright pixels (`frame == 2`) → re-label with `sk_label` → isolate the region matching `bright_largest[i]["label"]` → call `find_boundaries(mode="inner")` → save as `uint8`
+- Updated the call in `export_all` (line 178) to pass `region_data`
+
+### `classes/plot_results.py`
+- Minor cosmetic cleanup: collapsed multi-line `ax.set_title(...)` calls into single-line format (ruff style)
+- Changed x-span and y-span lines in `PlotRegion` from yellow/lime → **red** for both
 
 ## Completed TODOs/Tasks (before new wrap-up)
-- Uniform segment length fix (A1 + A2 from plan)
-- Colorbar UI fixes (B1 + B2 from plan)
-- Magnification shown correctly in spatial plot title
+- `_categorized.tif` now exports boundary-only binary stack (matching magenta contour in region_plot left panel)
+- Span line colors unified to red in PlotRegion
 
 ## What should we do next? (TODOs)
-- (none specified)
+- Verify `_categorized.tif` output in ImageJ: open a sample result and confirm boundary-only binary stack, compare shape to magenta contour in `region_plot.png`
+- Continue GUI development (Phase 1–5 per plan `swift-plotting-porcupine.md`)
 
 ## Messages from you
 - (none)
