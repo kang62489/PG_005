@@ -74,11 +74,15 @@ class ResultsExporter:
     Output structure:
         results/
         ├── results.db
-        └── files/
-            ├── {date}-img{img}-abf{abf}_zscore.tif
-            ├── {date}-img{img}-abf{abf}_categorized.tif
-            ├── {date}-img{img}-abf{abf}_spatial_plot.png
-            └── {date}-img{img}-abf{abf}_region_plot.png
+        └── {exp_date}/
+            ├── zscores/
+            │   └── {date}-img{img}-abf{abf}_zscore.tif
+            ├── categorized/
+            │   └── {date}-img{img}-abf{abf}_categorized.tif
+            ├── regions/
+            │   └── {date}-img{img}-abf{abf}_region_plot.png
+            └── spatials/
+                └── {date}-img{img}-abf{abf}_spatial_plot.png
     """
 
     def __init__(self, results_root: Path = Path(__file__).parent.parent / "results") -> None:
@@ -170,17 +174,24 @@ class ResultsExporter:
             at: AT location (optional)
 
         Returns:
-            Path to the files directory
+            dict with keys "zscores", "categorized", "regions", "spatials" → Path to each subfolder
         """
-        files_dir = self.results_root / "files"
-        files_dir.mkdir(parents=True, exist_ok=True)
+        date_dir = self.results_root / exp_date
+        dirs = {
+            "zscores": date_dir / "zscores",
+            "categorized": date_dir / "categorized",
+            "regions": date_dir / "regions",
+            "spatials": date_dir / "spatials",
+        }
+        for d in dirs.values():
+            d.mkdir(parents=True, exist_ok=True)
         exp_prefix = f"{exp_date}-img{img_serial}-abf{abf_serial}"
 
-        self._export_zscore_stack(files_dir, zscore_stack, exp_prefix)
-        self._export_categorized_stack(files_dir, categorized_frames, exp_prefix, region_data)
+        self._export_zscore_stack(dirs["zscores"], zscore_stack, exp_prefix)
+        self._export_categorized_stack(dirs["categorized"], categorized_frames, exp_prefix, region_data)
 
         # Insert/update database record
-        data_dir = "files"
+        data_dir = exp_date
         self._upsert_record(
             exp_date=exp_date,
             abf_serial=abf_serial,
@@ -197,7 +208,7 @@ class ResultsExporter:
             at=at,
         )
 
-        return files_dir
+        return dirs
 
     def export_figure(self, exp_dir: Path, figure: "Figure", filename: str = "plot.png") -> None:
         """

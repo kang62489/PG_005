@@ -332,7 +332,7 @@ External Dependencies:
 • numpy, scipy          → Array operations, signal processing
 • imageio               → TIFF I/O
 • matplotlib            → Plotting
-• pandas                → Data tables
+• polars                → Data tables (replaced pandas 2026-04)
 • scikit-image          → Image processing, thresholding, morphology
 • scikit-learn          → K-means algorithm
 • numba, numba.cuda     → JIT compilation, GPU kernels
@@ -385,8 +385,27 @@ im_dynamics.py
    Pass 2: Li/Otsu on signal pixels → separates dim/bright
 
 
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              EXPERIMENTAL DETREND SCRIPTS (standalone, not in pipeline)     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+run_als_1d.py
+  └─→ scipy.sparse / scipy.sparse.linalg → ALS baseline on 1-D Excel trace
+       Input:  Excel file (col_index, col_intensity)
+       Output: *_ALS.xlsx  +  *_ALS.png
+
+run_biexp_detrend.py
+  └─→ scipy.optimize.curve_fit → per-pixel bi-exponential trend removal
+       Input:  raw TIFF stack (raw_images/)
+       Output: *_BiexpCal.tif (processed_images/)
+       Method: shared tau1/tau2 from N_TAU_SAMPLE pixels → per-pixel (A, B) fit
+
+demo_als_biexp.py / demo_biexp_detrend.py
+  └─→ matplotlib → visual walkthrough / tutorial for the above methods
+
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-03-31 (Flat file structure: results/files/, removed NPZ, added categorized TIFF)
+Updated: 2026-04-02 (pandas → polars; added experimental ALS + bi-exp detrend scripts)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

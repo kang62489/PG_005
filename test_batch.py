@@ -23,7 +23,7 @@ def main() -> None:
     # If no date provided, show available dates
     if not args.date:
         print("Available dates:")
-        dates = sorted(set(p["exp_date"] for p in all_pairs))
+        dates = sorted({p["exp_date"] for p in all_pairs})
         for date in dates:
             count = len([p for p in all_pairs if p["exp_date"] == date])
             print(f"  {date}: {count} pairs")
@@ -39,7 +39,7 @@ def main() -> None:
     if not pairs:
         print(f"No pairs found for date {args.date}")
         print("\nAvailable dates:")
-        dates = sorted(set(p["exp_date"] for p in all_pairs))
+        dates = sorted({p["exp_date"] for p in all_pairs})
         for date in dates:
             count = len([p for p in all_pairs if p["exp_date"] == date])
             print(f"  {date}: {count} pairs")
@@ -88,9 +88,9 @@ def main() -> None:
         ):
             print("    ✓ Analysis done")
             # Show what was saved
-            result_dir = Path("results") / pair["exp_date"] / f"abf{pair['abf_serial']}_img{pair['img_serial']}"
-            print(f"    ✓ Saved to: {result_dir}")
-            print("    ✓ Files: spatial_plot.png, region_plot.png, zscore_stack.tif, etc.")
+            result_dir = Path("results") / pair["exp_date"]
+            print(f"    ✓ Saved to: {result_dir}/{{zscores,categorized,regions,spatials}}/")
+            print("    ✓ Files: zscores/*_zscore.tif, categorized/*_categorized.tif, regions/*_region_plot.png, spatials/*_spatial_plot.png")
         else:
             print("    ✗ Analysis failed")
 

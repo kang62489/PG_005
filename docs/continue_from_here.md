@@ -1,32 +1,45 @@
-# Log of the project progress 2026-03-31 Tue (wrap-up)
-Last working file: classes/results_exporter.py
-Last working line: 233
+# Log of the project progress 2026-04-02 Thu 21:00
+Last working file: test_batch.py
+Last working line: 45
 
 # List of modified files:
-- classes/plot_results.py
-- classes/results_exporter.py (<- Break here, line 233)
+- batch_process.py
+- classes/results_exporter.py
+- test_batch.py
+- docs/DEPENDENCY_DIAGRAM.md
+- docs/PROJECT_SUMMARY.md
 
-## Summary of current progress (based on modified files, existing plans)
+## Summary of current progress
 
-### `classes/results_exporter.py`
-- Added imports: `from skimage.measure import label as sk_label` and `from skimage.segmentation import find_boundaries`
-- Modified `_export_categorized_stack` to accept a new `region_data: dict` parameter
-- Instead of saving raw 0/1/2 category values, it now saves **boundary lines** of the largest bright region per frame as a binary uint8 TIFF (1=boundary pixel, 0=rest)
-- Logic: for each frame → extract bright pixels (`frame == 2`) → re-label with `sk_label` → isolate the region matching `bright_largest[i]["label"]` → call `find_boundaries(mode="inner")` → save as `uint8`
-- Updated the call in `export_all` (line 178) to pass `region_data`
+### Branch merge: `new_detrend` → `gui`
+- Rebased `new_detrend` onto `gui` to linearize history
+- Resolved a conflict in `docs/continue_from_here.md` during rebase
+- Completed squash merge on `gui` branch (all `new_detrend` commits collapsed into one)
 
-### `classes/plot_results.py`
-- Minor cosmetic cleanup: collapsed multi-line `ax.set_title(...)` calls into single-line format (ruff style)
-- Changed x-span and y-span lines in `PlotRegion` from yellow/lime → **red** for both
+### Changes brought in by `new_detrend` merge:
+- **pandas → polars**: Replaced across `functions/kmeans.py`, `classes/abf_clip.py`, `classes/dialog_pick_list.py`, `classes/model_from_dataframe.py`, `classes/plot_results.py`
+- **`pyproject.toml`**: `pandas` removed, `polars>=1.39.3` added
+- **New experimental detrend scripts** (standalone, not in pipeline):
+  - `run_als_1d.py` — ALS baseline correction for 1D Excel traces
+  - `run_biexp_detrend.py` — per-pixel bi-exponential detrend for TIFF stacks
+  - `demo_als_biexp.py` / `demo_biexp_detrend.py` — visual demos
+
+### Reorganized results output structure
+- `classes/results_exporter.py`: `export_all()` now saves to `results/{exp_date}/{zscores,categorized,regions,spatials}/` instead of flat `results/files/`; returns a `dict` of paths keyed by subfolder name
+- `batch_process.py`: figure exports updated to use `exp_dir["spatials"]` and `exp_dir["regions"]`
+- `test_batch.py`: updated printout; fixed C401 ruff warnings (set comprehensions)
+
+### Docs updated
+- `docs/DEPENDENCY_DIAGRAM.md` — pandas→polars, added experimental detrend scripts section
+- `docs/PROJECT_SUMMARY.md` — same updates, timestamp updated to 2026-04-02
 
 ## Completed TODOs/Tasks (before new wrap-up)
-- `_categorized.tif` now exports boundary-only binary stack (matching magenta contour in region_plot left panel)
-- Span line colors unified to red in PlotRegion
+- ✅ Squash merge `new_detrend` into `gui`
+- ✅ Update `docs/PROJECT_SUMMARY.md` and `docs/DEPENDENCY_DIAGRAM.md`
+- ✅ Reorganize results output into date-based subfolders
 
 ## What should we do next? (TODOs)
-- Verify `_categorized.tif` output in ImageJ: open a sample result and confirm boundary-only binary stack, compare shape to magenta contour in `region_plot.png`
-- Continue GUI development (Phase 1–5 per plan `swift-plotting-porcupine.md`)
-
+- Try to complete the GUI (Phase 1–5 per plan `.claude/plans/swift-plotting-porcupine.md`) OR organize `rec_data.db`
 
 ## Messages from you
-- (none)
+- Re-sectioned and mounted slides since 15:00 today — go rest! 🙌

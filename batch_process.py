@@ -188,7 +188,7 @@ def analyze_pair(
             show=False,
         )
         exp_prefix = f"{exp_date}-img{img_serial}-abf{abf_serial}"
-        exporter.export_figure(exp_dir, plt_spatial.grab(), filename=f"{exp_prefix}_spatial_plot.png")
+        exporter.export_figure(exp_dir["spatials"], plt_spatial.grab(), filename=f"{exp_prefix}_spatial_plot.png")
 
         plt_region = PlotRegion(
             categorizer,
@@ -199,7 +199,7 @@ def analyze_pair(
             n_spikes=len(abf_clip.df_picked_spikes),
             show=False,
         )
-        exporter.export_figure(exp_dir, plt_region.grab(), filename=f"{exp_prefix}_region_plot.png")
+        exporter.export_figure(exp_dir["regions"], plt_region.grab(), filename=f"{exp_prefix}_region_plot.png")
 
     except Exception:
         print(f"  ✗ Error analyzing {exp_date} abf{abf_serial}_img{img_serial}")

@@ -19,6 +19,12 @@ PG_005/
 ├── batch_process.py                 # Batch processor: Process all picked pairs
 ├── test_batch.py                    # Test batch processor: Process specific date
 │
+├── [Experimental Detrend Scripts]
+├── run_als_1d.py                    # ALS baseline correction for 1-D intensity trace (from Excel)
+├── run_biexp_detrend.py             # Per-pixel bi-exponential trend removal for TIFF stacks
+├── demo_als_biexp.py                # Visual demo: ALS + bi-exponential baseline fitting
+├── demo_biexp_detrend.py            # Visual demo: bi-exponential detrend walkthrough
+│
 ├── classes/
 │   ├── __init__.py
 │   ├── plot_results.py              # Interactive Qt viewers (PlotPeaks, PlotSegs, PlotSpatialDist, PlotRegion)
@@ -376,7 +382,7 @@ start = target_center - seg_center
 | numpy, scipy | Array operations, signal processing |
 | imageio | TIFF I/O |
 | matplotlib | Plotting |
-| pandas | Data tables |
+| polars | Data tables (replaced pandas 2026-04) |
 | scikit-image | Image processing, thresholding, morphology |
 | scikit-learn | K-means clustering |
 | numba, numba.cuda | JIT compilation, GPU kernels |
@@ -859,4 +865,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-03-31 (Flat file structure: results/files/, removed NPZ exports, added categorized TIFF for ImageJ overlay)*
+*Last updated: 2026-04-02 (pandas → polars; added experimental detrend scripts: ALS 1D, bi-exponential per-pixel)*

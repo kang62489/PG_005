@@ -30,7 +30,8 @@
       "Bash(/mnt/d/MyDB/2_Programs/PG_005/.venv/Scripts/ruff.exe check:*)",
       "Bash(conda run:*)",
       "Bash(conda env:*)",
-      "Bash(.venv/Scripts/ruff.exe check:*)"
+      "Bash(.venv/Scripts/ruff.exe check:*)",
+      "Bash(rg -v \"warning:|Installed|Removed|Creating|Downloading|Downloaded|hardlink|filesystems|intentional|unfixable|Using CPython|^\\\\s*$\")"
     ]
   }
 }
