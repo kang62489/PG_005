@@ -56,7 +56,7 @@ class AbfClip:
 
     def load_img(self, filter_type: str = "Gauss") -> None:
         img_file_path = (
-            Path(self.root_dir) / "processed_images" / f"{self.exp_date}-{self.img_serial}_{filter_type}.tif"
+            Path(self.root_dir) / "proc_tiffs" / f"{self.exp_date}-{self.img_serial}_{filter_type}.tif"
         )
         self.loaded_img = imageio.volread(img_file_path).astype(np.uint16)
         self.loaded_img_frames = self.loaded_img.shape[0]

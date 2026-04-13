@@ -2,22 +2,23 @@
 # Third-party imports
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QGroupBox,
+    QComboBox,
+    QDateEdit,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QListWidget,
     QPushButton,
     QTableView,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 # Local application imports
-from classes import CheckableDropdown
 from utils import UISizes
-
-FILTER_COLUMNS = ["OBJ", "EXC", "EMI"]
 
 
 class ViewDorQuery:
@@ -25,7 +26,6 @@ class ViewDorQuery:
         self.tab_container = parent
         self.lo_tab_container = QHBoxLayout()
         self.tab_container.setLayout(self.lo_tab_container)
-        self.filter_columns = FILTER_COLUMNS
         self.setup_blocks()
 
     def setup_blocks(self) -> None:
@@ -69,42 +69,45 @@ class ViewDorQuery:
         self.tv_injections.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.tv_injections.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
-        # Filter Panel
-        self.lo_panels = QHBoxLayout()
-        self.lo_block_2.addLayout(self.lo_panels)
+        # Data Folder Properties
+        self.lo_data_folder_props = QHBoxLayout()
+        self.lo_block_2.addLayout(self.lo_data_folder_props)
 
-        self.gb_filter_panel = QGroupBox("Filter Panel")
-        self.lo_panels.addWidget(self.gb_filter_panel)
-        self.gb_filter_panel.setLayout(QHBoxLayout())
+        self.lo_data_folder_props_left = QVBoxLayout()
+        self.lo_data_folder_props_right = QVBoxLayout()
+        self.lo_data_folder_props.addLayout(self.lo_data_folder_props_left)
+        self.lo_data_folder_props.addLayout(self.lo_data_folder_props_right)
 
-        for col in self.filter_columns:
-            dropdown = CheckableDropdown(col)
-            dropdown.setObjectName(f"dd_{col}")
-            setattr(self, f"dd_{col}", dropdown)
-            self.gb_filter_panel.layout().addWidget(dropdown)
+        # Left side of data folder properties: metadata and log insertion
+        self.lo_metadata = QFormLayout()
+        self.lo_data_folder_props_left.addLayout(self.lo_metadata)
 
-        self.dd_shown_cols = CheckableDropdown("Show Columns")
-        self.gb_filter_panel.layout().addWidget(self.dd_shown_cols)
+        self.le_last_updated = QDateEdit()
+        self.le_system = QLineEdit()
+        self.le_keywords = QLineEdit()
 
-        self.btn_reset_all_filters = QPushButton("Reset All Filters")
-        self.gb_filter_panel.layout().addWidget(self.btn_reset_all_filters)
-        self.lo_db_view = QVBoxLayout()
-        self.lo_block_2.addLayout(self.lo_db_view)
+        self.lo_metadata.addRow("Last Updated: ", self.le_last_updated)
+        self.lo_metadata.addRow("System: ", self.le_system)
+        self.lo_metadata.addRow("Keywords: ", self.le_keywords)
 
-        # Pick List Control
-        self.gb_pick_list = QGroupBox("Pick List Control")
-        self.gb_pick_list.setLayout(QHBoxLayout())
-        self.btn_pick_selected = QPushButton("Pick Selected")
-        self.btn_open_pick_list = QPushButton("Open Pick List")
-        self.gb_pick_list.layout().addWidget(self.btn_pick_selected)
-        self.gb_pick_list.layout().addWidget(self.btn_open_pick_list)
-        self.lo_panels.addWidget(self.gb_pick_list)
+        self.lbl_insert_log = QLabel("Insert Notes: ")
+        self.te_insert_log = QTextEdit()
+        self.lo_data_folder_props_left.addWidget(self.lbl_insert_log)
+        self.lo_data_folder_props_left.addWidget(self.te_insert_log)
 
-        # REC Summary
-        self.lbl_rec_summary = QLabel("REC Summary: ")
-        self.lo_db_view.addWidget(self.lbl_rec_summary)
+        self.lo_buttons = QHBoxLayout()
+        self.lo_data_folder_props_left.addLayout(self.lo_buttons)
+        self.btn_insert_log = QPushButton("Insert Log")
+        self.btn_clear_log = QPushButton("Clear")
+        self.lo_buttons.addWidget(self.btn_insert_log)
+        self.lo_buttons.addWidget(self.btn_clear_log)
 
-        self.tv_rec_summary = QTableView()
-        self.lo_db_view.addWidget(self.tv_rec_summary)
-        self.tv_rec_summary.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.tv_rec_summary.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        # Right side of data folder properties: log viewer
+        self.lbl_log_date = QLabel("Jump to Log Date: ")
+        self.cb_log_date = QComboBox()
+        self.lo_data_folder_props_right.addWidget(self.lbl_log_date)
+        self.lo_data_folder_props_right.addWidget(self.cb_log_date)
+
+        self.te_log_contents = QTextEdit()
+        self.te_log_contents.setReadOnly(True)
+        self.lo_data_folder_props_right.addWidget(self.te_log_contents)

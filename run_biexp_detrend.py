@@ -23,8 +23,8 @@ import tifffile
 from scipy.optimize import curve_fit
 
 # ── Config ────────────────────────────────────────────────
-RAW_DIR = Path(__file__).parent / "raw_images"
-OUT_DIR = Path(__file__).parent / "processed_images"
+RAW_DIR = Path(__file__).parent / "raw_tiffs"
+OUT_DIR = Path(__file__).parent / "proc_tiffs"
 OUT_DIR.mkdir(exist_ok=True)
 
 FILES = [

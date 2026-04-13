@@ -35,8 +35,8 @@ def preprocess_single(date: str, serial: str) -> bool:
     Returns:
         bool: True if successful, False otherwise
     """
-    input_path = Path("raw_images")
-    output_path = Path("processed_images")
+    input_path = Path("raw_tiffs")
+    output_path = Path("proc_tiffs")
     output_path.mkdir(exist_ok=True)
 
     file = input_path / f"{date}-{serial}.tif"
@@ -271,8 +271,8 @@ def main() -> None:
 
         for exp_date, img_serial in tqdm(sorted(unique_images), desc="Preprocessing"):
             # Check if preprocessed files already exist
-            cal_file = Path("processed_images") / f"{exp_date}-{img_serial}_Cal.tif"
-            gauss_file = Path("processed_images") / f"{exp_date}-{img_serial}_Gauss.tif"
+            cal_file = Path("proc_tiffs") / f"{exp_date}-{img_serial}_Cal.tif"
+            gauss_file = Path("proc_tiffs") / f"{exp_date}-{img_serial}_Gauss.tif"
 
             if cal_file.exists() and gauss_file.exists():
                 preprocess_skipped += 1

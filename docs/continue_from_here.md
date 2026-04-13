@@ -1,45 +1,36 @@
-# Log of the project progress 2026-04-02 Thu 21:00
-Last working file: test_batch.py
-Last working line: 45
+# Log of the project progress 2026-04-13 Sun 12:00
+Last working file: controllers/ctrl_dor_query.py
+Last working line: 48
 
 # List of modified files:
-- batch_process.py
-- classes/results_exporter.py
-- test_batch.py
-- docs/DEPENDENCY_DIAGRAM.md
-- docs/PROJECT_SUMMARY.md
+- controllers/ctrl_dor_query.py
+- views/view_dor_query.py
 
 ## Summary of current progress
 
-### Branch merge: `new_detrend` → `gui`
-- Rebased `new_detrend` onto `gui` to linearize history
-- Resolved a conflict in `docs/continue_from_here.md` during rebase
-- Completed squash merge on `gui` branch (all `new_detrend` commits collapsed into one)
+### Bug fixes in ctrl_dor_query.py
+- Fixed infinite recursion: `update_preview` was calling `te_editing.setMarkdown()` on itself → now renders to `te_preview`
+- Fixed Qt crash on `---` input: Qt tries to parse YAML frontmatter and crashes → prepend `\n` to text starting with `---` as workaround
 
-### Changes brought in by `new_detrend` merge:
-- **pandas → polars**: Replaced across `functions/kmeans.py`, `classes/abf_clip.py`, `classes/dialog_pick_list.py`, `classes/model_from_dataframe.py`, `classes/plot_results.py`
-- **`pyproject.toml`**: `pandas` removed, `polars>=1.39.3` added
-- **New experimental detrend scripts** (standalone, not in pipeline):
-  - `run_als_1d.py` — ALS baseline correction for 1D Excel traces
-  - `run_biexp_detrend.py` — per-pixel bi-exponential detrend for TIFF stacks
-  - `demo_als_biexp.py` / `demo_biexp_detrend.py` — visual demos
-
-### Reorganized results output structure
-- `classes/results_exporter.py`: `export_all()` now saves to `results/{exp_date}/{zscores,categorized,regions,spatials}/` instead of flat `results/files/`; returns a `dict` of paths keyed by subfolder name
-- `batch_process.py`: figure exports updated to use `exp_dir["spatials"]` and `exp_dir["regions"]`
-- `test_batch.py`: updated printout; fixed C401 ruff warnings (set comprehensions)
-
-### Docs updated
-- `docs/DEPENDENCY_DIAGRAM.md` — pandas→polars, added experimental detrend scripts section
-- `docs/PROJECT_SUMMARY.md` — same updates, timestamp updated to 2026-04-02
+### Layout redesign in view_dor_query.py
+- Removed old `te_editing` / `te_preview` markdown editor panels
+- New layout under `lo_data_folder_props` (QHBoxLayout):
+  - **Left**: QFormLayout (Last Updated, System, Keywords) + `te_insert_log` + Insert/Clear buttons
+  - **Right**: `cb_log_date` (QComboBox) + `te_log_contents` (read-only QTextEdit)
+- Reviewed and confirmed layout structure; ready to wire up controller functions
 
 ## Completed TODOs/Tasks (before new wrap-up)
-- ✅ Squash merge `new_detrend` into `gui`
-- ✅ Update `docs/PROJECT_SUMMARY.md` and `docs/DEPENDENCY_DIAGRAM.md`
-- ✅ Reorganize results output into date-based subfolders
+- ✅ Fix `update_preview` infinite recursion bug
+- ✅ Fix Qt `---` YAML frontmatter crash
+- ✅ Redesign `view_dor_query.py` layout
+- ✅ Review new layout
 
 ## What should we do next? (TODOs)
-- Try to complete the GUI (Phase 1–5 per plan `.claude/plans/swift-plotting-porcupine.md`) OR organize `rec_data.db`
+- Wire up controller functions for the new layout in `ctrl_dor_query.py`
 
-## Messages from you
-- Re-sectioned and mounted slides since 15:00 today — go rest! 🙌
+## Extra Notes (Plan for ctrl_dor_query.py next session)
+1. Select date in DOR → check and load `logs/Data_{DOR}.md`
+2. Fill UIs (QDateEdit, QTextEdit) based on loaded markdown
+3. Determine the inserting text format for `te_insert_log`
+4. Set guards for the above functions
+5. Complete `cb_log_date` to jump to and display a certain block in the loaded markdown

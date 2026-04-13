@@ -28,7 +28,7 @@ from scipy.sparse.linalg import spsolve
 # ─────────────────────────────────────────────────────────
 # Parameters (tune here)
 # ─────────────────────────────────────────────────────────
-RAW_DIR = Path(__file__).parent / "raw_images"
+RAW_DIR = Path(__file__).parent / "raw_tiffs"
 
 FILES = [
     "2026_03_20-0028.tif",
