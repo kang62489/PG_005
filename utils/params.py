@@ -17,6 +17,7 @@ STYLES_DIR = BASE_DIR / "styles"
 MODELS_DIR = BASE_DIR / "data"
 EXP_DB_PATH = MODELS_DIR / "exp_info.db"
 REC_DB_PATH = MODELS_DIR / "rec_data.db"
+LOG_DIR = BASE_DIR / "logs"
 
 
 # UI Sizes
@@ -31,3 +32,6 @@ class UISizes:
 
     TV_ANIMALS_HEIGHT: int = 100
     TV_INJECTIONS_HEIGHT: int = 120
+    
+    TE_DESCRIPTIONS_HEIGHT: int = 80
+    TE_FINDINGS_HEIGHT: int = 80

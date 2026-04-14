@@ -3,7 +3,6 @@
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QDateEdit,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -82,15 +81,25 @@ class ViewDorQuery:
         self.lo_metadata = QFormLayout()
         self.lo_data_folder_props_left.addLayout(self.lo_metadata)
 
-        self.le_last_updated = QDateEdit()
+        self.le_last_modified = QLineEdit()
+        self.le_last_modified.setReadOnly(True)
+
         self.le_system = QLineEdit()
         self.le_keywords = QLineEdit()
+        
+        self.te_descriptions = QTextEdit()
+        self.te_descriptions.setFixedHeight(UISizes.TE_DESCRIPTIONS_HEIGHT)
+        
+        self.te_findings = QTextEdit()
+        self.te_findings.setFixedHeight(UISizes.TE_FINDINGS_HEIGHT)
 
-        self.lo_metadata.addRow("Last Updated: ", self.le_last_updated)
+        self.lo_metadata.addRow("Last Modified: ", self.le_last_modified)
         self.lo_metadata.addRow("System: ", self.le_system)
         self.lo_metadata.addRow("Keywords: ", self.le_keywords)
+        self.lo_metadata.addRow("Descriptions: ", self.te_descriptions)
+        self.lo_metadata.addRow("Findings: ", self.te_findings)
 
-        self.lbl_insert_log = QLabel("Insert Notes: ")
+        self.lbl_insert_log = QLabel("Insert Log: ")
         self.te_insert_log = QTextEdit()
         self.lo_data_folder_props_left.addWidget(self.lbl_insert_log)
         self.lo_data_folder_props_left.addWidget(self.te_insert_log)

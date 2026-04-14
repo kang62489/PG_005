@@ -1,36 +1,31 @@
-# Log of the project progress 2026-04-13 Sun 12:00
+# Log of the project progress 2026-04-14 Mon
+
 Last working file: controllers/ctrl_dor_query.py
-Last working line: 48
+Last working line: ~120
 
 # List of modified files:
-- controllers/ctrl_dor_query.py
+- controllers/ctrl_dor_query.py (<- Break here, line ~120)
 - views/view_dor_query.py
+- utils/__init__.py
+- utils/params.py
+- logs/Data_2022_07_20.md
 
 ## Summary of current progress
 
-### Bug fixes in ctrl_dor_query.py
-- Fixed infinite recursion: `update_preview` was calling `te_editing.setMarkdown()` on itself → now renders to `te_preview`
-- Fixed Qt crash on `---` input: Qt tries to parse YAML frontmatter and crashes → prepend `\n` to text starting with `---` as workaround
-
-### Layout redesign in view_dor_query.py
-- Removed old `te_editing` / `te_preview` markdown editor panels
-- New layout under `lo_data_folder_props` (QHBoxLayout):
-  - **Left**: QFormLayout (Last Updated, System, Keywords) + `te_insert_log` + Insert/Clear buttons
-  - **Right**: `cb_log_date` (QComboBox) + `te_log_contents` (read-only QTextEdit)
-- Reviewed and confirmed layout structure; ready to wire up controller functions
+### ctrl_dor_query.py — load_data_md implemented
+- Connected `load_data_md` to `lw_dor.currentTextChanged` signal
+- `load_data_md` reads `DATA_{dor}.md` from LOG_DIR
+- Extracts `System` and `Keywords` using `next()` + `split(":", 1)` (safe for time-containing strings)
+- Gets file last modified time via `stat().st_mtime`, formatted with weekday (`%Y-%b-%d %a (%H:%M:%S)`)
+- Handles missing log file: prints red message via rich console, sets UI fields to "No log found"
 
 ## Completed TODOs/Tasks (before new wrap-up)
-- ✅ Fix `update_preview` infinite recursion bug
-- ✅ Fix Qt `---` YAML frontmatter crash
-- ✅ Redesign `view_dor_query.py` layout
-- ✅ Review new layout
+- ✅ Connect `load_data_md` to `lw_dor` signal
+- ✅ Parse System and Keywords from markdown
+- ✅ Display last modified time (with weekday) in `le_last_modified`
+- ✅ Handle missing log file gracefully
 
 ## What should we do next? (TODOs)
-- Wire up controller functions for the new layout in `ctrl_dor_query.py`
-
-## Extra Notes (Plan for ctrl_dor_query.py next session)
-1. Select date in DOR → check and load `logs/Data_{DOR}.md`
-2. Fill UIs (QDateEdit, QTextEdit) based on loaded markdown
-3. Determine the inserting text format for `te_insert_log`
-4. Set guards for the above functions
-5. Complete `cb_log_date` to jump to and display a certain block in the loaded markdown
+- Wire up `cb_log_date` — populate with date block headers from the markdown log
+- Display the corresponding log block in `te_log_contents` when a date is selected in `cb_log_date`
+- Implement insert log functionality (`te_insert_log` + Insert/Clear buttons)
