@@ -44,6 +44,7 @@ class Main(QMainWindow):
 
         self.view_check_list = ViewCheckList(self.tab_check_list)
         self.ctrl_check_list = CtrlCheckList(self.view_check_list)
+        self.ctrl_dor_query.dor_changed.connect(self.ctrl_check_list.on_dor_changed)
 
         self.setCentralWidget(self.w_main)
         self.show()
