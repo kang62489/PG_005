@@ -1,9 +1,11 @@
 ## Modules
 # Standard library imports
+import collections
 import datetime
 import json
 import re
 import sqlite3
+from pathlib import Path
 
 # Third-party imports
 import polars as pl
@@ -13,7 +15,7 @@ from rich.console import Console
 from tabulate import tabulate
 
 # Local application imports
-from classes import DialogPickList
+from classes import DialogConfirm, DialogGetPath, DialogPickList
 from utils import EXP_DB_PATH, LOG_DIR, MODELS_DIR, REC_DB_PATH
 from views import ViewDorQuery
 
@@ -38,6 +40,17 @@ class CtrlDorQuery:
         self.exp_info_db.open()
         self.rec_data_db.open()
 
+        self.view.le_system.setEnabled(False)
+        self.view.le_keywords.setEnabled(False)
+        self.view.te_descriptions.setEnabled(False)
+        self.view.te_findings.setEnabled(False)
+
+        self.view.te_insert_log.setEnabled(False)
+        self.view.btn_insert_log.setEnabled(False)
+        self.view.btn_update_descriptions.setEnabled(False)
+        self.view.btn_update_findings.setEnabled(False)
+        self.view.btn_scan_files.setEnabled(False)
+
         # self.clear_pick_list()
         self.load_dors()
         self.connect_signals()
@@ -56,6 +69,15 @@ class CtrlDorQuery:
         self.view.btn_insert_log.clicked.connect(self.insert_log)
         self.view.btn_clear_log.clicked.connect(self.clear_insert_log)
         self.view.cb_log_date.currentTextChanged.connect(self._show_log_section)
+        self.view.le_system.editingFinished.connect(self.update_system_info)
+        self.view.le_keywords.editingFinished.connect(self.update_keywords)
+        self.view.te_descriptions.textChanged.connect(lambda: self.view.btn_update_descriptions.setEnabled(True))
+        self.view.te_findings.textChanged.connect(lambda: self.view.btn_update_findings.setEnabled(True))
+
+        self.view.btn_update_descriptions.clicked.connect(self.update_descriptions)
+        self.view.btn_update_findings.clicked.connect(self.update_findings)
+        self.view.btn_scan_files.clicked.connect(self.scan_files)
+
         # self.view.te_editing.textChanged.connect(self.update_preview)
         # self.view.lw_dor.currentTextChanged.connect(self.load_rec_summary)
         # self.view.btn_reset_all_filters.clicked.connect(self.reset_all_filters)
@@ -101,15 +123,40 @@ class CtrlDorQuery:
                 self.view.tv_injections.hideColumn(col)
 
     def load_data_md(self, dor: str) -> None:
-        log_path = LOG_DIR / f"DATA_{dor}.md"
+        self.view.te_insert_log.clear()
+        log_path = LOG_DIR / f"Data_{dor}.md"
         if not log_path.exists():
             console.print(f"[red]{log_path} is not found.[/red]")
             self.view.le_last_modified.setText("No record found")
+
             self.view.le_system.setText("No record found")
+            self.view.le_system.setEnabled(False)
+
             self.view.le_keywords.setText("No record found")
+            self.view.le_keywords.setEnabled(False)
+
             self.view.te_descriptions.setPlainText("No record found")
+            self.view.te_descriptions.setEnabled(False)
+            self.view.btn_update_descriptions.setEnabled(False)
+
             self.view.te_findings.setPlainText("No record found")
+            self.view.te_findings.setEnabled(False)
+            self.view.btn_update_findings.setEnabled(False)
+
+            self.view.te_insert_log.setEnabled(False)
+            self.view.btn_insert_log.setEnabled(False)
+            self.view.btn_scan_files.setEnabled(False)
+            self.view.te_file_structure.clear()
             self._populate_log_date_combo(dor)
+
+
+            dlg_create_log_file = DialogConfirm(title="Create Log File?", msg=f"No log file found for DOR {dor}. Do you want to create one?")
+            if not dlg_create_log_file.exec():
+                console.print("[yellow]Creation denied.[/yellow]")
+                return
+
+            log_path.write_text("---\nSystem:\nKeywords:\n---\n# Descriptions\n\n# Findings\n\n# Logs\n\n# Folder Structure\n\nExtra Info\n", encoding="utf-8")
+            self.load_data_md(dor)
             return
 
         last_modified = datetime.datetime.fromtimestamp(log_path.stat().st_mtime, tz=datetime.UTC).strftime(
@@ -128,52 +175,117 @@ class CtrlDorQuery:
             line_id_descriptions = next((i for i, line in enumerate(md_contents) if line.startswith("# Descriptions")), None)
             line_id_findings = next((i for i, line in enumerate(md_contents) if line.startswith("# Findings")), None)
             line_id_logs = next((i for i, line in enumerate(md_contents) if line.startswith("# Logs")), None)
-            
+
             if (line_id_descriptions or line_id_findings or line_id_logs) is None:
-                console.print(f"[red]Descriptions or Findings section not found in {log_path}.[/red]")
-                self.view.te_descriptions.setPlainText("No descriptions found")
-                self.view.te_findings.setPlainText("No findings found")
+                console.print(f"[red] Heading is missing in {log_path}.[/red]")
+                self.view.te_descriptions.setPlainText("Can not load descriptions due to missing heading")
+                self.view.te_findings.setPlainText("Can not load findings due to missing heading")
                 return
 
             descriptions = "\n".join(md_contents[line_id_descriptions + 1 : line_id_findings]).strip()
             findings = "\n".join(md_contents[line_id_findings + 1 : line_id_logs]).strip() if line_id_logs else "\n".join(md_contents[line_id_findings + 1 :]).strip()
 
+            self.view.te_descriptions.blockSignals(True)
             self.view.te_descriptions.setPlainText(descriptions)
+            self.view.te_descriptions.blockSignals(False)
+
+            self.view.te_findings.blockSignals(True)
             self.view.te_findings.setPlainText(findings)
+            self.view.te_findings.blockSignals(False)
+
+            self.view.le_system.setEnabled(True)
+            self.view.le_keywords.setEnabled(True)
+            self.view.te_descriptions.setEnabled(True)
+            self.view.te_findings.setEnabled(True)
+            self.view.te_insert_log.setEnabled(True)
+            self.view.btn_insert_log.setEnabled(True)
+            self.view.btn_scan_files.setEnabled(True)
+
+            line_id_folder_struct = next((i for i, line in enumerate(md_contents) if line.startswith("# Folder Structure")), None)
+            if line_id_folder_struct is not None:
+                line_id_after_folder = next(
+                    (i for i in range(line_id_folder_struct + 1, len(md_contents)) if md_contents[i].startswith("#")),
+                    len(md_contents),
+                )
+                folder_struct_text = "\n".join(md_contents[line_id_folder_struct + 1 : line_id_after_folder]).strip()
+                self.view.te_file_structure.setPlainText(folder_struct_text if folder_struct_text else "no scanning results")
+            else:
+                self.view.te_file_structure.setPlainText("no scanning results")
+
             self._populate_log_date_combo(dor)
-            
-    def insert_log(self) -> None:
+
+    def get_selected_dor(self) -> str | None:
         selected_item = self.view.lw_dor.currentItem()
         if selected_item is None:
+            return None
+        return selected_item.text()
+
+    def scan_files(self) -> None:
+        dor = self.get_selected_dor()
+        log_path = LOG_DIR / f"Data_{dor}.md"
+
+        dlg = DialogGetPath(title="Select folder to scan")
+        chosen = dlg.get_path()
+        if not chosen:
+            console.print("[yellow]Scanning cancelled.[/yellow]")
+            return
+
+        if dor not in Path(chosen).name:
+            console.print(f"[red]Folder name does not match DOR {dor}. Aborting.[/red]")
+            self.view.te_file_structure.setPlainText(f"Mismatch: selected folder does not match DOR {dor}.")
+            return
+
+        ext_counts: collections.Counter[str] = collections.Counter()
+        for item in Path(chosen).rglob("*"):
+            if item.is_dir():
+                continue
+            ext = item.suffix.upper().lstrip(".")
+            ext_counts[ext if ext else "Other"] += 1
+
+        summary_text = ", ".join(f"{count} {ext}" for ext, count in sorted(ext_counts.items()))
+        if not summary_text:
+            summary_text = "(no files found)"
+
+        lines = log_path.read_text(encoding="utf-8").splitlines()
+        line_id_folder_struct = next((i for i, line in enumerate(lines) if line.startswith("# Folder Structure")), None)
+        if line_id_folder_struct is None:
+            lines.append("# Folder Structure")
+            lines.append(summary_text)
+            lines.append("")
+        else:
+            line_id_next = next(
+                (i for i in range(line_id_folder_struct + 1, len(lines)) if lines[i].startswith("#")),
+                len(lines),
+            )
+            lines[line_id_folder_struct + 1 : line_id_next] = [summary_text, ""]
+
+        log_path.write_text("\n".join(lines), encoding="utf-8")
+        self.load_data_md(dor)
+
+    def insert_log(self) -> None:
+        dor = self.get_selected_dor()
+        if dor is None:
             console.print("[red]No DOR selected.[/red]")
             return
-        
-        dor = selected_item.text()
-        
+
         new_texts = self.view.te_insert_log.toPlainText().strip()
         if not new_texts:
             console.print("[red]No input messages for inserting log.[/red]")
             return
-        
-        log_path = LOG_DIR / f"DATA_{dor}.md"
+
+        log_path = LOG_DIR / f"Data_{dor}.md"
         if not log_path.exists():
             console.print(f"[red]{log_path} does not exist.[/red]")
             return
         timestamp = datetime.datetime.now(tz=datetime.UTC).astimezone().strftime("%Y-%m-%d %H:%M:%S")
-        entry = f"## {timestamp}\n{new_texts}\n\n"
-        content = log_path.read_text(encoding="utf-8")
-        console.print("Content", content)
-        marker = "\n# Folder Structure"
-        idx = content.find(marker)
-        console.print("Marker index", idx)
-        if idx == -1:
-            content = content + entry
+        lines = log_path.read_text(encoding="utf-8").splitlines()
+        folder_struct_idx = next((i for i, line in enumerate(lines) if line.startswith("# Folder Structure")), None)
+        entry_lines = [f"## {timestamp}"] + new_texts.splitlines() + ["", ""]
+        if folder_struct_idx is None:
+            lines.extend(entry_lines)
         else:
-            console.print("1st part", content[:idx] + "\n")
-            console.print("2nd part", entry)
-            console.print("3rd part", content[idx:])
-            content = content[:idx] + "\n" + entry + content[idx:]
-        log_path.write_text(content, encoding="utf-8")
+            lines[folder_struct_idx:folder_struct_idx] = entry_lines
+        log_path.write_text("\n".join(lines), encoding="utf-8")
         self.view.te_insert_log.clear()
         self.load_data_md(dor)
 
@@ -184,7 +296,7 @@ class CtrlDorQuery:
         self.view.cb_log_date.blockSignals(True)
         self.view.cb_log_date.clear()
         self.view.te_log_contents.clear()
-        log_path = LOG_DIR / f"DATA_{dor}.md"
+        log_path = LOG_DIR / f"Data_{dor}.md"
         if log_path.exists():
             content = log_path.read_text(encoding="utf-8")
             logs_match = re.search(r"^# Logs$", content, re.MULTILINE)
@@ -193,7 +305,7 @@ class CtrlDorQuery:
                 next_section = re.search(r"^# ", content[logs_start:], re.MULTILINE)
                 logs_end = logs_start + next_section.start() if next_section else len(content)
                 timestamps = LOG_SECTION_RE.findall(content[logs_start:logs_end])
-                self.view.cb_log_date.addItems(timestamps)
+                self.view.cb_log_date.addItems(reversed(timestamps))
         self.view.cb_log_date.blockSignals(False)
         self._show_log_section(self.view.cb_log_date.currentText())
 
@@ -203,7 +315,7 @@ class CtrlDorQuery:
         item = self.view.lw_dor.currentItem()
         if item is None:
             return
-        log_path = LOG_DIR / f"DATA_{item.text()}.md"
+        log_path = LOG_DIR / f"Data_{item.text()}.md"
         if not log_path.exists():
             return
         content = log_path.read_text(encoding="utf-8")
@@ -221,6 +333,54 @@ class CtrlDorQuery:
             candidates.append(next_section.start())
         entry_text = content[entry_start : entry_start + min(candidates)].strip()
         self.view.te_log_contents.setPlainText(entry_text)
+
+    def update_system_info(self) -> None:
+        dor = self.get_selected_dor()
+
+        log_path = LOG_DIR / f"Data_{dor}.md"
+        with log_path.open(encoding="utf-8") as f:
+            md_contents = f.read().splitlines()
+            system_line_idx = next((i for i, line in enumerate(md_contents) if line.startswith("System:")), None)
+            if system_line_idx is not None:
+                md_contents[system_line_idx] = f"System: {self.view.le_system.text()}"
+                log_path.write_text("\n".join(md_contents), encoding="utf-8")
+
+    def update_keywords(self) -> None:
+        dor = self.get_selected_dor()
+
+        log_path = LOG_DIR / f"Data_{dor}.md"
+        with log_path.open(encoding="utf-8") as f:
+            md_contents = f.read().splitlines()
+            keywords_line_idx = next((i for i, line in enumerate(md_contents) if line.startswith("Keywords:")), None)
+            if keywords_line_idx is not None:
+                md_contents[keywords_line_idx] = f"Keywords: {self.view.le_keywords.text()}"
+                log_path.write_text("\n".join(md_contents), encoding="utf-8")
+
+    def update_descriptions(self) -> None:
+        dor = self.get_selected_dor()
+
+        log_path = LOG_DIR / f"Data_{dor}.md"
+        with log_path.open(encoding="utf-8") as f:
+            md_contents = f.read().splitlines()
+            line_id_descriptions = next((i for i, line in enumerate(md_contents) if line.startswith("# Descriptions")), None)
+            line_id_findings = next((i for i, line in enumerate(md_contents) if line.startswith("# Findings")), None)
+            if line_id_descriptions is not None and line_id_findings is not None:
+                md_contents[line_id_descriptions + 1 : line_id_findings] = [self.view.te_descriptions.toPlainText()]
+                log_path.write_text("\n".join(md_contents), encoding="utf-8")
+                self.view.btn_update_descriptions.setEnabled(False)
+
+    def update_findings(self) -> None:
+        dor = self.get_selected_dor()
+
+        log_path = LOG_DIR / f"Data_{dor}.md"
+        with log_path.open(encoding="utf-8") as f:
+            md_contents = f.read().splitlines()
+            line_id_findings = next((i for i, line in enumerate(md_contents) if line.startswith("# Findings")), None)
+            line_id_logs = next((i for i, line in enumerate(md_contents) if line.startswith("# Logs")), None)
+            if line_id_findings is not None and line_id_logs is not None:
+                md_contents[line_id_findings + 1 : line_id_logs] = [self.view.te_findings.toPlainText()]
+                log_path.write_text("\n".join(md_contents), encoding="utf-8")
+                self.view.btn_update_findings.setEnabled(False)
 
     # def load_rec_summary(self, dor: str) -> None:
     #     # Clear rec summary table when switching DOR

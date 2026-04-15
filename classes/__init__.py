@@ -12,9 +12,14 @@ if TYPE_CHECKING:
     from .results_exporter import ResultsExporter
     from .spatial_categorization import SpatialCategorizer
 
+from .dialog_confirm import DialogConfirm
+from .dialog_get_path import DialogGetPath
+
 __all__ = [
     "AbfClip",
     "CheckableDropdown",
+    "DialogConfirm",
+    "DialogGetPath",
     "DialogPickList",
     "ModelFromDataFrame",
     "PlotPeaks",

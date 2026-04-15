@@ -1,31 +1,34 @@
-# Log of the project progress 2026-04-14 Mon
+# Log of the project progress 2026-04-15 Tue 17:30:00
 
 Last working file: controllers/ctrl_dor_query.py
-Last working line: ~120
+Last working line: ~235
 
-# List of modified files:
-- controllers/ctrl_dor_query.py (<- Break here, line ~120)
+# List of modified files
+- classes/__init__.py
+- classes/dialog_confirm.py (new file)
+- classes/dialog_get_path.py (new file)
+- controllers/ctrl_dor_query.py (<- Break here, line ~235)
 - views/view_dor_query.py
-- utils/__init__.py
 - utils/params.py
-- logs/Data_2022_07_20.md
 
 ## Summary of current progress
 
-### ctrl_dor_query.py — load_data_md implemented
-- Connected `load_data_md` to `lw_dor.currentTextChanged` signal
-- `load_data_md` reads `DATA_{dor}.md` from LOG_DIR
-- Extracts `System` and `Keywords` using `next()` + `split(":", 1)` (safe for time-containing strings)
-- Gets file last modified time via `stat().st_mtime`, formatted with weekday (`%Y-%b-%d %a (%H:%M:%S)`)
-- Handles missing log file: prints red message via rich console, sets UI fields to "No log found"
+### classes/__init__.py — Added DialogGetPath export
+- Added direct (non-lazy) import for `DialogGetPath` alongside `DialogConfirm`
+- Added `DialogGetPath` to `__all__`
+
+### ctrl_dor_query.py — btn_scan_files & te_file_structure fully wired
+- `scan_files()` implemented: opens `DialogGetPath`, guards DOR mismatch (folder name must contain DOR string), recursively scans with `rglob("*")`, counts file extensions via `collections.Counter`, writes summary to `# Folder Structure` section in `Data_{dor}.md`
+- `load_data_md` now parses `# Folder Structure` and displays content in `te_file_structure`; shows `"no scanning results"` if section is empty or missing
+- `btn_scan_files` enabled/disabled in sync with log file existence
+- Mismatch between selected folder and DOR shown in `te_file_structure`
 
 ## Completed TODOs/Tasks (before new wrap-up)
-- ✅ Connect `load_data_md` to `lw_dor` signal
-- ✅ Parse System and Keywords from markdown
-- ✅ Display last modified time (with weekday) in `le_last_modified`
-- ✅ Handle missing log file gracefully
+- ✅ Wire up `btn_scan_files` → `scan_files()` method
+- ✅ Parse and display `# Folder Structure` in `te_file_structure` on load
+- ✅ Export `DialogGetPath` from `classes/__init__.py`
+- ✅ DOR mismatch guard with message shown in `te_file_structure`
+- ✅ Fixed scan to be recursive (`rglob` instead of `glob`)
 
 ## What should we do next? (TODOs)
-- Wire up `cb_log_date` — populate with date block headers from the markdown log
-- Display the corresponding log block in `te_log_contents` when a date is selected in `cb_log_date`
-- Implement insert log functionality (`te_insert_log` + Insert/Clear buttons)
+- [ ] Transfer loading of rec_tables to `ctrl_pick_list.py` (currently commented out in `ctrl_dor_query.py`)

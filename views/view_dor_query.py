@@ -86,18 +86,27 @@ class ViewDorQuery:
 
         self.le_system = QLineEdit()
         self.le_keywords = QLineEdit()
-        
+
         self.te_descriptions = QTextEdit()
         self.te_descriptions.setFixedHeight(UISizes.TE_DESCRIPTIONS_HEIGHT)
-        
+
+        self.btn_update_descriptions = QPushButton("Update")
+        self.lo_descriptions = QHBoxLayout()
+        self.lo_descriptions.addWidget(self.te_descriptions)
+        self.lo_descriptions.addWidget(self.btn_update_descriptions)
+
         self.te_findings = QTextEdit()
         self.te_findings.setFixedHeight(UISizes.TE_FINDINGS_HEIGHT)
+        self.btn_update_findings = QPushButton("Update")
+        self.lo_findings = QHBoxLayout()
+        self.lo_findings.addWidget(self.te_findings)
+        self.lo_findings.addWidget(self.btn_update_findings)
 
         self.lo_metadata.addRow("Last Modified: ", self.le_last_modified)
         self.lo_metadata.addRow("System: ", self.le_system)
         self.lo_metadata.addRow("Keywords: ", self.le_keywords)
-        self.lo_metadata.addRow("Descriptions: ", self.te_descriptions)
-        self.lo_metadata.addRow("Findings: ", self.te_findings)
+        self.lo_metadata.addRow("Descriptions: ", self.lo_descriptions)
+        self.lo_metadata.addRow("Findings: ", self.lo_findings)
 
         self.lbl_insert_log = QLabel("Insert Log: ")
         self.te_insert_log = QTextEdit()
@@ -113,10 +122,20 @@ class ViewDorQuery:
 
         # Right side of data folder properties: log viewer
         self.lbl_log_date = QLabel("Jump to Log Date: ")
+        self.lbl_log_date.setFixedHeight(24)
         self.cb_log_date = QComboBox()
         self.lo_data_folder_props_right.addWidget(self.lbl_log_date)
         self.lo_data_folder_props_right.addWidget(self.cb_log_date)
 
         self.te_log_contents = QTextEdit()
         self.te_log_contents.setReadOnly(True)
+        self.te_log_contents.setFixedHeight(UISizes.TE_LOG_CONTENTS_HEIGHT)
         self.lo_data_folder_props_right.addWidget(self.te_log_contents)
+
+
+        self.btn_scan_files = QPushButton("Scan Files in the Data Folder")
+        self.te_file_structure = QTextEdit()
+        self.te_file_structure.setReadOnly(True)
+
+        self.lo_data_folder_props_right.addWidget(self.btn_scan_files)
+        self.lo_data_folder_props_right.addWidget(self.te_file_structure)
