@@ -1,34 +1,43 @@
-# Log of the project progress 2026-04-15 Tue 17:30:00
+# Log of the project progress 2026-04-16 Wed 17:00:00
 
-Last working file: controllers/ctrl_dor_query.py
-Last working line: ~235
+Last working file: controllers/ctrl_data_selector.py
+Last working line: ~end of file
 
-# List of modified files
-- classes/__init__.py
-- classes/dialog_confirm.py (new file)
-- classes/dialog_get_path.py (new file)
-- controllers/ctrl_dor_query.py (<- Break here, line ~235)
-- views/view_dor_query.py
-- utils/params.py
+# List of modified files:
+- controllers/__init__.py
+- controllers/ctrl_dor_query.py
+- controllers/ctrl_data_selector.py (renamed from ctrl_check_list.py)
+- views/__init__.py
+- views/view_data_selector.py (renamed from view_check_list.py)
+- main.py
+- docs/knowledgebase/signal_slot_cross_controller.md (new)
 
 ## Summary of current progress
 
-### classes/__init__.py — Added DialogGetPath export
-- Added direct (non-lazy) import for `DialogGetPath` alongside `DialogConfirm`
-- Added `DialogGetPath` to `__all__`
+### Signal/Slot cross-controller wiring
+- `CtrlDorQuery` now inherits `QObject` and declares `dor_changed = Signal(str)`
+- Signal is emitted in `load_animals()` whenever DOR selection changes
+- `Main` connects `ctrl_dor_query.dor_changed` → `ctrl_data_selector.on_dor_changed`
+- `CtrlDataSelector.on_dor_changed` stores `current_dor` and calls `load_rec_summary(dor)`
 
-### ctrl_dor_query.py — btn_scan_files & te_file_structure fully wired
-- `scan_files()` implemented: opens `DialogGetPath`, guards DOR mismatch (folder name must contain DOR string), recursively scans with `rglob("*")`, counts file extensions via `collections.Counter`, writes summary to `# Folder Structure` section in `Data_{dor}.md`
-- `load_data_md` now parses `# Folder Structure` and displays content in `te_file_structure`; shows `"no scanning results"` if section is empty or missing
-- `btn_scan_files` enabled/disabled in sync with log file existence
-- Mismatch between selected folder and DOR shown in `te_file_structure`
+### Code migration from ctrl_dor_query → ctrl_data_selector
+- Moved and uncommented: `load_rec_summary`, `apply_filters`, `reset_all_filters`,
+  `toggle_shown_columns`, `check_pick_list`, `pick_selected`, `clear_pick_list`, `open_pick_list`
+- Moved signal connections and `COLUMNS_TO_PICK` constant
+- `rec_data_db` is now opened in `CtrlDataSelector.__init__`
 
-## Completed TODOs/Tasks (before new wrap-up)
-- ✅ Wire up `btn_scan_files` → `scan_files()` method
-- ✅ Parse and display `# Folder Structure` in `te_file_structure` on load
-- ✅ Export `DialogGetPath` from `classes/__init__.py`
-- ✅ DOR mismatch guard with message shown in `te_file_structure`
-- ✅ Fixed scan to be recursive (`rglob` instead of `glob`)
+### Rename refactor
+- Tab title: "Check Pick List" → "Data Selector"
+- Files: ctrl_check_list.py → ctrl_data_selector.py, view_check_list.py → view_data_selector.py
+- Classes: CtrlCheckList → CtrlDataSelector, ViewCheckList → ViewDataSelector
+- Widget names: tv_check_list → tv_data_selector, lbl_check_list → lbl_data_selector
+
+### Documentation
+- Created `docs/knowledgebase/signal_slot_cross_controller.md` explaining the signal/slot pattern
+
+## Completed TODOs (from last session)
+- ✅ Transfer rec_table loading code to ctrl_data_selector.py
 
 ## What should we do next? (TODOs)
-- [ ] Transfer loading of rec_tables to `ctrl_pick_list.py` (currently commented out in `ctrl_dor_query.py`)
+- [ ] Re-arrange the layout of tab Data Selector (view_data_selector.py)
+- [ ] Complete the functions in ctrl_data_selector.py (wire up buttons, test flow end-to-end)

@@ -36,3 +36,8 @@ class UISizes:
     TE_DESCRIPTIONS_HEIGHT: int = 120
     TE_FINDINGS_HEIGHT: int = 120
     TE_LOG_CONTENTS_HEIGHT: int = 240
+
+    # Tab: Data Selector
+    TV_REC_SUMMARY_WIDTH: int = 1200
+    TE_DIRS_HEIGHT: int = 60
+    

@@ -27,6 +27,7 @@ LOG_SECTION_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})$", re.MU
 
 
 class CtrlDorQuery(QObject):
+    # Inherit from QObject to use signals
     dor_changed = Signal(str)
 
     def __init__(self, view: ViewDorQuery) -> None:
@@ -78,6 +79,7 @@ class CtrlDorQuery(QObject):
         self.view.btn_scan_files.clicked.connect(self.scan_files)
 
     def load_animals(self, dor: str) -> None:
+        # Emit signal and dor text to notify DOR change, so that other controllers can react accordingly
         self.dor_changed.emit(dor)
         # Clear injections table when switching DOR
         self.view.tv_injections.setModel(None)
@@ -111,6 +113,10 @@ class CtrlDorQuery(QObject):
             if model.headerData(col, Qt.Orientation.Horizontal) not in INJECTIONS_KEEP:
                 self.view.tv_injections.hideColumn(col)
 
+    def creation_confirmed(self, dor: str, log_path: Path) -> None:
+        log_path.write_text("---\nSystem:\nKeywords:\n---\n# Descriptions\n\n# Findings\n\n# Logs\n\n# Folder Structure\n\nExtra Info\n", encoding="utf-8")
+        self.load_data_md(dor)
+
     def load_data_md(self, dor: str) -> None:
         self.view.te_insert_log.clear()
         log_path = LOG_DIR / f"Data_{dor}.md"
@@ -140,12 +146,11 @@ class CtrlDorQuery(QObject):
 
 
             dlg_create_log_file = DialogConfirm(title="Create Log File?", msg=f"No log file found for DOR {dor}. Do you want to create one?")
-            if not dlg_create_log_file.exec():
-                console.print("[yellow]Creation denied.[/yellow]")
-                return
+            dlg_create_log_file.accepted.connect(lambda: self.creation_confirmed(dor, log_path))
+            dlg_create_log_file.rejected.connect(lambda: console.print("[yellow]Creation denied.[/yellow]"))
+            dlg_create_log_file.setAttribute(Qt.WA_DeleteOnClose)  # Ensure dialog is deleted after closing
+            dlg_create_log_file.open()
 
-            log_path.write_text("---\nSystem:\nKeywords:\n---\n# Descriptions\n\n# Findings\n\n# Logs\n\n# Folder Structure\n\nExtra Info\n", encoding="utf-8")
-            self.load_data_md(dor)
             return
 
         last_modified = datetime.datetime.fromtimestamp(log_path.stat().st_mtime, tz=datetime.UTC).strftime(

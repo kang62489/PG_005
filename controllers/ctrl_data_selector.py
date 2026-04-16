@@ -10,68 +10,47 @@ from rich.console import Console
 from tabulate import tabulate
 
 # Local application imports
-from classes import DialogPickList, ModelFromDataFrame
+from classes import DialogPickList
 from utils.params import MODELS_DIR, REC_DB_PATH
-from views import ViewCheckList
+from views import ViewDataSelector
 
 # Set up rich console
 console = Console()
 
 # Constants
-PICK_LIST_PATH = MODELS_DIR / "pick_list.json"
-CHECK_COLUMNS = ["DOR", "TIFF_SERIAL", "IMG_READY", "PREPROC", "PREPROC_READY"]
 COLUMNS_TO_PICK = ("Filename", "OBJ", "EMI", "FRAMES", "SLICE", "AT", "ABF_NUMBER")
+PICK_LIST_PATH = MODELS_DIR / "pick_list.json"
 
-
-class CtrlCheckList:
-    def __init__(self, view: ViewCheckList) -> None:
+class CtrlDataSelector:
+    def __init__(self, view: ViewDataSelector) -> None:
         self.view = view
         self.current_dor: str | None = None
         self.df_pick_list = pl.DataFrame()
 
-        self.rec_data_db = QSqlDatabase.addDatabase("QSQLITE", "check_list_rec_data")
+        self.rec_data_db = QSqlDatabase.addDatabase("QSQLITE", "data_selector_rec_data")
         self.rec_data_db.setDatabaseName(str(REC_DB_PATH))
         self.rec_data_db.open()
 
         self.connect_signals()
+        self.clear_pick_list()  # Clear pick list on startup to avoid confusion with old entries
 
     def connect_signals(self) -> None:
-        self.view.btn_load_pick_list.clicked.connect(self.load_pick_list)
-
         self.view.btn_reset_all_filters.clicked.connect(self.reset_all_filters)
+
+        self.view.btn_pick_selected.clicked.connect(self.pick_selected)
+        self.view.btn_open_pick_list.clicked.connect(self.open_pick_list)
+        
+        # Connect filter dropdowns
         for col in self.view.filter_columns:
             dropdown = getattr(self.view, f"dd_{col}")
             dropdown.lw.itemChanged.connect(self.apply_filters)
         self.view.dd_shown_cols.lw.itemChanged.connect(self.toggle_shown_columns)
-        self.view.btn_pick_selected.clicked.connect(self.pick_selected)
-        self.view.btn_open_pick_list.clicked.connect(self.open_pick_list)
+        
 
     def on_dor_changed(self, dor: str) -> None:
         self.current_dor = dor
         self.load_rec_summary(dor)
 
-    def load_pick_list(self) -> None:
-        """Load pick_list.json and display a check table in tv_check_list."""
-        df_pick = pl.read_json(PICK_LIST_PATH).with_columns(pl.all().cast(pl.Utf8))
-
-        if df_pick.is_empty():
-            console.log("[yellow]Pick list is empty, nothing to load.[/yellow]")
-            model = ModelFromDataFrame(pl.DataFrame(schema=dict.fromkeys(CHECK_COLUMNS, pl.Utf8)))
-            self.view.tv_check_list.setModel(model)
-            return
-
-        # Parse Filename → DOR and TIFF_SERIAL
-        df_check = df_pick.select(
-            pl.col("Filename").str.split("-").list.first().alias("DOR"),
-            pl.col("Filename").str.split("-").list.last().str.replace(r"\.tif$", "").alias("TIFF_SERIAL"),
-            pl.lit("").alias("IMG_READY"),
-            pl.lit("").alias("PREPROC"),
-            pl.lit("").alias("PREPROC_READY"),
-        )
-
-        model = ModelFromDataFrame(df_check)
-        self.view.tv_check_list.setModel(model)
-        console.log(f"[green]Loaded {len(df_check)} entries into check list.[/green]")
 
     def load_rec_summary(self, dor: str) -> None:
         # Clear rec summary table when switching DOR

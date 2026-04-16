@@ -4,11 +4,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget
 from rich.console import Console
 
-from controllers import CtrlCheckList, CtrlDorQuery
+from controllers import CtrlDataSelector, CtrlDorQuery, CtrlImgPreproc
 
 # Local application imports
 from utils import APP_STATUS_MESSAGE, UISizes
-from views import ViewCheckList, ViewDorQuery
+from views import ViewDataSelector, ViewDorQuery, ViewImgPreproc
 
 # Setup rich console
 console = Console()
@@ -29,12 +29,12 @@ class Main(QMainWindow):
         # Add tabs to the tab widget
         self.tab_dor_query = QWidget()
         self.tab_pick_raws = QWidget()
-        self.tab_check_list = QWidget()
+        self.tab_data_selector = QWidget()
         self.tab_im_preproc = QWidget()
         self.tab_spike_align = QWidget()
 
         self.w_main.addTab(self.tab_dor_query, "Query by DOR")
-        self.w_main.addTab(self.tab_check_list, "Check Pick List")
+        self.w_main.addTab(self.tab_data_selector, "Data Selector")
         self.w_main.addTab(self.tab_im_preproc, "Image Preprocessing")
         self.w_main.addTab(self.tab_spike_align, "Spike Alignment Analysis")
 
@@ -42,9 +42,14 @@ class Main(QMainWindow):
         self.view_dor_query = ViewDorQuery(self.tab_dor_query)
         self.ctrl_dor_query = CtrlDorQuery(self.view_dor_query)
 
-        self.view_check_list = ViewCheckList(self.tab_check_list)
-        self.ctrl_check_list = CtrlCheckList(self.view_check_list)
-        self.ctrl_dor_query.dor_changed.connect(self.ctrl_check_list.on_dor_changed)
+        self.view_data_selector = ViewDataSelector(self.tab_data_selector)
+        self.ctrl_data_selector = CtrlDataSelector(self.view_data_selector)
+
+        self.view_img_preproc = ViewImgPreproc(self.tab_im_preproc)
+        self.ctrl_img_preproc = CtrlImgPreproc(self.view_img_preproc)
+
+        # Connect dor_changed signal from ctrl_dor_query to ctrl_data_selector
+        self.ctrl_dor_query.dor_changed.connect(self.ctrl_data_selector.on_dor_changed)
 
         self.setCentralWidget(self.w_main)
         self.show()

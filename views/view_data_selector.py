@@ -2,10 +2,12 @@
 # Third-party imports
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QPushButton,
     QTableView,
     QTextEdit,
@@ -15,11 +17,13 @@ from PySide6.QtWidgets import (
 
 # Local application imports
 from classes import CheckableDropdown
+from utils.params import UISizes
 
+# Constants
 FILTER_COLUMNS = ["OBJ", "EXC", "EMI"]
 
 
-class ViewCheckList:
+class ViewDataSelector:
     def __init__(self, parent: QWidget | None = None) -> None:
         self.tab_container = parent
         self.lo_tab_container = QHBoxLayout()
@@ -30,7 +34,6 @@ class ViewCheckList:
     def setup_blocks(self) -> None:
         self.setup_block_1()
         self.setup_block_2()
-        self.setup_block_3()
 
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
@@ -72,6 +75,8 @@ class ViewCheckList:
         self.lo_db_view.addWidget(self.lbl_rec_summary)
 
         self.tv_rec_summary = QTableView()
+        self.tv_rec_summary.setFixedWidth(UISizes.TV_REC_SUMMARY_WIDTH)
+
         self.lo_db_view.addWidget(self.tv_rec_summary)
         self.tv_rec_summary.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.tv_rec_summary.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
@@ -80,59 +85,14 @@ class ViewCheckList:
         self.lo_block_2 = QVBoxLayout()
         self.lo_tab_container.addLayout(self.lo_block_2)
 
-        self.lbl_check_list = QLabel("Check List: ")
-        self.lo_block_2.addWidget(self.lbl_check_list)
+        self.gb_analysis_notes = QGroupBox("Analysis Notes")
+        self.gb_analysis_notes.setLayout(QFormLayout())
+        self.lo_block_2.addWidget(self.gb_analysis_notes)
 
-        self.btn_load_pick_list = QPushButton("Load Pick List")
-        self.lo_block_2.addWidget(self.btn_load_pick_list)
+        self.le_title = QLineEdit()
+        self.te_purposes = QTextEdit()
+        self.le_date_created = QLineEdit()
 
-        self.tv_check_list = QTableView()
-        self.lo_block_2.addWidget(self.tv_check_list)
-
-        self.lo_btn_row = QHBoxLayout()
-        self.lo_block_2.addLayout(self.lo_btn_row)
-        self.btn_rm_selected = QPushButton("Remove Selected")
-        self.lo_btn_row.addWidget(self.btn_rm_selected)
-        self.btn_clear_list = QPushButton("Clear List")
-        self.lo_btn_row.addWidget(self.btn_clear_list)
-
-    def setup_block_3(self) -> None:
-        self.lo_block_3 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_3)
-
-        # Directory of raw TIFFs
-        self.lbl_dir_raw_tiffs = QLabel("Directory of Raw TIFFs: ")
-        self.lo_block_3.addWidget(self.lbl_dir_raw_tiffs)
-
-        self.lo_dir_raw_tiffs = QHBoxLayout()
-        self.lo_block_3.addLayout(self.lo_dir_raw_tiffs)
-        self.btn_browse_raw_tiffs = QPushButton("Browse...")
-        self.le_dir_raw_images = QTextEdit()
-        self.lo_dir_raw_tiffs.addWidget(self.le_dir_raw_images)
-        self.lo_dir_raw_tiffs.addWidget(self.btn_browse_raw_tiffs)
-
-        # Directory of raw ABFs
-        self.lbl_dir_raw_abfs = QLabel("Directory of Raw ABFs: ")
-        self.lo_block_3.addWidget(self.lbl_dir_raw_abfs)
-
-        self.lo_dir_raw_abfs = QHBoxLayout()
-        self.lo_block_3.addLayout(self.lo_dir_raw_abfs)
-
-        self.le_dir_raw_abfs = QTextEdit()
-        self.btn_browse_raw_abfs = QPushButton("Browse...")
-        self.lo_dir_raw_abfs.addWidget(self.le_dir_raw_abfs)
-        self.lo_dir_raw_abfs.addWidget(self.btn_browse_raw_abfs)
-
-        # Directory of preprocessed TIFFs (Cal and Gauss)
-        self.lbl_dir_preprocessed = QLabel("Directory of Preprocessed TIFFs: ")
-        self.lo_block_3.addWidget(self.lbl_dir_preprocessed)
-
-        self.lo_dir_preprocessed = QHBoxLayout()
-        self.lo_block_3.addLayout(self.lo_dir_preprocessed)
-        self.le_dir_preprocessed = QTextEdit()
-        self.btn_browse_preprocessed = QPushButton("Browse...")
-        self.lo_dir_preprocessed.addWidget(self.le_dir_preprocessed)
-        self.lo_dir_preprocessed.addWidget(self.btn_browse_preprocessed)
-
-        self.btn_start_check = QPushButton("Start Check")
-        self.lo_block_3.addWidget(self.btn_start_check)
+        self.gb_analysis_notes.layout().addRow(QLabel("Title:"), self.le_title)
+        self.gb_analysis_notes.layout().addRow(QLabel("Purpose:"), self.te_purposes)
+        self.gb_analysis_notes.layout().addRow(QLabel("Date Created:"), self.le_date_created)
