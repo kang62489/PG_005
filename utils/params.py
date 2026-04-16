@@ -18,6 +18,7 @@ MODELS_DIR = BASE_DIR / "data"
 EXP_DB_PATH = MODELS_DIR / "exp_info.db"
 REC_DB_PATH = MODELS_DIR / "rec_data.db"
 LOG_DIR = BASE_DIR / "logs"
+RESULTS_DIR = BASE_DIR / "results"
 
 
 # UI Sizes
@@ -32,7 +33,7 @@ class UISizes:
 
     TV_ANIMALS_HEIGHT: int = 100
     TV_INJECTIONS_HEIGHT: int = 120
-    
+
     TE_DESCRIPTIONS_HEIGHT: int = 120
     TE_FINDINGS_HEIGHT: int = 120
     TE_LOG_CONTENTS_HEIGHT: int = 240
@@ -40,4 +41,4 @@ class UISizes:
     # Tab: Data Selector
     TV_REC_SUMMARY_WIDTH: int = 1200
     TE_DIRS_HEIGHT: int = 60
-    
+

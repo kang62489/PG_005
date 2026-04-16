@@ -86,13 +86,30 @@ class ViewDataSelector:
         self.lo_tab_container.addLayout(self.lo_block_2)
 
         self.gb_analysis_notes = QGroupBox("Analysis Notes")
-        self.gb_analysis_notes.setLayout(QFormLayout())
+        self.gb_analysis_notes.setLayout(QVBoxLayout())
         self.lo_block_2.addWidget(self.gb_analysis_notes)
 
+        # Form fields
+        self.lo_analysis_notes_form = QFormLayout()
         self.le_title = QLineEdit()
         self.te_purposes = QTextEdit()
         self.le_date_created = QLineEdit()
+        self.lo_analysis_notes_form.addRow(QLabel("Date Created:"), self.le_date_created)
+        self.lo_analysis_notes_form.addRow(QLabel("Title:"), self.le_title)
+        self.lo_analysis_notes_form.addRow(QLabel("Purpose:"), self.te_purposes)
+        self.gb_analysis_notes.layout().addLayout(self.lo_analysis_notes_form)
 
-        self.gb_analysis_notes.layout().addRow(QLabel("Title:"), self.le_title)
-        self.gb_analysis_notes.layout().addRow(QLabel("Purpose:"), self.te_purposes)
-        self.gb_analysis_notes.layout().addRow(QLabel("Date Created:"), self.le_date_created)
+        # Preview
+        self.lbl_preview_analysis_note = QLabel("Preview")
+        self.gb_analysis_notes.layout().addWidget(self.lbl_preview_analysis_note)
+        self.te_analysis_notes = QTextEdit()
+        self.te_analysis_notes.setReadOnly(True)
+        self.gb_analysis_notes.layout().addWidget(self.te_analysis_notes)
+
+        # Buttons
+        self.lo_analysis_notes_btns = QHBoxLayout()
+        self.btn_note_gen = QPushButton("Generate Note")
+        self.btn_note_export = QPushButton("Export Analysis Note")
+        self.lo_analysis_notes_btns.addWidget(self.btn_note_gen)
+        self.lo_analysis_notes_btns.addWidget(self.btn_note_export)
+        self.gb_analysis_notes.layout().addLayout(self.lo_analysis_notes_btns)
