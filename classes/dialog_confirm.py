@@ -3,8 +3,8 @@ from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
 
 class DialogConfirm(QDialog):
-    def __init__(self, title="Dialog", msg="Question"):
-        super().__init__()
+    def __init__(self, title="Dialog", msg="Question", parent=None):
+        super().__init__(parent)
         self.setWindowTitle(title)
 
         self.lbl_message = QLabel(msg)

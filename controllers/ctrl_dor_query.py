@@ -16,7 +16,7 @@ from classes import DialogConfirm, DialogGetPath
 from utils import EXP_DB_PATH, LOG_DIR, REC_DB_PATH
 from views import ViewDorQuery
 
-ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Genotype", "Sex"}
+ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Project_Code", "Genotype", "Sex"}
 INJECTIONS_KEEP = {"DOI", "Inj_Mode", "Side", "Incubated", "Virus_Full"}
 COLUMNS_TO_PICK = ("Filename", "OBJ", "EMI", "FRAMES", "SLICE", "AT", "ABF_NUMBER")
 
@@ -43,6 +43,7 @@ class CtrlDorQuery(QObject):
 
         self.view.le_system.setEnabled(False)
         self.view.le_keywords.setEnabled(False)
+        self.view.le_prj.setEnabled(False)
         self.view.te_descriptions.setEnabled(False)
         self.view.te_findings.setEnabled(False)
 
@@ -71,6 +72,7 @@ class CtrlDorQuery(QObject):
         self.view.cb_log_date.currentTextChanged.connect(self._show_log_section)
         self.view.le_system.editingFinished.connect(self.update_system_info)
         self.view.le_keywords.editingFinished.connect(self.update_keywords)
+        self.view.le_prj.editingFinished.connect(self.update_project)
         self.view.te_descriptions.textChanged.connect(lambda: self.view.btn_update_descriptions.setEnabled(True))
         self.view.te_findings.textChanged.connect(lambda: self.view.btn_update_findings.setEnabled(True))
 
@@ -114,11 +116,18 @@ class CtrlDorQuery(QObject):
                 self.view.tv_injections.hideColumn(col)
 
     def creation_confirmed(self, dor: str, log_path: Path) -> None:
-        log_path.write_text("---\nSystem:\nKeywords:\n---\n# Descriptions\n\n# Findings\n\n# Logs\n\n# Folder Structure\n\nExtra Info\n", encoding="utf-8")
+        log_path.write_text("---\nSystem:\nKeywords:\nProject:\n---\n# Descriptions\n\n# Findings\n\n# Logs\n\n# Folder Structure\n\n# Extra Info\n", encoding="utf-8")
         self.load_data_md(dor)
 
     def load_data_md(self, dor: str) -> None:
+        # Clear previous log-related UI elements
         self.view.te_insert_log.clear()
+        self.view.te_folder_structure.clear()
+        self.view.cb_log_date.blockSignals(True)
+        self.view.cb_log_date.clear()
+        self.view.cb_log_date.blockSignals(False)
+        self.view.te_log_contents.clear()
+
         log_path = LOG_DIR / f"Data_{dor}.md"
         if not log_path.exists():
             console.print(f"[red]{log_path} is not found.[/red]")
@@ -129,6 +138,9 @@ class CtrlDorQuery(QObject):
 
             self.view.le_keywords.setText("No record found")
             self.view.le_keywords.setEnabled(False)
+
+            self.view.le_prj.setText("No record found")
+            self.view.le_prj.setEnabled(False)
 
             self.view.te_descriptions.setPlainText("No record found")
             self.view.te_descriptions.setEnabled(False)
@@ -141,11 +153,11 @@ class CtrlDorQuery(QObject):
             self.view.te_insert_log.setEnabled(False)
             self.view.btn_insert_log.setEnabled(False)
             self.view.btn_scan_files.setEnabled(False)
-            self.view.te_file_structure.clear()
+            self.view.te_folder_structure.clear()
             self._populate_log_date_combo(dor)
 
 
-            dlg_create_log_file = DialogConfirm(title="Create Log File?", msg=f"No log file found for DOR {dor}. Do you want to create one?")
+            dlg_create_log_file = DialogConfirm(title="Create Log File?", msg=f"No log file found for DOR {dor}. Do you want to create one?", parent=self.view.tab_container)
             dlg_create_log_file.accepted.connect(lambda: self.creation_confirmed(dor, log_path))
             dlg_create_log_file.rejected.connect(lambda: console.print("[yellow]Creation denied.[/yellow]"))
             dlg_create_log_file.setAttribute(Qt.WA_DeleteOnClose)  # Ensure dialog is deleted after closing
@@ -153,7 +165,7 @@ class CtrlDorQuery(QObject):
 
             return
 
-        last_modified = datetime.datetime.fromtimestamp(log_path.stat().st_mtime, tz=datetime.UTC).strftime(
+        last_modified = datetime.datetime.fromtimestamp(log_path.stat().st_mtime).strftime(
             "%Y-%b-%d %a (%H:%M:%S)"
         )
         self.view.le_last_modified.setText(last_modified)
@@ -162,9 +174,11 @@ class CtrlDorQuery(QObject):
             md_contents = f.read().splitlines()
             system = next((line.split(":", 1)[1].strip() for line in md_contents if line.startswith("System:")), "")
             keywords = next((line.split(":", 1)[1].strip() for line in md_contents if line.startswith("Keywords:")), "")
+            prj = next((line.split(":", 1)[1].strip() for line in md_contents if line.startswith("Project:")), "")
 
             self.view.le_system.setText(system)
             self.view.le_keywords.setText(keywords)
+            self.view.le_prj.setText(prj)
 
             line_id_descriptions = next((i for i, line in enumerate(md_contents) if line.startswith("# Descriptions")), None)
             line_id_findings = next((i for i, line in enumerate(md_contents) if line.startswith("# Findings")), None)
@@ -174,6 +188,7 @@ class CtrlDorQuery(QObject):
                 console.print(f"[red] Heading is missing in {log_path}.[/red]")
                 self.view.te_descriptions.setPlainText("Can not load descriptions due to missing heading")
                 self.view.te_findings.setPlainText("Can not load findings due to missing heading")
+                self._populate_log_date_combo(dor)
                 return
 
             descriptions = "\n".join(md_contents[line_id_descriptions + 1 : line_id_findings]).strip()
@@ -187,8 +202,12 @@ class CtrlDorQuery(QObject):
             self.view.te_findings.setPlainText(findings)
             self.view.te_findings.blockSignals(False)
 
+            self.view.btn_update_descriptions.setEnabled(False)
+            self.view.btn_update_findings.setEnabled(False)
+
             self.view.le_system.setEnabled(True)
             self.view.le_keywords.setEnabled(True)
+            self.view.le_prj.setEnabled(True)
             self.view.te_descriptions.setEnabled(True)
             self.view.te_findings.setEnabled(True)
             self.view.te_insert_log.setEnabled(True)
@@ -202,9 +221,9 @@ class CtrlDorQuery(QObject):
                     len(md_contents),
                 )
                 folder_struct_text = "\n".join(md_contents[line_id_folder_struct + 1 : line_id_after_folder]).strip()
-                self.view.te_file_structure.setPlainText(folder_struct_text or "no scanning results")
+                self.view.te_folder_structure.setPlainText(folder_struct_text or "no scanning results")
             else:
-                self.view.te_file_structure.setPlainText("no scanning results")
+                self.view.te_folder_structure.setPlainText("no scanning results")
 
             self._populate_log_date_combo(dor)
 
@@ -226,7 +245,7 @@ class CtrlDorQuery(QObject):
 
         if dor not in Path(chosen).name:
             console.print(f"[red]Folder name does not match DOR {dor}. Aborting.[/red]")
-            self.view.te_file_structure.setPlainText(f"Mismatch: selected folder does not match DOR {dor}.")
+            self.view.te_folder_structure.setPlainText(f"Mismatch: selected folder does not match DOR {dor}.")
             return
 
         ext_counts: collections.Counter[str] = collections.Counter()
@@ -348,6 +367,17 @@ class CtrlDorQuery(QObject):
             keywords_line_idx = next((i for i, line in enumerate(md_contents) if line.startswith("Keywords:")), None)
             if keywords_line_idx is not None:
                 md_contents[keywords_line_idx] = f"Keywords: {self.view.le_keywords.text()}"
+                log_path.write_text("\n".join(md_contents), encoding="utf-8")
+
+    def update_project(self) -> None:
+        dor = self.get_selected_dor()
+
+        log_path = LOG_DIR / f"Data_{dor}.md"
+        with log_path.open(encoding="utf-8") as f:
+            md_contents = f.read().splitlines()
+            prj_line_idx = next((i for i, line in enumerate(md_contents) if line.startswith("Project:")), None)
+            if prj_line_idx is not None:
+                md_contents[prj_line_idx] = f"Project: {self.view.le_prj.text()}"
                 log_path.write_text("\n".join(md_contents), encoding="utf-8")
 
     def update_descriptions(self) -> None:

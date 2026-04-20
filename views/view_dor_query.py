@@ -87,6 +87,8 @@ class ViewDorQuery:
         self.le_system = QLineEdit()
         self.le_keywords = QLineEdit()
 
+        self.le_prj = QLineEdit()
+
         self.te_descriptions = QTextEdit()
         self.te_descriptions.setFixedHeight(UISizes.TE_DESCRIPTIONS_HEIGHT)
 
@@ -96,7 +98,6 @@ class ViewDorQuery:
         self.lo_descriptions.addWidget(self.btn_update_descriptions)
 
         self.te_findings = QTextEdit()
-        self.te_findings.setFixedHeight(UISizes.TE_FINDINGS_HEIGHT)
         self.btn_update_findings = QPushButton("Update")
         self.lo_findings = QHBoxLayout()
         self.lo_findings.addWidget(self.te_findings)
@@ -105,22 +106,23 @@ class ViewDorQuery:
         self.lo_metadata.addRow("Last Modified: ", self.le_last_modified)
         self.lo_metadata.addRow("System: ", self.le_system)
         self.lo_metadata.addRow("Keywords: ", self.le_keywords)
+        self.lo_metadata.addRow("Project: ", self.le_prj)
         self.lo_metadata.addRow("Descriptions: ", self.lo_descriptions)
         self.lo_metadata.addRow("Findings: ", self.lo_findings)
 
+        # Right side of data folder properties: log viewer
         self.lbl_insert_log = QLabel("Insert Log: ")
         self.te_insert_log = QTextEdit()
-        self.lo_data_folder_props_left.addWidget(self.lbl_insert_log)
-        self.lo_data_folder_props_left.addWidget(self.te_insert_log)
+        self.lo_data_folder_props_right.addWidget(self.lbl_insert_log)
+        self.lo_data_folder_props_right.addWidget(self.te_insert_log)
 
         self.lo_buttons = QHBoxLayout()
-        self.lo_data_folder_props_left.addLayout(self.lo_buttons)
+        self.lo_data_folder_props_right.addLayout(self.lo_buttons)
         self.btn_insert_log = QPushButton("Insert Log")
         self.btn_clear_log = QPushButton("Clear")
         self.lo_buttons.addWidget(self.btn_insert_log)
         self.lo_buttons.addWidget(self.btn_clear_log)
 
-        # Right side of data folder properties: log viewer
         self.lbl_log_date = QLabel("Jump to Log Date: ")
         self.lbl_log_date.setFixedHeight(24)
         self.cb_log_date = QComboBox()
@@ -134,8 +136,9 @@ class ViewDorQuery:
 
 
         self.btn_scan_files = QPushButton("Scan Files in the Data Folder")
-        self.te_file_structure = QTextEdit()
-        self.te_file_structure.setReadOnly(True)
+        self.te_folder_structure = QTextEdit()
+        self.te_folder_structure.setReadOnly(True)
+        self.te_folder_structure.setFixedHeight(UISizes.TE_FOLDER_STRUCTURE_HEIGHT)
 
         self.lo_data_folder_props_right.addWidget(self.btn_scan_files)
-        self.lo_data_folder_props_right.addWidget(self.te_file_structure)
+        self.lo_data_folder_props_right.addWidget(self.te_folder_structure)
