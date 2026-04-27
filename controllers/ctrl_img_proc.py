@@ -1,16 +1,16 @@
 ## Modules
 # Standard library imports
-from pathlib import Path
 import re
+from pathlib import Path
 
 # Third-party imports
 import polars as pl
-from PySide6.QtWidgets import QTextEdit
+from PySide6.QtCore import QFileSystemWatcher
 from rich.console import Console
 
 # Local application imports
-from classes import DialogGetPath, ModelFromDataFrame
-from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_ABFS_DIR, RAW_TIFFS_DIR
+from classes import ModelFromDataFrame
+from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_TIFFS_DIR
 from views import ViewImgProc
 
 # Constants
@@ -24,46 +24,28 @@ console = Console()
 class CtrlImgProc:
     def __init__(self, view: ViewImgProc) -> None:
         self.view = view
+        self.view.le_dir_raw_images.setReadOnly(True)
         self.view.le_dir_raw_images.setPlainText(str(RAW_TIFFS_DIR))
-        self.view.le_dir_raw_abfs.setPlainText(str(RAW_ABFS_DIR))
+        self.view.le_dir_processed.setReadOnly(True)
         self.view.le_dir_processed.setPlainText(str(PROC_TIFFS_DIR))
+        self._ensure_dirs()
         self.connect_signals()
+
+    def _ensure_dirs(self) -> None:
+        for path in (RAW_TIFFS_DIR, PROC_TIFFS_DIR):
+            try:
+                if path.exists():
+                    console.log(f"[green]EXISTS[/green]: {path}")
+                else:
+                    path.mkdir(parents=True, exist_ok=True)
+                    console.log(f"[yellow]CREATED[/yellow]: {path}")
+            except OSError as e:
+                console.log(f"[red]FAILED to create[/red]: {path} — {e}")
+        self.dirs_watcher = QFileSystemWatcher([str(RAW_TIFFS_DIR), str(PROC_TIFFS_DIR)])
 
     def connect_signals(self) -> None:
         self.view.btn_load_pick_list.clicked.connect(self.load_pick_list)
-        self.view.btn_check_file_status.clicked.connect(self.check_file_status)
-
-        # Validate directory paths on text change and browse button click
-        self.view.le_dir_raw_images.textChanged.connect(
-            lambda: self._validate_path(self.view.le_dir_raw_images)
-        )
-        self.view.le_dir_raw_abfs.textChanged.connect(
-            lambda: self._validate_path(self.view.le_dir_raw_abfs)
-        )
-        self.view.le_dir_processed.textChanged.connect(
-            lambda: self._validate_path(self.view.le_dir_processed)
-        )
-        self.view.btn_browse_raw_tiffs.clicked.connect(
-            lambda: self._browse_dir(self.view.le_dir_raw_images, "Select Directory of Raw TIFFs")
-        )
-        self.view.btn_browse_raw_abfs.clicked.connect(
-            lambda: self._browse_dir(self.view.le_dir_raw_abfs, "Select Directory of Raw ABFs")
-        )
-        self.view.btn_browse_processed.clicked.connect(
-            lambda: self._browse_dir(self.view.le_dir_processed, "Select Directory of Processed TIFFs")
-        )
-
-    def _browse_dir(self, le: QTextEdit, title: str) -> None:
-        dlg = DialogGetPath(title=title, init_dir=le.toPlainText().strip())
-        path_str = dlg.get_path()
-        if not path_str:
-            return
-        le.setPlainText(path_str)
-        self._validate_path(le)
-
-    def _validate_path(self, le: QTextEdit) -> None:
-        valid_path = Path(le.toPlainText().strip()).exists()
-        le.setStyleSheet("color: green;" if valid_path else "color: red;")
+        self.dirs_watcher.directoryChanged.connect(self.check_file_status)
 
     def load_pick_list(self) -> None:
         """Load pick_list.json and display a check table in tv_data_selector."""
@@ -90,13 +72,14 @@ class CtrlImgProc:
         model_pick_list = ModelFromDataFrame(self.df_check_list)
         self.view.tv_data_selector.setModel(model_pick_list)
         console.log(f"[green]Loaded {len(self.df_check_list)} entries into check list.[/green]")
+        self.check_file_status()
 
     def _raw_tiff_ready(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
         """Helper function to check if a file exists based on DOR and TIFF_SERIAL."""
         examine_file = dir_path / f"{dor}-{tiff_serial}.tif"
         file_status = "READY" if examine_file.exists() else "MISSING"
         return file_status
-    
+
     def _cal_exists(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
         """Helper function to check if a processed file exists based on DOR and TIFF_SERIAL."""
         examine_file_cal = list(dir_path.glob(f"{dor}-{tiff_serial}*_Cal*.tif"))
@@ -109,13 +92,13 @@ class CtrlImgProc:
         gauss_list = [m.group(1) for f in examine_file_gauss if (m := CAL_PATTERN.search(f.name))]
         gauss_result = ", ".join(gauss_list) if gauss_list else "Not Exist"
         return gauss_result
-    
+
     def check_file_status(self) -> None:
         """Check file status based on the pick list and update the check table."""
         if not hasattr(self, "df_check_list"):
             console.log("[yellow]No pick list loaded to check file status.[/yellow]")
             return
-        
+
         if self.df_check_list.is_empty():
             console.log("[yellow]No data in check table to verify.[/yellow]")
             return
@@ -143,8 +126,8 @@ class CtrlImgProc:
             .then(pl.lit("YES"))
             .otherwise(pl.lit("SKIP"))
             .alias("PROC")
-        ) 
+        )
 
         model_examined = ModelFromDataFrame(self.df_file_status)
         self.view.tv_data_selector.setModel(model_examined)
-        console.log(f"[green] File status updated.[/green]")
+        console.log("[green] File status updated.[/green]")

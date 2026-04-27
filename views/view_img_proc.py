@@ -25,43 +25,17 @@ class ViewImgProc:
         self.lbl_dir_raw_tiffs = QLabel("Directory of Raw TIFFs: ")
         self.lo_block_1.addWidget(self.lbl_dir_raw_tiffs)
 
-        self.lo_dir_raw_tiffs = QHBoxLayout()
-        self.lo_block_1.addLayout(self.lo_dir_raw_tiffs)
-        self.btn_browse_raw_tiffs = QPushButton("Browse...")
-
         self.le_dir_raw_images = QTextEdit()
         self.le_dir_raw_images.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
-
-        self.lo_dir_raw_tiffs.addWidget(self.le_dir_raw_images)
-        self.lo_dir_raw_tiffs.addWidget(self.btn_browse_raw_tiffs)
-
-        # Directory of raw ABFs
-        self.lbl_dir_raw_abfs = QLabel("Directory of Raw ABFs: ")
-        self.lo_block_1.addWidget(self.lbl_dir_raw_abfs)
-
-        self.lo_dir_raw_abfs = QHBoxLayout()
-        self.lo_block_1.addLayout(self.lo_dir_raw_abfs)
-
-        self.le_dir_raw_abfs = QTextEdit()
-        self.le_dir_raw_abfs.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
-
-        self.btn_browse_raw_abfs = QPushButton("Browse...")
-        self.lo_dir_raw_abfs.addWidget(self.le_dir_raw_abfs)
-        self.lo_dir_raw_abfs.addWidget(self.btn_browse_raw_abfs)
+        self.lo_block_1.addWidget(self.le_dir_raw_images)
 
         # Directory of processed TIFFs (Cal and Gauss)
         self.lbl_dir_processed = QLabel("Directory of Processed TIFFs: ")
         self.lo_block_1.addWidget(self.lbl_dir_processed)
 
-        self.lo_dir_processed = QHBoxLayout()
-        self.lo_block_1.addLayout(self.lo_dir_processed)
-
         self.le_dir_processed = QTextEdit()
         self.le_dir_processed.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
-
-        self.btn_browse_processed = QPushButton("Browse...")
-        self.lo_dir_processed.addWidget(self.le_dir_processed)
-        self.lo_dir_processed.addWidget(self.btn_browse_processed)
+        self.lo_block_1.addWidget(self.le_dir_processed)
 
 
         self.lbl_data_selector = QLabel("Picked Data: ")
@@ -69,9 +43,6 @@ class ViewImgProc:
 
         self.btn_load_pick_list = QPushButton("Load Pick List")
         self.lo_block_1.addWidget(self.btn_load_pick_list)
-
-        self.btn_check_file_status = QPushButton("Check File Status")
-        self.lo_block_1.addWidget(self.btn_check_file_status)
 
         self.btn_check_bleach_corr = QPushButton("Check Bleach Correction")
         self.lo_block_1.addWidget(self.btn_check_bleach_corr)
