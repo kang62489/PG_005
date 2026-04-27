@@ -8,6 +8,7 @@ import shutil
 import polars as pl
 from PySide6.QtCore import Qt
 from PySide6.QtSql import QSqlDatabase, QSqlTableModel
+from PySide6.QtWidgets import QAbstractItemView
 from rich.console import Console
 
 # Local application imports
@@ -19,7 +20,7 @@ from views import ViewDataSelector
 console = Console()
 
 # Constants
-CORE_COLUMNS = ("Filename", "Timestamp", "OBJ", "EXC", "EMI", "FRAMES", "SLICE", "AT")
+CORE_COLUMNS = ("Filename", "Timestamp", "OBJ", "EXC", "EMI", "FRAMES", "SLICE", "AT", "SENSOR", "PAIRED_ABF")
 PICK_LIST_JSON_PATH = MODELS_DIR / "pick_list.json"
 PICK_LIST_XLSX_PATH = MODELS_DIR / "pick_list.xlsx"
 
@@ -33,6 +34,8 @@ class CtrlDataSelector:
         self.rec_data_db = QSqlDatabase.addDatabase("QSQLITE", "data_selector_rec_data")
         self.rec_data_db.setDatabaseName(str(REC_DB_PATH))
         self.rec_data_db.open()
+
+        self.view.tv_rec_summary.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
         self.connect_signals()
         self.clear_pick_list()  # Clear pick list on startup to avoid confusion with old entries
@@ -243,6 +246,13 @@ class CtrlDataSelector:
             df_merged = pl.concat([df_saved, new_rows], how="diagonal").fill_null("")
         else:
             df_merged = df_selected
+
+        # Re-apply CORE_COLUMNS ordering after concat (diagonal concat uses df_saved column order,
+        # so new columns from new_rows would be appended instead of placed correctly)
+        all_cols = df_merged.columns
+        core_in_merged = [c for c in CORE_COLUMNS if c in all_cols]
+        extra_cols = sorted(c for c in all_cols if c not in CORE_COLUMNS)
+        df_merged = df_merged.select(core_in_merged + extra_cols)
 
         self.save_pick_list(df_merged.sort("Filename"))
 

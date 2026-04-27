@@ -279,6 +279,6 @@ for row, fname in enumerate(FILES):
              bbox=dict(boxstyle="round,pad=0.4", facecolor=box_color, edgecolor=title_color))
 
 print(f"\n{'='*60}")
-plt.savefig("demo_biexp_detrend.png", dpi=150, bbox_inches="tight")
-print("Saved: demo_biexp_detrend.png")
+# plt.savefig("demo_biexp_detrend.png", dpi=150, bbox_inches="tight")
+# print("Saved: demo_biexp_detrend.png")
 plt.show()

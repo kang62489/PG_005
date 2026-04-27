@@ -9,6 +9,7 @@ from pathlib import Path
 # Third-party imports
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtSql import QSqlDatabase, QSqlTableModel
+from PySide6.QtWidgets import QAbstractItemView
 from rich.console import Console
 
 # Local application imports
@@ -18,7 +19,6 @@ from views import ViewDorQuery
 
 ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Project_Code", "Genotype", "Sex"}
 INJECTIONS_KEEP = {"DOI", "Inj_Mode", "Side", "Incubated", "Virus_Full"}
-COLUMNS_TO_PICK = ("Filename", "OBJ", "EMI", "FRAMES", "SLICE", "AT", "ABF_NUMBER")
 
 # Set up rich console
 console = Console()
@@ -52,6 +52,9 @@ class CtrlDorQuery(QObject):
         self.view.btn_update_descriptions.setEnabled(False)
         self.view.btn_update_findings.setEnabled(False)
         self.view.btn_scan_files.setEnabled(False)
+
+        self.view.tv_animals.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.view.tv_injections.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
         self.load_dors()
         self.connect_signals()

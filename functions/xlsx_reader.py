@@ -30,7 +30,7 @@ def get_picked_pairs(rec_summary_dir: str = "rec_summary") -> list[dict[str, str
         headers = [cell.value for cell in ws[1]]
 
         # Find ABF column (different files use different names)
-        abf_col_names = ["ABF_NUMBER", "ABF_SERIAL_NUMBER", "ABF_SERIAL", "ABF", "STIM_PROTOCOL_NUMBER"]
+        abf_col_names = ["PAIRED_ABF", "ABF_NUMBER", "ABF_SERIAL_NUMBER", "ABF_SERIAL", "ABF", "STIM_PROTOCOL_NUMBER"]
         col_abf = None
         for col_name in abf_col_names:
             if col_name in headers:

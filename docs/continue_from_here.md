@@ -1,29 +1,26 @@
-# Log of the project progress 2026-04-17 Thu
+# Log of the project progress 2026-04-27 Sun
 
-Last working file: controllers/ctrl_dor_query.py
-Last working line: ~358 (update_project method)
+Last working file: controllers/ctrl_img_preproc.py
+Last working line: ~95
 
 # List of modified files:
+- controllers/ctrl_data_selector.py
 - controllers/ctrl_dor_query.py
-- views/view_dor_query.py
-- utils/params.py
-- logs/Data_2022_07_20.md
-- logs/Data_2022_07_27.md
+- controllers/ctrl_img_preproc.py (<- Break here, ~line 95)
+- views/view_img_preproc.py
 
 ## Summary of current progress
-
-### DOR Query tab improvements
-
-1. **Added "Project" field** — new `le_prj` QLineEdit; reads/writes `Project:` from `Data_{DOR}.md` frontmatter
-2. **Renamed** `te_file_structure` → `te_folder_structure` (naming consistency)
-3. **Layout fix** — moved Insert Log section from left panel to right panel
-4. **Adjusted UI sizes** in `params.py`: `TE_DESCRIPTIONS_HEIGHT=240`, `TE_FINDINGS_HEIGHT=60` (no fixed height), `TE_FOLDER_STRUCTURE_HEIGHT=40`
-5. **Updated new-file template** — new `Data_{DOR}.md` now includes `Project:` in frontmatter and `# Extra Info` section
+- Set all `tv_` table views in DOR Query and Data Selector tabs to uneditable (`NoEditTriggers`)
+- Merged `_init_dir_fields()` directly into `__init__` in `ctrl_img_preproc.py`
+- Added `setup_block_2()` with `w_preview_corr` plot container placeholder in `view_img_preproc.py`
+- Learned and documented Polars expressions (`docs/knowledgebase/polars_expressions.md`)
+- Identified multiple bugs in `check_file_status()` — not yet applied
 
 ## Completed TODOs (from last session)
-- ✅ Add `Data_{dor}.md` files to the data directory and fix their formats (partially — updated existing log files)
+- ✅ Set all tv_ tableviews in Query by DOR and Data Selector to uneditable
 
 ## What should we do next? (TODOs)
-- [ ] Rename `ABF_NUMBER` → `PAIRED_ABF` in all REC summary Excel files, then update `functions/xlsx_reader.py` and `controllers/ctrl_dor_query.py`
-- [ ] Backfill existing `Data_{DOR}.md` log files to include the new `Project:` field in frontmatter
-- [ ] Organize `rec_data.db` and raw `.rec` files
+- [ ] Apply `check_file_status()` fix (map_elements, correct variable names, remove .clone())
+
+## Extra Notes / Ideas
+- ⚠️ **Re-think `check_file_status()`** — there are multiple types of preprocessed TIFFs: **Cal**, **Gauss (mov)**, and **BiExp**. The current logic only checks for one `_preproc.tif` file. Need to redesign status checking to handle all three types.

@@ -19,6 +19,9 @@ EXP_DB_PATH = MODELS_DIR / "exp_info.db"
 REC_DB_PATH = MODELS_DIR / "rec_data.db"
 LOG_DIR = BASE_DIR / "logs"
 RESULTS_DIR = BASE_DIR / "results"
+RAW_TIFFS_DIR = BASE_DIR / "raw_tiffs"
+RAW_ABFS_DIR = BASE_DIR / "raw_abfs"
+PROC_TIFFS_DIR = BASE_DIR / "proc_tiffs"
 
 
 # UI Sizes

@@ -59,7 +59,7 @@ PG_005/
 │       ├── spike_centered_processes.py          # Spike-aligned median/mean
 │       └── imaging_segments_zscore_normalization.py  # Z-score normalization
 │
-├── doc/
+├── docs/
 │   ├── PROJECT_SUMMARY.md           # This file
 │   ├── DEPENDENCY_DIAGRAM.md        # Architecture diagram
 │   ├── DATABASE_STRUCTURE.md        # Database schema and optimization details
@@ -324,14 +324,14 @@ python test_batch.py 2025_12_15 --analysis-only  # Skip preprocessing
 
 REC_*.xlsx files in `rec_summary/`:
 
-| Filename | ABF | OBJ | PICK | SLICE | AT |
-|----------|-----|-----|------|-------|-----|
+| Filename | PAIRED_ABF | OBJ | PICK | SLICE | AT |
+|----------|------------|-----|------|-------|-----|
 | 2025_12_15-0026.tif | 23 | 10X | ✓ | 1 | A1 |
 | 2025_12_15-0027.tif | 24 | 10X | ✓ | 1 | A2 |
 
 - Only rows with PICK column filled are processed
 - SLICE and AT are optional metadata
-- Multiple ABF column names supported
+- Multiple ABF column names supported (`PAIRED_ABF`, `ABF_NUMBER`, `ABF_SERIAL_NUMBER`, etc.)
 
 ### Performance Timing
 
@@ -865,4 +865,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-04-02 (pandas → polars; added experimental detrend scripts: ALS 1D, bi-exponential per-pixel)*
+*Last updated: 2026-04-21 (doc/ → docs/; ABF column renamed to PAIRED_ABF)*
