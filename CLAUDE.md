@@ -16,6 +16,13 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 1. Consider impact on both CPU and GPU pipelines if changing preprocessing
 2. Check and fix ruff problems of **python files** after editing according to the settings in `pyproject.toml`.
 
+### Type Annotation Rules
+- **Always** annotate return types on every function/method.
+- **Argument annotations** — only annotate if the type is already imported for use in the function body. Never add an extra import solely for annotating an argument.
+- **Qt override methods** (e.g. `data`, `flags`, `setData`, `createEditor`, `eventFilter`) — skip argument annotations unless the type is already imported for other use in the file.
+- Example ✅: `def load(self, path: Path) -> pl.DataFrame` — `Path` and `pl.DataFrame` already imported for body use.
+- Example ❌: `def flags(self, index: QModelIndex) -> Qt.ItemFlag` — if `QModelIndex` is imported only for this annotation, remove it.
+
 ### Adding New Features
 - New analysis methods → add to `classes/`
 - New processing functions → add to `functions/` with both CPU/GPU if applicable

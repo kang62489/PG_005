@@ -121,7 +121,7 @@ def cpu_gaussian_blur(detrended_stack: np.ndarray, sigma: float) -> np.ndarray:
         sigma=4.0 -> heavy blurring
 
     """
-    n_frames, height, width = detrended_stack.shape
+    n_frames, _height, _width = detrended_stack.shape
     gaussian_stack = np.zeros_like(detrended_stack)
 
     # Create 1D Gaussian kernel (reused for all frames)

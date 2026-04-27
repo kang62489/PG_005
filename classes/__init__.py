@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .abf_clip import AbfClip
     from .dialog_pick_list import DialogPickList
+    from .helper_cell_dropdown import CellDropdownDelegate
     from .helper_checkable_dropdown import CheckableDropdown
     from .model_from_dataframe import ModelFromDataFrame
     from .plot_results import PlotPeaks, PlotRegion, PlotSegs, PlotSpatialDist
@@ -17,6 +18,7 @@ from .dialog_get_path import DialogGetPath
 
 __all__ = [
     "AbfClip",
+    "CellDropdownDelegate",
     "CheckableDropdown",
     "DialogConfirm",
     "DialogGetPath",
@@ -33,6 +35,7 @@ __all__ = [
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "AbfClip": (".abf_clip", "AbfClip"),
+    "CellDropdownDelegate": (".helper_cell_dropdown", "CellDropdownDelegate"),
     "DialogPickList": (".dialog_pick_list", "DialogPickList"),
     "CheckableDropdown": (".helper_checkable_dropdown", "CheckableDropdown"),
     "ModelFromDataFrame": (".model_from_dataframe", "ModelFromDataFrame"),

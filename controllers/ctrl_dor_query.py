@@ -15,7 +15,6 @@ from rich.console import Console
 # Local application imports
 from classes import DialogConfirm, DialogGetPath
 from utils import EXP_DB_PATH, LOG_DIR, REC_DB_PATH
-from views import ViewDorQuery
 
 ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Project_Code", "Genotype", "Sex"}
 INJECTIONS_KEEP = {"DOI", "Inj_Mode", "Side", "Incubated", "Virus_Full"}
@@ -30,7 +29,7 @@ class CtrlDorQuery(QObject):
     # Inherit from QObject to use signals
     dor_changed = Signal(str)
 
-    def __init__(self, view: ViewDorQuery) -> None:
+    def __init__(self, view) -> None:
         super().__init__()
         self.view = view
         self.exp_info_db = QSqlDatabase.addDatabase("QSQLITE", "access_exp_info")

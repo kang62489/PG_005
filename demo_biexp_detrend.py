@@ -17,8 +17,8 @@ Files tested:
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
 import tifffile
@@ -234,7 +234,7 @@ for row, fname in enumerate(FILES):
     if res["fitted_bl"] is not None:
         ax2.plot(t, res["fitted_bl"], color="crimson", lw=2, ls="--",
                  label=f"Bi-exp fit\nτ₁={res['tau1']:.0f}  τ₂={res['tau2']:.0f}\nR²={res['r2']:.3f}")
-    ax2.set_title(f"② Bi-exp fit to ALS baseline", fontsize=9, fontweight="bold")
+    ax2.set_title("② Bi-exp fit to ALS baseline", fontsize=9, fontweight="bold")
     ax2.set_xlabel("Frame")
     ax2.set_ylabel("Intensity (a.u.)")
     ax2.legend(fontsize=7)

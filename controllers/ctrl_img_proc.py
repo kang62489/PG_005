@@ -6,12 +6,12 @@ from pathlib import Path
 # Third-party imports
 import polars as pl
 from PySide6.QtCore import QFileSystemWatcher
+from PySide6.QtWidgets import QAbstractItemView
 from rich.console import Console
 
 # Local application imports
-from classes import ModelFromDataFrame
+from classes import CellDropdownDelegate, ModelFromDataFrame
 from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_TIFFS_DIR
-from views import ViewImgProc
 
 # Constants
 CHECK_COLUMNS = ["DOR", "TIFF_SERIAL", "IMG_READY", "PROC", "PROC_READY"]
@@ -22,13 +22,14 @@ CAL_PATTERN = re.compile(r"(Biexp|Mov)")
 console = Console()
 
 class CtrlImgProc:
-    def __init__(self, view: ViewImgProc) -> None:
+    def __init__(self, view) -> None:
         self.view = view
         self.view.le_dir_raw_images.setReadOnly(True)
         self.view.le_dir_raw_images.setPlainText(str(RAW_TIFFS_DIR))
         self.view.le_dir_processed.setReadOnly(True)
         self.view.le_dir_processed.setPlainText(str(PROC_TIFFS_DIR))
         self._ensure_dirs()
+        self._setup_table()
         self.connect_signals()
 
     def _ensure_dirs(self) -> None:
@@ -42,6 +43,14 @@ class CtrlImgProc:
             except OSError as e:
                 console.log(f"[red]FAILED to create[/red]: {path} — {e}")
         self.dirs_watcher = QFileSystemWatcher([str(RAW_TIFFS_DIR), str(PROC_TIFFS_DIR)])
+
+    def _setup_table(self) -> None:
+        self._proc_delegate = CellDropdownDelegate(["YES", "SKIP"])
+        proc_col_idx = 5
+        self.view.tv_data_selector.setItemDelegateForColumn(proc_col_idx, self._proc_delegate)
+        self.view.tv_data_selector.setEditTriggers(
+            QAbstractItemView.EditTrigger.CurrentChanged | QAbstractItemView.EditTrigger.SelectedClicked
+        )
 
     def connect_signals(self) -> None:
         self.view.btn_load_pick_list.clicked.connect(self.load_pick_list)

@@ -96,7 +96,7 @@ class RegionAnalyzer:
 
         for frame in categorized_frames:
             # Analyze individual regions (connected components)
-            dim_info, dim_cont, dim_props = self._analyze_regions(frame, CATEGORY_DIM)
+            dim_info, dim_cont, _dim_props = self._analyze_regions(frame, CATEGORY_DIM)
             self.dim_regions.append(dim_info)
             self.dim_contours.append(dim_cont)
 

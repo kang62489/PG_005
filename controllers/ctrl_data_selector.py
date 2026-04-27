@@ -14,7 +14,6 @@ from rich.console import Console
 # Local application imports
 from classes import DialogPickList
 from utils.params import MODELS_DIR, REC_DB_PATH, RESULTS_DIR
-from views import ViewDataSelector
 
 # Set up rich console
 console = Console()
@@ -26,7 +25,7 @@ PICK_LIST_XLSX_PATH = MODELS_DIR / "pick_list.xlsx"
 
 
 class CtrlDataSelector:
-    def __init__(self, view: ViewDataSelector) -> None:
+    def __init__(self, view) -> None:
         self.view = view
         self.current_dor: str | None = None
         self.df_pick_list = pl.DataFrame()

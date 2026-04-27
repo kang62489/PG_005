@@ -36,7 +36,7 @@ def _setup_cuda_environment() -> tuple[bool, str]:
         return False, f"CUDA installation directory not found: {base_path}"
 
     # Find all installed CUDA versions
-    versions = sorted([path for path in base_path.glob("v*")], reverse=True)
+    versions = sorted(base_path.glob("v*"), reverse=True)
 
     if not versions:
         return False, f"No CUDA versions found in {base_path}"
@@ -113,7 +113,7 @@ def _setup_cuda_environment() -> tuple[bool, str]:
         cleaned_path.append(part)
 
     # Add selected CUDA paths at the beginning
-    new_path_parts = [str(cuda_bin), str(cuda_libnvvp)] + cleaned_path
+    new_path_parts = [str(cuda_bin), str(cuda_libnvvp), *cleaned_path]
     os.environ["PATH"] = ";".join(new_path_parts)
 
     version_name = preferred_version.name

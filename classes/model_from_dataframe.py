@@ -1,7 +1,7 @@
 # Modules
 # Third-party imports
 import polars as pl
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, Qt
 
 
 class ModelFromDataFrame(QAbstractTableModel):
@@ -9,18 +9,37 @@ class ModelFromDataFrame(QAbstractTableModel):
         super().__init__()
         self._data = df if df is not None else pl.DataFrame()
 
-    def data(self, index: QModelIndex, role: Qt.ItemDataRole) -> None | str:
+    def data(self, index, role) -> None | str:
         if role == Qt.ItemDataRole.DisplayRole:
             return str(self._data[index.row(), index.column()])
         return None
 
-    def rowCount(self, _parent: QModelIndex | None = None) -> int:
+    def rowCount(self, _parent=None) -> int:
         return self._data.shape[0]
 
-    def columnCount(self, _parent: QModelIndex | None = None) -> int:
+    def columnCount(self, _parent=None) -> int:
         return self._data.shape[1]
 
-    def headerData(self, section: int, orientation: Qt.Orientation, role: Qt.ItemDataRole = Qt.ItemDataRole.DisplayRole) -> str | None:
+    def flags(self, index) -> Qt.ItemFlag:
+        base = super().flags(index)
+        if self._data.columns[index.column()] == "PROC":
+            return base | Qt.ItemFlag.ItemIsEditable
+        return base
+
+    def setData(self, index, value: str, role=Qt.ItemDataRole.EditRole) -> bool:
+        if role != Qt.ItemDataRole.EditRole:
+            return False
+        col_name = self._data.columns[index.column()]
+        self._data = self._data.with_columns(
+            pl.when(pl.int_range(pl.len()) == index.row())
+            .then(pl.lit(value))
+            .otherwise(pl.col(col_name))
+            .alias(col_name)
+        )
+        self.dataChanged.emit(index, index, [role])
+        return True
+
+    def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole) -> str | None:
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         if role != Qt.ItemDataRole.DisplayRole:
