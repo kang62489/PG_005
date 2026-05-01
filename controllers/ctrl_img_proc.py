@@ -16,7 +16,7 @@ from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_TIFFS_DIR
 # Constants
 CHECK_COLUMNS = ["DOR", "TIFF_SERIAL", "IMG_READY", "PROC", "PROC_READY"]
 PICK_LIST_PATH = MODELS_DIR / "pick_list.json"
-CAL_PATTERN = re.compile(r"(Biexp|Mov)")
+CAL_PATTERN = re.compile(r"(BiExp|Mov)")
 
 # Set up rich console
 console = Console()
@@ -29,7 +29,7 @@ class CtrlImgProc:
         self.view.le_dir_processed.setReadOnly(True)
         self.view.le_dir_processed.setPlainText(str(PROC_TIFFS_DIR))
         self._ensure_dirs()
-        self._setup_table()
+        self._set_proc_delegate()
         self.connect_signals()
 
     def _ensure_dirs(self) -> None:
@@ -44,11 +44,11 @@ class CtrlImgProc:
                 console.log(f"[red]FAILED to create[/red]: {path} — {e}")
         self.dirs_watcher = QFileSystemWatcher([str(RAW_TIFFS_DIR), str(PROC_TIFFS_DIR)])
 
-    def _setup_table(self) -> None:
+    def _set_proc_delegate(self) -> None:
         self._proc_delegate = CellDropdownDelegate(["YES", "SKIP"])
         proc_col_idx = 5
-        self.view.tv_data_selector.setItemDelegateForColumn(proc_col_idx, self._proc_delegate)
-        self.view.tv_data_selector.setEditTriggers(
+        self.view.tv_pick_list.setItemDelegateForColumn(proc_col_idx, self._proc_delegate)
+        self.view.tv_pick_list.setEditTriggers(
             QAbstractItemView.EditTrigger.CurrentChanged | QAbstractItemView.EditTrigger.SelectedClicked
         )
 
@@ -57,14 +57,14 @@ class CtrlImgProc:
         self.dirs_watcher.directoryChanged.connect(self.check_file_status)
 
     def load_pick_list(self) -> None:
-        """Load pick_list.json and display a check table in tv_data_selector."""
+        """Load pick_list.json and display a check table in tv_pick_list."""
         df_pick_list = pl.read_json(PICK_LIST_PATH).with_columns(pl.all().cast(pl.Utf8))
 
         if df_pick_list.is_empty():
             console.log("[yellow]Pick list is empty, nothing to load.[/yellow]")
             self.df_check_list = pl.DataFrame()
             model = ModelFromDataFrame(pl.DataFrame(schema=dict.fromkeys(CHECK_COLUMNS, pl.Utf8)))
-            self.view.tv_data_selector.setModel(model)
+            self.view.tv_pick_list.setModel(model)
             return
 
         # Parse Filename → DOR and TIFF_SERIAL (Note that pl.DataFrame is immutable,)
@@ -79,7 +79,7 @@ class CtrlImgProc:
 
         # Customized QAbstractTableModel for display in table view
         model_pick_list = ModelFromDataFrame(self.df_check_list)
-        self.view.tv_data_selector.setModel(model_pick_list)
+        self.view.tv_pick_list.setModel(model_pick_list)
         console.log(f"[green]Loaded {len(self.df_check_list)} entries into check list.[/green]")
         self.check_file_status()
 
@@ -138,5 +138,5 @@ class CtrlImgProc:
         )
 
         model_examined = ModelFromDataFrame(self.df_file_status)
-        self.view.tv_data_selector.setModel(model_examined)
+        self.view.tv_pick_list.setModel(model_examined)
         console.log("[green] File status updated.[/green]")

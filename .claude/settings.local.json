@@ -31,7 +31,8 @@
       "Bash(conda run:*)",
       "Bash(conda env:*)",
       "Bash(.venv/Scripts/ruff.exe check:*)",
-      "Bash(rg -v \"warning:|Installed|Removed|Creating|Downloading|Downloaded|hardlink|filesystems|intentional|unfixable|Using CPython|^\\\\s*$\")"
+      "Bash(rg -v \"warning:|Installed|Removed|Creating|Downloading|Downloaded|hardlink|filesystems|intentional|unfixable|Using CPython|^\\\\s*$\")",
+      "Bash(uvx ruff:*)"
     ]
   }
 }

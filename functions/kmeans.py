@@ -121,7 +121,7 @@ def calculate_cluster_areas(clustered_frames: list[np.ndarray], magnification: s
     return frame_areas
 
 
-def visualize_clustering_results(  # noqa: C901, PLR0912, PLR0915
+def visualize_clustering_results(
     original_frames: list[np.ndarray],
     clustered_frames: list[np.ndarray],
     spike_trace: list[np.ndarray] | list[list[np.ndarray]],

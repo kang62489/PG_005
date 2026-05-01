@@ -28,8 +28,8 @@ def main(file: str) -> None:
     # Parameters
     filename = file
     raw_path = Path(__file__).parent / "raw_tiffs"
-    output_name_1 = f"{Path(filename).stem}_Cal.tif"
-    output_name_2 = f"{Path(filename).stem}_Gauss.tif"
+    output_name_1 = f"{Path(filename).stem}_Mov_Cal.tif"
+    output_name_2 = f"{Path(filename).stem}_Mov_Gauss.tif"
 
     # Delete existing output files
     for output_file in [output_name_1, output_name_2]:
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     # Process files
     date = "2026_03_20"
-    serials = ["0013", "0029", "0041"]
+    serials = ["0028", "0029", "0040", "0041"]
     file_list = [f"{date}-{serial}.tif" for serial in serials]
     for file in file_list:
         main(file)

@@ -1,4 +1,3 @@
-# noqa: INP001
 """
 run_als_1d.py  --  ALS baseline correction for a 1-D intensity trace
 =====================================================================
@@ -97,7 +96,6 @@ print(f"Corrected range: [{corrected.min():.3f}, {corrected.max():.3f}]")
 # ── Save results ──────────────────────────────────────────
 stem = INPUT_FILE.stem
 out_xlsx = INPUT_FILE.with_name(f"{stem}_ALS.xlsx")
-out_png = INPUT_FILE.with_name(f"{stem}_ALS.png")
 
 df_out = pd.DataFrame({COL_INDEX: t, COL_INTENSITY: y, "baseline": baseline, "corrected": corrected})
 df_out.to_excel(out_xlsx, index=False)
@@ -122,6 +120,4 @@ ax1.set_ylabel("Intensity")
 ax1.legend(fontsize=8)
 ax1.set_title("Baseline-corrected signal")
 
-fig.savefig(out_png, dpi=120, bbox_inches="tight")
-print(f"Plot   -> {out_png}")
 plt.show()

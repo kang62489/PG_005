@@ -25,6 +25,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "polars>=1.39.3",
     "xlsxwriter>=3.2.9",
+    "pandas>=2.3.3",
 ]
 
 [tool.ruff]

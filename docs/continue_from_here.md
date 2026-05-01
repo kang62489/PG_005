@@ -1,31 +1,31 @@
-# Log of the project progress 2026-04-27 Sun
+# Log of the project progress 2026-04-28 Mon (Session 3)
 
-Last working file: controllers/ctrl_img_proc.py
-Last working line: ~145
+Last working file: run_biexp_detrend.py
+Last working line: ~1 (reviewing only)
 
 # List of modified files:
-- controllers/__init__.py (renamed CtrlImgPreproc → CtrlImgProc)
-- controllers/ctrl_img_proc.py (<- Break here, ~line 145)
-- views/__init__.py (renamed ViewImgPreproc → ViewImgProc)
-- views/view_img_proc.py (renamed ViewImgPreproc → ViewImgProc)
-- main.py (renamed all preproc references → proc, tab label updated)
+- demo_als_biexp.py (deleted)
+- demo_biexp_detrend.py (deleted)
+- run_als_1d.py (removed savefig call + out_png variable)
+- run_biexp_detrend.py (removed noqa: INP001)
+- classes/helper_checkable_dropdown.py (removed unnecessary noqa: N802)
+- classes/plot_results.py (removed unnecessary noqa: C901, PLR0915)
+- classes/results_exporter.py (removed unnecessary noqa: ANN401)
+- functions/kmeans.py (removed unnecessary noqa: C901, PLR0912, PLR0915)
+- functions/spike_centered_processes.py (removed unnecessary noqa: E741)
 
 ## Summary of current progress
-- Renamed ImgPreproc → ImgProc across all files (ctrl, view, __init__ x2, main.py)
-- Redesigned check_file_status(): split into _raw_tiff_ready, _cal_exists, _gauss_exists
-- Used regex CAL_PATTERN (Biexp|Mov) to detect processing type from filenames
-- Fixed load_pick_list() empty case not clearing self.df_check_list
-- Added PROC column (YES/SKIP) using chained .with_columns() after GAUSS_EXISTS? is resolved
-- Fixed polars bug: pl.col referencing a newly computed column in the same with_columns() call
+- Reviewed all 4 standalone scripts (demo_als_biexp, demo_biexp_detrend, run_als_1d, run_biexp_detrend)
+- Deleted demo_als_biexp.py and demo_biexp_detrend.py — no longer needed
+- Kept run_als_1d.py and run_biexp_detrend.py for future integration into CPU/GPU pipeline
+- Removed 7 unnecessary noqa comments across multiple files (RUF100)
+- Removed savefig calls from run_als_1d.py
+- Fixed 3 C408 ruff issues (dict() → literal) in demo files before deletion
+- Discussed differences: biexp detrend (run_biexp_detrend.py) vs moving-average detrend (cpu/gpu_process.py)
 
 ## Completed TODOs (from last session)
-- Apply check_file_status() fix (map_elements, correct variable names, remove .clone())
-- Re-think check_file_status() to handle Cal, Gauss (Mov), and BiExp separately
+- (none — this session was focused on code review and cleanup)
 
 ## What should we do next? (TODOs)
-- [ ] Implement editable PROC column (dropdown YES/SKIP) via QStyledItemDelegate + ModelFromDataFrame editable support
-- [ ] Wire btn_start_processing to run processing based on PROC column values
-- [ ] Add setup_block_2 preview plot for bleach correction
-
-## Extra Notes / Ideas
-- 💡 Consider adding a DirWatcher (QFileSystemWatcher on proc dir) for automatic file status refresh
+- [ ] Wire btn_start_processing — run processing based on PROC column values
+- [ ] Plan merging biexp detrend into CPU/GPU pipeline (run_biexp_detrend.py → functions/)

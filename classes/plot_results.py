@@ -433,7 +433,7 @@ class PlotSpatialDist(QMainWindow):
             self.show()
             center_on_screen(self)
 
-    def plotting(self) -> None:  # noqa: C901, PLR0915
+    def plotting(self) -> None:
         if not self.sc_ins.categorized_frames:
             msg = "No results to plot. Call fit() first."
             raise RuntimeError(msg)

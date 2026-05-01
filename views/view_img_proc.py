@@ -1,13 +1,13 @@
 ## Modules
 # Third-party imports
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextEdit, QVBoxLayout
 
 # Local application imports
 from utils.params import UISizes
 
 
 class ViewImgProc:
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent=None) -> None:
         self.tab_container = parent
         self.lo_tab_container = QHBoxLayout()
         self.tab_container.setLayout(self.lo_tab_container)
@@ -15,7 +15,6 @@ class ViewImgProc:
 
     def setup_blocks(self) -> None:
         self.setup_block_1()
-        self.setup_block_2()
 
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
@@ -38,29 +37,15 @@ class ViewImgProc:
         self.lo_block_1.addWidget(self.le_dir_processed)
 
 
-        self.lbl_data_selector = QLabel("Picked Data: ")
-        self.lo_block_1.addWidget(self.lbl_data_selector)
+        self.lbl_pick_list = QLabel("Picked Data: ")
+        self.lo_block_1.addWidget(self.lbl_pick_list)
 
         self.btn_load_pick_list = QPushButton("Load Pick List")
         self.lo_block_1.addWidget(self.btn_load_pick_list)
 
-        self.btn_check_bleach_corr = QPushButton("Check Bleach Correction")
-        self.lo_block_1.addWidget(self.btn_check_bleach_corr)
-
-        self.tv_data_selector = QTableView()
-        self.lo_block_1.addWidget(self.tv_data_selector)
+        self.tv_pick_list = QTableView()
+        self.lo_block_1.addWidget(self.tv_pick_list)
 
         self.btn_start_processing = QPushButton("Start Processing")
         self.lo_block_1.addWidget(self.btn_start_processing)
-
-    def setup_block_2(self) -> None:
-        self.lo_block_2 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_2)
-
-        self.lbl_preview_corr = QLabel("Preview of Bleaching Correction: ")
-        self.lo_block_2.addWidget(self.lbl_preview_corr)
-
-        self.w_preview_corr = QWidget()
-        self.lo_block_2.addWidget(self.w_preview_corr)
-        self.lo_preview_corr = QVBoxLayout(self.w_preview_corr)
 

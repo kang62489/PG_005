@@ -1,4 +1,3 @@
-# noqa: INP001
 """
 run_biexp_detrend.py  --  Per-pixel bi-exponential trend removal
 ================================================================
@@ -7,8 +6,8 @@ Pipeline per file:
      -> take median tau1, tau2 as shared time constants
   2. Per pixel: fast linear solve for (A, B) with fixed tau1, tau2
      -> subtract bi-exp trend over the full trace
-  3. Align pixel means, save as <stem>_BiexpCal.tif
-  4. Plot N_PIX_PLOT randomly sampled pixels: raw / trend / detrended
+  3. Align pixel means, save as <stem>_Biexp_Cal.tif
+  4. Gaussian blur (sigma=SIGMA), save as <stem>_Biexp_Gauss.tif
 """
 
 from __future__ import annotations
@@ -22,6 +21,10 @@ import numpy as np
 import tifffile
 from scipy.optimize import curve_fit
 
+from functions import cpu_gaussian_blur
+
+SIGMA = 6.0
+
 # ── Config ────────────────────────────────────────────────
 RAW_DIR = Path(__file__).parent / "raw_tiffs"
 OUT_DIR = Path(__file__).parent / "proc_tiffs"
@@ -32,8 +35,12 @@ FILES = [
     # "20260323_005.tif",
     # "20260323_008.tif",
     # "20260323_011.tif",
-    "2024_12_19-0018.tif",
-    "2025_02_27-0036.tif",
+    # "2024_12_19-0018.tif",
+    # "2025_02_27-0036.tif",
+    "2026_03_20-0028.tif",
+    "2026_03_20-0029.tif",
+    "2026_03_20-0040.tif",
+    "2026_03_20-0041.tif",
 ]
 
 N_TAU_SAMPLE = 500  # pixels used to estimate tau1, tau2
@@ -126,7 +133,9 @@ def _process_chunk(rows: list[int], img: np.ndarray, E: np.ndarray, E_pinv: np.n
 
     for i, row in enumerate(rows):
         Y = img[:, row, :].astype(np.float64)
-        out_chunk[:, i, :] = (Y - E @ (E_pinv @ Y)).astype(np.float32)
+        trend = E @ (E_pinv @ Y)                              # (n_frames, n_cols)
+        edge_min = np.minimum(trend[0], trend[-1])            # per-pixel baseline
+        out_chunk[:, i, :] = (Y - trend + edge_min).astype(np.float32)
 
     return rows, out_chunk
 
@@ -184,13 +193,16 @@ for fname in FILES:
     print(f"  Detrending  (workers={N_WORKERS})...")
     detrended = detrend_stack(img, tau1, tau2)
 
-    # Step 3 -- align + save
+    # Step 3 -- align + save Cal
     detrended = align_to_min(detrended)
-    out_path = OUT_DIR / f"{stem}_BiexpCal.tif"
-    save_data = detrended - detrended.min()  # shift so global min = 0, no clipping
-    tifffile.imwrite(out_path, save_data.astype(np.uint16))
-    print(f"  Saved  -> {out_path}   ({time.time() - t0:.1f}s total)")
+    tifffile.imwrite(OUT_DIR / f"{stem}_Biexp_Cal.tif", np.clip(detrended, 0, 65535).astype(np.uint16))
+    print(f"  Saved  -> {stem}_Biexp_Cal.tif   ({time.time() - t0:.1f}s total)")
 
-    del img, detrended
+    # Step 4 -- Gaussian blur + save Gauss
+    gaussian = cpu_gaussian_blur(detrended, SIGMA)
+    tifffile.imwrite(OUT_DIR / f"{stem}_Biexp_Gauss.tif", np.clip(gaussian, 0, 65535).astype(np.uint16))
+    print(f"  Saved  -> {stem}_Biexp_Gauss.tif   ({time.time() - t0:.1f}s total)")
+
+    del img, detrended, gaussian
 
 print(f"\n{'=' * 60}\nAll done!")

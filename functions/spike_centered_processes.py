@@ -18,7 +18,7 @@ def _median_axis0(stacked: np.ndarray) -> np.ndarray:
     result = np.empty((n_frames, height, width), dtype=np.float64)
     mid = s_count // 2
 
-    for h in prange(height):  # noqa: E741
+    for h in prange(height):
         for w in range(width):
             for f in range(n_frames):
                 vals = np.empty(s_count, dtype=np.float64)
