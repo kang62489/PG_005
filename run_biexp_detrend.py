@@ -6,8 +6,8 @@ Pipeline per file:
      -> take median tau1, tau2 as shared time constants
   2. Per pixel: fast linear solve for (A, B) with fixed tau1, tau2
      -> subtract bi-exp trend over the full trace
-  3. Align pixel means, save as <stem>_Biexp_Cal.tif
-  4. Gaussian blur (sigma=SIGMA), save as <stem>_Biexp_Gauss.tif
+  3. Align pixel means, save as <stem>_BIEXP_CAL.tif
+  4. Gaussian blur (sigma=SIGMA), save as <stem>_BIEXP_GAUSS.tif
 """
 
 from __future__ import annotations
@@ -184,28 +184,29 @@ for fname in FILES:
     stem = Path(fname).stem
     print(f"\n{'=' * 60}\n  {fname}")
 
+    # Step 1 -- load stack
     img = tifffile.imread(fpath).astype(np.float32)
     n_frames, H, W = img.shape
     print(f"  Shape : ({n_frames}, {H}, {W})   loaded {time.time() - t0:.1f}s")
 
-    # Step 1 -- estimate tau from sampled pixels
+    # Step 2 -- estimate tau from sampled pixels
     print(f"  Sampling {N_TAU_SAMPLE} pixels for tau estimation...")
     tau1, tau2 = sample_tau(img)
     print(f"  -> using tau1={tau1:.1f}  tau2={tau2:.1f}  ({time.time() - t0:.1f}s)")
 
-    # Step 2 -- fast per-pixel linear detrend
+    # Step 3 -- fast per-pixel linear detrend
     print(f"  Detrending  (workers={N_WORKERS})...")
     detrended = detrend_stack(img, tau1, tau2)
 
-    # Step 3 -- align + save Cal
+    # Step 4 -- align + save Cal
     detrended = align_to_min(detrended)
-    tifffile.imwrite(OUT_DIR / f"{stem}_Biexp_Cal.tif", np.clip(detrended, 0, 65535).astype(np.uint16))
-    print(f"  Saved  -> {stem}_Biexp_Cal.tif   ({time.time() - t0:.1f}s total)")
+    tifffile.imwrite(OUT_DIR / f"{stem}_BIEXP_CAL.tif", np.clip(detrended, 0, 65535).astype(np.uint16))
+    print(f"  Saved  -> {stem}_BIEXP_CAL.tif   ({time.time() - t0:.1f}s total)")
 
-    # Step 4 -- Gaussian blur + save Gauss
+    # Step 5 -- Gaussian blur + save Gauss
     gaussian = cpu_gaussian_blur(detrended, SIGMA)
-    tifffile.imwrite(OUT_DIR / f"{stem}_Biexp_Gauss.tif", np.clip(gaussian, 0, 65535).astype(np.uint16))
-    print(f"  Saved  -> {stem}_Biexp_Gauss.tif   ({time.time() - t0:.1f}s total)")
+    tifffile.imwrite(OUT_DIR / f"{stem}_BIEXP_GAUSS.tif", np.clip(gaussian, 0, 65535).astype(np.uint16))
+    print(f"  Saved  -> {stem}_BIEXP_GAUSS.tif   ({time.time() - t0:.1f}s total)")
 
     del img, detrended, gaussian
 

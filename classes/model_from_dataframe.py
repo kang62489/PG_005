@@ -22,8 +22,13 @@ class ModelFromDataFrame(QAbstractTableModel):
 
     def flags(self, index) -> Qt.ItemFlag:
         base = super().flags(index)
-        if self._data.columns[index.column()] == "PROC":
+        col_name = self._data.columns[index.column()]
+        if col_name == "PROC":
             return base | Qt.ItemFlag.ItemIsEditable
+        if col_name == "MODE" and "PROC" in self._data.columns:
+            proc_val = self._data[index.row(), self._data.columns.index("PROC")]
+            if proc_val != "SKIP":
+                return base | Qt.ItemFlag.ItemIsEditable
         return base
 
     def setData(self, index, value: str, role=Qt.ItemDataRole.EditRole) -> bool:

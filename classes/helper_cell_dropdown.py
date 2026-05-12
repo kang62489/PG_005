@@ -14,6 +14,8 @@ class CellDropdownDelegate(QStyledItemDelegate):
     def createEditor(self, parent, _option, _index) -> QComboBox:
         editor = QComboBox(parent)
         editor.addItems(self.menu_options)
+        # Connect the currentIndexChanged signal to commitData to ensure changes are saved immediately
+        editor.activated.connect(lambda: self.commitData.emit(editor))
         return editor
 
     def setEditorData(self, editor: QComboBox, index) -> None:

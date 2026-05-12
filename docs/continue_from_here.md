@@ -1,26 +1,39 @@
-# Log of the project progress 2026-05-11 Sun (Session 6)
+# Log of the project progress 2026-05-13 Tue
 
 Last working file: controllers/ctrl_img_proc.py
-Last working line: ~143
+Last working line: ~255
 
 # List of modified files:
-- None (review/orientation session only)
+- batch_process.py
+- classes/abf_clip.py
+- classes/helper_cell_dropdown.py
+- classes/model_from_dataframe.py
+- controllers/ctrl_img_proc.py (<- Break here, ~line 255)
+- im_preprocess.py
+- run_als_baseline.py
+- run_biexp_detrend.py
+- test_batch.py
 
 ## Summary of current progress
-- Fixed VSCode IDE issues (external, not code-related)
-- Re-oriented in the GUI codebase on the `gui` branch
-- Reviewed ctrl_img_proc.py and view_img_proc.py — GUI tab for image processing
-- Clarified that pick_list.json and pick_list.xlsx both live in data/
-- Clarified that data/pick_list.xlsx is deleted and data/pick_list.json is reset to [] on every app startup (clear_pick_list called in CtrlDataSelector.__init__)
+- Filtered out `_checked.txt` files from `load_pick_list` dialog
+- Added MODE column (BIEXP/MOV/BOTH/NONE) to the pick list table with its own dropdown delegate
+- `_on_proc_changed`: MODE auto-updates when PROC changes (YES→BIEXP, SKIP→NONE)
+- MODE cell is disabled (not editable) when PROC is SKIP
+- `export_checked_list` now writes `[filename, PROC, MODE]` format
+- Both `load_pick_list` and `export_checked_list` now parse between `Picked:` and `Total...` lines
+- Delegate auto-commits on selection (`activated` signal); fixed "editor not belong to view" warning
+- Unified ALL_CAPS file suffix convention: `_MOV_CAL`, `_MOV_GAUSS`, `_BIEXP_CAL`, `_BIEXP_GAUSS`, `_BIEXP_BASELINE`, `_BIEXP_DFF0` across all scripts
+- `classes/abf_clip.py` `load_img` default updated to `"MOV_GAUSS"`
 
 ## Completed TODOs (from last session)
-- None (this session was review/orientation only)
+- Added DETREND/MODE column to check_list — covered by new MODE column
+- Consistent file naming convention enforced across all scripts
 
 ## What should we do next? (TODOs)
-- [ ] Wire btn_start_processing — run biexp processing based on PROC column values
-- [ ] Plan merging biexp detrend into CPU/GPU pipeline (run_biexp_detrend.py -> functions/)
+- [ ] **[NEXT]** Modify and merge `im_preprocess.py` and `run_biexp_detrend.py` into a MODE-selection-oriented structure — single entry point that dispatches to MOV or BIEXP pipeline based on MODE value
+- [ ] Wire `btn_start_processing` — trigger processing based on PROC/MODE column values from checked list
+- [ ] Make preprocessing scripts load filenames from `*_checked.txt` instead of hardcoded lists
+- [ ] Plan merging biexp detrend into CPU/GPU pipeline (`run_biexp_detrend.py` → `functions/`)
 - [ ] Implement ALS baseline estimation for dF/F0 calculation
-- [ ] Consider cropping image edges to reduce non-uniform illumination effect on tau estimation
-- [ ] Decouple Gaussian blur from detrending — separate functions for detrend and blur
-- [ ] Archive original Mov pipeline (im_preprocess.py + cpu/gpu_process.py) — keep usable but clearly separated for PI reference
-- [ ] Apply im_preprocess_to_be_mod.py changes to main im_preprocess.py
+- [ ] Decouple Gaussian blur from detrending — separate functions
+- [ ] Archive original Mov pipeline — keep usable but clearly separated for PI reference

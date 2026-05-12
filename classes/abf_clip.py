@@ -54,7 +54,7 @@ class AbfClip:
         abf_file_path = Path(self.root_dir) / "raw_abfs" / f"{self.exp_date}_{self.abf_serial}.abf"
         self.loaded_abf = pyabf.ABF(abf_file_path)
 
-    def load_img(self, filter_type: str = "Gauss") -> None:
+    def load_img(self, filter_type: str = "MOV_GAUSS") -> None:
         img_file_path = (
             Path(self.root_dir) / "proc_tiffs" / f"{self.exp_date}-{self.img_serial}_{filter_type}.tif"
         )

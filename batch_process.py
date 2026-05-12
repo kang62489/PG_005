@@ -61,8 +61,8 @@ def preprocess_single(date: str, serial: str) -> bool:
         detrended_uint16 = np.clip(detrended, 0, 65535).astype(np.uint16)
         gaussian_uint16 = np.clip(gaussian, 0, 65535).astype(np.uint16)
 
-        tifffile.imwrite(output_path / f"{base_name}_Cal.tif", detrended_uint16)
-        tifffile.imwrite(output_path / f"{base_name}_Gauss.tif", gaussian_uint16)
+        tifffile.imwrite(output_path / f"{base_name}_MOV_CAL.tif", detrended_uint16)
+        tifffile.imwrite(output_path / f"{base_name}_MOV_GAUSS.tif", gaussian_uint16)
 
     except Exception:
         print(f"  ✗ Error preprocessing {file}")
@@ -271,8 +271,8 @@ def main() -> None:
 
         for exp_date, img_serial in tqdm(sorted(unique_images), desc="Preprocessing"):
             # Check if preprocessed files already exist
-            cal_file = Path("proc_tiffs") / f"{exp_date}-{img_serial}_Cal.tif"
-            gauss_file = Path("proc_tiffs") / f"{exp_date}-{img_serial}_Gauss.tif"
+            cal_file = Path("proc_tiffs") / f"{exp_date}-{img_serial}_MOV_CAL.tif"
+            gauss_file = Path("proc_tiffs") / f"{exp_date}-{img_serial}_MOV_GAUSS.tif"
 
             if cal_file.exists() and gauss_file.exists():
                 preprocess_skipped += 1

@@ -2,11 +2,11 @@
 run_als_baseline.py  --  Per-pixel ALS baseline estimation
 ===========================================================
 Pipeline per file:
-  Input : *_Biexp_Gauss.tif  (T x H x W, uint16)
+  Input : *_BIEXP_GAUSS.tif  (T x H x W, uint16)
   1. ALS pixel-wise  ->  slowly-varying F0 per pixel
-  2. Save *_Biexp_Baseline.tif  (float32)
+  2. Save *_BIEXP_BASELINE.tif  (float32)
   3. Compute dF/F0 = (Gauss - Baseline) / Baseline
-  4. Save *_Biexp_dFF0.tif  (float32)
+  4. Save *_BIEXP_DFF0.tif  (float32)
 
 GPU path  : one Numba CUDA thread per pixel, Thomas algorithm per ALS iteration.
 CPU path  : same Thomas algorithm vectorised across all pixels with NumPy.
@@ -25,12 +25,12 @@ from numba import cuda
 PROC_DIR = Path(__file__).parent / "proc_tiffs"
 
 FILES = [
-    # "2026_03_20-0028_Biexp_Gauss.tif",
-    # "2026_03_20-0029_Biexp_Gauss.tif",
-    # "2026_03_20-0040_Biexp_Gauss.tif",
-    # "2026_03_20-0041_Biexp_Gauss.tif",
-    "2025_06_11-0002_Biexp_Gauss.tif",
-    "2025_06_11-0003_Biexp_Gauss.tif",
+    # "2026_03_20-0028_BIEXP_GAUSS.tif",
+    # "2026_03_20-0029_BIEXP_GAUSS.tif",
+    # "2026_03_20-0040_BIEXP_GAUSS.tif",
+    # "2026_03_20-0041_BIEXP_GAUSS.tif",
+    "2025_06_11-0002_BIEXP_GAUSS.tif",
+    "2025_06_11-0003_BIEXP_GAUSS.tif",
 ]
 
 LAM = 1e2    # smoothness: larger → smoother baseline
@@ -182,7 +182,7 @@ for fname in FILES:
         print(f"\n[SKIP] {fname} not found in {PROC_DIR}")
         continue
 
-    stem = fpath.stem.replace("_Biexp_Gauss", "")
+    stem = fpath.stem.replace("_BIEXP_GAUSS", "")
     t0 = time.time()
     print(f"\n{'=' * 60}\n  {fname}")
 
@@ -196,14 +196,14 @@ for fname in FILES:
     print(f"  ALS done  ({time.time() - t0:.1f}s)")
 
     # ── Save baseline ─────────────────────────────────────
-    tifffile.imwrite(PROC_DIR / f"{stem}_Biexp_Baseline.tif", baseline.astype(np.float16))
-    print(f"  Saved  -> {stem}_Biexp_Baseline.tif")
+    tifffile.imwrite(PROC_DIR / f"{stem}_BIEXP_BASELINE.tif", baseline.astype(np.float16))
+    print(f"  Saved  -> {stem}_BIEXP_BASELINE.tif")
 
     # ── Compute and save dF/F0 ───────────────────────────
     # f0 = np.maximum(baseline, 1.0)          # guard against zero baseline
     dff0 = (100 * (gauss - baseline) / baseline).astype(np.float16)
-    tifffile.imwrite(PROC_DIR / f"{stem}_Biexp_dFF0.tif", dff0)
-    print(f"  Saved  -> {stem}_Biexp_dFF0.tif   ({time.time() - t0:.1f}s total)")
+    tifffile.imwrite(PROC_DIR / f"{stem}_BIEXP_DFF0.tif", dff0)
+    print(f"  Saved  -> {stem}_BIEXP_DFF0.tif   ({time.time() - t0:.1f}s total)")
 
     del gauss, baseline, dff0
 

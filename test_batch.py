@@ -64,8 +64,8 @@ def main() -> None:
 
         # Preprocess (unless --analysis-only)
         if not args.analysis_only:
-            cal_file = Path("proc_tiffs") / f"{pair['exp_date']}-{pair['img_serial']}_Cal.tif"
-            gauss_file = Path("proc_tiffs") / f"{pair['exp_date']}-{pair['img_serial']}_Gauss.tif"
+            cal_file = Path("proc_tiffs") / f"{pair['exp_date']}-{pair['img_serial']}_MOV_CAL.tif"
+            gauss_file = Path("proc_tiffs") / f"{pair['exp_date']}-{pair['img_serial']}_MOV_GAUSS.tif"
 
             if cal_file.exists() and gauss_file.exists():
                 print("  - Preprocessing... ✓ Already exists, skipping")
