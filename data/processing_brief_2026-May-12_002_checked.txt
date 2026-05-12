@@ -1,0 +1,15 @@
+Date Created: 2026-May-12
+Analysis: test
+Purposes:
+     123
+
+Picked:
+[2025_11_08-0032.tif, Yes]
+[2025_11_08-0033.tif, Yes]
+[2025_11_08-0034.tif, Yes]
+[2025_11_08-0035.tif, Yes]
+
+Total 4 records picked
+
+dir_raw_tiffs: D:\MyDB\2_Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs

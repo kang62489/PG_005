@@ -2,7 +2,6 @@
 # Standard library imports
 import datetime
 import json
-import shutil
 
 # Third-party imports
 import polars as pl
@@ -13,7 +12,7 @@ from rich.console import Console
 
 # Local application imports
 from classes import DialogPickList
-from utils.params import MODELS_DIR, REC_DB_PATH, RESULTS_DIR
+from utils.params import MODELS_DIR, REC_DB_PATH
 
 # Set up rich console
 console = Console()
@@ -21,7 +20,6 @@ console = Console()
 # Constants
 CORE_COLUMNS = ("Filename", "Timestamp", "OBJ", "EXC", "EMI", "FRAMES", "SLICE", "AT", "SENSOR", "PAIRED_ABF")
 PICK_LIST_JSON_PATH = MODELS_DIR / "pick_list.json"
-PICK_LIST_XLSX_PATH = MODELS_DIR / "pick_list.xlsx"
 
 
 class CtrlDataSelector:
@@ -44,8 +42,8 @@ class CtrlDataSelector:
 
         self.view.btn_pick_selected.clicked.connect(self.pick_selected)
         self.view.btn_open_pick_list.clicked.connect(self.open_pick_list)
-        self.view.btn_note_gen.clicked.connect(self.note_gen)
-        self.view.btn_note_export.clicked.connect(self.note_export)
+        self.view.btn_brief_gen.clicked.connect(self.brief_gen)
+        self.view.btn_brief_export.clicked.connect(self.brief_export)
 
         # Connect filter dropdowns
         for col in self.view.filter_columns:
@@ -150,19 +148,14 @@ class CtrlDataSelector:
     # ── Pick list persistence ──────────────────────────────────────────────
 
     def save_pick_list(self, df: pl.DataFrame) -> None:
-        """Persist pick list to JSON + XLSX, then refresh GUI log."""
+        """Persist pick list to JSON, then refresh processing brief."""
         self.df_pick_list = df
         PICK_LIST_JSON_PATH.write_text(json.dumps(df.to_dicts(), indent=4))
-        if not df.is_empty():
-            try:
-                df.write_excel(PICK_LIST_XLSX_PATH)
-            except Exception as e:
-                console.print(f"[bold yellow]Warning: could not write XLSX — {e}[/bold yellow]")
-        self.note_gen()
+        self.brief_gen()
 
-    def note_gen(self) -> None:
-        """Format and display the analysis note in the GUI text area."""
-        # Auto-fill creation date and generate note content based on current pick list and user inputs
+    def brief_gen(self) -> None:
+        """Format and display the processing brief in the GUI text area."""
+        # Auto-fill creation date and generate brief content based on current pick list and user inputs
         self.view.le_date_created.setText(datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%b-%d"))
         title = self.view.le_title.text().strip() or "Untitled"
         purposes_raw = self.view.te_purposes.toPlainText().strip()
@@ -184,52 +177,41 @@ class CtrlDataSelector:
         if self.df_pick_list.is_empty() or "Filename" not in self.df_pick_list.columns:
             lines.append("  (No records picked yet)")
         else:
-            df_with_folder = self.df_pick_list.with_columns(
-                pl.col("Filename").str.split("-").list.first().alias("_folder")
-            )
-            cols = df_with_folder.columns
-            total = 0
-            for folder in df_with_folder["_folder"].unique(maintain_order=True).sort().to_list():
-                group = df_with_folder.filter(pl.col("_folder") == folder)
-                rows = sorted(group.to_dicts(), key=lambda r: r["Filename"])
-                lines.append(f"\n{folder}/")
-                for row in rows:
-                    obj = row.get("OBJ") or "" if "OBJ" in cols else ""
-                    abf = row.get("PAIRED_ABF") or "" if "PAIRED_ABF" in cols else ""
-                    suffix = "  |  ".join(filter(None, [obj, abf]))
-                    entry = f"    {row['Filename']}"
-                    if suffix:
-                        entry += f"  |  {suffix}"
-                    lines.append(entry)
-                n = len(rows)
-                total += n
-                lines.append(f"\n{n} records picked")
-            lines.append(f"\nTotal {total} records picked")
+            cols = self.df_pick_list.columns
+            rows = sorted(self.df_pick_list.to_dicts(), key=lambda r: r["Filename"])
+            for row in rows:
+                abf = row.get("PAIRED_ABF") or "" if "PAIRED_ABF" in cols else ""
+                if abf:
+                    dor = row["Filename"].split("-")[0]
+                    entry = f"[{row['Filename']}, {dor}_{abf}.abf]"
+                else:
+                    entry = f"[{row['Filename']}]"
+                lines.append(entry)
+            lines.append(f"\nTotal {len(rows)} records picked")
 
-        self.view.te_analysis_notes.setPlainText("\n".join(lines))
+        self.view.te_processing_brief.setPlainText("\n".join(lines))
 
-    def note_export(self) -> None:
-        """Export analysis note as .txt and pick list as .xlsx into results/."""
+    def brief_export(self) -> None:
+        """Export processing brief as .txt into results/, with auto serial suffix."""
         date_created = self.view.le_date_created.text().strip()
         if not date_created:
-            console.print("[bold red]Date Created is empty — run Generate Note first.[/bold red]")
+            console.print("[bold red]Date Created is empty — run Generate Brief first.[/bold red]")
             return
 
-        RESULTS_DIR.mkdir(exist_ok=True)
+        MODELS_DIR.mkdir(exist_ok=True)
 
-        # Save analysis note text
-        note_text = self.view.te_analysis_notes.toPlainText().strip()
-        note_path = RESULTS_DIR / f"analysis_note_{date_created}.txt"
-        note_path.write_text(note_text, encoding="utf-8")
-        console.print(f"[bold green]Analysis note saved → {note_path}[/bold green]")
-
-        # Move pick list XLSX
-        if PICK_LIST_XLSX_PATH.exists():
-            dest = RESULTS_DIR / f"pick_list_{date_created}.xlsx"
-            shutil.copy2(PICK_LIST_XLSX_PATH, dest)
-            console.print(f"[bold green]Pick list copied → {dest}[/bold green]")
+        # Find next available serial number for today's date
+        existing = sorted(MODELS_DIR.glob(f"processing_brief_{date_created}_*.txt"))
+        if existing:
+            last_serial = int(existing[-1].stem.rsplit("_", 1)[-1])
+            serial = last_serial + 1
         else:
-            console.print("[bold yellow]No pick_list.xlsx found to export.[/bold yellow]")
+            serial = 0
+        note_path = MODELS_DIR / f"processing_brief_{date_created}_{serial:03d}.txt"
+
+        note_text = self.view.te_processing_brief.toPlainText().strip()
+        note_path.write_text(note_text, encoding="utf-8")
+        console.print(f"[bold green]Processing brief saved → {note_path}[/bold green]")
 
     # ── Pick actions ───────────────────────────────────────────────────────
 
@@ -286,8 +268,6 @@ class CtrlDataSelector:
     def clear_pick_list(self) -> None:
         self.df_pick_list = pl.DataFrame()
         PICK_LIST_JSON_PATH.write_text(json.dumps([], indent=4))
-        if PICK_LIST_XLSX_PATH.exists():
-            PICK_LIST_XLSX_PATH.unlink()
 
     def open_pick_list(self) -> None:
         self.dlg_pick_list = DialogPickList()
@@ -295,16 +275,11 @@ class CtrlDataSelector:
         self.dlg_pick_list.show()
 
     def _on_dialog_pick_list_changed(self) -> None:
-        """Sync XLSX and GUI log after the pick list dialog modifies the JSON."""
+        """Sync GUI log after the pick list dialog modifies the JSON."""
         if PICK_LIST_JSON_PATH.exists():
             raw = pl.read_json(PICK_LIST_JSON_PATH)
             df = raw.with_columns(pl.all().cast(pl.Utf8)).fill_null("") if not raw.is_empty() else pl.DataFrame()
         else:
             df = pl.DataFrame()
         self.df_pick_list = df
-        if not df.is_empty():
-            try:
-                df.write_excel(PICK_LIST_XLSX_PATH)
-            except Exception as e:
-                console.print(f"[bold yellow]Warning: could not write XLSX — {e}[/bold yellow]")
-        self.note_gen()
+        self.brief_gen()

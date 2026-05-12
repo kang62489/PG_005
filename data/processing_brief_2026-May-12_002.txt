@@ -1,0 +1,12 @@
+Date Created: 2026-May-12
+Analysis: test
+Purposes:
+     123
+
+Picked:
+[2025_11_08-0032.tif, 2025_11_08_0016.abf]
+[2025_11_08-0033.tif, 2025_11_08_0017.abf]
+[2025_11_08-0034.tif, 2025_11_08_0018.abf]
+[2025_11_08-0035.tif, 2025_11_08_0019.abf]
+
+Total 4 records picked

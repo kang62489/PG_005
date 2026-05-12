@@ -24,17 +24,25 @@ class ViewImgProc:
         self.lbl_dir_raw_tiffs = QLabel("Directory of Raw TIFFs: ")
         self.lo_block_1.addWidget(self.lbl_dir_raw_tiffs)
 
-        self.le_dir_raw_images = QTextEdit()
-        self.le_dir_raw_images.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
-        self.lo_block_1.addWidget(self.le_dir_raw_images)
+        self.lo_dir_raw_images = QHBoxLayout()
+        self.te_dir_raw_images = QTextEdit()
+        self.te_dir_raw_images.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
+        self.btn_browse_raw_images = QPushButton("Browse...")
+        self.lo_dir_raw_images.addWidget(self.te_dir_raw_images)
+        self.lo_dir_raw_images.addWidget(self.btn_browse_raw_images)
+        self.lo_block_1.addLayout(self.lo_dir_raw_images)
 
         # Directory of processed TIFFs (Cal and Gauss)
         self.lbl_dir_processed = QLabel("Directory of Processed TIFFs: ")
         self.lo_block_1.addWidget(self.lbl_dir_processed)
 
-        self.le_dir_processed = QTextEdit()
-        self.le_dir_processed.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
-        self.lo_block_1.addWidget(self.le_dir_processed)
+        self.lo_dir_processed = QHBoxLayout()
+        self.te_dir_processed = QTextEdit()
+        self.te_dir_processed.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
+        self.btn_browse_processed = QPushButton("Browse...")
+        self.lo_dir_processed.addWidget(self.te_dir_processed)
+        self.lo_dir_processed.addWidget(self.btn_browse_processed)
+        self.lo_block_1.addLayout(self.lo_dir_processed)
 
 
         self.lbl_pick_list = QLabel("Picked Data: ")
@@ -46,6 +54,8 @@ class ViewImgProc:
         self.tv_pick_list = QTableView()
         self.lo_block_1.addWidget(self.tv_pick_list)
 
+        self.btn_export_checked_list = QPushButton("Export Checked List")
         self.btn_start_processing = QPushButton("Start Processing")
+        self.lo_block_1.addWidget(self.btn_export_checked_list)
         self.lo_block_1.addWidget(self.btn_start_processing)
 
