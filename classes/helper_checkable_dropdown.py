@@ -21,7 +21,7 @@ class CheckableDropdown(QPushButton):
         self.popup.move(pos)
         self.popup.show()
 
-    def eventFilter(self, obj: object, event) -> bool:
+    def eventFilter(self, obj, event) -> bool:
         if obj is self.lw.viewport() and event.type() == QEvent.Type.MouseButtonRelease:
             item = self.lw.itemAt(event.position().toPoint())
             if item:

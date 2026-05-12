@@ -26,13 +26,14 @@ from scipy import sparse
 from scipy.sparse.linalg import spsolve
 
 # ── Config ────────────────────────────────────────────────
-INPUT_FILE = Path("D:\\MyDB\\3_Meeting\\Unsorted\\2026-04-01\\2025_02_27-0036_BiExpCal.xlsx")  # <-- change to your file
+# INPUT_FILE = Path("D:\\MyDB\\3_Meeting\\Unsorted\\2026-04-01\\2025_02_27-0036_BiExpCal.xlsx")  # <-- change to your file
+INPUT_FILE = Path("D:\\MyDB\\2_Programs\\PG_005\\proc_tiffs\\pixel1.xlsx")  # <-- change to your file
 COL_INDEX = "col_index"
 COL_INTENSITY = "col_intensity"
 
-LAM = 1e3  # baseline smoothness
-P = 0.01  # asymmetry  (fraction of points treated as "above baseline")
-NITER = 20  # ALS iterations
+LAM = 1e2  # baseline smoothness
+P = 0.05  # asymmetry  (fraction of points treated as "above baseline")
+NITER = 10  # ALS iterations
 
 
 # ── ALS core ─────────────────────────────────────────────
