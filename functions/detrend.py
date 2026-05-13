@@ -40,18 +40,40 @@ def _cpu_mov(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
     """
     n_pixels, n_frames = pixel_data.shape
     output = np.zeros_like(pixel_data, dtype=np.float32)
+    half_window = window_size // 2
 
     for pixel_idx in prange(n_pixels):
-        moving_avgs = np.zeros(n_frames, dtype=np.float32)
-        for frame_idx in prange(n_frames):
-            window_start = max(0, frame_idx - window_size // 2)
-            window_end = min(n_frames, frame_idx + window_size // 2)
-            moving_avgs[frame_idx] = np.mean(pixel_data[pixel_idx, window_start:window_end])
+        # Moving average at frame 0 — needed for edge_min
+        first_window_right_bound = min(n_frames, half_window)
+        first_window_sum = np.float32(0.0)
+        for k in range(first_window_right_bound):
+            first_window_sum += pixel_data[pixel_idx, k]
+        first_window_moving_avg = first_window_sum / np.float32(first_window_right_bound)
 
-        # Trend = moving average minus its lower endpoint (edge normalization)
-        edge_min = min(moving_avgs[0], moving_avgs[-1])
-        for frame_idx in prange(n_frames):
-            output[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - (moving_avgs[frame_idx] - edge_min)
+        # Moving average at last frame — needed for edge_min
+        last_window_left_bound = max(0, n_frames - 1 - half_window)
+        last_window_sum = np.float32(0.0)
+        for k in range(last_window_left_bound, n_frames):
+            last_window_sum += pixel_data[pixel_idx, k]
+        last_window_moving_avg = last_window_sum / np.float32(n_frames - last_window_left_bound)
+
+        edge_min = min(first_window_moving_avg, last_window_moving_avg)
+
+        # Sliding-window pass: compute moving avg and write output in one loop
+        window_left_bound = 0
+        window_right_bound = first_window_right_bound
+        running_sum = first_window_sum
+        for frame_idx in range(n_frames):
+            moving_avg_at_frame = running_sum / np.float32(window_right_bound - window_left_bound)
+            output[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - moving_avg_at_frame + edge_min
+            next_window_left_bound = max(0, frame_idx + 1 - half_window)
+            next_window_right_bound = min(n_frames, frame_idx + 1 + half_window)
+            if next_window_right_bound > window_right_bound:
+                running_sum += pixel_data[pixel_idx, next_window_right_bound - 1]
+            if next_window_left_bound > window_left_bound:
+                running_sum -= pixel_data[pixel_idx, window_left_bound]
+            window_left_bound = next_window_left_bound
+            window_right_bound = next_window_right_bound
 
     return output
 
@@ -69,19 +91,38 @@ def _gpu_mov(pixel_data: np.ndarray, output: np.ndarray, window_size: int) -> No
 
     n_frames = pixel_data.shape[1]
     half_window = window_size // 2
-    moving_averages = cuda.local.array(2048, dtype=np.float32)
 
-    for frame_idx in range(n_frames):
-        window_start = max(0, frame_idx - half_window)
-        window_end = min(n_frames, frame_idx + half_window)
-        window_sum = 0.0
-        for k in range(window_start, window_end):
-            window_sum += pixel_data[pixel_idx, k]
-        moving_averages[frame_idx] = window_sum / (window_end - window_start)
+    # -- Moving average at frame 0 (for edge_min) ---------------------------------
+    first_window_right_bound = min(n_frames, half_window)
+    first_window_sum = np.float32(0.0)
+    for k in range(first_window_right_bound):
+        first_window_sum += pixel_data[pixel_idx, k]
+    first_window_moving_avg = first_window_sum / np.float32(first_window_right_bound)
 
-    edge_min = min(moving_averages[0], moving_averages[n_frames - 1])
+    # -- Moving average at last frame (for edge_min) ------------------------------
+    last_window_left_bound = max(0, n_frames - 1 - half_window)
+    last_window_sum = np.float32(0.0)
+    for k in range(last_window_left_bound, n_frames):
+        last_window_sum += pixel_data[pixel_idx, k]
+    last_window_moving_avg = last_window_sum / np.float32(n_frames - last_window_left_bound)
+
+    edge_min = min(first_window_moving_avg, last_window_moving_avg)
+
+    # -- Sliding-window pass: compute moving avg and write output in one loop -----
+    window_left_bound = 0
+    window_right_bound = first_window_right_bound
+    running_sum = first_window_sum
     for frame_idx in range(n_frames):
-        output[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - (moving_averages[frame_idx] - edge_min)
+        moving_avg_at_frame = running_sum / np.float32(window_right_bound - window_left_bound)
+        output[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - moving_avg_at_frame + edge_min
+        next_window_left_bound = max(0, frame_idx + 1 - half_window)
+        next_window_right_bound = min(n_frames, frame_idx + 1 + half_window)
+        if next_window_right_bound > window_right_bound:
+            running_sum += pixel_data[pixel_idx, next_window_right_bound - 1]
+        if next_window_left_bound > window_left_bound:
+            running_sum -= pixel_data[pixel_idx, window_left_bound]
+        window_left_bound = next_window_left_bound
+        window_right_bound = next_window_right_bound
 
 
 def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101) -> np.ndarray:
@@ -115,10 +156,7 @@ def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101)
 
     detrended_stack = detrended_pixels.T.reshape(n_frames, height, width)
 
-    # Align pixel time-means: shift so the lowest-mean pixel has mean = 0
-    pixel_means = detrended_stack.mean(axis=0)
-    detrended_stack -= (pixel_means - pixel_means.min())[None, :, :]
-    return detrended_stack
+    return align_to_min(detrended_stack)
 
 
 # ── Bi-exponential detrend ─────────────────────────────────────────────────────
@@ -163,34 +201,31 @@ def _gpu_biexp(
     Trend computed on-the-fly per frame to avoid large local arrays.
     Edge normalization: shift so the lower endpoint value = 0.
     """
-    i = cuda.grid(1)
-    if i >= img_flat.shape[0]:
+    pixel_idx = cuda.grid(1)
+    if pixel_idx >= img_flat.shape[1]:  # img_flat shape: (n_frames, n_pixels)
         return
 
-    T = img_flat.shape[1]
+    n_frames = img_flat.shape[0]
 
-    # coeffs = basis_pinv @ y  (manual dot product, result size = 3)
-    coeffs = cuda.local.array(3, dtype=np.float64)
+    coeffs = cuda.local.array(3, dtype=np.float32)
     for k in range(3):
-        s = 0.0
-        for t in range(T):
-            s += basis_pinv[k, t] * img_flat[i, t]
+        s = np.float32(0.0)
+        for frame_idx in range(n_frames):
+            s += basis_pinv[k, frame_idx] * img_flat[frame_idx, pixel_idx]
         coeffs[k] = s
 
-    # Compute trend only at endpoints for edge normalization
-    trend_0 = 0.0
-    trend_end = 0.0
+    trend_0 = np.float32(0.0)
+    trend_end = np.float32(0.0)
     for k in range(3):
         trend_0 += basis_matrix[0, k] * coeffs[k]
-        trend_end += basis_matrix[T - 1, k] * coeffs[k]
+        trend_end += basis_matrix[n_frames - 1, k] * coeffs[k]
     edge_min = min(trend_0, trend_end)
 
-    # Subtract trend + apply edge normalization, computing trend per frame on-the-fly
-    for t in range(T):
-        trend_t = 0.0
+    for frame_idx in range(n_frames):
+        trend_t = np.float32(0.0)
         for k in range(3):
-            trend_t += basis_matrix[t, k] * coeffs[k]
-        output[i, t] = img_flat[i, t] - trend_t + edge_min
+            trend_t += basis_matrix[frame_idx, k] * coeffs[k]
+        output[frame_idx, pixel_idx] = img_flat[frame_idx, pixel_idx] - trend_t + edge_min
 
 
 def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: bool) -> np.ndarray:
@@ -210,41 +245,45 @@ def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: boo
         Detrended stack, shape (n_frames, H, W), float32.
     """
     n_frames, H, W = img.shape
-    t = np.arange(n_frames, dtype=np.float64)
+    t = np.arange(n_frames, dtype=np.float32)
 
     # basis_matrix (T, 3): columns = [exp(-t/tau1), exp(-t/tau2), constant ones]
-    basis_matrix = np.column_stack([np.exp(-t / tau1), np.exp(-t / tau2), np.ones(n_frames)])
+    basis_matrix = np.column_stack([np.exp(-t / tau1), np.exp(-t / tau2), np.ones(n_frames, dtype=np.float32)]).astype(np.float32)
     # basis_pinv (3, T): pseudo-inverse — the least-squares projection operator
-    basis_pinv = np.linalg.pinv(basis_matrix)
-
-    img_flat = img.reshape(n_frames, -1).T.astype(np.float64)  # (n_pixels, T)
+    basis_pinv = np.linalg.pinv(basis_matrix).astype(np.float32)
 
     if cuda_available:
-        d_img = cuda.to_device(img_flat)
+        # (n_frames, n_pixels) — kernel reads img_flat[frame_idx, pixel_idx], coalesced across threads
+        img_flat_gpu = img.reshape(n_frames, -1).astype(np.float32)
+        n_pixels = img_flat_gpu.shape[1]
+        d_img = cuda.to_device(img_flat_gpu)
         d_pinv = cuda.to_device(basis_pinv)
         d_basis = cuda.to_device(basis_matrix)
-        d_out = cuda.to_device(np.empty_like(img_flat))
+        d_out = cuda.to_device(np.empty_like(img_flat_gpu))
         threads = 256
-        blocks = math.ceil(img_flat.shape[0] / threads)
+        blocks = math.ceil(n_pixels / threads)
         _gpu_biexp[blocks, threads](d_img, d_pinv, d_basis, d_out)
         cuda.synchronize()
-        output_flat = d_out.copy_to_host()
+        output_flat_gpu = d_out.copy_to_host()
+        return align_to_min(output_flat_gpu.reshape(n_frames, H, W))
     else:
-        output_flat = _cpu_biexp(img_flat, basis_pinv, basis_matrix)
-
-    return output_flat.T.reshape(n_frames, H, W).astype(np.float32)
+        # (n_pixels, n_frames) — each pixel's trace is contiguous in memory
+        img_flat_cpu = img.reshape(n_frames, -1).T.astype(np.float32)
+        output_flat_cpu = _cpu_biexp(img_flat_cpu, basis_pinv, basis_matrix)
+        return align_to_min(output_flat_cpu.T.reshape(n_frames, H, W))
 
 
 # ── Shared utility ─────────────────────────────────────────────────────────────
 
 
-def align_to_min(stack: np.ndarray) -> np.ndarray:
+def align_to_min(stack: np.ndarray, floor: float = 3.0) -> np.ndarray:
     """
-    Shift each pixel's time series so that the lowest-mean pixel has mean = 0.
+    Normalise each pixel's time series to a common baseline of ``floor``.
 
-    Computes the per-pixel time-mean, finds the global minimum, and subtracts
-    the per-pixel offset so all pixels are aligned relative to the quietest one.
+    Computes the per-pixel time-mean and subtracts it from each pixel's trace,
+    then lifts everything by ``floor``.  Every pixel's baseline therefore lands at
+    ``floor`` (~3.0), with dF fluctuations preserved around it.  This avoids
+    division-by-zero in dF/F0 calculations.
     """
     means = stack.mean(axis=0)
-    offset = means - means.min()
-    return stack - offset[None, :, :]
+    return (stack - means[None, :, :] + floor).astype(np.float16)

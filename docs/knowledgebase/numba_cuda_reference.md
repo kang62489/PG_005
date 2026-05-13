@@ -1,6 +1,7 @@
 ---
-keywords: numba, cuda, gpu, jit, kernel, device_array, to_device, copy_to_host, syncthreads, grid
-files_referenced: functions/check_cuda.py, functions/test_cuda.py, functions/gpu_detrend.py, functions/gpu_gauss.py, functions/gpu_process.py
+keywords: numba, cuda, gpu, jit, kernel, device_array, to_device, copy_to_host, syncthreads, grid, synchronize, numpy, dot, warp
+files_referenced: functions/check_cuda.py, functions/test_cuda.py, functions/detrend.py, functions/gaussian_blur.py
+related: biexp_detrend_math.md
 ---
 
 # numba.cuda Reference — PG_005 Usage Guide
@@ -319,4 +320,109 @@ Without `syncthreads()`, thread 0 might read `kernel_out[5]` before thread 5 has
 
 ---
 
-*Last updated: 2026-05-07*
+---
+
+# 2026-05-14
+
+## `cuda.grid(1)` — What it actually computes
+
+```python
+pixel_idx = cuda.grid(1)
+```
+
+Is exactly shorthand for:
+
+```python
+pixel_idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+```
+
+These three variables (`blockIdx`, `blockDim`, `threadIdx`) are **hardware registers** —
+set automatically by the CUDA runtime the moment a thread is fired up. Your code never
+assigns them; you only read them. By the time the kernel's first line executes, every
+thread already knows its own position.
+
+Concrete example for `pixel_idx = 513` with 256 threads/block:
+```
+blockIdx.x  = 2    (3rd block)
+blockDim.x  = 256  (always matches launch config)
+threadIdx.x = 1    (2nd thread in that block)
+
+pixel_idx = 2 * 256 + 1 = 513
+```
+
+---
+
+## Guard condition — why `shape[0]` not `shape[1]`
+
+```python
+pixel_idx = cuda.grid(1)
+if pixel_idx >= pixel_data.shape[0]:   # shape[0] = n_pixels
+    return
+```
+
+`pixel_data` is shaped `(n_pixels, n_frames)`:
+- `shape[0]` = n_pixels (e.g. 1,048,576) — the dimension threads are assigned to
+- `shape[1]` = n_frames (e.g. 1,200) — wrong dimension, would give incorrect guard
+
+The guard is needed because `blocks = ceil(n_pixels / 256)` always rounds up,
+creating extra threads beyond n_pixels that must be made idle.
+
+---
+
+## `cuda.synchronize()` — CPU barrier, not data movement
+
+```python
+_gpu_mov[blocks, threads](gpu_input, gpu_output, window_size)  # async launch
+cuda.synchronize()                                              # CPU waits here
+detrended_pixels = gpu_output.copy_to_host()                   # safe to copy now
+```
+
+The kernel writes directly into `gpu_output`'s VRAM location throughout execution —
+there is no intermediate buffer. `cuda.synchronize()` simply makes the CPU block
+until the GPU finishes writing. Without it, `copy_to_host()` would run before the
+GPU is done → partial/garbage results.
+
+---
+
+## `@jit` vs `@cuda.jit` — NumPy availability
+
+| Operation | `@jit(nopython=True)` | `@cuda.jit` |
+|-----------|----------------------|-------------|
+| `np.mean(arr)` | ✅ | ❌ |
+| `np.zeros(n)` | ✅ | ❌ |
+| `np.dot(a, b)` | ✅ | ❌ |
+| `np.exp(x)` | ✅ | ❌ |
+| `arr[i]` (indexing) | ✅ | ✅ |
+| `math.exp(x)` | ✅ | ✅ |
+| `cuda.local.array()` | ❌ | ✅ |
+
+`@jit` compiles Python+NumPy → native CPU machine code (NumPy calls rewritten).
+`@cuda.jit` compiles Python → GPU assembly (PTX) — NumPy has no GPU runtime.
+Every operation must be explicit scalar math.
+
+---
+
+## Manual dot product inside `@cuda.jit`
+
+`np.dot(basis_pinv, y)` is unavailable in a CUDA kernel, so it is written as:
+
+```python
+# CPU (@jit):
+coeffs = np.dot(basis_pinv, y)   # (3,T) @ (T,) → (3,)
+
+# GPU (@cuda.jit) — same math, hand-unrolled:
+coeffs = cuda.local.array(3, dtype=np.float64)
+for k in range(3):
+    s = 0.0
+    for t in range(T):
+        s += basis_pinv[k, t] * y[t]   # += accumulates sum, * is element multiply
+    coeffs[k] = s
+```
+
+The `+=` accumulates the running sum across T frames; `*` multiplies element-wise.
+Identical result to `np.dot` — just written out explicitly because that is the only
+option inside a CUDA kernel.
+
+---
+
+*Last updated: 2026-05-14*

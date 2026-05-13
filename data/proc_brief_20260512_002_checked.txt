@@ -4,10 +4,8 @@ Purposes:
      123
 
 Picked:
-[2025_11_08-0032.tif, YES, BIEXP]
-[2025_11_08-0033.tif, SKIP, NONE]
-[2025_11_08-0034.tif, YES, BIEXP]
-[2025_11_08-0035.tif, YES, BIEXP]
+[2026_03_20-0028.tif, YES, BOTH]
+[2026_03_20-0029.tif, YES, BOTH]
 
 Total 4 records picked
 

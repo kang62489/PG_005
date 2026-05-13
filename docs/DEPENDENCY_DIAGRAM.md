@@ -11,45 +11,44 @@
 │                         WORKFLOW 1: IMAGE PREPROCESSING                     │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────┐
-│  im_preprocess.py       │  ← Main Script
-│  ─────────────────────  │
-│  - Load raw TIFF        │
-│  - Check CUDA           │
-│  - Process images       │
-│  - Save results         │
-└───────────┬─────────────┘
+┌──────────────────────────────────────┐
+│  img_proc.py                         │  ← Main Script (CLI: --brief _checked.txt)
+│  ──────────────────────────────────  │
+│  - Parse proc_brief_*_checked.txt    │
+│  - Route by MODE: MOV/BIEXP/BOTH     │
+│  - sample_tau → biexp_detrend        │
+│  - mov_detrend → gaussian_blur_run   │
+│  - Save results                      │
+└───────────┬──────────────────────────┘
             │
             ├──────────────────────────┐
             │                          │
             ▼                          ▼
-┌───────────────────────┐  ┌──────────────────────┐
-│  Hardware Checks      │  │  Image Processing    │
-│  ───────────────      │  │  ────────────────    │
-│  functions/           │  │  functions/          │
-│  ├─ check_cuda()      │  │  ├─ process_on_gpu() │
-│  ├─ test_cuda()       │  │  └─ process_on_cpu() │
-│  └─ get_memory_usage()│  └───────────┬──────────┘
-└───────────────────────┘              │
-                                       │
-                ┌──────────────────────┴──────────────────────┐
-                │                                             │
-                ▼                                             ▼
-    ┌──────────────────────┐                    ┌──────────────────────┐
-    │  GPU Pipeline        │                    │  CPU Pipeline        │
-    │  ─────────────       │                    │  ─────────────       │
-    │  functions/          │                    │  functions/          │
-    │  gpu_process.py      │                    │  cpu_process.py      │
-    └───────────┬──────────┘                    └─────────┬────────────┘
-                │                                         │
-     ┌──────────┴───────────┐                  ┌──────────┴──────────┐
-     ▼                      ▼                  ▼                     ▼
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ gpu_detrend │    │ gpu_gauss   │    │ cpu_detrend │    │ cpu_gauss   │
-│  (CUDA)     │    │  (CUDA)     │    │  (Numba)    │    │  (Numba)    │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+┌───────────────────────┐  ┌──────────────────────────┐
+│  Hardware Checks      │  │  Image Processing        │
+│  ───────────────      │  │  ────────────────        │
+│  functions/           │  │  functions/              │
+│  ├─ check_cuda()      │  │  ├─ mov_detrend()        │
+│  ├─ test_cuda()       │  │  ├─ biexp_detrend()      │
+│  └─ get_memory_usage()│  │  ├─ sample_tau()         │
+└───────────────────────┘  │  ├─ align_to_min()       │
+                            │  └─ gaussian_blur_run()  │
+                            └───────────┬──────────────┘
+                                        │
+                         ┌──────────────┴──────────────┐
+                         │                             │
+                         ▼                             ▼
+             ┌─────────────────────┐      ┌─────────────────────┐
+             │  GPU (@cuda.jit)    │      │  CPU (@jit)         │
+             │  detrend.py:        │      │  detrend.py:        │
+             │  ├─ _gpu_mov        │      │  ├─ _cpu_mov        │
+             │  └─ _gpu_biexp      │      │  └─ _cpu_biexp      │
+             │  gaussian_blur.py:  │      │  gaussian_blur.py:  │
+             │  └─ _gpu_gaussian   │      │  └─ _cpu_gaussian   │
+             │     _blur           │      │     _blur           │
+             └─────────────────────┘      └─────────────────────┘
 
-Output: *_Cal.tif (detrended), *_Gauss.tif (Gaussian filtered)
+Output: *_MOV_CAL.tif, *_MOV_GAUSS.tif, *_BIEXP_CAL.tif, *_BIEXP_GAUSS.tif
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -194,19 +193,15 @@ functions/
 │   ├── test_cuda.py           → Test CUDA with sample kernel
 │   └── get_memory_use.py      → Memory usage monitoring
 │
-├── [CPU Processing]
-│   ├── cpu_detrend.py         → @numba.jit detrending
-│   ├── cpu_gauss.py           → @numba.jit Gaussian blur
-│   ├── cpu_binning.py         → Spatial binning
-│   └── cpu_process.py         → Orchestrator (warm up → detrend → blur)
-│
-├── [GPU Processing]
-│   ├── gpu_detrend.py         → @cuda.jit detrending kernel
-│   ├── gpu_gauss.py           → CUDA Gaussian blur
-│   └── gpu_process.py         → Orchestrator (transfer → process → copy back)
+├── [Preprocessing — unified CPU+GPU]
+│   ├── detrend.py             → MOV (@jit _cpu_mov, @cuda.jit _gpu_mov)
+│   │                             BIEXP (@jit _cpu_biexp, @cuda.jit _gpu_biexp)
+│   │                             + align_to_min()
+│   ├── gaussian_blur.py       → Separable 2D Gaussian (@jit CPU + @cuda.jit GPU)
+│   └── tau_estimate.py        → sample_tau() — scipy curve_fit on 500 random pixels
 │
 └── [Analysis]
-    ├── kmeans.py              → K-means clustering suite
+    ├── kmeans.py              → K-means clustering suite (archived)
     │    ├── prepare_frame_for_kmeans()
     │    ├── apply_kmeans_to_frame()
     │    ├── calculate_cluster_areas()
@@ -342,9 +337,10 @@ External Dependencies:
 
 Internal Dependencies:
 ━━━━━━━━━━━━━━━━━━━━━━
-im_preprocess.py
-  └─→ functions (check_cuda, test_cuda, get_memory_usage,
-                 process_on_gpu, process_on_cpu)
+img_proc.py
+  └─→ functions (check_cuda, get_memory_usage,
+                 mov_detrend, biexp_detrend, align_to_min,
+                 sample_tau, gaussian_blur_run)
 
 im_dynamics.py
   ├─→ classes
@@ -386,26 +382,26 @@ im_dynamics.py
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│              EXPERIMENTAL DETREND SCRIPTS (standalone, not in pipeline)     │
+│              ARCHIVED SCRIPTS (archive/ — reference only)                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-run_als_1d.py
+archive/run_als_1d.py
   └─→ scipy.sparse / scipy.sparse.linalg → ALS baseline on 1-D Excel trace
-       Input:  Excel file (col_index, col_intensity)
-       Output: *_ALS.xlsx  +  *_ALS.png
 
-run_biexp_detrend.py
-  └─→ scipy.optimize.curve_fit → per-pixel bi-exponential trend removal
-       Input:  raw TIFF stack (raw_images/)
-       Output: *_BiexpCal.tif (processed_images/)
-       Method: shared tau1/tau2 from N_TAU_SAMPLE pixels → per-pixel (A, B) fit
+archive/run_biexp_detrend.py
+  └─→ Original standalone biexp script (superseded by img_proc.py + functions/detrend.py)
 
-demo_als_biexp.py / demo_biexp_detrend.py
-  └─→ matplotlib → visual walkthrough / tutorial for the above methods
+archive/im_preprocess.py
+  └─→ Original MOV-only pipeline (superseded by img_proc.py)
+
+archive/cpu_binning.py, archive/kmeans.py
+  └─→ Unused analysis helpers
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-04-02 (pandas → polars; added experimental ALS + bi-exp detrend scripts)
+Updated: 2026-05-14 (refactored preprocessing pipeline: unified detrend.py,
+         gaussian_blur.py, tau_estimate.py; img_proc.py replaces im_preprocess.py;
+         old CPU/GPU split files archived)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

@@ -8,7 +8,7 @@ Reads a checked processing brief, routes each file by mode:
   NONE  -> skip
 
 Usage:
-    python img_proc.py --brief data/processing_brief_2026-May-12_002_checked.txt
+    python img_proc.py --brief data/proc_brief_20260512_002_checked.txt
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ import tifffile
 from rich.console import Console
 
 from functions import (
-    align_to_min,
     biexp_detrend,
     check_cuda,
     gaussian_blur_run,
@@ -95,17 +94,17 @@ def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool) 
     t0 = time.time()
 
     console.log(f"[cyan]Loading {file}...")
-    img = tifffile.imread(raw_dir / file).astype(np.float32)
+    img = tifffile.imread(raw_dir / file).astype(np.float16)
     console.log(f"  Shape {img.shape}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
     console.log("  Detrending (MOV)...")
     detrended = mov_detrend(img, cuda_available)
-    tifffile.imwrite(proc_dir / f"{stem}_MOV_CAL.tif", np.clip(detrended, 0, 65535).astype(np.uint16))
+    tifffile.imwrite(proc_dir / f"{stem}_MOV_CAL.tif", detrended.astype(np.float16))
     console.log(f"  Saved {stem}_MOV_CAL.tif  ({time.time() - t0:.1f}s)")
 
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
-    tifffile.imwrite(proc_dir / f"{stem}_MOV_GAUSS.tif", np.clip(blurred, 0, 65535).astype(np.uint16))
+    tifffile.imwrite(proc_dir / f"{stem}_MOV_GAUSS.tif", blurred.astype(np.float16))
     console.log(f"  Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
     del img, detrended, blurred
@@ -117,7 +116,7 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
     t0 = time.time()
 
     console.log(f"[cyan]Loading {file}...")
-    img = tifffile.imread(raw_dir / file).astype(np.float32)
+    img = tifffile.imread(raw_dir / file).astype(np.float16)
     console.log(f"  Shape {img.shape}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
     console.log("  Sampling pixels for tau estimation...")
@@ -126,13 +125,12 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
 
     console.log("  Detrending (BIEXP)...")
     detrended = biexp_detrend(img, tau1, tau2, cuda_available)
-    detrended = align_to_min(detrended)
-    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_CAL.tif", np.clip(detrended, 0, 65535).astype(np.uint16))
+    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_CAL.tif", detrended.astype(np.float16))
     console.log(f"  Saved {stem}_BIEXP_CAL.tif  ({time.time() - t0:.1f}s)")
 
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
-    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", np.clip(blurred, 0, 65535).astype(np.uint16))
+    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", blurred.astype(np.float16))
     console.log(f"  Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
     del img, detrended, blurred

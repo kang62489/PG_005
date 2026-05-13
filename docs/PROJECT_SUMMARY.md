@@ -14,16 +14,16 @@
 
 ```
 PG_005/
-├── im_preprocess.py                 # Main script: Image preprocessing (detrend + Gaussian)
+├── img_proc.py                      # Main script: Image preprocessing (MOV/BIEXP/BOTH modes)
 ├── im_dynamics.py                   # Main script: Spike-triggered ACh analysis (interactive)
 ├── batch_process.py                 # Batch processor: Process all picked pairs
 ├── test_batch.py                    # Test batch processor: Process specific date
 │
-├── [Experimental Detrend Scripts]
-├── run_als_1d.py                    # ALS baseline correction for 1-D intensity trace (from Excel)
-├── run_biexp_detrend.py             # Per-pixel bi-exponential trend removal for TIFF stacks
-├── demo_als_biexp.py                # Visual demo: ALS + bi-exponential baseline fitting
-├── demo_biexp_detrend.py            # Visual demo: bi-exponential detrend walkthrough
+├── [Archived Scripts — archive/]
+├── archive/im_preprocess.py         # Old MOV-only preprocessing (superseded by img_proc.py)
+├── archive/run_biexp_detrend.py     # Old standalone biexp script (superseded by img_proc.py)
+├── archive/cpu_binning.py           # Unused spatial binning
+├── archive/kmeans.py                # Unused K-means helpers
 │
 ├── classes/
 │   ├── __init__.py
@@ -43,16 +43,10 @@ PG_005/
 │   │   ├── test_cuda.py             # Test CUDA functionality
 │   │   └── get_memory_use.py        # Memory usage monitoring
 │   │
-│   ├── [CPU Processing]
-│   │   ├── cpu_detrend.py           # Numba JIT detrending
-│   │   ├── cpu_gauss.py             # Numba JIT Gaussian blur
-│   │   ├── cpu_binning.py           # Spatial binning
-│   │   └── cpu_process.py           # CPU processing orchestrator
-│   │
-│   ├── [GPU Processing]
-│   │   ├── gpu_detrend.py           # CUDA kernel detrending
-│   │   ├── gpu_gauss.py             # CUDA Gaussian blur
-│   │   └── gpu_process.py           # GPU processing orchestrator
+│   ├── [Preprocessing — unified CPU+GPU]
+│   │   ├── detrend.py               # MOV + BIEXP detrend (Numba JIT + CUDA kernels)
+│   │   ├── gaussian_blur.py         # Separable 2D Gaussian blur (Numba JIT + CUDA)
+│   │   └── tau_estimate.py          # Bi-exp tau estimation (scipy curve_fit, 500 pixels)
 │   │
 │   └── [Analysis]
 │       ├── kmeans.py                            # K-means clustering
@@ -86,30 +80,29 @@ PG_005/
 
 ## Workflow 1: Image Preprocessing
 
-**Script**: `im_preprocess.py`
+**Script**: `img_proc.py`  — driven by a `proc_brief_YYYYMMDD_NNN_checked.txt` brief
 
 ```
-Raw TIFF Stack
+proc_brief_*_checked.txt
       ↓
-  Load Image (imageio.volread)
+  Parse entries: [filename, PROC, MODE]
       ↓
-  [CUDA Detection]
-      ↓
-  ┌─────┴─────┐
-  ↓           ↓
-CPU Path   GPU Path
-  ↓           ↓
-  └─────┬─────┘
-      ↓
+  For each file, route by MODE:
+  ┌──────────┬──────────┬──────────┐
+  ↓          ↓          ↓          ↓
+ MOV       BIEXP      BOTH       NONE
+  ↓          ↓          ↓
   Detrend → Gaussian Blur
-      ↓
-  Save: *_Cal.tif, *_Gauss.tif
+  ↓
+  Save: *_MOV_CAL.tif / *_MOV_GAUSS.tif
+        *_BIEXP_CAL.tif / *_BIEXP_GAUSS.tif
 ```
 
 ### Processing Steps
 
-1. **Detrending**: Remove baseline drift using moving average subtraction
-2. **Gaussian Filtering**: Spatial smoothing for signal extraction (see below)
+1. **MOV detrend**: Centred moving-average subtraction (window=101 frames)
+2. **BIEXP detrend**: Bi-exponential baseline fit per pixel using pre-estimated tau1/tau2
+3. **Gaussian Filtering**: Spatial smoothing for signal extraction (see below)
 
 ### Gaussian Filtering for ACh Signal Extraction
 
@@ -467,7 +460,7 @@ Use `skimage.measure.label()` to convert categorical → labeled for regionprops
 
 ### Run Preprocessing
 ```bash
-python im_preprocess.py
+python img_proc.py --brief data/proc_brief_20260512_002_checked.txt
 ```
 
 ### Run Spike-Triggered Analysis
@@ -865,4 +858,6 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-04-21 (doc/ → docs/; ABF column renamed to PAIRED_ABF)*
+*Last updated: 2026-05-14 (refactored preprocessing pipeline: img_proc.py replaces im_preprocess.py;
+unified detrend.py + gaussian_blur.py + tau_estimate.py; old CPU/GPU split files archived;
+proc_brief naming + YYYYMMDD date format)*

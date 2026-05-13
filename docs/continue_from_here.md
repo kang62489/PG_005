@@ -1,37 +1,49 @@
-# Log of the project progress 2026-05-13 Tue (Session 3)
+# Log of the project progress 2026-05-14 Wed (Session 4)
 
-Last working file: img_proc.py
-Last working line: ~176
+Last working file: functions/detrend.py
+Last working line: ~290
 
 # List of modified files:
-- functions/detrend.py (NEW)
-- functions/gaussian_blur.py (NEW)
-- functions/tau_estimate.py (NEW)
-- functions/__init__.py (updated exports)
-- functions/gpu_gauss.py (fixed: unified _gpu_conv with axis parameter)
-- img_proc.py (completed from broken draft)
-- archive/ (NEW folder)
+- functions/detrend.py (major optimizations)
+- img_proc.py (float16 pipeline, align_to_min cleanup)
 
 ## Summary of current progress
-- Completed full refactor: 6 fragmented files → 3 unified modules
-  - `detrend.py`: `_cpu_mov`, `_gpu_mov`, `mov_detrend`, `_cpu_biexp`, `_gpu_biexp`, `biexp_detrend`, `align_to_min`
-  - `gaussian_blur.py`: `_cpu_kernel`, `_cpu_conv`, `_cpu_gaussian_blur`, `_gpu_kernel`, `_gpu_conv`, `_gpu_gaussian_blur`, `gaussian_blur_run`
-  - `tau_estimate.py`: `biexp`, `make_p0_bounds`, `_fit_pixel`, `sample_tau`
-- Rewrote biexp detrend with Numba JIT (`_cpu_biexp`) + CUDA kernel (`_gpu_biexp`)
-- Fixed GPU Gaussian blur: replaced separate `convolve_horizontal` / `convolve_vertical` with unified `_gpu_conv(axis)` — no warp divergence, consistent with CPU design
-- Completed `img_proc.py` — parses `_checked.txt` brief, routes by MODE (MOV/BIEXP/BOTH/NONE), runs successfully on 3 real TIFF files (1200×1024×1024) on RTX 3070
-- Archived old scripts: `im_preprocess.py`, `run_biexp_detrend.py`, `cpu_binning.py`, `kmeans.py` → `archive/`
-- Deleted: `cpu_detrend.py`, `gpu_detrend.py`, `cpu_gauss.py`, `gpu_gauss.py`, `cpu_process.py`, `gpu_process.py`
+
+### float16 pipeline unification
+- `img_proc.py`: imread now loads as `float16` instead of `float32` (~2.3 GB saved at load)
+- All `tifffile.imwrite` calls save as `float16` (removed `np.clip` + `uint16`)
+- `biexp_detrend` and `mov_detrend` both return `float16`
+
+### detrend.py internal dtype: float64 → float32
+- `biexp_detrend`: `basis_matrix`, `basis_pinv`, `img_flat` all changed from float64 → float32
+- `_gpu_biexp` kernel: `coeffs` local array and all accumulators changed float64 → float32
+- Halves memory footprint of biexp computation (~9.4 GB → ~4.7 GB for img_flat)
+
+### GPU biexp coalesced memory access
+- `_gpu_biexp` kernel: transposed indexing `img_flat[frame_idx, pixel_idx]` instead of `img_flat[i, t]`
+- `biexp_detrend` dispatcher: GPU path uses `(n_frames, n_pixels)` layout (no `.T`); CPU path keeps `(n_pixels, n_frames)` for cache-friendliness
+
+### _gpu_mov sliding window
+- Replaced O(window × frames) loop + `cuda.local.array(2048)` with two-pass sliding window: O(frames) per pixel, no local array allocation
+
+### _cpu_mov fixes
+- Fixed two nested `prange` → `range` (Numba does not support nested prange)
+- Replaced `np.mean(slice)` with sliding window (same logic as GPU)
+
+### align_to_min — real bottleneck found
+- Initially changed to `np.median` (slow — sorts 1200 values × 1M pixels on CPU, ~80s!)
+- Reverted to `stack.mean(axis=0)` — fast O(n), good enough for stable fluorescence baseline
+- Added `floor=3.0` parameter: every pixel's baseline lands at ~3.0 (avoids dF/F0 division-by-zero)
+- Changed from relative alignment to per-pixel normalization: `stack - means + floor`
+- Moved `align_to_min` call inside `biexp_detrend` (was previously in `img_proc.py`) — now consistent with `mov_detrend`
+- Removed `align_to_min` import from `img_proc.py`
 
 ## Completed TODOs (from last session)
-- [x] Write `img_proc.py` complete structure (parse_brief, process_mov, process_biexp, run, __main__)
-- [x] Create biexp Numba JIT detrend + scipy tau estimation (now in functions/detrend.py + tau_estimate.py)
-- [x] Decouple Gaussian blur from detrending — separate functions
-- [x] Archive original MOV/BIEXP pipeline scripts
+- [x] Adjust BIEXP detrend calculation — align_to_min now normalizes correctly, values ~3.0
+- [x] Answer user questions about writing CUDA kernels by hand
 
 ## What should we do next? (TODOs)
-- [ ] **[NEXT]** Adjust BIEXP detrend calculation — something in the math/output needs fixing
-- [ ] **[NEXT]** Answer user questions about writing CUDA kernels by hand
-- [ ] Wire `btn_start_processing` in `ctrl_img_proc.py` → call `run(brief_path, cuda_available)`
+- [ ] **[NEXT]** Wire `btn_start_processing` in `ctrl_img_proc.py` → call `run(brief_path, cuda_available)`
+- [ ] **[NEXT]** `_gpu_mov` still has non-coalesced memory access — consider transposing to `(n_frames, n_pixels)` same as biexp (separate future task)
 - [ ] Implement ALS baseline estimation for dF/F0 calculation
-- [ ] Run full verification: MOV mode and BOTH mode (only BIEXP tested so far)
+- [ ] Run full verification: MOV mode and BOTH mode

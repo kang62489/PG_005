@@ -156,7 +156,7 @@ class CtrlDataSelector:
     def brief_gen(self) -> None:
         """Format and display the processing brief in the GUI text area."""
         # Auto-fill creation date and generate brief content based on current pick list and user inputs
-        self.view.le_date_created.setText(datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%b-%d"))
+        self.view.le_date_created.setText(datetime.datetime.now(tz=datetime.UTC).strftime("%Y%m%d"))
         title = self.view.le_title.text().strip() or "Untitled"
         purposes_raw = self.view.te_purposes.toPlainText().strip()
 
@@ -201,13 +201,13 @@ class CtrlDataSelector:
         MODELS_DIR.mkdir(exist_ok=True)
 
         # Find next available serial number for today's date
-        existing = sorted(MODELS_DIR.glob(f"processing_brief_{date_created}_*.txt"))
+        existing = sorted(MODELS_DIR.glob(f"proc_brief_{date_created}_*.txt"))
         if existing:
             last_serial = int(existing[-1].stem.rsplit("_", 1)[-1])
             serial = last_serial + 1
         else:
             serial = 0
-        note_path = MODELS_DIR / f"processing_brief_{date_created}_{serial:03d}.txt"
+        note_path = MODELS_DIR / f"proc_brief_{date_created}_{serial:03d}.txt"
 
         note_text = self.view.te_processing_brief.toPlainText().strip()
         note_path.write_text(note_text, encoding="utf-8")
