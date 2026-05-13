@@ -29,5 +29,6 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 - New plots → extend `classes/plot_results.py`
 
 ## Other advices
+**Try answering user's questions before proposing any code modification**
+**Properly spacing or separating responses/replys into more reader-friendly format, such as sections or blocks**
 *Use emoji to make the text lively. *
-*Use obvious characters or symbols or lines (only the separators) to separate sections or paragraphs of your answers. *

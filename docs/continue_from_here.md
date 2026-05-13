@@ -1,39 +1,37 @@
-# Log of the project progress 2026-05-13 Tue
+# Log of the project progress 2026-05-13 Tue (Session 3)
 
-Last working file: controllers/ctrl_img_proc.py
-Last working line: ~255
+Last working file: img_proc.py
+Last working line: ~176
 
 # List of modified files:
-- batch_process.py
-- classes/abf_clip.py
-- classes/helper_cell_dropdown.py
-- classes/model_from_dataframe.py
-- controllers/ctrl_img_proc.py (<- Break here, ~line 255)
-- im_preprocess.py
-- run_als_baseline.py
-- run_biexp_detrend.py
-- test_batch.py
+- functions/detrend.py (NEW)
+- functions/gaussian_blur.py (NEW)
+- functions/tau_estimate.py (NEW)
+- functions/__init__.py (updated exports)
+- functions/gpu_gauss.py (fixed: unified _gpu_conv with axis parameter)
+- img_proc.py (completed from broken draft)
+- archive/ (NEW folder)
 
 ## Summary of current progress
-- Filtered out `_checked.txt` files from `load_pick_list` dialog
-- Added MODE column (BIEXP/MOV/BOTH/NONE) to the pick list table with its own dropdown delegate
-- `_on_proc_changed`: MODE auto-updates when PROC changes (YES→BIEXP, SKIP→NONE)
-- MODE cell is disabled (not editable) when PROC is SKIP
-- `export_checked_list` now writes `[filename, PROC, MODE]` format
-- Both `load_pick_list` and `export_checked_list` now parse between `Picked:` and `Total...` lines
-- Delegate auto-commits on selection (`activated` signal); fixed "editor not belong to view" warning
-- Unified ALL_CAPS file suffix convention: `_MOV_CAL`, `_MOV_GAUSS`, `_BIEXP_CAL`, `_BIEXP_GAUSS`, `_BIEXP_BASELINE`, `_BIEXP_DFF0` across all scripts
-- `classes/abf_clip.py` `load_img` default updated to `"MOV_GAUSS"`
+- Completed full refactor: 6 fragmented files → 3 unified modules
+  - `detrend.py`: `_cpu_mov`, `_gpu_mov`, `mov_detrend`, `_cpu_biexp`, `_gpu_biexp`, `biexp_detrend`, `align_to_min`
+  - `gaussian_blur.py`: `_cpu_kernel`, `_cpu_conv`, `_cpu_gaussian_blur`, `_gpu_kernel`, `_gpu_conv`, `_gpu_gaussian_blur`, `gaussian_blur_run`
+  - `tau_estimate.py`: `biexp`, `make_p0_bounds`, `_fit_pixel`, `sample_tau`
+- Rewrote biexp detrend with Numba JIT (`_cpu_biexp`) + CUDA kernel (`_gpu_biexp`)
+- Fixed GPU Gaussian blur: replaced separate `convolve_horizontal` / `convolve_vertical` with unified `_gpu_conv(axis)` — no warp divergence, consistent with CPU design
+- Completed `img_proc.py` — parses `_checked.txt` brief, routes by MODE (MOV/BIEXP/BOTH/NONE), runs successfully on 3 real TIFF files (1200×1024×1024) on RTX 3070
+- Archived old scripts: `im_preprocess.py`, `run_biexp_detrend.py`, `cpu_binning.py`, `kmeans.py` → `archive/`
+- Deleted: `cpu_detrend.py`, `gpu_detrend.py`, `cpu_gauss.py`, `gpu_gauss.py`, `cpu_process.py`, `gpu_process.py`
 
 ## Completed TODOs (from last session)
-- Added DETREND/MODE column to check_list — covered by new MODE column
-- Consistent file naming convention enforced across all scripts
+- [x] Write `img_proc.py` complete structure (parse_brief, process_mov, process_biexp, run, __main__)
+- [x] Create biexp Numba JIT detrend + scipy tau estimation (now in functions/detrend.py + tau_estimate.py)
+- [x] Decouple Gaussian blur from detrending — separate functions
+- [x] Archive original MOV/BIEXP pipeline scripts
 
 ## What should we do next? (TODOs)
-- [ ] **[NEXT]** Modify and merge `im_preprocess.py` and `run_biexp_detrend.py` into a MODE-selection-oriented structure — single entry point that dispatches to MOV or BIEXP pipeline based on MODE value
-- [ ] Wire `btn_start_processing` — trigger processing based on PROC/MODE column values from checked list
-- [ ] Make preprocessing scripts load filenames from `*_checked.txt` instead of hardcoded lists
-- [ ] Plan merging biexp detrend into CPU/GPU pipeline (`run_biexp_detrend.py` → `functions/`)
+- [ ] **[NEXT]** Adjust BIEXP detrend calculation — something in the math/output needs fixing
+- [ ] **[NEXT]** Answer user questions about writing CUDA kernels by hand
+- [ ] Wire `btn_start_processing` in `ctrl_img_proc.py` → call `run(brief_path, cuda_available)`
 - [ ] Implement ALS baseline estimation for dF/F0 calculation
-- [ ] Decouple Gaussian blur from detrending — separate functions
-- [ ] Archive original Mov pipeline — keep usable but clearly separated for PI reference
+- [ ] Run full verification: MOV mode and BOTH mode (only BIEXP tested so far)

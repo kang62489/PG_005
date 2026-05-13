@@ -10,7 +10,6 @@ Pipeline per file:
 
 # ── Imports ──────────────────────────────────────────────────────────
 # Standard library imports
-import logging
 import os
 import time
 from pathlib import Path
@@ -20,7 +19,6 @@ import numpy as np
 import tifffile
 from numba import cuda
 from rich.console import Console
-from rich.logging import RichHandler
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 # Local application imports
@@ -35,13 +33,11 @@ OUT_DIR = Path(__file__).parent / "proc_tiffs"
 
 # ── Setup ────────────────────────────────────────────────────────────
 console = Console()
-logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers=[RichHandler(rich_tracebacks=True)])
-log = logging.getLogger("rich")
 
 
 # ── Main function ────────────────────────────────────────────────────
 
-def main(file: str) -> None:
+def main(file: str, cuda_available: bool) -> None:
     # Step 1 -- parameters
     filename = file
     output_name_1 = f"{Path(filename).stem}_MOV_CAL.tif"
@@ -60,26 +56,26 @@ def main(file: str) -> None:
         img_raw = tifffile.imread(RAW_DIR / filename).astype(np.uint16)
         progress.remove_task(task1)
 
-    log.info("Loading time: %s seconds", f"{time.time() - t_start:.2f}")
-    log.info("Image shape: %s", f"{img_raw.shape}")
-    log.info("Memory usage: %s GB", f"{get_memory_usage():.2f}")
+    console.log(f"Loading time: {time.time() - t_start:.2f} seconds")
+    console.log(f"Image shape: {img_raw.shape}")
+    console.log(f"Memory usage: {get_memory_usage():.2f} GB")
 
     # Step 4 -- process (GPU with CPU fallback)
-    console.print("[bold green]Processing data...")
+    console.log("[bold green]Processing data...")
     t_start = time.time()
 
     try:
-        if cuda.is_available():
+        if cuda_available:
             detrended, gaussian = process_on_gpu(img_raw)
         else:
-            detrended, _averaged, gaussian = process_on_cpu(img_raw)
+            detrended, gaussian = process_on_cpu(img_raw)
     except (cuda.cudadrv.driver.CudaAPIError, RuntimeError, Exception) as e:
-        console.print(f"[yellow]GPU processing failed: {e}[/yellow]")
-        console.print("[yellow]Falling back to CPU processing...[/yellow]")
-        detrended, _averaged, gaussian = process_on_cpu(img_raw)
+        console.log(f"[yellow]GPU processing failed: {e}[/yellow]")
+        console.log("[yellow]Falling back to CPU processing...[/yellow]")
+        detrended, gaussian = process_on_cpu(img_raw)
 
     # detrended, gaussian = process_on_cpu(img_raw)
-    console.print(f"Total processing time: {time.time() - t_start:.2f} seconds")
+    console.log(f"Total processing time: {time.time() - t_start:.2f} seconds")
 
     # Step 5 -- save results
     with Progress(
@@ -94,21 +90,21 @@ def main(file: str) -> None:
         tifffile.imwrite(OUT_DIR / output_name_2, gaussian_uint16)
         progress.remove_task(task2)
 
-    log.info("Saving time: %s seconds", f"{time.time() - t_start:.2f}")
-    log.info("Results %s and %s saved!", output_name_1, output_name_2)
-    console.print("[bold green]Processing completed successfully!")
+    console.log(f"Saving time: {time.time() - t_start:.2f} seconds")
+    console.log(f"Results {output_name_1} and {output_name_2} saved!")
+    console.log("[bold green]Processing completed successfully!")
 
 
 # ── Entry point ──────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     # Check CUDA availability
-    check_cuda()
+    cuda_available = check_cuda()
     test_cuda()
 
     # Process files
     date = "2026_03_20"
-    serials = ["0028", "0029", "0040", "0041"]
+    serials = ["0040"]
     file_list = [f"{date}-{serial}.tif" for serial in serials]
     for file in file_list:
-        main(file)
+        main(file, cuda_available)

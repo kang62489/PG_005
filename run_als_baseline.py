@@ -27,10 +27,10 @@ PROC_DIR = Path(__file__).parent / "proc_tiffs"
 FILES = [
     # "2026_03_20-0028_BIEXP_GAUSS.tif",
     # "2026_03_20-0029_BIEXP_GAUSS.tif",
-    # "2026_03_20-0040_BIEXP_GAUSS.tif",
+    "2026_03_20-0040_MOV_GAUSS.tif",
     # "2026_03_20-0041_BIEXP_GAUSS.tif",
-    "2025_06_11-0002_BIEXP_GAUSS.tif",
-    "2025_06_11-0003_BIEXP_GAUSS.tif",
+    # "2025_06_11-0002_BIEXP_GAUSS.tif",
+    # "2025_06_11-0003_BIEXP_GAUSS.tif",
 ]
 
 LAM = 1e2    # smoothness: larger → smoother baseline

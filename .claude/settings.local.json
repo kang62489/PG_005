@@ -32,7 +32,8 @@
       "Bash(conda env:*)",
       "Bash(.venv/Scripts/ruff.exe check:*)",
       "Bash(rg -v \"warning:|Installed|Removed|Creating|Downloading|Downloaded|hardlink|filesystems|intentional|unfixable|Using CPython|^\\\\s*$\")",
-      "Bash(uvx ruff:*)"
+      "Bash(uvx ruff:*)",
+      "Bash(find /d/MyDB/2_Programs/PG_005 -maxdepth 2 -type f \\\\\\(-name *.txt -o -name *.csv -o -name *.md \\\\\\) ! -path ./.venv/*)"
     ]
   }
 }

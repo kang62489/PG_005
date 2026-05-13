@@ -24,11 +24,11 @@ def test_cuda() -> bool:
         result = d_test.copy_to_host()
 
         if np.allclose(result, 2.0):
-            console.print("[green]GPU test successful!")
+            console.log("[green]GPU test successful!")
             return True
     except Exception as e:
-        console.print(f"[bold red]GPU test error: {e!s}")
+        console.log(f"[bold red]GPU test error: {e!s}")
         return False
     else:
-        console.print("[bold red]GPU test failed!")
+        console.log("[bold red]GPU test failed!")
         return False

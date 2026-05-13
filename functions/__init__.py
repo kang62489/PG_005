@@ -1,40 +1,28 @@
-# Try to import CUDA-related functions, but don't fail if dependencies are missing
-try:
-    from .check_cuda import check_cuda
-    from .gpu_detrend import gpu_detrend_jitted
-    from .gpu_gauss import gpu_gaussian_blur
-    from .gpu_process import process_on_gpu
-    from .test_cuda import test_cuda
-
-    CUDA_AVAILABLE = True
-except (ImportError, ModuleNotFoundError):
-    CUDA_AVAILABLE = False
-    check_cuda = None
-    gpu_detrend_jitted = None
-    gpu_gaussian_blur = None
-    process_on_gpu = None
-    test_cuda = None
-
-from .cpu_detrend import cpu_detrend_jitted
-from .cpu_gauss import cpu_gaussian_blur
-from .cpu_process import process_on_cpu
+from .detrend import align_to_min, biexp_detrend, mov_detrend
+from .gaussian_blur import gaussian_blur_run
 from .get_memory_use import get_memory_usage
 from .imaging_segments_zscore_normalization import img_seg_zscore_norm
 from .spike_centered_processes import spike_centered_avg, spike_centered_median
+from .tau_estimate import sample_tau
 from .xlsx_reader import get_picked_pairs
 
+try:
+    from .check_cuda import check_cuda
+    from .test_cuda import test_cuda
+except (ImportError, ModuleNotFoundError):
+    check_cuda = None  # type: ignore[assignment]
+    test_cuda = None   # type: ignore[assignment]
+
 __all__ = [
-    "CUDA_AVAILABLE",
+    "align_to_min",
+    "biexp_detrend",
     "check_cuda",
-    "cpu_detrend_jitted",
-    "cpu_gaussian_blur",
+    "gaussian_blur_run",
     "get_memory_usage",
     "get_picked_pairs",
-    "gpu_detrend_jitted",
-    "gpu_gaussian_blur",
     "img_seg_zscore_norm",
-    "process_on_cpu",
-    "process_on_gpu",
+    "mov_detrend",
+    "sample_tau",
     "spike_centered_avg",
     "spike_centered_median",
     "test_cuda",
