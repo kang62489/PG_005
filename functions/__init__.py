@@ -1,4 +1,5 @@
-from .detrend import align_to_min, biexp_detrend, mov_detrend
+from .als_baseline import als_baseline_run
+from .detrend import biexp_detrend, mov_detrend
 from .gaussian_blur import gaussian_blur_run
 from .get_memory_use import get_memory_usage
 from .imaging_segments_zscore_normalization import img_seg_zscore_norm
@@ -14,7 +15,7 @@ except (ImportError, ModuleNotFoundError):
     test_cuda = None   # type: ignore[assignment]
 
 __all__ = [
-    "align_to_min",
+    "als_baseline_run",
     "biexp_detrend",
     "check_cuda",
     "gaussian_blur_run",

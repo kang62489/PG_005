@@ -5,7 +5,6 @@ Public API
 ----------
 mov_detrend(stack, cuda_available, window_size=101)  ->  np.ndarray
 biexp_detrend(img, tau1, tau2, cuda_available)        ->  np.ndarray
-align_to_min(stack)                                   ->  np.ndarray
 """
 
 from __future__ import annotations
@@ -130,7 +129,7 @@ def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101)
     Moving-average detrend of an image stack (GPU if available, else CPU Numba JIT).
 
     Flattens the stack to (n_pixels, n_frames), detrends each pixel in parallel,
-    then reshapes back and aligns pixel time-means to the global minimum.
+    then reshapes back.
 
     Args:
         stack: Input array of shape (n_frames, H, W).
@@ -138,7 +137,7 @@ def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101)
         window_size: Width of the centred moving-average window (frames).
 
     Returns:
-        Detrended stack, shape (n_frames, H, W), float32.
+        Detrended stack, shape (n_frames, H, W), float16.
     """
     n_frames, height, width = stack.shape
     pixel_data = stack.reshape(n_frames, -1).T.astype(np.float32)  # (n_pixels, n_frames)
@@ -156,7 +155,7 @@ def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101)
 
     detrended_stack = detrended_pixels.T.reshape(n_frames, height, width)
 
-    return align_to_min(detrended_stack)
+    return detrended_stack.astype(np.float16)
 
 
 # ── Bi-exponential detrend ─────────────────────────────────────────────────────
@@ -242,7 +241,7 @@ def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: boo
         cuda_available: Route to GPU kernel if True.
 
     Returns:
-        Detrended stack, shape (n_frames, H, W), float32.
+        Detrended stack, shape (n_frames, H, W), float16.
     """
     n_frames, H, W = img.shape
     t = np.arange(n_frames, dtype=np.float32)
@@ -265,25 +264,8 @@ def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: boo
         _gpu_biexp[blocks, threads](d_img, d_pinv, d_basis, d_out)
         cuda.synchronize()
         output_flat_gpu = d_out.copy_to_host()
-        return align_to_min(output_flat_gpu.reshape(n_frames, H, W))
-    else:
-        # (n_pixels, n_frames) — each pixel's trace is contiguous in memory
-        img_flat_cpu = img.reshape(n_frames, -1).T.astype(np.float32)
-        output_flat_cpu = _cpu_biexp(img_flat_cpu, basis_pinv, basis_matrix)
-        return align_to_min(output_flat_cpu.T.reshape(n_frames, H, W))
-
-
-# ── Shared utility ─────────────────────────────────────────────────────────────
-
-
-def align_to_min(stack: np.ndarray, floor: float = 3.0) -> np.ndarray:
-    """
-    Normalise each pixel's time series to a common baseline of ``floor``.
-
-    Computes the per-pixel time-mean and subtracts it from each pixel's trace,
-    then lifts everything by ``floor``.  Every pixel's baseline therefore lands at
-    ``floor`` (~3.0), with dF fluctuations preserved around it.  This avoids
-    division-by-zero in dF/F0 calculations.
-    """
-    means = stack.mean(axis=0)
-    return (stack - means[None, :, :] + floor).astype(np.float16)
+        return output_flat_gpu.reshape(n_frames, H, W).astype(np.float16)
+    # (n_pixels, n_frames) — each pixel's trace is contiguous in memory
+    img_flat_cpu = img.reshape(n_frames, -1).T.astype(np.float32)
+    output_flat_cpu = _cpu_biexp(img_flat_cpu, basis_pinv, basis_matrix)
+    return output_flat_cpu.T.reshape(n_frames, H, W).astype(np.float16)

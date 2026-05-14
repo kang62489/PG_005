@@ -15,7 +15,7 @@ from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_TIFFS_DIR
 
 # Constants
 CHECK_COLUMNS = ["DOR", "TIFF_SERIAL", "IMG_READY", "PROC", "PROC_READY"]
-CAL_PATTERN = re.compile(r"(BIEXP|MOV)")
+DETREND_PATTERN = re.compile(r"(BIEXP|MOV)")
 
 # Set up rich console
 console = Console()
@@ -125,7 +125,6 @@ class CtrlImgProc:
             pl.col("Filename").str.split("-").list.first().alias("DOR"),
             pl.col("Filename").str.split("-").list.last().str.replace(r"\.tif$", "").alias("TIFF_SERIAL"),
             pl.lit("").alias("IMG_READY"),
-            pl.lit("").alias("CAL_EXISTS?"),
             pl.lit("").alias("GAUSS_EXISTS?"),
             pl.lit("").alias("PROC"),
             pl.lit("").alias("MODE")
@@ -142,16 +141,9 @@ class CtrlImgProc:
         file_status = "READY" if examine_file.exists() else "MISSING"
         return file_status
 
-    def _cal_exists(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
-        """Helper function to check if a processed file exists based on DOR and TIFF_SERIAL."""
-        examine_file_cal = list(dir_path.glob(f"{dor}-{tiff_serial}*_CAL*.tif"))
-        cal_list = [m.group(1) for f in examine_file_cal if (m := CAL_PATTERN.search(f.name))]
-        cal_result = ", ".join(cal_list) if cal_list else "Not Exist"
-        return cal_result
-
     def _gauss_exists(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
         examine_file_gauss = list(dir_path.glob(f"{dor}-{tiff_serial}*_GAUSS*.tif"))
-        gauss_list = [m.group(1) for f in examine_file_gauss if (m := CAL_PATTERN.search(f.name))]
+        gauss_list = [m.group(1) for f in examine_file_gauss if (m := DETREND_PATTERN.search(f.name))]
         gauss_result = ", ".join(gauss_list) if gauss_list else "Not Exist"
         return gauss_result
 
@@ -187,9 +179,6 @@ class CtrlImgProc:
             pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
                 lambda row_dict: self._raw_tiff_ready(dir_raw_tiffs, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("IMG_READY"),
-            pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
-                lambda row_dict: self._cal_exists(dir_processed, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
-                return_dtype=pl.Utf8).alias("CAL_EXISTS?"),
             pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
                 lambda row_dict: self._gauss_exists(dir_processed, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("GAUSS_EXISTS?"),

@@ -12,8 +12,6 @@ GPU path  : one Numba CUDA thread per pixel, Thomas algorithm per ALS iteration.
 CPU path  : same Thomas algorithm vectorised across all pixels with NumPy.
 """
 
-from __future__ import annotations
-
 import time
 from pathlib import Path
 
@@ -201,7 +199,7 @@ for fname in FILES:
 
     # ── Compute and save dF/F0 ───────────────────────────
     # f0 = np.maximum(baseline, 1.0)          # guard against zero baseline
-    dff0 = (100 * (gauss - baseline) / baseline).astype(np.float16)
+    dff0 = ((gauss - baseline) / baseline).astype(np.float16)
     tifffile.imwrite(PROC_DIR / f"{stem}_BIEXP_DFF0.tif", dff0)
     print(f"  Saved  -> {stem}_BIEXP_DFF0.tif   ({time.time() - t0:.1f}s total)")
 

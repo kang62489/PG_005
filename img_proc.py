@@ -23,6 +23,7 @@ import tifffile
 from rich.console import Console
 
 from functions import (
+    als_baseline_run,
     biexp_detrend,
     check_cuda,
     gaussian_blur_run,
@@ -32,6 +33,9 @@ from functions import (
 )
 
 SIGMA = 6.0
+ALS_LAM = 1e2
+ALS_P = 0.05
+ALS_N_ITER = 10
 console = Console()
 
 
@@ -89,7 +93,7 @@ def parse_brief(brief_path: Path) -> tuple[list[dict], Path, Path]:
 
 
 def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool) -> None:
-    """Moving-average detrend + Gaussian blur. Saves *_MOV_CAL.tif and *_MOV_GAUSS.tif."""
+    """Moving-average detrend + Gaussian blur. Saves *_MOV_GAUSS.tif."""
     stem = Path(file).stem
     t0 = time.time()
 
@@ -99,15 +103,25 @@ def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool) 
 
     console.log("  Detrending (MOV)...")
     detrended = mov_detrend(img, cuda_available)
-    tifffile.imwrite(proc_dir / f"{stem}_MOV_CAL.tif", detrended.astype(np.float16))
-    console.log(f"  Saved {stem}_MOV_CAL.tif  ({time.time() - t0:.1f}s)")
+    # tifffile.imwrite(proc_dir / f"{stem}_MOV_CAL.tif", detrended.astype(np.float16))
+    # console.log(f"  Saved {stem}_MOV_CAL.tif  ({time.time() - t0:.1f}s)")
 
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
     tifffile.imwrite(proc_dir / f"{stem}_MOV_GAUSS.tif", blurred.astype(np.float16))
     console.log(f"  Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
-    del img, detrended, blurred
+    console.log("  ALS baseline...")
+    baseline = als_baseline_run(blurred, ALS_LAM, ALS_P, ALS_N_ITER, cuda_available)
+    tifffile.imwrite(proc_dir / f"{stem}_MOV_BASELINE.tif", baseline.astype(np.float16))
+    console.log(f"  Saved {stem}_MOV_BASELINE.tif  ({time.time() - t0:.1f}s)")
+
+    console.log("  Computing dF/F0...")
+    dff0 = ((blurred.astype(np.float32) - baseline) / baseline).astype(np.float16)
+    tifffile.imwrite(proc_dir / f"{stem}_MOV_DFF0.tif", dff0)
+    console.log(f"  Saved {stem}_MOV_DFF0.tif  ({time.time() - t0:.1f}s)")
+
+    del img, detrended, blurred, baseline, dff0
 
 
 def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool) -> None:
@@ -125,15 +139,25 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
 
     console.log("  Detrending (BIEXP)...")
     detrended = biexp_detrend(img, tau1, tau2, cuda_available)
-    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_CAL.tif", detrended.astype(np.float16))
-    console.log(f"  Saved {stem}_BIEXP_CAL.tif  ({time.time() - t0:.1f}s)")
+    # tifffile.imwrite(proc_dir / f"{stem}_BIEXP_CAL.tif", detrended.astype(np.float16))
+    # console.log(f"  Saved {stem}_BIEXP_CAL.tif  ({time.time() - t0:.1f}s)")
 
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
     tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", blurred.astype(np.float16))
     console.log(f"  Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
-    del img, detrended, blurred
+    console.log("  ALS baseline...")
+    baseline = als_baseline_run(blurred, ALS_LAM, ALS_P, ALS_N_ITER, cuda_available)
+    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_BASELINE.tif", baseline.astype(np.float16))
+    console.log(f"  Saved {stem}_BIEXP_BASELINE.tif  ({time.time() - t0:.1f}s)")
+
+    console.log("  Computing dF/F0...")
+    dff0 = ((blurred.astype(np.float32) - baseline) / baseline).astype(np.float16)
+    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_DFF0.tif", dff0)
+    console.log(f"  Saved {stem}_BIEXP_DFF0.tif  ({time.time() - t0:.1f}s)")
+
+    del img, detrended, blurred, baseline, dff0
 
 
 # ── Pipeline runner ───────────────────────────────────────────────────────────
