@@ -1,0 +1,14 @@
+Date Created: 20260522
+Analysis: Test new pipeline
+Purposes:
+     add more stuff to _checked brief.
+
+Picked: [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]
+# [raw_tiff_name, paired_abf]
+[2025_11_08-0028.tif, No, YES, BIEXP, 2025_11_08_0014.abf]
+[2025_11_08-0029.tif, BIEXP, SKIP, NONE, 2025_11_08_0015.abf]
+
+Total 2 records picked
+
+dir_raw_tiffs: D:\MyDB\2_Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs

@@ -7,8 +7,6 @@ mov_detrend(stack, cuda_available, window_size=101)  ->  np.ndarray
 biexp_detrend(img, tau1, tau2, cuda_available)        ->  np.ndarray
 """
 
-from __future__ import annotations
-
 import math
 import os
 import warnings

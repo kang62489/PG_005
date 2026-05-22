@@ -1,0 +1,11 @@
+Date Created: 20260522
+Analysis: Test new pipeline
+Purposes:
+     add more stuff to _checked brief.
+
+Picked:
+# [raw_tiff_name, paired_abf]
+[2025_11_08-0028.tif, 2025_11_08_0014.abf]
+[2025_11_08-0029.tif, 2025_11_08_0015.abf]
+
+Total 2 records picked

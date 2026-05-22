@@ -14,6 +14,7 @@
 
 ```
 PG_005/
+├── main.py                          # GUI entry point (ACID - PySide6 QMainWindow)
 ├── img_proc.py                      # Main script: Image preprocessing (MOV/BIEXP/BOTH modes)
 ├── im_dynamics.py                   # Main script: Spike-triggered ACh analysis (interactive)
 ├── batch_process.py                 # Batch processor: Process all picked pairs
@@ -25,9 +26,32 @@ PG_005/
 ├── archive/cpu_binning.py           # Unused spatial binning
 ├── archive/kmeans.py                # Unused K-means helpers
 │
-├── classes/
+├── views/                           # GUI view layer (PySide6 widget layouts)
 │   ├── __init__.py
-│   ├── plot_results.py              # Interactive Qt viewers (PlotPeaks, PlotSegs, PlotSpatialDist, PlotRegion)
+│   ├── view_dor_query.py            # Tab: Query by DOR
+│   ├── view_data_selector.py        # Tab: Data Selector
+│   ├── view_img_proc.py             # Tab: Image Processing (pick list, console output)
+│   └── view_als_dff0.py             # Tab: Normalization Test (ALS config, 5 MplCanvas)
+│
+├── controllers/                     # GUI controller layer (signals + business logic)
+│   ├── __init__.py
+│   ├── ctrl_dor_query.py            # Controller: DOR Query tab
+│   ├── ctrl_data_selector.py        # Controller: Data Selector tab
+│   ├── ctrl_img_proc.py             # Controller: Image Processing tab
+│   │                                #   - pick list loading, file status check
+│   │                                #   - processing log: writes to data/{brief}_log.txt
+│   │                                #   - QFileSystemWatcher.fileChanged → tb_console
+│   └── ctrl_als_dff0.py             # Controller: Normalization tab (ROI switching)
+│
+├── classes/
+│   ├── __init__.py                  # Lazy imports (_LAZY_IMPORTS + __getattr__)
+│   ├── bk_worker.py                 # BackgroundWorker(QThread) — runs fn(*args, **kwargs)
+│   ├── dialog_confirm.py            # DialogConfirm
+│   ├── dialog_get_path.py           # DialogGetFile, DialogGetPath
+│   ├── helper_cell_dropdown.py      # CellDropdownDelegate (editable dropdown cells)
+│   ├── helper_checkable_dropdown.py # CheckableDropdown
+│   ├── model_from_dataframe.py      # ModelFromDataFrame (Qt table model for polars)
+│   ├── plot_results.py              # MplCanvas + interactive Qt viewers
 │   ├── abf_clip.py                  # ABF data clipping + spike detection utilities
 │   ├── spatial_categorization.py    # SpatialCategorizer class
 │   ├── region_analyzer.py           # RegionAnalyzer class (area, centroid, contours)
@@ -35,11 +59,11 @@ PG_005/
 │   └── archived_methods.py          # Archived: dbscan, region_growing
 │
 ├── functions/
-│   ├── __init__.py
+│   ├── __init__.py                  # Lazy imports for all heavy functions
 │   ├── xlsx_reader.py               # Read metadata from REC_*.xlsx files
 │   │
 │   ├── [Hardware/CUDA]
-│   │   ├── check_cuda.py            # Verify CUDA availability
+│   │   ├── check_cuda.py            # check_cuda() → (bool, str): CUDA status + log messages
 │   │   ├── test_cuda.py             # Test CUDA functionality
 │   │   └── get_memory_use.py        # Memory usage monitoring
 │   │
@@ -53,27 +77,33 @@ PG_005/
 │       ├── spike_centered_processes.py          # Spike-aligned median/mean
 │       └── imaging_segments_zscore_normalization.py  # Z-score normalization
 │
+├── utils/
+│   └── params.py                    # Path constants (BASE_DIR, MODELS_DIR, etc.) + UISizes
+│
 ├── docs/
 │   ├── PROJECT_SUMMARY.md           # This file
 │   ├── DEPENDENCY_DIAGRAM.md        # Architecture diagram
 │   ├── DATABASE_STRUCTURE.md        # Database schema and optimization details
-│   └── examples/                    # Usage examples
+│   └── continue_from_here.md        # Session progress log (current TODOs)
+│
+├── data/                            # Processing briefs + logs
+│   ├── proc_brief_*.txt             # Processing briefs (picked TIFFs + modes)
+│   ├── proc_brief_*_checked.txt     # Checked briefs (with dir paths + PROC/MODE)
+│   └── {brief_stem}_log.txt         # Processing logs (written live during img_proc.run())
 │
 ├── scripts/
 │   ├── migrate_database.py          # Database migration script (completed 2026-02-10)
 │   └── __init__.py
 │
-├── raw_images/                      # Raw TIFF stacks (input)
+├── raw_tiffs/                       # Raw TIFF stacks (input)
 ├── raw_abfs/                        # ABF files (electrophysiology input)
-├── processed_images/                # Preprocessed TIFFs (*_Cal.tif, *_Gauss.tif)
+├── proc_tiffs/                      # Preprocessed TIFFs (*_MOV_GAUSS.tif, *_BIEXP_GAUSS.tif)
 ├── results/                         # Analysis results
 │   ├── results.db                   # SQLite database (optimized, <1 MB)
 │   ├── results_backup.db            # Pre-migration backup (680 MB)
 │   ├── export_experiment_to_excel.py # Export to Excel script
 │   └── files/                       # Flat directory: all TIFFs and PNGs
-├── rec_summary/                     # Recording summary Excel files (REC_YYYY_MM_DD.xlsx)
-├── logs/                            # Processing logs
-└── utils/                           # Utility scripts (currently unused)
+└── rec_summary/                     # Recording summary Excel files (REC_YYYY_MM_DD.xlsx)
 ```
 
 ---
@@ -858,6 +888,6 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-05-14 (refactored preprocessing pipeline: img_proc.py replaces im_preprocess.py;
-unified detrend.py + gaussian_blur.py + tau_estimate.py; old CPU/GPU split files archived;
-proc_brief naming + YYYYMMDD date format)*
+*Last updated: 2026-05-22 (added PySide6 GUI: main.py, views/, controllers/, classes/bk_worker.py;
+check_cuda() now returns (bool, str); img_proc.run() accepts log_path for live processing log;
+QFileSystemWatcher on log file → tb_console updates in real-time)*

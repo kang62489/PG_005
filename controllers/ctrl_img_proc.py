@@ -10,7 +10,8 @@ from PySide6.QtWidgets import QAbstractItemView
 from rich.console import Console
 
 # Local application imports
-from classes import CellDropdownDelegate, DialogGetFile, DialogGetPath, ModelFromDataFrame
+from classes import BackgroundWorker, CellDropdownDelegate, DialogGetFile, DialogGetPath, ModelFromDataFrame
+from functions import check_cuda
 from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_TIFFS_DIR
 
 # Constants
@@ -27,28 +28,19 @@ class CtrlImgProc:
         self.view.te_dir_raw_images.setPlainText(str(RAW_TIFFS_DIR))
         self.view.te_dir_processed.setReadOnly(True)
         self.view.te_dir_processed.setPlainText(str(PROC_TIFFS_DIR))
-        self._ensure_dirs()
+        self._proc_log_path: Path | None = None
+        self._init_dir_watcher()
         self._set_proc_delegate()
         self._set_mode_delegate()
         self.connect_signals()
-        self.view.btn_start_processing.setEnabled(False)
         self.view.btn_export_checked_list.setEnabled(False)
 
-    def _ensure_dirs(self) -> None:
-        for path in (RAW_TIFFS_DIR, PROC_TIFFS_DIR):
-            try:
-                if path.exists():
-                    console.log(f"[green]EXISTS[/green]: {path}")
-                else:
-                    path.mkdir(parents=True, exist_ok=True)
-                    console.log(f"[yellow]CREATED[/yellow]: {path}")
-            except OSError as e:
-                console.log(f"[red]FAILED to create[/red]: {path} — {e}")
+    def _init_dir_watcher(self) -> None:
         self.dirs_watcher = QFileSystemWatcher([str(RAW_TIFFS_DIR), str(PROC_TIFFS_DIR)])
 
     def _set_proc_delegate(self) -> None:
         self._proc_delegate = CellDropdownDelegate(["YES", "SKIP"])
-        proc_col_idx = 5
+        proc_col_idx = 4  # DOR=0, TIFF_SERIAL=1, IMG_READY=2, GAUSS_EXISTS?=3, PROC=4, MODE=5
         self.view.tv_pick_list.setItemDelegateForColumn(proc_col_idx, self._proc_delegate)
         self.view.tv_pick_list.setEditTriggers(
             QAbstractItemView.EditTrigger.CurrentChanged | QAbstractItemView.EditTrigger.SelectedClicked
@@ -56,7 +48,7 @@ class CtrlImgProc:
 
     def _set_mode_delegate(self) -> None:
         self._mode_delegate = CellDropdownDelegate(["BIEXP", "MOV", "BOTH", "NONE"])
-        mode_col_idx = 6
+        mode_col_idx = 5  # DOR=0, TIFF_SERIAL=1, IMG_READY=2, GAUSS_EXISTS?=3, PROC=4, MODE=5
         self.view.tv_pick_list.setItemDelegateForColumn(mode_col_idx, self._mode_delegate)
         self.view.tv_pick_list.setEditTriggers(
             QAbstractItemView.EditTrigger.CurrentChanged | QAbstractItemView.EditTrigger.SelectedClicked
@@ -66,8 +58,10 @@ class CtrlImgProc:
         self.view.btn_load_pick_list.clicked.connect(self.load_pick_list)
         self.view.btn_browse_raw_images.clicked.connect(self._browse_raw_images)
         self.view.btn_browse_processed.clicked.connect(self._browse_processed)
-        self.dirs_watcher.directoryChanged.connect(self.check_file_status)
         self.view.btn_export_checked_list.clicked.connect(self.export_checked_list)
+        self.view.btn_start_processing.clicked.connect(self.start_processing)
+        self.dirs_watcher.directoryChanged.connect(self.check_file_status)
+        self.dirs_watcher.fileChanged.connect(self._on_log_changed)
 
     def _browse_raw_images(self) -> None:
         path = DialogGetPath(title="Select Directory of Raw TIFFs").get_path()
@@ -88,7 +82,7 @@ class CtrlImgProc:
     def load_pick_list(self) -> None:
         """Open a processing brief .txt via dialog and display a check table in tv_pick_list."""
         dlg = DialogGetFile(title="Select a Processing Brief (.txt)", init_dir=str(MODELS_DIR))
-        path_str = dlg.get_file()
+        path_str = dlg.get_pick_list()
         if not path_str:
             return
 
@@ -102,7 +96,7 @@ class CtrlImgProc:
         # Extract filenames between "Picked:" and 2 lines before "Total ..."
         lines = text.splitlines()
         try:
-            picked_idx = next(i for i, ln in enumerate(lines) if ln.strip() == "Picked:")
+            picked_idx = next(i for i, ln in enumerate(lines) if ln.strip().startswith("Picked:"))
             total_idx = next(i for i, ln in enumerate(lines) if ln.strip().startswith("Total"))
             filenames = [
                 line.strip()[1:].split(",")[0].strip().rstrip("]").strip()
@@ -144,18 +138,21 @@ class CtrlImgProc:
     def _gauss_exists(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
         examine_file_gauss = list(dir_path.glob(f"{dor}-{tiff_serial}*_GAUSS*.tif"))
         gauss_list = [m.group(1) for f in examine_file_gauss if (m := DETREND_PATTERN.search(f.name))]
-        gauss_result = ", ".join(gauss_list) if gauss_list else "Not Exist"
-        return gauss_result
+        if not gauss_list:
+            return "No"
+        if "BIEXP" in gauss_list and "MOV" in gauss_list:
+            return "BIEXP & MOV"
+        return gauss_list[0]
 
     def _on_proc_changed(self, top_left, _bottom_right, _roles) -> None:
-        # only respond to changes in the "PROC" column (index 5)
-        if top_left.column() != 5:
+        # only respond to changes in the "PROC" column (index 4)
+        if top_left.column() != 4:
             return
         proc_val = top_left.data() # should be "YES" or "SKIP"
         mode_val: str = "BIEXP" if proc_val == "YES" else "NONE"
-        # update the cell value to the MODE column (index 6) in the table view
+        # update the cell value to the MODE column (index 5) in the table view
         model = self.view.tv_pick_list.model()
-        model.setData(model.index(top_left.row(), 6), mode_val)
+        model.setData(model.index(top_left.row(), 5), mode_val)
 
     def check_file_status(self) -> None:
         """Check file status based on the pick list and update the check table."""
@@ -183,12 +180,15 @@ class CtrlImgProc:
                 lambda row_dict: self._gauss_exists(dir_processed, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("GAUSS_EXISTS?"),
         ).with_columns(
-            pl.when(pl.col("GAUSS_EXISTS?") == "Not Exist")
+            pl.when(pl.col("GAUSS_EXISTS?") == "No")
             .then(pl.lit("YES"))
             .otherwise(pl.lit("SKIP"))
             .alias("PROC")
         ).with_columns(
-            pl.when(pl.col("PROC") == "SKIP").then(pl.lit("NONE")).otherwise(pl.lit("BIEXP")).alias("MODE")
+            pl.when(pl.col("PROC") == "SKIP")
+            .then(pl.col("GAUSS_EXISTS?").replace("BIEXP & MOV", "BOTH"))
+            .otherwise(pl.lit("BIEXP"))
+            .alias("MODE")
         )
 
         model_examined = ModelFromDataFrame(self.df_file_status)
@@ -197,7 +197,6 @@ class CtrlImgProc:
         console.log("[green] File status updated.[/green]")
 
         all_ready = (self.df_file_status["IMG_READY"] == "READY").all()
-        self.view.btn_start_processing.setEnabled(all_ready)
         self.view.btn_export_checked_list.setEnabled(all_ready)
 
     def export_checked_list(self) -> None:
@@ -207,12 +206,12 @@ class CtrlImgProc:
 
         df = model._data  # noqa: SLF001  # captures any user edits to PROC and MODE columns
         row_lookup = {
-            f"{row['DOR']}-{row['TIFF_SERIAL']}.tif": (row["PROC"], row["MODE"])
+            f"{row['DOR']}-{row['TIFF_SERIAL']}.tif": (row["GAUSS_EXISTS?"], row["PROC"], row["MODE"])
             for row in df.iter_rows(named=True)
         }
 
-        dir_raw = self.view.te_dir_raw_images.toPlainText().strip()
-        dir_proc = self.view.te_dir_processed.toPlainText().strip()
+        dir_raw = str(Path(self.view.te_dir_raw_images.toPlainText().strip()))
+        dir_proc = str(Path(self.view.te_dir_processed.toPlainText().strip()))
 
         original_lines = self.current_brief_path.read_text(encoding="utf-8").splitlines()
 
@@ -223,15 +222,52 @@ class CtrlImgProc:
             f"dir_proc_tiffs: {dir_proc}",
         ]
 
-        # Replace [filename...] lines between "Picked:" and 2 lines before "Total ..."
-        picked_idx = next(i for i, ln in enumerate(out_lines) if ln.strip() == "Picked:")
+        # Update "Picked:" line to include schema, then replace bracket entries.
+        picked_idx = next(i for i, ln in enumerate(out_lines) if ln.strip().startswith("Picked:"))
         total_idx = next(i for i, ln in enumerate(out_lines) if ln.strip().startswith("Total"))
+        out_lines[picked_idx] = "Picked: [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]"
         for i in range(picked_idx + 1, total_idx - 1):
-            filename = out_lines[i].strip()[1:].split(",")[0].strip().rstrip("]").strip()
+            brief_line = out_lines[i].strip()
+            if not brief_line.startswith("["):
+                continue
+            parts = [p.strip().rstrip("]").strip() for p in brief_line[1:].split(",")]
+            filename = parts[0]
+            abf = parts[1] if len(parts) > 1 else "N/A"
             if filename in row_lookup:
-                proc, mode = row_lookup[filename]
-                out_lines[i] = f"[{filename}, {proc}, {mode}]"
+                gauss_exists, proc, mode = row_lookup[filename]
+                out_lines[i] = f"[{filename}, {gauss_exists}, {proc}, {mode}, {abf}]"
 
         out_path = self.current_brief_path.parent / f"{self.current_brief_path.stem}_checked.txt"
         out_path.write_text("\n".join(out_lines), encoding="utf-8")
         console.log(f"[bold green]Checked list saved → {out_path}[/bold green]")
+
+    def start_processing(self) -> None:
+        from img_proc import run as run_img_proc
+
+        brief_path = DialogGetFile(title="Select the Brief to Process", init_dir=str(MODELS_DIR)).get_checked_brief()
+        if not brief_path:
+            console.log("[yellow]Processing cancelled: No brief selected.[/yellow]")
+            return
+
+        log_path = MODELS_DIR / f"{Path(brief_path).stem}_log.txt"
+        self._proc_log_path = log_path
+
+        _cuda_available, _cuda_msg = check_cuda()
+        log_path.write_text(_cuda_msg + "\n", encoding="utf-8")
+        self.dirs_watcher.addPath(str(log_path))
+
+        self._bk_worker = BackgroundWorker(run_img_proc, Path(brief_path), _cuda_available, log_path=log_path)
+        self._bk_worker.finished.connect(self._on_processing_done)
+        self._bk_worker.start()
+
+    def _on_log_changed(self, path: str) -> None:
+        log_path = Path(path)
+        if log_path.exists():
+            self.view.tb_console.setPlainText(log_path.read_text(encoding="utf-8"))
+
+    def _on_processing_done(self) -> None:
+        if self._proc_log_path is not None:
+            self.dirs_watcher.removePath(str(self._proc_log_path))
+            if self._proc_log_path.exists():
+                self.view.tb_console.setPlainText(self._proc_log_path.read_text(encoding="utf-8"))
+            self._proc_log_path = None

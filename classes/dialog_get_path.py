@@ -19,14 +19,22 @@ class DialogGetPath(QFileDialog):
 class DialogGetFile(QFileDialog):
     def __init__(self, title="Please select a file", init_dir=""):
         super().__init__()
+        self._init_dir = init_dir
         self.setFileMode(QFileDialog.ExistingFile)
-        self.setNameFilters(["Text Files (*.txt)", "Markdown Files (*.md)"])
-        self.setDirectory(init_dir)
 
         self.setAcceptMode(QFileDialog.AcceptOpen)
         self.setWindowTitle(title)
 
-    def get_file(self):
+    def get_pick_list(self):
+        self.setNameFilters(["Text Files (*.txt)",])
+        self.setDirectory(self._init_dir)
+        if self.exec():
+            return self.selectedFiles()[0]
+        return ""
+
+    def get_checked_brief(self):
+        self.setNameFilter("Checked Brief (*_checked.txt)")
+        self.setDirectory(self._init_dir)
         if self.exec():
             return self.selectedFiles()[0]
         return ""

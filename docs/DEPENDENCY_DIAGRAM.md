@@ -8,6 +8,45 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
+│                         WORKFLOW 0: GUI (main.py)                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+main.py (QMainWindow + QTabWidget)
+  ├── Tab: Image Processing
+  │     ├── ViewImgProc        (views/view_img_proc.py)
+  │     └── CtrlImgProc        (controllers/ctrl_img_proc.py)
+  │           ├── load_pick_list()      → ModelFromDataFrame + CellDropdownDelegate
+  │           ├── check_file_status()   → QFileSystemWatcher (RAW_TIFFS_DIR, PROC_TIFFS_DIR)
+  │           ├── export_checked_list() → writes *_checked.txt to data/
+  │           └── start_processing()
+  │                 ├── check_cuda()           → (bool, str)  [functions/check_cuda.py]
+  │                 ├── writes cuda msg        → data/{brief}_log.txt
+  │                 ├── BackgroundWorker.start()  → runs img_proc.run(..., log_path)
+  │                 │     └── img_proc.run() swaps module console → writes to log in real-time
+  │                 └── QFileSystemWatcher.fileChanged → _on_log_changed → tb_console.setPlainText()
+  │
+  ├── Tab: Normalization Test
+  │     ├── ViewAlsDff0        (views/view_als_dff0.py)
+  │     │     └── 5x MplCanvas in QStackedLayout
+  │     └── CtrlAlsDff0        (controllers/ctrl_als_dff0.py)
+  │           └── cb_switch_roi.activated → lo_als_plot.setCurrentIndex()
+  │
+  ├── Tab: Query by DOR
+  │     ├── ViewDorQuery / CtrlDorQuery
+  │     └── emits dor_changed → CtrlDataSelector.on_dor_changed
+  │
+  └── Tab: Data Selector
+        ├── ViewDataSelector / CtrlDataSelector
+        └── responds to dor_changed signal
+
+classes/bk_worker.py
+  └── BackgroundWorker(QThread)
+        ├── __init__(fn, *args, **kwargs)
+        ├── run() → fn(*args, **kwargs); finished.emit()
+        └── finished = Signal()
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
 │                         WORKFLOW 1: IMAGE PREPROCESSING                     │
 └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -400,8 +439,7 @@ archive/cpu_binning.py, archive/kmeans.py
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-05-14 (refactored preprocessing pipeline: unified detrend.py,
-         gaussian_blur.py, tau_estimate.py; img_proc.py replaces im_preprocess.py;
-         old CPU/GPU split files archived)
+Updated: 2026-05-22 (added Workflow 0: GUI; BackgroundWorker; processing log system;
+         check_cuda() returns (bool, str); img_proc.run() accepts log_path)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

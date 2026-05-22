@@ -23,7 +23,7 @@ os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "40")
 LAM: float = 1e2    # smoothness: larger → smoother baseline
 P: float = 0.05     # asymmetry: small → baseline hugs the lower envelope
 N_ITER: int = 10    # ALS iterations (10 is usually sufficient)
-MAX_T: int = 2048   # compile-time local-array size; must be >= number of frames
+MAX_T: int = 4096   # compile-time local-array size; must be >= number of frames
 
 
 # ── GPU kernel ─────────────────────────────────────────────────────────────────
@@ -47,11 +47,12 @@ def _gpu_als_kernel(data, baseline, lam, p, n_iter) -> None:
 
     T = data.shape[0]
 
-    # Thread-local arrays (stored in GPU local/register memory)
-    z = cuda.local.array(2048, dtype=np.float32)   # current baseline estimate
-    w = cuda.local.array(2048, dtype=np.float32)   # ALS weights
-    c = cuda.local.array(2048, dtype=np.float32)   # Thomas: modified upper diagonal
-    d = cuda.local.array(2048, dtype=np.float32)   # Thomas: modified RHS
+    # Thread-local arrays (stored in GPU local/register memory).
+    # Size is the module-level constant MAX_T — Numba reads it at JIT compile time.
+    z = cuda.local.array(MAX_T, dtype=np.float32)   # current baseline estimate
+    w = cuda.local.array(MAX_T, dtype=np.float32)   # ALS weights
+    c = cuda.local.array(MAX_T, dtype=np.float32)   # Thomas: modified upper diagonal
+    d = cuda.local.array(MAX_T, dtype=np.float32)   # Thomas: modified RHS
 
     for i in range(T):
         z[i] = data[i, px]
@@ -96,6 +97,10 @@ def _gpu_als(stack: np.ndarray, lam: float, p: float, n_iter: int) -> np.ndarray
     n_px = H * W
     # Reshape to (T, n_pixels) — frame index first for coalesced access across threads
     data_px = np.ascontiguousarray(stack.reshape(T, n_px), dtype=np.float32)
+
+    # Flush any pending Numba GPU deallocations before allocating large arrays,
+    # to avoid CUDA_ERROR_ILLEGAL_ADDRESS from memory pressure.
+    cuda.current_context().deallocations.clear()
 
     data_gpu = cuda.to_device(data_px)
     baseline_gpu = cuda.device_array_like(data_px)

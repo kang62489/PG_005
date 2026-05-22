@@ -2,6 +2,7 @@
 # Standard library imports
 import datetime
 import json
+from pathlib import Path
 
 # Third-party imports
 import polars as pl
@@ -20,6 +21,26 @@ console = Console()
 # Constants
 CORE_COLUMNS = ("Filename", "Timestamp", "OBJ", "EXC", "EMI", "FRAMES", "SLICE", "AT", "SENSOR", "PAIRED_ABF")
 PICK_LIST_JSON_PATH = MODELS_DIR / "pick_list.json"
+
+
+def _parse_brief_header(path: Path) -> tuple[str, str]:
+    """Extract normalized title and purposes from a brief .txt for duplicate detection."""
+    title = ""
+    purposes_lines: list[str] = []
+    in_purposes = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("Analysis:"):
+            title = line.split(":", 1)[1].strip()
+            in_purposes = False
+        elif line.strip() == "Purposes:":
+            in_purposes = True
+        elif in_purposes:
+            stripped = line.strip()
+            if not stripped:
+                in_purposes = False
+            else:
+                purposes_lines.append(stripped)
+    return title, "\n".join(purposes_lines)
 
 
 class CtrlDataSelector:
@@ -42,8 +63,9 @@ class CtrlDataSelector:
 
         self.view.btn_pick_selected.clicked.connect(self.pick_selected)
         self.view.btn_open_pick_list.clicked.connect(self.open_pick_list)
-        self.view.btn_brief_gen.clicked.connect(self.brief_gen)
         self.view.btn_brief_export.clicked.connect(self.brief_export)
+        self.view.le_title.textChanged.connect(lambda _: self.brief_gen())
+        self.view.te_purposes.textChanged.connect(self.brief_gen)
 
         # Connect filter dropdowns
         for col in self.view.filter_columns:
@@ -173,6 +195,7 @@ class CtrlDataSelector:
                 lines.append(f"{indent} {purpose_line}")
 
         lines.append("\nPicked:")
+        lines.append("# [raw_tiff_name, paired_abf]")
 
         if self.df_pick_list.is_empty() or "Filename" not in self.df_pick_list.columns:
             lines.append("  (No records picked yet)")
@@ -183,33 +206,50 @@ class CtrlDataSelector:
                 abf = row.get("PAIRED_ABF") or "" if "PAIRED_ABF" in cols else ""
                 if abf:
                     dor = row["Filename"].split("-")[0]
-                    entry = f"[{row['Filename']}, {dor}_{abf}.abf]"
+                    abf_str = f"{dor}_{abf}.abf"
                 else:
-                    entry = f"[{row['Filename']}]"
-                lines.append(entry)
+                    abf_str = "N/A"
+                lines.append(f"[{row['Filename']}, {abf_str}]")
             lines.append(f"\nTotal {len(rows)} records picked")
 
         self.view.te_processing_brief.setPlainText("\n".join(lines))
 
     def brief_export(self) -> None:
         """Export processing brief as .txt into results/, with auto serial suffix."""
+        note_text = self.view.te_processing_brief.toPlainText().strip()
+        if not note_text:
+            console.print("[bold red]Preview is empty — nothing to export.[/bold red]")
+            return
+
         date_created = self.view.le_date_created.text().strip()
         if not date_created:
-            console.print("[bold red]Date Created is empty — run Generate Brief first.[/bold red]")
+            console.print("[bold red]Date Created is empty — please enter a date before exporting.[/bold red]")
             return
 
         MODELS_DIR.mkdir(exist_ok=True)
 
-        # Find next available serial number for today's date
-        existing = sorted(MODELS_DIR.glob(f"proc_brief_{date_created}_*.txt"))
-        if existing:
-            last_serial = int(existing[-1].stem.rsplit("_", 1)[-1])
-            serial = last_serial + 1
-        else:
-            serial = 0
-        note_path = MODELS_DIR / f"proc_brief_{date_created}_{serial:03d}.txt"
+        current_title = self.view.le_title.text().strip() or "Untitled"
+        current_purposes = "\n".join(
+            line.strip() for line in self.view.te_purposes.toPlainText().splitlines() if line.strip()
+        )
 
-        note_text = self.view.te_processing_brief.toPlainText().strip()
+        # Check if any existing brief from the same date has identical title + purposes
+        existing = sorted(
+            p for p in MODELS_DIR.glob(f"proc_brief_{date_created}_*.txt")
+            if not p.stem.endswith("_checked")
+        )
+        match_path = next(
+            (p for p in existing if _parse_brief_header(p) == (current_title, current_purposes)),
+            None,
+        )
+
+        if match_path:
+            note_path = match_path
+            console.print(f"[yellow]Same title+purpose found — overwriting {match_path.name}[/yellow]")
+        else:
+            last_serial = int(existing[-1].stem.rsplit("_", 1)[-1]) if existing else -1
+            note_path = MODELS_DIR / f"proc_brief_{date_created}_{last_serial + 1:03d}.txt"
+
         note_path.write_text(note_text, encoding="utf-8")
         console.print(f"[bold green]Processing brief saved → {note_path}[/bold green]")
 

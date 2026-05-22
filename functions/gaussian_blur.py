@@ -6,8 +6,6 @@ Public API
 gaussian_blur_run(stack, sigma, cuda_available)  ->  np.ndarray
 """
 
-from __future__ import annotations
-
 import math
 import os
 import warnings

@@ -135,13 +135,17 @@ from numba import cuda
 # ============================================================================
 
 
-def check_cuda() -> bool:
+def check_cuda() -> tuple[bool, str]:
     """Check CUDA availability and print diagnostic information"""
+    messages: list[str] = []
+
     # Print setup status
     if _SETUP_SUCCESS:
         console.log(f"[dim]{_SETUP_MESSAGE}[/dim]")
+        messages.append(_SETUP_MESSAGE)
     else:
         console.log(f"[yellow]Setup warning: {_SETUP_MESSAGE}[/yellow]")
+        messages.append(f"Setup warning: {_SETUP_MESSAGE}")
 
     try:
         # Check if CUDA is available through Numba
@@ -150,11 +154,15 @@ def check_cuda() -> bool:
             # Handle both bytes and str for device name (compatibility with different numba versions)
             device_name = device.name.decode("utf-8") if isinstance(device.name, bytes) else device.name
             console.log(f"[green]CUDA is available. Using device: {device_name}[/green]")
+            messages.append(f"CUDA is available. Using device: {device_name}")
             console.log(f"[green]Compute Capability: {device.compute_capability}[/green]")
+            messages.append(f"Compute Capability: {device.compute_capability}")
             console.log(f"[green]Max threads per block: {device.MAX_THREADS_PER_BLOCK}[/green]")
-            return True
+            messages.append(f"Max threads per block: {device.MAX_THREADS_PER_BLOCK}")
+            return True, "\n".join(messages)
 
         console.log("[bold red]CUDA is not available through Numba. Checking why...[/bold red]")
+        messages.append("CUDA is not available through Numba. Checking why...")
 
         # Check NVIDIA driver
         try:
@@ -163,8 +171,11 @@ def check_cuda() -> bool:
             device_name = pynvml.nvmlDeviceGetName(handle)
             driver_version = pynvml.nvmlSystemGetDriverVersion()
             console.log("[yellow]NVIDIA driver is installed[/yellow]")
+            messages.append("NVIDIA driver is installed")
             console.log(f"[yellow]GPU: {device_name}[/yellow]")
+            messages.append(f"GPU: {device_name}")
             console.log(f"[yellow]Driver Version: {driver_version}[/yellow]")
+            messages.append(f"Driver Version: {driver_version}")
             pynvml.nvmlShutdown()
         except (
             pynvml.NVMLError_DriverNotLoaded,
@@ -172,19 +183,23 @@ def check_cuda() -> bool:
             pynvml.NVMLError_LibraryNotFound,
         ) as e:
             console.log(f"[bold red]NVIDIA driver not found or not properly installed: {e!s}[/bold red]")
-            return False
+            messages.append(f"NVIDIA driver not found or not properly installed: {e!s}")
+            return False, "\n".join(messages)
 
         # Print current environment variables for debugging
         console.log("\n[yellow]Current CUDA environment variables:[/yellow]")
+        messages.append("\nCurrent CUDA environment variables:")
         for key in ["CUDA_PATH", "CUDA_HOME", "NUMBAPRO_NVVM", "NUMBAPRO_LIBDEVICE"]:
             value = os.environ.get(key, "Not set")
             # Truncate long paths for readability
             if len(value) > 100:
                 value = value[:100] + "..."
             console.log(f"[yellow]{key}: {value}[/yellow]")
+            messages.append(f"{key}: {value}")
 
-        return False
+        return False, "\n".join(messages)
 
     except (KeyError, TypeError, RuntimeError) as e:
         console.log(f"[bold red]Error checking CUDA: {e!s}[/bold red]")
-        return False
+        messages.append(f"Error checking CUDA: {e!s}")
+        return False, "\n".join(messages)

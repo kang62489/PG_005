@@ -1,6 +1,6 @@
 ## Modules
 # Third-party imports
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextEdit, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextBrowser, QTextEdit, QVBoxLayout
 
 # Local application imports
 from utils.params import UISizes
@@ -15,6 +15,7 @@ class ViewImgProc:
 
     def setup_blocks(self) -> None:
         self.setup_block_1()
+        self.setup_block_2()
 
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
@@ -55,7 +56,19 @@ class ViewImgProc:
         self.lo_block_1.addWidget(self.tv_pick_list)
 
         self.btn_export_checked_list = QPushButton("Export Checked List")
-        self.btn_start_processing = QPushButton("Start Processing")
         self.lo_block_1.addWidget(self.btn_export_checked_list)
-        self.lo_block_1.addWidget(self.btn_start_processing)
+
+    def setup_block_2(self) -> None:
+        self.lo_block_2 = QVBoxLayout()
+        self.lo_tab_container.addLayout(self.lo_block_2)
+
+        self.btn_start_processing = QPushButton("Start Processing")
+        self.lo_block_2.addWidget(self.btn_start_processing)
+        
+        self.lbl_console = QLabel("Console Output:")
+        self.lo_block_2.addWidget(self.lbl_console)
+
+        self.tb_console = QTextBrowser()
+        self.lo_block_2.addWidget(self.tb_console)
+
 

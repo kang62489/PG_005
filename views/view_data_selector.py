@@ -108,8 +108,6 @@ class ViewDataSelector:
 
         # Buttons
         self.lo_processing_brief_btns = QHBoxLayout()
-        self.btn_brief_gen = QPushButton("Generate Brief")
         self.btn_brief_export = QPushButton("Export Processing Brief")
-        self.lo_processing_brief_btns.addWidget(self.btn_brief_gen)
         self.lo_processing_brief_btns.addWidget(self.btn_brief_export)
         self.gb_processing_brief.layout().addLayout(self.lo_processing_brief_btns)

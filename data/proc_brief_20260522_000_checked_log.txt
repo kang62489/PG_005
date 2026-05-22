@@ -1,0 +1,21 @@
+CUDA environment configured for v12.8 at C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
+CUDA is available. Using device: NVIDIA GeForce RTX 3070 Laptop GPU
+Compute Capability: ComputeCapability(major=8, minor=6)
+Max threads per block: 1024
+[14:42:51] Brief: proc_brief_20260522_000_checked.txt                                                                                                             img_proc.py:177
+             raw  -> D:\MyDB\2_Programs\PG_005\raw_tiffs                                                                                                          img_proc.py:178
+             proc -> D:\MyDB\2_Programs\PG_005\proc_tiffs                                                                                                         img_proc.py:179
+             1 file(s) to process  (cuda=True)                                                                                                                    img_proc.py:180
+                                                                                                                                                                  img_proc.py:191
+           ============================================================                                                                                                          
+           2025_11_08-0028.tif  MODE=BIEXP                                                                                                                        img_proc.py:192
+           Loading 2025_11_08-0028.tif...                                                                                                                         img_proc.py:140
+[14:42:57]   Shape (1200, 1024, 1024)  memory=5.10 GB  (5.4s)                                                                                                     img_proc.py:142
+             Sampling pixels for tau estimation...                                                                                                                img_proc.py:144
+[14:43:05]   tau1=2400.0  tau2=14.9  (13.6s)                                                                                                                      img_proc.py:146
+             Detrending (BIEXP)...                                                                                                                                img_proc.py:148
+[14:43:16]   Gaussian blur...                                                                                                                                     img_proc.py:153
+[14:43:34]   Saved 2025_11_08-0028_BIEXP_GAUSS.tif  (43.0s)                                                                                                       img_proc.py:157
+[14:43:35]                                                                                                                                                        img_proc.py:204
+           ============================================================                                                                                                          
+           All done!                                                                                                                                              img_proc.py:205
