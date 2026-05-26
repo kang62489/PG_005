@@ -77,42 +77,30 @@ def run(
     lam: float,
     p: float,
     n_iter: int,
-    log_path: Path | None = None,
 ) -> None:
     """Parse brief and compute dF/F0 for each *_GAUSS.tif."""
-    global console
-    _log_file = None
-    if log_path:
-        _log_file = log_path.open("a", encoding="utf-8", buffering=1)
-        _original_console = console
-        console = Console(file=_log_file, highlight=False, no_color=True)
-    try:
-        gauss_paths, _proc_dir = _parse_brief_for_gauss(brief_path)
-        console.log(f"Brief: {brief_path.name}")
-        console.log(f"Found {len(gauss_paths)} GAUSS TIFF(s) to process  (cuda={cuda_available})")
+    gauss_paths, _proc_dir = _parse_brief_for_gauss(brief_path)
+    console.log(f"Brief: {brief_path.name}")
+    console.log(f"Found {len(gauss_paths)} GAUSS TIFF(s) to process  (cuda={cuda_available})")
 
-        for tiff_path in gauss_paths:
-            console.log(f"\n{'=' * 60}")
-            console.log(f"[cyan]Processing {tiff_path.name}...")
-            stack = tifffile.imread(tiff_path).astype(np.float32)
-            console.log(f"  Shape {stack.shape}")
-
-            console.log("  Computing ALS baseline...")
-            baseline = als_baseline_run(stack, lam, p, n_iter, cuda_available)
-
-            console.log("  Computing dF/F0...")
-            dff0 = ((stack - baseline) / baseline).astype(np.float16)
-
-            out_path = tiff_path.with_stem(tiff_path.stem.replace("_GAUSS", "_DFF0"))
-            tifffile.imwrite(out_path, dff0)
-            console.log(f"  Saved {out_path.name}")
-
+    for tiff_path in gauss_paths:
         console.log(f"\n{'=' * 60}")
-        console.log("All done!")
-    finally:
-        if _log_file is not None:
-            console = _original_console
-            _log_file.close()
+        console.log(f"[cyan]Processing {tiff_path.name}...")
+        stack = tifffile.imread(tiff_path).astype(np.float32)
+        console.log(f"  Shape {stack.shape}")
+
+        console.log("  Computing ALS baseline...")
+        baseline = als_baseline_run(stack, lam, p, n_iter, cuda_available)
+
+        console.log("  Computing dF/F0...")
+        dff0 = ((stack - baseline) / baseline).astype(np.float16)
+
+        out_path = tiff_path.with_stem(tiff_path.stem.replace("_GAUSS", "_DFF0"))
+        tifffile.imwrite(out_path, dff0)
+        console.log(f"  Saved {out_path.name}")
+
+    console.log(f"\n{'=' * 60}")
+    console.log("All done!")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

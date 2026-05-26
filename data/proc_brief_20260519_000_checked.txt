@@ -4,7 +4,7 @@ Purposes:
      add more stuff to _checked brief.
 
 Picked: [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]
-[2026_03_20-0028.tif, BIEXP, SKIP, BIEXP, 2026_03_20_0015.abf]
+[2026_03_20-0028.tif, BIEXP & MOV, SKIP, BIEXP, 2026_03_20_0015.abf]
 [2026_03_20-0029.tif, BIEXP & MOV, SKIP, BOTH, 2026_03_20_0016.abf]
 
 Total 2 records picked

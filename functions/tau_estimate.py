@@ -4,14 +4,18 @@ tau_estimate.py  --  Estimate bi-exponential time constants (tau1, tau2) from im
 Runs once per file: fits a bi-exponential model to a random sample of pixels using
 scipy curve_fit, then returns the median tau1 and tau2 for use in the full detrend pass.
 """
-
-from __future__ import annotations
-
+## Modules
+# Third-party imports
 import numpy as np
 from scipy.optimize import curve_fit
+from rich.console import Console
 
+# Constants
 _N_PIXEL_SAMPLE = 500
 _RNG_SEED = 42
+
+# Setup rich console for logging
+console = Console()
 
 
 def biexp(t: np.ndarray, A: float, tau1: float, B: float, tau2: float, C: float) -> np.ndarray:
@@ -80,13 +84,13 @@ def sample_tau(img: np.ndarray, n_pixels: int = _N_PIXEL_SAMPLE, seed: int = _RN
         else:
             n_failed += 1
 
-    print(f"  Sampled {n_pixels} pixels  ({n_failed} failed)")
+    console.print(f"  Sampled {n_pixels} pixels  ({n_failed} failed)")
     if tau1s:
-        print(
+        console.log(
             f"  tau1: median={np.median(tau1s):.1f}  "
             f"IQR [{np.percentile(tau1s, 25):.1f}, {np.percentile(tau1s, 75):.1f}]"
         )
-        print(
+        console.log(
             f"  tau2: median={np.median(tau2s):.1f}  "
             f"IQR [{np.percentile(tau2s, 25):.1f}, {np.percentile(tau2s, 75):.1f}]"
         )

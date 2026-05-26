@@ -5,7 +5,7 @@ Purposes:
 
 Picked: [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]
 # [raw_tiff_name, paired_abf]
-[2025_11_08-0028.tif, No, YES, BIEXP, 2025_11_08_0014.abf]
+[2025_11_08-0028.tif, BIEXP, YES, BIEXP, 2025_11_08_0014.abf]
 [2025_11_08-0029.tif, BIEXP, SKIP, NONE, 2025_11_08_0015.abf]
 
 Total 2 records picked

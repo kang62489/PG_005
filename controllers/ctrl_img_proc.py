@@ -28,7 +28,6 @@ class CtrlImgProc:
         self.view.te_dir_raw_images.setPlainText(str(RAW_TIFFS_DIR))
         self.view.te_dir_processed.setReadOnly(True)
         self.view.te_dir_processed.setPlainText(str(PROC_TIFFS_DIR))
-        self._proc_log_path: Path | None = None
         self._init_dir_watcher()
         self._set_proc_delegate()
         self._set_mode_delegate()
@@ -61,7 +60,6 @@ class CtrlImgProc:
         self.view.btn_export_checked_list.clicked.connect(self.export_checked_list)
         self.view.btn_start_processing.clicked.connect(self.start_processing)
         self.dirs_watcher.directoryChanged.connect(self.check_file_status)
-        self.dirs_watcher.fileChanged.connect(self._on_log_changed)
 
     def _browse_raw_images(self) -> None:
         path = DialogGetPath(title="Select Directory of Raw TIFFs").get_path()
@@ -157,11 +155,11 @@ class CtrlImgProc:
     def check_file_status(self) -> None:
         """Check file status based on the pick list and update the check table."""
         if not hasattr(self, "df_check_list"):
-            console.log("[yellow]No pick list loaded to check file status.[/yellow]")
+            console.log("[yellow]  No pick list loaded to check file status.[/yellow]")
             return
 
         if self.df_check_list.is_empty():
-            console.log("[yellow]No data in check table to verify.[/yellow]")
+            console.log("[yellow]  No data in check table to verify.[/yellow]")
             return
 
         # Get directory paths from the UI
@@ -249,28 +247,12 @@ class CtrlImgProc:
             console.log("[yellow]Processing cancelled: No brief selected.[/yellow]")
             return
 
-        log_path = MODELS_DIR / f"{Path(brief_path).stem}_log.txt"
-        self._proc_log_path = log_path
-
         _cuda_available, _cuda_msg = check_cuda()
-        # Add the log file to the watcher before writing so the first write triggers the signal
-        self.dirs_watcher.addPath(str(log_path))
-        log_path.write_text(_cuda_msg + "\n", encoding="utf-8")
-        self.view.tb_console.setPlainText(_cuda_msg)  # manual first display in case file didn't exist yet
+        console.log(_cuda_msg)
 
-        self._bk_worker = BackgroundWorker(run_img_proc, Path(brief_path), _cuda_available, log_path=log_path)
+        self._bk_worker = BackgroundWorker(run_img_proc, Path(brief_path), _cuda_available)
         self._bk_worker.finished.connect(self._on_processing_done)
         self._bk_worker.start()
 
-    def _on_log_changed(self, path: str) -> None:
-        log_path = Path(path)
-        if log_path.exists():
-            self.view.tb_console.setPlainText(log_path.read_text(encoding="utf-8"))
-            self.dirs_watcher.addPath(path)  # re-arm: Windows drops file from watcher after each signal
-
     def _on_processing_done(self) -> None:
-        if self._proc_log_path is not None:
-            self.dirs_watcher.removePath(str(self._proc_log_path))
-            if self._proc_log_path.exists():
-                self.view.tb_console.setPlainText(self._proc_log_path.read_text(encoding="utf-8"))
-            self._proc_log_path = None
+        console.log("[bold green]Processing complete.[/bold green]")

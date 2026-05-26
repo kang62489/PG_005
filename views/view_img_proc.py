@@ -1,6 +1,6 @@
 ## Modules
 # Third-party imports
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextBrowser, QTextEdit, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextEdit, QVBoxLayout, QTextBrowser
 
 # Local application imports
 from utils.params import UISizes
@@ -64,11 +64,8 @@ class ViewImgProc:
 
         self.btn_start_processing = QPushButton("Start Processing")
         self.lo_block_2.addWidget(self.btn_start_processing)
-        
-        self.lbl_console = QLabel("Console Output:")
-        self.lo_block_2.addWidget(self.lbl_console)
 
-        self.tb_console = QTextBrowser()
-        self.lo_block_2.addWidget(self.tb_console)
+        self.tb_proc_log = QTextBrowser()
+        self.lo_block_2.addWidget(self.tb_proc_log)
 
 

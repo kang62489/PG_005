@@ -152,11 +152,9 @@ class CtrlAlsDff0:
         n_iter = int(self.view.le_als_num_iters.text())
 
         cuda_available, cuda_msg = check_cuda()
-        brief_stem = self._brief_path.stem
-        log_path = MODELS_DIR / f"{brief_stem}_als_log.txt"
-        log_path.write_text(cuda_msg + "\n", encoding="utf-8")
+        console.log(cuda_msg)
 
-        self._worker = BackgroundWorker(run_als_dff0, self._brief_path, cuda_available, lam, p, n_iter, log_path=log_path)
+        self._worker = BackgroundWorker(run_als_dff0, self._brief_path, cuda_available, lam, p, n_iter)
         self._worker.finished.connect(self._on_dff0_all_done)
         self._worker.start()
 

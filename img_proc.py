@@ -188,52 +188,41 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
 # ── Pipeline runner ───────────────────────────────────────────────────────────
 
 
-def run(brief_path: Path, cuda_available: bool, log_path: Path | None = None) -> None:
+def run(brief_path: Path, cuda_available: bool) -> None:
     """Parse brief and process each file according to its MODE."""
-    global console
-    _log_file = None
-    if log_path:
-        _log_file = log_path.open("a", encoding="utf-8", buffering=1)
-        _original_console = console
-        console = Console(file=_log_file, highlight=False, no_color=True)
-    try:
-        entries, raw_dir, proc_dir = parse_brief(brief_path)
-        proc_dir.mkdir(parents=True, exist_ok=True)
+    entries, raw_dir, proc_dir = parse_brief(brief_path)
+    proc_dir.mkdir(parents=True, exist_ok=True)
 
-        console.log(f"Brief: {brief_path.name}")
-        console.log(f"  raw  -> {raw_dir}")
-        console.log(f"  proc -> {proc_dir}")
-        console.log(f"  {len(entries)} file(s) to process  (cuda={cuda_available})")
+    console.log(f"Brief: {brief_path.name}")
+    console.log(f"  raw  -> {raw_dir}")
+    console.log(f"  proc -> {proc_dir}")
+    console.log(f"  {len(entries)} file(s) to process  (cuda={cuda_available})")
 
-        for entry in entries:
-            file = entry["file"]
-            mode = entry["mode"]
-            fpath = raw_dir / file
+    for entry in entries:
+        file = entry["file"]
+        mode = entry["mode"]
+        fpath = raw_dir / file
 
-            if not fpath.exists():
-                console.log(f"[SKIP] {file} not found")
-                continue
-
-            console.log(f"\n{'=' * 60}")
-            console.log(f"{file}  MODE={mode}")
-
-            if mode == "MOV":
-                process_mov(file, raw_dir, proc_dir, cuda_available)
-            elif mode == "BIEXP":
-                process_biexp(file, raw_dir, proc_dir, cuda_available)
-            elif mode == "BOTH":
-                process_biexp(file, raw_dir, proc_dir, cuda_available)
-                process_mov(file, raw_dir, proc_dir, cuda_available)
-            else:
-                console.log(f"  Unknown mode '{mode}', skipping")
+        if not fpath.exists():
+            console.log(f"[SKIP] {file} not found")
+            continue
 
         console.log(f"\n{'=' * 60}")
-        update_brief_gauss_exists(brief_path, proc_dir)
-        console.log("All done!")
-    finally:
-        if _log_file is not None:
-            console = _original_console
-            _log_file.close()
+        console.log(f"{file}  MODE={mode}")
+
+        if mode == "MOV":
+            process_mov(file, raw_dir, proc_dir, cuda_available)
+        elif mode == "BIEXP":
+            process_biexp(file, raw_dir, proc_dir, cuda_available)
+        elif mode == "BOTH":
+            process_biexp(file, raw_dir, proc_dir, cuda_available)
+            process_mov(file, raw_dir, proc_dir, cuda_available)
+        else:
+            console.log(f"  Unknown mode '{mode}', skipping")
+
+    console.log(f"\n{'=' * 60}")
+    update_brief_gauss_exists(brief_path, proc_dir)
+    console.log("All done!")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
