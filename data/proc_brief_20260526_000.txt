@@ -1,0 +1,15 @@
+Date Created: 20260526
+Analysis: test_pipeline
+Purposes:
+     to_dff0
+
+Picked:
+# [raw_tiff_name, paired_abf]
+[2025_11_13-0017.tif, 2025_11_13_0011.abf]
+[2025_11_13-0018.tif, 2025_11_13_0012.abf]
+[2026_03_20-0028.tif, 2026_03_20_0015.abf]
+[2026_03_20-0029.tif, 2026_03_20_0016.abf]
+[2026_03_20-0040.tif, 2026_03_20_0025.abf]
+[2026_03_20-0041.tif, 2026_03_20_0026.abf]
+
+Total 7 records picked

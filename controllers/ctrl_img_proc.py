@@ -186,7 +186,7 @@ class CtrlImgProc:
             .alias("PROC")
         ).with_columns(
             pl.when(pl.col("PROC") == "SKIP")
-            .then(pl.col("GAUSS_EXISTS?").replace("BIEXP & MOV", "BOTH"))
+            .then(pl.lit("NONE"))
             .otherwise(pl.lit("BIEXP"))
             .alias("MODE")
         )
@@ -253,8 +253,10 @@ class CtrlImgProc:
         self._proc_log_path = log_path
 
         _cuda_available, _cuda_msg = check_cuda()
-        log_path.write_text(_cuda_msg + "\n", encoding="utf-8")
+        # Add the log file to the watcher before writing so the first write triggers the signal
         self.dirs_watcher.addPath(str(log_path))
+        log_path.write_text(_cuda_msg + "\n", encoding="utf-8")
+        self.view.tb_console.setPlainText(_cuda_msg)  # manual first display in case file didn't exist yet
 
         self._bk_worker = BackgroundWorker(run_img_proc, Path(brief_path), _cuda_available, log_path=log_path)
         self._bk_worker.finished.connect(self._on_processing_done)
@@ -264,6 +266,7 @@ class CtrlImgProc:
         log_path = Path(path)
         if log_path.exists():
             self.view.tb_console.setPlainText(log_path.read_text(encoding="utf-8"))
+            self.dirs_watcher.addPath(path)  # re-arm: Windows drops file from watcher after each signal
 
     def _on_processing_done(self) -> None:
         if self._proc_log_path is not None:

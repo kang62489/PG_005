@@ -107,6 +107,32 @@ def parse_brief(brief_path: Path) -> tuple[list[dict], Path, Path]:
     return entries, raw_dir, proc_dir
 
 
+# ── Brief update ──────────────────────────────────────────────────────────────
+
+
+def update_brief_gauss_exists(brief_path: Path, proc_dir: Path) -> None:
+    """Rewrite gauss_exists (col 1) of each bracket row based on actual files in proc_dir."""
+    lines = brief_path.read_text().splitlines()
+    updated = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("["):
+            parts = [p.strip() for p in stripped.strip("[]").split(",")]
+            if len(parts) >= 5:
+                stem = Path(parts[0]).stem
+                has_biexp = (proc_dir / f"{stem}_BIEXP_GAUSS.tif").exists()
+                has_mov = (proc_dir / f"{stem}_MOV_GAUSS.tif").exists()
+                parts[1] = (
+                    "BIEXP & MOV" if has_biexp and has_mov
+                    else "BIEXP" if has_biexp
+                    else "MOV" if has_mov
+                    else "No"
+                )
+                line = "[" + ", ".join(parts) + "]"
+        updated.append(line)
+    brief_path.write_text("\n".join(updated))
+
+
 # ── Processing functions ───────────────────────────────────────────────────────
 
 
@@ -202,6 +228,7 @@ def run(brief_path: Path, cuda_available: bool, log_path: Path | None = None) ->
                 console.log(f"  Unknown mode '{mode}', skipping")
 
         console.log(f"\n{'=' * 60}")
+        update_brief_gauss_exists(brief_path, proc_dir)
         console.log("All done!")
     finally:
         if _log_file is not None:

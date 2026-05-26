@@ -1,0 +1,79 @@
+CUDA environment configured for v12.8 at C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
+CUDA is available. Using device: NVIDIA GeForce RTX 3070 Laptop GPU
+Compute Capability: ComputeCapability(major=8, minor=6)
+Max threads per block: 1024
+[10:09:58] Brief: proc_brief_20260526_000_checked.txt                                                                                                                    als_dff0.py:91
+           Found 10 GAUSS TIFF(s) to process  (cuda=True)                                                                                                                als_dff0.py:92
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2025_11_13-0017_BIEXP_GAUSS.tif...                                                                                                                 als_dff0.py:96
+[10:10:01]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:10:11]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:10:22]   Saved 2025_11_13-0017_BIEXP_DFF0.tif                                                                                                                       als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2025_11_13-0018_BIEXP_GAUSS.tif...                                                                                                                 als_dff0.py:96
+[10:10:26]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:10:41]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:10:51]   Saved 2025_11_13-0018_BIEXP_DFF0.tif                                                                                                                       als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2026_03_20-0028_BIEXP_GAUSS.tif...                                                                                                                 als_dff0.py:96
+[10:10:55]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:11:06]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:11:17]   Saved 2026_03_20-0028_BIEXP_DFF0.tif                                                                                                                       als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2026_03_20-0028_MOV_GAUSS.tif...                                                                                                                   als_dff0.py:96
+[10:11:21]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:11:34]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:11:46]   Saved 2026_03_20-0028_MOV_DFF0.tif                                                                                                                         als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2026_03_20-0029_BIEXP_GAUSS.tif...                                                                                                                 als_dff0.py:96
+[10:11:51]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:12:01]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:12:12]   Saved 2026_03_20-0029_BIEXP_DFF0.tif                                                                                                                       als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2026_03_20-0029_MOV_GAUSS.tif...                                                                                                                   als_dff0.py:96
+[10:12:18]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:12:42]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:12:54]   Saved 2026_03_20-0029_MOV_DFF0.tif                                                                                                                         als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2026_03_20-0040_BIEXP_GAUSS.tif...                                                                                                                 als_dff0.py:96
+[10:13:00]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:13:25]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:13:39]   Saved 2026_03_20-0040_BIEXP_DFF0.tif                                                                                                                       als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2026_03_20-0040_MOV_GAUSS.tif...                                                                                                                   als_dff0.py:96
+[10:13:43]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+[10:13:44]   Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:14:07]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:14:17]   Saved 2026_03_20-0040_MOV_DFF0.tif                                                                                                                         als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2026_03_20-0041_BIEXP_GAUSS.tif...                                                                                                                 als_dff0.py:96
+[10:14:24]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:15:12]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:15:29]   Saved 2026_03_20-0041_BIEXP_DFF0.tif                                                                                                                       als_dff0.py:108
+                                                                                                                                                                         als_dff0.py:95
+           ============================================================                                                                                                                
+           Processing 2026_03_20-0041_MOV_GAUSS.tif...                                                                                                                   als_dff0.py:96
+[10:15:36]   Shape (1200, 1024, 1024)                                                                                                                                    als_dff0.py:98
+             Computing ALS baseline...                                                                                                                                  als_dff0.py:100
+[10:16:16]   Computing dF/F0...                                                                                                                                         als_dff0.py:103
+[10:16:26]   Saved 2026_03_20-0041_MOV_DFF0.tif                                                                                                                         als_dff0.py:108
+                                                                                                                                                                        als_dff0.py:110
+           ============================================================                                                                                                                
+           All done!                                                                                                                                                    als_dff0.py:111

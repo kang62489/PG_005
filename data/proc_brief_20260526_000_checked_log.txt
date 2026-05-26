@@ -1,0 +1,51 @@
+CUDA environment configured for v12.8 at C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
+CUDA is available. Using device: NVIDIA GeForce RTX 3070 Laptop GPU
+Compute Capability: ComputeCapability(major=8, minor=6)
+Max threads per block: 1024
+[09:47:45] Brief: proc_brief_20260526_000_checked.txt                                                                                                                   img_proc.py:203
+             raw  -> D:\MyDB\2_Programs\PG_005\raw_tiffs                                                                                                                img_proc.py:204
+             proc -> D:\MyDB\2_Programs\PG_005\proc_tiffs                                                                                                               img_proc.py:205
+             4 file(s) to process  (cuda=True)                                                                                                                          img_proc.py:206
+                                                                                                                                                                        img_proc.py:217
+           ============================================================                                                                                                                
+           2025_11_13-0017.tif  MODE=BIEXP                                                                                                                              img_proc.py:218
+           Loading 2025_11_13-0017.tif...                                                                                                                               img_proc.py:166
+[09:47:50]   Shape (1200, 1024, 1024)  memory=5.11 GB  (5.5s)                                                                                                           img_proc.py:168
+             Sampling pixels for tau estimation...                                                                                                                      img_proc.py:170
+[09:47:58]   tau1=2397.3  tau2=27.1  (13.4s)                                                                                                                            img_proc.py:172
+             Detrending (BIEXP)...                                                                                                                                      img_proc.py:174
+[09:48:08]   Gaussian blur...                                                                                                                                           img_proc.py:179
+[09:48:25]   Saved 2025_11_13-0017_BIEXP_GAUSS.tif  (40.7s)                                                                                                             img_proc.py:183
+[09:48:26]                                                                                                                                                              img_proc.py:217
+           ============================================================                                                                                                                
+           2025_11_13-0018.tif  MODE=BIEXP                                                                                                                              img_proc.py:218
+           Loading 2025_11_13-0018.tif...                                                                                                                               img_proc.py:166
+[09:48:32]   Shape (1200, 1024, 1024)  memory=5.19 GB  (6.3s)                                                                                                           img_proc.py:168
+             Sampling pixels for tau estimation...                                                                                                                      img_proc.py:170
+[09:48:43]   tau1=2400.0  tau2=32.5  (17.0s)                                                                                                                            img_proc.py:172
+             Detrending (BIEXP)...                                                                                                                                      img_proc.py:174
+[09:48:53]   Gaussian blur...                                                                                                                                           img_proc.py:179
+[09:49:08]   Saved 2025_11_13-0018_BIEXP_GAUSS.tif  (41.5s)                                                                                                             img_proc.py:183
+                                                                                                                                                                        img_proc.py:217
+           ============================================================                                                                                                                
+           2026_03_20-0040.tif  MODE=BIEXP                                                                                                                              img_proc.py:218
+           Loading 2026_03_20-0040.tif...                                                                                                                               img_proc.py:166
+[09:49:13]   Shape (1200, 1024, 1024)  memory=5.18 GB  (5.4s)                                                                                                           img_proc.py:168
+             Sampling pixels for tau estimation...                                                                                                                      img_proc.py:170
+[09:49:20]   tau1=679.2  tau2=186.7  (11.8s)                                                                                                                            img_proc.py:172
+             Detrending (BIEXP)...                                                                                                                                      img_proc.py:174
+[09:49:29]   Gaussian blur...                                                                                                                                           img_proc.py:179
+[09:49:43]   Saved 2026_03_20-0040_BIEXP_GAUSS.tif  (34.9s)                                                                                                             img_proc.py:183
+                                                                                                                                                                        img_proc.py:217
+           ============================================================                                                                                                                
+           2026_03_20-0041.tif  MODE=BIEXP                                                                                                                              img_proc.py:218
+           Loading 2026_03_20-0041.tif...                                                                                                                               img_proc.py:166
+[09:49:48]   Shape (1200, 1024, 1024)  memory=5.18 GB  (5.2s)                                                                                                           img_proc.py:168
+[09:49:49]   Sampling pixels for tau estimation...                                                                                                                      img_proc.py:170
+[09:49:54]   tau1=471.2  tau2=157.4  (11.2s)                                                                                                                            img_proc.py:172
+             Detrending (BIEXP)...                                                                                                                                      img_proc.py:174
+[09:50:03]   Gaussian blur...                                                                                                                                           img_proc.py:179
+[09:50:18]   Saved 2026_03_20-0041_BIEXP_GAUSS.tif  (34.3s)                                                                                                             img_proc.py:183
+                                                                                                                                                                        img_proc.py:230
+           ============================================================                                                                                                                
+           All done!                                                                                                                                                    img_proc.py:232

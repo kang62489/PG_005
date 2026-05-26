@@ -1,6 +1,6 @@
 ## Modules
 # Third-party imports
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QVBoxLayout, QGridLayout, QLineEdit, QComboBox, QStackedLayout
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QListWidget, QVBoxLayout, QGridLayout, QLineEdit, QComboBox, QStackedLayout
 
 # Local application imports
 from utils.params import UISizes
@@ -24,8 +24,8 @@ class ViewAlsDff0:
         self.btn_load_checked_brief = QPushButton("Load Checked Brief")
         self.lo_block_1.addWidget(self.btn_load_checked_brief)
 
-        self.tv_checked_brief = QTableView()
-        self.lo_block_1.addWidget(self.tv_checked_brief)
+        self.lw_gauss_tiff = QListWidget()
+        self.lo_block_1.addWidget(self.lw_gauss_tiff)
 
     def setup_block_2(self) -> None:
         self.lo_block_2 = QVBoxLayout()
