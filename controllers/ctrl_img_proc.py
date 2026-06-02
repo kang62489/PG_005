@@ -32,7 +32,7 @@ class CtrlImgProc:
         self._set_proc_delegate()
         self._set_mode_delegate()
         self.connect_signals()
-        self.view.btn_export_checked_list.setEnabled(False)
+        self.view.btn_export_proc_list.setEnabled(False)
 
     def _init_dir_watcher(self) -> None:
         self.dirs_watcher = QFileSystemWatcher([str(RAW_TIFFS_DIR), str(PROC_TIFFS_DIR)])
@@ -57,7 +57,7 @@ class CtrlImgProc:
         self.view.btn_load_pick_list.clicked.connect(self.load_pick_list)
         self.view.btn_browse_raw_images.clicked.connect(self._browse_raw_images)
         self.view.btn_browse_processed.clicked.connect(self._browse_processed)
-        self.view.btn_export_checked_list.clicked.connect(self.export_checked_list)
+        self.view.btn_export_proc_list.clicked.connect(self.export_proc_list)
         self.view.btn_start_processing.clicked.connect(self.start_processing)
         self.dirs_watcher.directoryChanged.connect(self.check_file_status)
 
@@ -77,19 +77,23 @@ class CtrlImgProc:
             self.dirs_watcher.addPath(path)
             self.check_file_status()
 
-    def load_pick_list(self) -> None:
-        """Open a processing brief .txt via dialog and display a check table in tv_pick_list."""
-        dlg = DialogGetFile(title="Select a Processing Brief (.txt)", init_dir=str(MODELS_DIR))
-        path_str = dlg.get_pick_list()
+    def load_pick_list(self, path_str: str = "") -> None:
+        """Open a pick list .txt via dialog and display a check table in tv_pick_list."""
+
         if not path_str:
+            dlg = DialogGetFile(title="Select a Pick List (.txt)", init_dir=str(MODELS_DIR))
+            path_str = dlg.get_pick_list()
+            if not path_str:
+            # Cancelled dialog returns empty string, so check before proceeding
+                console.log("[yellow]Pick list loading cancelled.[/yellow]")
+                return
+
+        if Path(path_str).stem.startswith("proc_"):
+            console.log("[yellow]Please select the original pick list, not a proc file.[/yellow]")
             return
 
-        if Path(path_str).stem.endswith("_checked"):
-            console.log("[yellow]Please select the original brief, not a _checked file.[/yellow]")
-            return
-
-        self.current_brief_path = Path(path_str)
-        text = self.current_brief_path.read_text(encoding="utf-8")
+        self.current_pick_list_path = Path(path_str)
+        text = self.current_pick_list_path.read_text(encoding="utf-8")
 
         # Extract filenames between "Picked:" and 2 lines before "Total ..."
         lines = text.splitlines()
@@ -102,11 +106,11 @@ class CtrlImgProc:
                 if line.strip().startswith("[")
             ]
         except StopIteration:
-            console.log("[yellow]Brief format unrecognised: missing 'Picked:' or 'Total' line.[/yellow]")
+            console.log("[yellow]Processing list format unrecognised: missing 'Picked:' or 'Total' line.[/yellow]")
             filenames = []
 
         if not filenames:
-            console.log("[yellow]No filenames found in the selected brief.[/yellow]")
+            console.log("[yellow]No filenames found in the selected pick list.[/yellow]")
             self.df_check_list = pl.DataFrame()
             model = ModelFromDataFrame(pl.DataFrame(schema=dict.fromkeys(CHECK_COLUMNS, pl.Utf8)))
             self.view.tv_pick_list.setModel(model)
@@ -195,11 +199,11 @@ class CtrlImgProc:
         console.log("[green] File status updated.[/green]")
 
         all_ready = (self.df_file_status["IMG_READY"] == "READY").all()
-        self.view.btn_export_checked_list.setEnabled(all_ready)
+        self.view.btn_export_proc_list.setEnabled(all_ready)
 
-    def export_checked_list(self) -> None:
+    def export_proc_list(self) -> None:
         model = self.view.tv_pick_list.model()
-        if model is None or not hasattr(self, "current_brief_path"):
+        if model is None or not hasattr(self, "current_pick_list_path"):
             return
 
         df = model._data  # noqa: SLF001  # captures any user edits to PROC and MODE columns
@@ -211,7 +215,7 @@ class CtrlImgProc:
         dir_raw = str(Path(self.view.te_dir_raw_images.toPlainText().strip()))
         dir_proc = str(Path(self.view.te_dir_processed.toPlainText().strip()))
 
-        original_lines = self.current_brief_path.read_text(encoding="utf-8").splitlines()
+        original_lines = self.current_pick_list_path.read_text(encoding="utf-8").splitlines()
 
         out_lines = [
             *original_lines,
@@ -225,34 +229,38 @@ class CtrlImgProc:
         total_idx = next(i for i, ln in enumerate(out_lines) if ln.strip().startswith("Total"))
         out_lines[picked_idx] = "Picked: [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]"
         for i in range(picked_idx + 1, total_idx - 1):
-            brief_line = out_lines[i].strip()
-            if not brief_line.startswith("["):
+            pick_line = out_lines[i].strip()
+            if not pick_line.startswith("["):
                 continue
-            parts = [p.strip().rstrip("]").strip() for p in brief_line[1:].split(",")]
+            parts = [p.strip().rstrip("]").strip() for p in pick_line[1:].split(",")]
             filename = parts[0]
             abf = parts[1] if len(parts) > 1 else "N/A"
             if filename in row_lookup:
                 gauss_exists, proc, mode = row_lookup[filename]
                 out_lines[i] = f"[{filename}, {gauss_exists}, {proc}, {mode}, {abf}]"
 
-        out_path = self.current_brief_path.parent / f"{self.current_brief_path.stem}_checked.txt"
+        out_path = self.current_pick_list_path.parent / f"proc_{self.current_pick_list_path.stem}.txt"
         out_path.write_text("\n".join(out_lines), encoding="utf-8")
-        console.log(f"[bold green]Checked list saved → {out_path}[/bold green]")
+        console.log(f"[bold green]Processing list saved → {out_path}[/bold green]")
 
     def start_processing(self) -> None:
         from img_proc import run as run_img_proc
 
-        brief_path = DialogGetFile(title="Select the Brief to Process", init_dir=str(MODELS_DIR)).get_checked_brief()
-        if not brief_path:
-            console.log("[yellow]Processing cancelled: No brief selected.[/yellow]")
+        if not hasattr(self, "current_pick_list_path"):
+            console.log("[yellow]No pick list loaded. Please load a pick list first.[/yellow]")
             return
+
+        out_path = self.current_pick_list_path.parent / f"proc_{self.current_pick_list_path.stem}.txt"
+        if not out_path.exists():
+            self.export_proc_list()
 
         _cuda_available, _cuda_msg = check_cuda()
         console.log(_cuda_msg)
 
-        self._bk_worker = BackgroundWorker(run_img_proc, Path(brief_path), _cuda_available)
+        self._bk_worker = BackgroundWorker(run_img_proc, out_path, _cuda_available)
         self._bk_worker.finished.connect(self._on_processing_done)
         self._bk_worker.start()
 
     def _on_processing_done(self) -> None:
         console.log("[bold green]Processing complete.[/bold green]")
+        self.check_file_status()

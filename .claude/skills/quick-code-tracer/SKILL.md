@@ -1,5 +1,5 @@
 ---
-name: quick_code_trace
+name: quick-code-tracer
 description: Create markdown files for quickly tracing the code when user asks questions like "Which file is used to create the database?", "Where are the codes related to the saving functions", "Where are the codes related to the plotting of the figure XX?", etc.
 ---
 

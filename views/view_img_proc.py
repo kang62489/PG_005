@@ -1,6 +1,6 @@
 ## Modules
 # Third-party imports
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextEdit, QVBoxLayout, QTextBrowser
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextBrowser, QTextEdit, QVBoxLayout
 
 # Local application imports
 from utils.params import UISizes
@@ -45,18 +45,20 @@ class ViewImgProc:
         self.lo_dir_processed.addWidget(self.btn_browse_processed)
         self.lo_block_1.addLayout(self.lo_dir_processed)
 
-
-        self.lbl_pick_list = QLabel("Picked Data: ")
-        self.lo_block_1.addWidget(self.lbl_pick_list)
+        self.lo_buttons = QHBoxLayout()
+        self.lo_block_1.addLayout(self.lo_buttons)
 
         self.btn_load_pick_list = QPushButton("Load Pick List")
-        self.lo_block_1.addWidget(self.btn_load_pick_list)
+        self.lo_buttons.addWidget(self.btn_load_pick_list)
+        self.btn_export_proc_list = QPushButton("Export Proc List")
+        self.lo_buttons.addWidget(self.btn_export_proc_list)
+
+        self.lbl_pick_list = QLabel("Status of Picked Files: ")
+        self.lo_block_1.addWidget(self.lbl_pick_list)
 
         self.tv_pick_list = QTableView()
         self.lo_block_1.addWidget(self.tv_pick_list)
 
-        self.btn_export_checked_list = QPushButton("Export Checked List")
-        self.lo_block_1.addWidget(self.btn_export_checked_list)
 
     def setup_block_2(self) -> None:
         self.lo_block_2 = QVBoxLayout()
@@ -64,8 +66,5 @@ class ViewImgProc:
 
         self.btn_start_processing = QPushButton("Start Processing")
         self.lo_block_2.addWidget(self.btn_start_processing)
-
-        self.tb_proc_log = QTextBrowser()
-        self.lo_block_2.addWidget(self.tb_proc_log)
 
 

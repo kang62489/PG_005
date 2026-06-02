@@ -6,7 +6,7 @@ from pathlib import Path
 
 # Third-party imports
 import polars as pl
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtSql import QSqlDatabase, QSqlTableModel
 from PySide6.QtWidgets import QAbstractItemView
 from rich.console import Console
@@ -23,28 +23,11 @@ CORE_COLUMNS = ("Filename", "Timestamp", "OBJ", "EXC", "EMI", "FRAMES", "SLICE",
 PICK_LIST_JSON_PATH = MODELS_DIR / "pick_list.json"
 
 
-def _parse_brief_header(path: Path) -> tuple[str, str]:
-    """Extract normalized title and purposes from a brief .txt for duplicate detection."""
-    title = ""
-    purposes_lines: list[str] = []
-    in_purposes = False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("Analysis:"):
-            title = line.split(":", 1)[1].strip()
-            in_purposes = False
-        elif line.strip() == "Purposes:":
-            in_purposes = True
-        elif in_purposes:
-            stripped = line.strip()
-            if not stripped:
-                in_purposes = False
-            else:
-                purposes_lines.append(stripped)
-    return title, "\n".join(purposes_lines)
+class CtrlDataSelector(QObject):
+    pick_confirmed = Signal(str)
 
-
-class CtrlDataSelector:
     def __init__(self, view) -> None:
+        super().__init__()
         self.view = view
         self.current_dor: str | None = None
         self.df_pick_list = pl.DataFrame()
@@ -63,9 +46,9 @@ class CtrlDataSelector:
 
         self.view.btn_pick_selected.clicked.connect(self.pick_selected)
         self.view.btn_open_pick_list.clicked.connect(self.open_pick_list)
-        self.view.btn_brief_export.clicked.connect(self.brief_export)
-        self.view.le_title.textChanged.connect(lambda _: self.brief_gen())
-        self.view.te_purposes.textChanged.connect(self.brief_gen)
+        self.view.btn_pick_list_export.clicked.connect(self.pick_list_export)
+        self.view.le_title.textChanged.connect(lambda _: self.pick_list_gen())
+        self.view.te_purposes.textChanged.connect(self.pick_list_gen)
 
         # Connect filter dropdowns
         for col in self.view.filter_columns:
@@ -170,14 +153,14 @@ class CtrlDataSelector:
     # ── Pick list persistence ──────────────────────────────────────────────
 
     def save_pick_list(self, df: pl.DataFrame) -> None:
-        """Persist pick list to JSON, then refresh processing brief."""
+        """Persist pick list to JSON, then refresh pick list preview."""
         self.df_pick_list = df
         PICK_LIST_JSON_PATH.write_text(json.dumps(df.to_dicts(), indent=4))
-        self.brief_gen()
+        self.pick_list_gen()
 
-    def brief_gen(self) -> None:
-        """Format and display the processing brief in the GUI text area."""
-        # Auto-fill creation date and generate brief content based on current pick list and user inputs
+    def pick_list_gen(self) -> None:
+        """Format and display the pick list preview in the GUI text area."""
+        # Auto-fill creation date and generate pick list content based on current pick list and user inputs
         self.view.le_date_created.setText(datetime.datetime.now(tz=datetime.UTC).strftime("%Y%m%d"))
         title = self.view.le_title.text().strip() or "Untitled"
         purposes_raw = self.view.te_purposes.toPlainText().strip()
@@ -212,12 +195,31 @@ class CtrlDataSelector:
                 lines.append(f"[{row['Filename']}, {abf_str}]")
             lines.append(f"\nTotal {len(rows)} records picked")
 
-        self.view.te_processing_brief.setPlainText("\n".join(lines))
+        self.view.te_pick_list_preview.setPlainText("\n".join(lines))
 
-    def brief_export(self) -> None:
-        """Export processing brief as .txt into results/, with auto serial suffix."""
-        note_text = self.view.te_processing_brief.toPlainText().strip()
-        if not note_text:
+    def _parse_pick_list_header(self, path: Path) -> tuple[str, str]:
+        """Extract normalized title and purposes from a pick list .txt for duplicate detection."""
+        title = ""
+        purposes_lines: list[str] = []
+        in_purposes = False
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("Analysis:"):
+                title = line.split(":", 1)[1].strip()
+                in_purposes = False
+            elif line.strip() == "Purposes:":
+                in_purposes = True
+            elif in_purposes:
+                stripped = line.strip()
+                if not stripped:
+                    in_purposes = False
+                else:
+                    purposes_lines.append(stripped)
+        return title, "\n".join(purposes_lines)
+
+    def pick_list_export(self) -> None:
+        """Export pick list as .txt, with auto serial suffix."""
+        pick_list_context = self.view.te_pick_list_preview.toPlainText().strip()
+        if not pick_list_context:
             console.print("[bold red]Preview is empty — nothing to export.[/bold red]")
             return
 
@@ -233,25 +235,28 @@ class CtrlDataSelector:
             line.strip() for line in self.view.te_purposes.toPlainText().splitlines() if line.strip()
         )
 
-        # Check if any existing brief from the same date has identical title + purposes
+        # Check if any existing pick list from the same date has identical title + purposes
         existing = sorted(
-            p for p in MODELS_DIR.glob(f"proc_brief_{date_created}_*.txt")
+            p for p in MODELS_DIR.glob(f"pick_{date_created}_*.txt")
             if not p.stem.endswith("_checked")
         )
         match_path = next(
-            (p for p in existing if _parse_brief_header(p) == (current_title, current_purposes)),
+            (p for p in existing if self._parse_pick_list_header(p) == (current_title, current_purposes)),
             None,
         )
 
         if match_path:
-            note_path = match_path
+            current_pick_list_path = match_path
             console.print(f"[yellow]Same title+purpose found — overwriting {match_path.name}[/yellow]")
         else:
             last_serial = int(existing[-1].stem.rsplit("_", 1)[-1]) if existing else -1
-            note_path = MODELS_DIR / f"proc_brief_{date_created}_{last_serial + 1:03d}.txt"
+            current_pick_list_path = MODELS_DIR / f"pick_{date_created}_{last_serial + 1:03d}.txt"
 
-        note_path.write_text(note_text, encoding="utf-8")
-        console.print(f"[bold green]Processing brief saved → {note_path}[/bold green]")
+        current_pick_list_path.write_text(pick_list_context, encoding="utf-8")
+        console.print(f"[bold green]Pick list saved → {current_pick_list_path}[/bold green]")
+
+        # Emit signal with current_pick_list_path to automatically load the pick list to self.view.tv_pick_list in view_img_proc
+        self.pick_confirmed.emit(str(current_pick_list_path))
 
     # ── Pick actions ───────────────────────────────────────────────────────
 
@@ -322,4 +327,4 @@ class CtrlDataSelector:
         else:
             df = pl.DataFrame()
         self.df_pick_list = df
-        self.brief_gen()
+        self.pick_list_gen()

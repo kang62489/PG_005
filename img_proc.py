@@ -1,17 +1,17 @@
 """
 img_proc.py  --  Unified image preprocessing pipeline entry point.
 ==================================================================
-Reads a checked processing brief, routes each file by mode:
+Reads a proc list, routes each file by mode:
   MOV   -> moving-average detrend + Gaussian blur
   BIEXP -> bi-exponential detrend + Gaussian blur
   BOTH  -> BIEXP then MOV
   NONE  -> skip
 
-Checked brief format (5 fields per entry):
+Proc list format (5 fields per entry):
   [filename, gauss_exists, do_processing, detrend_mode, paired_abf]
 
 Usage:
-    python img_proc.py --brief data/proc_brief_20260512_002_checked.txt
+    python img_proc.py --proc_list data/proc_pick_20260512_002.txt
 """
 
 from __future__ import annotations
@@ -41,19 +41,19 @@ SIGMA = 6.0
 console = Console()
 
 
-# ── Brief parsing ─────────────────────────────────────────────────────────────
+# ── Proc list parsing ─────────────────────────────────────────────────────────
 
 
-def _parse_bracket_entry(brief_line: str) -> dict | None:
+def _parse_bracket_entry(proc_list_line: str) -> dict | None:
     """Parse one '[filename, gauss_exists, do_processing, detrend_mode, ...]' bracket line.
 
-    Checked brief format (5 fields):
+    Proc list format (5 fields):
         [filename, gauss_exists, do_processing, detrend_mode, paired_abf]
 
     Returns a dict {"file", "proc", "mode"} or None if fields are missing,
     do_processing is SKIP, or detrend_mode is NONE.
     """
-    parts = [p.strip() for p in brief_line.strip("[]").split(",")]
+    parts = [p.strip() for p in proc_list_line.strip("[]").split(",")]
     if len(parts) < 4:
         return None
     filename, proc, mode = parts[0], parts[2], parts[3]
@@ -62,9 +62,9 @@ def _parse_bracket_entry(brief_line: str) -> dict | None:
     return {"file": filename, "proc": proc, "mode": mode}
 
 
-def parse_brief(brief_path: Path) -> tuple[list[dict], Path, Path]:
+def parse_proc_list(proc_list_path: Path) -> tuple[list[dict], Path, Path]:
     """
-    Parse a checked processing brief (_checked.txt).
+    Parse a proc list file (proc_*.txt).
 
     Extracts the "Picked:" block as a list of entries and reads
     dir_raw_tiffs / dir_proc_tiffs from the footer.
@@ -74,7 +74,7 @@ def parse_brief(brief_path: Path) -> tuple[list[dict], Path, Path]:
         {"file": str, "proc": str, "mode": str}.
         Entries with MODE == "NONE" are excluded.
     """
-    text = brief_path.read_text()
+    text = proc_list_path.read_text()
     entries: list[dict] = []
     raw_dir: Path | None = None
     proc_dir: Path | None = None
@@ -101,18 +101,18 @@ def parse_brief(brief_path: Path) -> tuple[list[dict], Path, Path]:
             proc_dir = Path(line.split(":", 1)[1].strip())
 
     if raw_dir is None or proc_dir is None:
-        msg = f"Missing dir_raw_tiffs or dir_proc_tiffs in {brief_path}"
+        msg = f"Missing dir_raw_tiffs or dir_proc_tiffs in {proc_list_path}"
         raise ValueError(msg)
 
     return entries, raw_dir, proc_dir
 
 
-# ── Brief update ──────────────────────────────────────────────────────────────
+# ── Proc list update ──────────────────────────────────────────────────────────
 
 
-def update_brief_gauss_exists(brief_path: Path, proc_dir: Path) -> None:
+def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
     """Rewrite gauss_exists (col 1) of each bracket row based on actual files in proc_dir."""
-    lines = brief_path.read_text().splitlines()
+    lines = proc_list_path.read_text().splitlines()
     updated = []
     for line in lines:
         stripped = line.strip()
@@ -130,7 +130,7 @@ def update_brief_gauss_exists(brief_path: Path, proc_dir: Path) -> None:
                 )
                 line = "[" + ", ".join(parts) + "]"
         updated.append(line)
-    brief_path.write_text("\n".join(updated))
+    proc_list_path.write_text("\n".join(updated))
 
 
 # ── Processing functions ───────────────────────────────────────────────────────
@@ -188,12 +188,12 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
 # ── Pipeline runner ───────────────────────────────────────────────────────────
 
 
-def run(brief_path: Path, cuda_available: bool) -> None:
-    """Parse brief and process each file according to its MODE."""
-    entries, raw_dir, proc_dir = parse_brief(brief_path)
+def run(proc_list_path: Path, cuda_available: bool) -> None:
+    """Parse proc list and process each file according to its MODE."""
+    entries, raw_dir, proc_dir = parse_proc_list(proc_list_path)
     proc_dir.mkdir(parents=True, exist_ok=True)
 
-    console.log(f"Brief: {brief_path.name}")
+    console.log(f"Processing list: {proc_list_path.name}")
     console.log(f"  raw  -> {raw_dir}")
     console.log(f"  proc -> {proc_dir}")
     console.log(f"  {len(entries)} file(s) to process  (cuda={cuda_available})")
@@ -221,7 +221,7 @@ def run(brief_path: Path, cuda_available: bool) -> None:
             console.log(f"  Unknown mode '{mode}', skipping")
 
     console.log(f"\n{'=' * 60}")
-    update_brief_gauss_exists(brief_path, proc_dir)
+    update_proc_list_gauss_exists(proc_list_path, proc_dir)
     console.log("All done!")
 
 
@@ -229,9 +229,9 @@ def run(brief_path: Path, cuda_available: bool) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Image preprocessing pipeline")
-    parser.add_argument("--brief", required=True, type=Path, help="Path to _checked.txt brief file")
+    parser.add_argument("--proc_list", required=True, type=Path, help="Path to proc list file (proc_*.txt)")
     args = parser.parse_args()
 
     _cuda_available, _cuda_msg = check_cuda() if check_cuda is not None else (False, "CUDA not available")
     console.log(_cuda_msg)
-    run(args.brief, _cuda_available)
+    run(args.proc_list, _cuda_available)

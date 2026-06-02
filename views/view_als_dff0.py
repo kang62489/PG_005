@@ -1,9 +1,16 @@
 ## Modules
 # Third-party imports
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QListWidget, QVBoxLayout, QGridLayout, QLineEdit, QComboBox, QStackedLayout
-
-# Local application imports
-from utils.params import UISizes
+from PySide6.QtWidgets import (
+    QComboBox,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QPushButton,
+    QStackedLayout,
+    QVBoxLayout,
+)
 
 
 class ViewAlsDff0:
@@ -20,9 +27,9 @@ class ViewAlsDff0:
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
         self.lo_tab_container.addLayout(self.lo_block_1)
-        
-        self.btn_load_checked_brief = QPushButton("Load Checked Brief")
-        self.lo_block_1.addWidget(self.btn_load_checked_brief)
+
+        self.btn_load_proc_list = QPushButton("Load Processing List")
+        self.lo_block_1.addWidget(self.btn_load_proc_list)
 
         self.lw_gauss_tiff = QListWidget()
         self.lo_block_1.addWidget(self.lw_gauss_tiff)
@@ -49,7 +56,7 @@ class ViewAlsDff0:
         self.lo_als_config.addWidget(self.le_als_p, 1, 1)
         self.lo_als_config.addWidget(self.le_als_num_iters, 1, 2)
 
-        
+
         self.btn_run_als_test = QPushButton("Run ALS Test")
         self.lo_als_config.addWidget(self.btn_run_als_test, 0, 3)
         self.btn_cal_dff0_all = QPushButton("Calculate dF/F0 for All Gauss TIFFs")

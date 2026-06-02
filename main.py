@@ -57,6 +57,10 @@ class Main(QMainWindow):
         # Connect dor_changed signal from ctrl_dor_query to ctrl_data_selector
         self.ctrl_dor_query.dor_changed.connect(self.ctrl_data_selector.on_dor_changed)
 
+        # Connect pick_confirmed signal from ctrl_data_selector to ctrl_img_proc
+        self.ctrl_data_selector.pick_confirmed.connect(self.ctrl_img_proc.load_pick_list)
+        self.ctrl_data_selector.pick_confirmed.connect(lambda _: self.w_main.setCurrentIndex(2))
+
         self.setCentralWidget(self.w_main)
         self.show()
 

@@ -1,0 +1,18 @@
+{
+  "note": "Project-local Codex notes only. Codex uses AGENTS.md for repository instructions; this file is not a Claude-style permission allowlist.",
+  "project": "PG_005",
+  "editor": "code",
+  "preferred_commands": [
+    "uv run ruff check",
+    ".venv/Scripts/python.exe",
+    "python",
+    "rg"
+  ],
+  "docs": {
+    "plans": ".codex/plans",
+    "knowledgebase": "docs/knowledgebase",
+    "quick_code_trace": "docs/quick_code_trace",
+    "resolved_problems": "docs/resolved_problems",
+    "continuation": "docs/continue_from_here.md"
+  }
+}

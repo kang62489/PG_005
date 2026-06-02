@@ -1,5 +1,5 @@
 ---
-name: trouble_shooter
+name: trouble-shooter
 description: Document bugs and problems that took effort to solve, with their solutions when user says "save the problem and solution", "remember this", "document this", etc.
 ---
 

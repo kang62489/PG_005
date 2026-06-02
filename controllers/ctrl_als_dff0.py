@@ -22,7 +22,7 @@ console = Console()
 class CtrlAlsDff0:
     def __init__(self, view) -> None:
         self.view = view
-        self._brief_path: Path | None = None
+        self._proc_list_path: Path | None = None
         self._proc_tiffs_dir: Path | None = None
         self._gauss_tiff_paths: list[Path] = []
         self._als_test_results: list[tuple[np.ndarray, np.ndarray]] | None = None
@@ -30,20 +30,20 @@ class CtrlAlsDff0:
         self.connect_signals()
 
     def connect_signals(self) -> None:
-        self.view.btn_load_checked_brief.clicked.connect(self.on_load_checked_brief)
+        self.view.btn_load_proc_list.clicked.connect(self.on_load_proc_list)
         self.view.btn_run_als_test.clicked.connect(self.on_run_als_test)
         self.view.btn_cal_dff0_all.clicked.connect(self.on_cal_dff0_all)
         self.view.cb_switch_roi.activated.connect(self.on_switch_roi)
 
-    # ── Load Checked Brief ─────────────────────────────────────────────────────
+    # ── Load Processing List ───────────────────────────────────────────────────
 
-    def on_load_checked_brief(self) -> None:
-        path_str = DialogGetFile(title="Select a Checked Brief", init_dir=str(MODELS_DIR)).get_checked_brief()
+    def on_load_proc_list(self) -> None:
+        path_str = DialogGetFile(title="Select a Processing List", init_dir=str(MODELS_DIR)).get_proc_list()
         if not path_str:
             return
-        brief_path = Path(path_str)
-        self._brief_path = brief_path
-        self._load_gauss_tiffs_from_brief(brief_path)
+        proc_list_path = Path(path_str)
+        self._proc_list_path = proc_list_path
+        self._load_gauss_tiffs_from_proc_list(proc_list_path)
 
     def _collect_gauss_from_bracket(self, parts: list[str], proc_dir: Path) -> list[Path]:
         """Return existing GAUSS TIFF paths for one parsed bracket-line parts list."""
@@ -62,18 +62,18 @@ class CtrlAlsDff0:
                 paths.append(candidate)
         return paths
 
-    def _load_gauss_tiffs_from_brief(self, brief_path: Path) -> None:
-        from img_proc import parse_brief, update_brief_gauss_exists
+    def _load_gauss_tiffs_from_proc_list(self, proc_list_path: Path) -> None:
+        from img_proc import parse_proc_list, update_proc_list_gauss_exists
 
-        _, _, proc_dir = parse_brief(brief_path)
-        update_brief_gauss_exists(brief_path, proc_dir)
+        _, _, proc_dir = parse_proc_list(proc_list_path)
+        update_proc_list_gauss_exists(proc_list_path, proc_dir)
         self._proc_tiffs_dir = proc_dir
 
         self._gauss_tiff_paths = []
         self.view.lw_gauss_tiff.clear()
         in_picked = False
 
-        for line in brief_path.read_text().splitlines():
+        for line in proc_list_path.read_text().splitlines():
             stripped = line.strip()
             if stripped.startswith("Picked:"):
                 in_picked = True
@@ -86,7 +86,7 @@ class CtrlAlsDff0:
                 elif not stripped.startswith("#"):
                     in_picked = False
 
-        console.log(f"[green]Loaded {len(self._gauss_tiff_paths)} GAUSS TIFF(s) from '{brief_path.name}'.[/green]")
+        console.log(f"[green]Loaded {len(self._gauss_tiff_paths)} GAUSS TIFF(s) from '{proc_list_path.name}'.[/green]")
 
     # ── ALS Test ───────────────────────────────────────────────────────────────
 
@@ -141,8 +141,8 @@ class CtrlAlsDff0:
     # ── Calculate dF/F0 for All ────────────────────────────────────────────────
 
     def on_cal_dff0_all(self) -> None:
-        if self._brief_path is None:
-            console.log("[yellow]Load a checked brief first.[/yellow]")
+        if self._proc_list_path is None:
+            console.log("[yellow]Load a processing list first.[/yellow]")
             return
 
         from als_dff0 import run as run_als_dff0
@@ -154,7 +154,7 @@ class CtrlAlsDff0:
         cuda_available, cuda_msg = check_cuda()
         console.log(cuda_msg)
 
-        self._worker = BackgroundWorker(run_als_dff0, self._brief_path, cuda_available, lam, p, n_iter)
+        self._worker = BackgroundWorker(run_als_dff0, self._proc_list_path, cuda_available, lam, p, n_iter)
         self._worker.finished.connect(self._on_dff0_all_done)
         self._worker.start()
 

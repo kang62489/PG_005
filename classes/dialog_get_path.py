@@ -32,8 +32,8 @@ class DialogGetFile(QFileDialog):
             return self.selectedFiles()[0]
         return ""
 
-    def get_checked_brief(self):
-        self.setNameFilter("Checked Brief (*_checked.txt)")
+    def get_proc_list(self):
+        self.setNameFilter("Processing List (proc_*.txt)")
         self.setDirectory(self._init_dir)
         if self.exec():
             return self.selectedFiles()[0]

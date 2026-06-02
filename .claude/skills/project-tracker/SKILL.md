@@ -1,5 +1,5 @@
 ---
-name: project_tracker
+name: project-tracker
 description: Create a markdown file to log and track the project's current progress and TODOs when user expresses that he/she is going to interrupt current work for a while (keywords such as "break", "sleep", "stop", "done", "wrap up", "food", "lunch", "dinner", "meal" may appear in the conversation); remind user where to continue based on docs/continue_from_here.md when user ask "where were we left last time?", "where should I continue?", "what should I do next?", etc.
 ---
 
@@ -16,7 +16,7 @@ User says:
 1. Show that this skill is triggered.
 2. Check modified files and then summarize the changes
 3. Check current working plans (if any) and then summarize the progress
-4. List candidates of TODOs based on the summaries, ask user to choose
+4. List candidates of TODOs based on the summaries of above 2 and 3, ask user to choose
 5. Log the last working file name and line number
 6. Ask user to see if any extra messages or todos need to be added
 7. Summarize above into a reporting sections in the markdown file
