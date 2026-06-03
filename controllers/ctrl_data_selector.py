@@ -246,17 +246,17 @@ class CtrlDataSelector(QObject):
         )
 
         if match_path:
-            current_pick_list_path = match_path
+            pick_list_path = match_path
             console.print(f"[yellow]Same title+purpose found — overwriting {match_path.name}[/yellow]")
         else:
             last_serial = int(existing[-1].stem.rsplit("_", 1)[-1]) if existing else -1
-            current_pick_list_path = MODELS_DIR / f"pick_{date_created}_{last_serial + 1:03d}.txt"
+            pick_list_path = MODELS_DIR / f"pick_{date_created}_{last_serial + 1:03d}.txt"
 
-        current_pick_list_path.write_text(pick_list_context, encoding="utf-8")
-        console.print(f"[bold green]Pick list saved → {current_pick_list_path}[/bold green]")
+        pick_list_path.write_text(pick_list_context, encoding="utf-8")
+        console.print(f"[bold green]Pick list saved → {pick_list_path}[/bold green]")
 
-        # Emit signal with current_pick_list_path to automatically load the pick list to self.view.tv_pick_list in view_img_proc
-        self.pick_confirmed.emit(str(current_pick_list_path))
+        # Emit signal with pick_list_path to automatically load the pick list to self.view.tv_pick_list in view_img_proc
+        self.pick_confirmed.emit(str(pick_list_path))
 
     # ── Pick actions ───────────────────────────────────────────────────────
 

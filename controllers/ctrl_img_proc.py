@@ -92,8 +92,8 @@ class CtrlImgProc:
             console.log("[yellow]Please select the original pick list, not a proc file.[/yellow]")
             return
 
-        self.current_pick_list_path = Path(path_str)
-        text = self.current_pick_list_path.read_text(encoding="utf-8")
+        self.pick_list_path = Path(path_str)
+        text = self.pick_list_path.read_text(encoding="utf-8")
 
         # Extract filenames between "Picked:" and 2 lines before "Total ..."
         lines = text.splitlines()
@@ -128,7 +128,7 @@ class CtrlImgProc:
 
         model_pick_list = ModelFromDataFrame(self.df_check_list)
         self.view.tv_pick_list.setModel(model_pick_list)
-        console.log(f"[green]Loaded {len(self.df_check_list)} entries from '{Path(path_str).name}'.[/green]")
+        console.log(f"[green]Loaded {len(self.df_check_list)} entries from '{self.pick_list_path.name}'.[/green]")
         self.check_file_status()
 
     def _raw_tiff_ready(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
@@ -203,7 +203,7 @@ class CtrlImgProc:
 
     def export_proc_list(self) -> None:
         model = self.view.tv_pick_list.model()
-        if model is None or not hasattr(self, "current_pick_list_path"):
+        if model is None or not hasattr(self, "pick_list_path"):
             return
 
         df = model._data  # noqa: SLF001  # captures any user edits to PROC and MODE columns
@@ -215,7 +215,7 @@ class CtrlImgProc:
         dir_raw = str(Path(self.view.te_dir_raw_images.toPlainText().strip()))
         dir_proc = str(Path(self.view.te_dir_processed.toPlainText().strip()))
 
-        original_lines = self.current_pick_list_path.read_text(encoding="utf-8").splitlines()
+        original_lines = self.pick_list_path.read_text(encoding="utf-8").splitlines()
 
         out_lines = [
             *original_lines,
@@ -239,27 +239,36 @@ class CtrlImgProc:
                 gauss_exists, proc, mode = row_lookup[filename]
                 out_lines[i] = f"[{filename}, {gauss_exists}, {proc}, {mode}, {abf}]"
 
-        out_path = self.current_pick_list_path.parent / f"proc_{self.current_pick_list_path.stem}.txt"
-        out_path.write_text("\n".join(out_lines), encoding="utf-8")
-        console.log(f"[bold green]Processing list saved → {out_path}[/bold green]")
+        proc_list_path = self.pick_list_path.parent / f"proc_{self.pick_list_path.stem}.txt"
+        proc_list_path.write_text("\n".join(out_lines), encoding="utf-8")
+        console.log(f"[bold green]Processing list saved → {proc_list_path}[/bold green]")
 
     def start_processing(self) -> None:
         from img_proc import run as run_img_proc
 
-        if not hasattr(self, "current_pick_list_path"):
+        if not hasattr(self, "pick_list_path"):
             console.log("[yellow]No pick list loaded. Please load a pick list first.[/yellow]")
             return
 
-        out_path = self.current_pick_list_path.parent / f"proc_{self.current_pick_list_path.stem}.txt"
-        if not out_path.exists():
+        proc_list_path = self.pick_list_path.parent / f"proc_{self.pick_list_path.stem}.txt"
+        if not proc_list_path.exists():
             self.export_proc_list()
 
         _cuda_available, _cuda_msg = check_cuda()
+        if _cuda_available:
+            self.view.le_run_on.setText("GPU (CUDA)")
+        else:
+            self.view.le_run_on.setText("CPU (NUMBA-JIT)")
+
         console.log(_cuda_msg)
 
-        self._bk_worker = BackgroundWorker(run_img_proc, out_path, _cuda_available)
+        self._bk_worker = BackgroundWorker(run_img_proc, proc_list_path, _cuda_available, use_emitter=True)
+        self._bk_worker.proc_msgs.connect(self._on_progress)
         self._bk_worker.finished.connect(self._on_processing_done)
         self._bk_worker.start()
+
+    def _on_progress(self, msg: str) -> None:
+        self.view.tb_proc_log.append(msg)
 
     def _on_processing_done(self) -> None:
         console.log("[bold green]Processing complete.[/bold green]")

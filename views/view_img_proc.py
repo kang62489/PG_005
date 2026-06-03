@@ -1,6 +1,6 @@
 ## Modules
 # Third-party imports
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QTextBrowser, QTextEdit, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QFormLayout, QTextEdit, QVBoxLayout, QLineEdit
 
 # Local application imports
 from utils.params import UISizes
@@ -66,5 +66,37 @@ class ViewImgProc:
 
         self.btn_start_processing = QPushButton("Start Processing")
         self.lo_block_2.addWidget(self.btn_start_processing)
+
+        self.lbl_proc_info = QLabel("Processing Information:")
+        self.lo_block_2.addWidget(self.lbl_proc_info)
+        
+        self.lo_proc_info = QFormLayout()
+        self.lo_block_2.addLayout(self.lo_proc_info)
+
+        self.lbl_run_on = QLabel("Run on:")
+        self.le_run_on = QLineEdit()
+        self.le_run_on.setReadOnly(True)
+
+        self.lbl_current_total = QLabel("Current/Total:")
+        self.lbl_current_total_disp = QLabel()
+
+        self.lbl_processing_file = QLabel("Processing file:")
+        self.le_processing_file = QLineEdit()
+        self.le_processing_file.setReadOnly(True)
+
+        self.lbl_processing_step = QLabel("Processing step:")
+        self.le_processing_step = QLineEdit()
+        self.le_processing_step.setReadOnly(True)
+
+        self.lo_proc_info.addRow(self.lbl_run_on, self.le_run_on)
+        self.lo_proc_info.addRow(self.lbl_current_total, self.lbl_current_total_disp)
+        self.lo_proc_info.addRow(self.lbl_processing_file, self.le_processing_file)
+        self.lo_proc_info.addRow(self.lbl_processing_step, self.le_processing_step)
+        
+
+
+
+
+
 
 

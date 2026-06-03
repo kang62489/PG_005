@@ -136,7 +136,7 @@ def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
 # ── Processing functions ───────────────────────────────────────────────────────
 
 
-def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool) -> None:
+def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool, emitter=None) -> None:
     """Moving-average detrend + Gaussian blur. Saves *_MOV_GAUSS.tif."""
     stem = Path(file).stem
     t0 = time.time()
@@ -145,20 +145,24 @@ def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool) 
     img = tifffile.imread(raw_dir / file).astype(np.float16)
     console.log(f"  Shape {img.shape}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
+    if emitter:
+        emitter("  Detrending (MOV)...")
     console.log("  Detrending (MOV)...")
     detrended = mov_detrend(img, cuda_available)
-    # tifffile.imwrite(proc_dir / f"{stem}_MOV_CAL.tif", detrended.astype(np.float16))
-    # console.log(f"  Saved {stem}_MOV_CAL.tif  ({time.time() - t0:.1f}s)")
 
+    if emitter:
+        emitter("  Gaussian blur...")
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
     tifffile.imwrite(proc_dir / f"{stem}_MOV_GAUSS.tif", blurred.astype(np.float16))
+    if emitter:
+        emitter(f"  ✓ Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)")
     console.log(f"  Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
     del img, detrended, blurred
 
 
-def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool) -> None:
+def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool, emitter=None) -> None:
     """Bi-exp detrend + Gaussian blur. Saves *_BIEXP_CAL.tif and *_BIEXP_GAUSS.tif."""
     stem = Path(file).stem
     t0 = time.time()
@@ -167,19 +171,25 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
     img = tifffile.imread(raw_dir / file).astype(np.float16)
     console.log(f"  Shape {img.shape}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
+    if emitter:
+        emitter("  Sampling pixels for tau estimation...")
     console.log("  Sampling pixels for tau estimation...")
     tau1, tau2 = sample_tau(img)
     console.log(f"  tau1={tau1:.1f}  tau2={tau2:.1f}  ({time.time() - t0:.1f}s)")
 
+    if emitter:
+        emitter("  Detrending (BIEXP)...")
     console.log("  Detrending (BIEXP)...")
     detrended = biexp_detrend(img, tau1, tau2, cuda_available)
-    # tifffile.imwrite(proc_dir / f"{stem}_BIEXP_CAL.tif", detrended.astype(np.float16))
-    # console.log(f"  Saved {stem}_BIEXP_CAL.tif  ({time.time() - t0:.1f}s)")
 
+    if emitter:
+        emitter("  Gaussian blur...")
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
     del detrended
     tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", blurred.astype(np.float16))
+    if emitter:
+        emitter(f"  ✓ Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)")
     console.log(f"  Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
     del img, blurred
@@ -188,7 +198,7 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
 # ── Pipeline runner ───────────────────────────────────────────────────────────
 
 
-def run(proc_list_path: Path, cuda_available: bool) -> None:
+def run(proc_list_path: Path, cuda_available: bool, emitter=None) -> None:
     """Parse proc list and process each file according to its MODE."""
     entries, raw_dir, proc_dir = parse_proc_list(proc_list_path)
     proc_dir.mkdir(parents=True, exist_ok=True)
@@ -198,7 +208,8 @@ def run(proc_list_path: Path, cuda_available: bool) -> None:
     console.log(f"  proc -> {proc_dir}")
     console.log(f"  {len(entries)} file(s) to process  (cuda={cuda_available})")
 
-    for entry in entries:
+    total = len(entries)
+    for i, entry in enumerate(entries, 1):
         file = entry["file"]
         mode = entry["mode"]
         fpath = raw_dir / file
@@ -207,16 +218,18 @@ def run(proc_list_path: Path, cuda_available: bool) -> None:
             console.log(f"[SKIP] {file} not found")
             continue
 
+        if emitter:
+            emitter(f"[{i}/{total}] {file}  MODE={mode}")
         console.log(f"\n{'=' * 60}")
-        console.log(f"{file}  MODE={mode}")
+        console.log(f"[{i}/{total}] {file}  MODE={mode}")
 
         if mode == "MOV":
-            process_mov(file, raw_dir, proc_dir, cuda_available)
+            process_mov(file, raw_dir, proc_dir, cuda_available, emitter=emitter)
         elif mode == "BIEXP":
-            process_biexp(file, raw_dir, proc_dir, cuda_available)
+            process_biexp(file, raw_dir, proc_dir, cuda_available, emitter=emitter)
         elif mode == "BOTH":
-            process_biexp(file, raw_dir, proc_dir, cuda_available)
-            process_mov(file, raw_dir, proc_dir, cuda_available)
+            process_biexp(file, raw_dir, proc_dir, cuda_available, emitter=emitter)
+            process_mov(file, raw_dir, proc_dir, cuda_available, emitter=emitter)
         else:
             console.log(f"  Unknown mode '{mode}', skipping")
 

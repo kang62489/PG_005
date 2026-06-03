@@ -1,3 +1,35 @@
+# Log of the project progress 2026-06-04 Wed (Session 14)
+
+## Last working file
+- `views/view_img_proc.py` (← break here, line 94)
+
+## List of modified files
+- `controllers/ctrl_img_proc.py` — `current_pick_list_path` → `pick_list_path`; `out_path` → `proc_list_path`; added `_on_progress(msg)` slot; wired `proc_msgs.connect(_on_progress)` in `start_processing()`; worker created with `use_emitter=True`
+- `controllers/ctrl_data_selector.py` — local `current_pick_list_path` → `pick_list_path` in `pick_list_export()`
+- `classes/bk_worker.py` — added `proc_msgs = Signal(str)`; added `use_emitter: bool = False` flag; when `True`, injects `emitter=self.proc_msgs.emit` as kwarg into the called function
+- `img_proc.py` — `run()` accepts `emitter=None`; `process_mov()` and `process_biexp()` accept `emitter=None`; emitter called at key steps (detrend, gaussian blur, save done); `emitter` forwarded from `run()` into both `process_*` functions
+- `views/view_img_proc.py` — user replaced `tb_proc_log` (QTextBrowser) with a structured `QFormLayout` (`lo_proc_info`) containing: `le_run_on`, `lbl_current_total_disp`, `le_processing_file`, `le_processing_step`
+
+## Summary of current progress
+- Completed variable renames: `current_pick_list_path` → `pick_list_path`, `out_path` → `proc_list_path`
+- Built the full progress reporting pipeline: `proc_msgs = Signal(str)` in `BackgroundWorker` with opt-in `use_emitter=True` flag (so `als_dff0` is unaffected); `emitter` callback injected into `img_proc.run()` and forwarded into `process_mov()` / `process_biexp()`
+- User redesigned the progress display in `view_img_proc.py`: replaced plain `QTextBrowser` with a structured form showing Run on / Current/Total / Processing file / Processing step
+- ⚠️ `_on_progress` in `ctrl_img_proc.py` still calls `self.view.tb_proc_log.append(msg)` which no longer exists — **not yet wired to the new form fields**
+
+## Completed TODOs/Tasks (before new wrap-up)
+- Variable renames: `current_pick_list_path` → `pick_list_path`, `out_path` → `proc_list_path`
+- Progress reporting architecture implemented end-to-end (BackgroundWorker signal → emitter callback → img_proc pipeline)
+- Previous session TODO "Think about how to hint processing progress in the GUI" — architecture decided and partially implemented
+
+## What should we do next? (TODOs)
+- [ ] **[NEXT]** Rewrite `_on_progress(msg)` in `ctrl_img_proc.py` to parse emitted messages and route to the correct form fields:
+  - `[i/total] filename  MODE=...` → parse into `lbl_current_total_disp` ("i/total") + `le_processing_file` (filename)
+  - `  Detrending...` / `  Gaussian blur...` / `  ✓ Saved...` → `le_processing_step`
+- [ ] Populate `le_run_on` with "GPU" or "CPU" when `start_processing()` is called
+- [ ] Optionally: disable `btn_start_processing` while running; re-enable in `_on_processing_done`
+
+---
+
 # Log of the project progress 2026-06-03 Tue (Session 13)
 
 ## Last working file
