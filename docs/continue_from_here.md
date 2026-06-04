@@ -1,3 +1,32 @@
+# Log of the project progress 2026-06-05 Thu (Session 17)
+
+## Last working file
+- `img_proc.py`
+
+## List of modified files
+- `CLAUDE.md` — updated ruff check instruction: run `C:\Users\KANG\.local\bin\ruff.exe check <files>` directly instead of `uv run ruff`
+- `controllers/ctrl_als_dff0.py` — disable `btn_cal_dff0_all` before starting dF/F0 worker; re-enable in `_on_dff0_all_done`
+- `controllers/ctrl_img_proc.py` — disable `btn_start_processing` before starting img_proc worker; re-enable in `_on_processing_done`; fixed `GAUSS_EXISTS?` → PROC/MODE logic for partial GAUSS existence
+- `functions/detrend.py` — removed `.astype(np.float16)` from `mov_detrend` and `biexp_detrend` return paths; both now return float32 cleanly
+- `img_proc.py` — GAUSS TIFFs (`_MOV_GAUSS.tif`, `_BIEXP_GAUSS.tif`) now saved as float32 instead of float16 (temporary, pending evaluation)
+
+## Summary of current progress
+- Completed all 3 carry-over TODOs from Session 16: disabled run buttons during worker execution, switched GAUSS TIFFs to float32
+- Discussed float16 precision: at baseline values (~20000 counts), float16 step size = 16, meaning no sub-integer precision; detrend functions were wastefully converting to float16 mid-pipeline only to be converted back to float32 by gaussian_blur — removed those intermediate casts
+- Fixed a logic bug in `check_file_status`: when only one GAUSS type existed (e.g. MOV but not BIEXP), the file was incorrectly marked SKIP/NONE; now correctly marks it YES with the missing mode
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Disable `btn_cal_dff0_all` while dF/F0 worker running; re-enable in `_on_dff0_all_done`
+- ✅ Disable `btn_start_processing` while img_proc worker running; re-enable in `_on_processing_done`
+- ✅ Removed float16 intermediate cast from `detrend.py` (both `mov_detrend` and `biexp_detrend`)
+- ✅ Switched GAUSS TIFF save format from float16 → float32 in `img_proc.py`
+- ✅ Fixed `GAUSS_EXISTS?` → PROC/MODE assignment in `check_file_status`
+
+## What should we do next? (TODOs)
+- [ ] Re-evaluate whether float32 GAUSS TIFFs should be permanent — compare file size vs precision tradeoff on real data (float32 = 2× disk space vs float16)
+
+---
+
 # Log of the project progress 2026-06-04 Wed (Session 16)
 
 ## Last working file

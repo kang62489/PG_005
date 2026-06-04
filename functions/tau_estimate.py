@@ -84,7 +84,7 @@ def sample_tau(img: np.ndarray, n_pixels: int = _N_PIXEL_SAMPLE, seed: int = _RN
         else:
             n_failed += 1
 
-    console.print(f"  Sampled {n_pixels} pixels  ({n_failed} failed)")
+    console.log(f"  Sampled {n_pixels} pixels  ({n_failed} failed)")
     if tau1s:
         console.log(
             f"  tau1: median={np.median(tau1s):.1f}  "

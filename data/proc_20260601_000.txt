@@ -5,12 +5,12 @@ Purposes:
 
 Picked: [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]
 # [raw_tiff_name, paired_abf]
-[2026_03_20-0028.tif, BIEXP, SKIP, NONE, 2026_03_20_0015.abf]
-[2026_03_20-0029.tif, BIEXP & MOV, YES, MOV, 2026_03_20_0016.abf]
-[2026_03_20-0040.tif, BIEXP, SKIP, NONE, 2026_03_20_0025.abf]
-[2026_03_20-0041.tif, BIEXP, SKIP, NONE, 2026_03_20_0026.abf]
+[2026_03_20-0028.tif, BIEXP & MOV, YES, BIEXP, 2026_03_20_0015.abf]
+[2026_03_20-0029.tif, BIEXP & MOV, SKIP, NONE, 2026_03_20_0016.abf]
+[2026_03_20-0040.tif, BIEXP & MOV, SKIP, NONE, 2026_03_20_0025.abf]
+[2026_03_20-0041.tif, BIEXP & MOV, YES, BIEXP, 2026_03_20_0026.abf]
 
 Total 4 records picked
 
-dir_raw_tiffs: D:\Kang_PGs\PG_005\raw_tiffs
-dir_proc_tiffs: D:\Kang_PGs\PG_005\proc_tiffs
+dir_raw_tiffs: D:\MyDB\2_Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs

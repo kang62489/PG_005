@@ -166,6 +166,7 @@ class CtrlAlsDff0:
         self.view.le_run_on.setText("GPU (CUDA)" if cuda_available else "CPU (NUMBA-JIT)")
         self.view.le_als_params.setText(f"lam={lam:g}, p={p:g}, n_iter={n_iter}")
 
+        self.view.btn_cal_dff0_all.setEnabled(False)
         self._worker = BackgroundWorker(run_als_dff0, self._proc_list_path, cuda_available, lam, p, n_iter, use_emitter=True)
         self._worker.proc_msgs.connect(self._on_dff0_progress)
         self._worker.finished.connect(self._on_dff0_all_done)
@@ -180,6 +181,7 @@ class CtrlAlsDff0:
             self.view.le_processing_step.setText(msg["msg"])
 
     def _on_dff0_all_done(self) -> None:
+        self.view.btn_cal_dff0_all.setEnabled(True)
         console.log("[green bold]dF/F0 calculation complete.[/green bold]")
         self.view.le_processing_step.setText("All done!")
 

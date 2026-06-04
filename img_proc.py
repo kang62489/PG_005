@@ -154,7 +154,7 @@ def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool, 
         emitter({"type": "step", "msg": "Gaussian blur..."})
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
-    tifffile.imwrite(proc_dir / f"{stem}_MOV_GAUSS.tif", blurred.astype(np.float16))
+    tifffile.imwrite(proc_dir / f"{stem}_MOV_GAUSS.tif", blurred.astype(np.float32))
     if emitter:
         emitter({"type": "step", "msg": f"✓ Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)"})
     console.log(f"  Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)")
@@ -187,7 +187,7 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
     del detrended
-    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", blurred.astype(np.float16))
+    tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", blurred.astype(np.float32))
     if emitter:
         emitter({"type": "step", "msg": f"✓ Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)"})
     console.log(f"  Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)")

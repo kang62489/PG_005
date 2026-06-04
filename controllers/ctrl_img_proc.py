@@ -182,13 +182,17 @@ class CtrlImgProc:
                 lambda row_dict: self._gauss_exists(dir_processed, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("GAUSS_EXISTS?"),
         ).with_columns(
-            pl.when(pl.col("GAUSS_EXISTS?") == "No")
-            .then(pl.lit("YES"))
-            .otherwise(pl.lit("SKIP"))
+            pl.when(pl.col("GAUSS_EXISTS?") == "BIEXP & MOV")
+            .then(pl.lit("SKIP"))
+            .otherwise(pl.lit("YES"))
             .alias("PROC")
         ).with_columns(
-            pl.when(pl.col("PROC") == "SKIP")
+            pl.when(pl.col("GAUSS_EXISTS?") == "BIEXP & MOV")
             .then(pl.lit("NONE"))
+            .when(pl.col("GAUSS_EXISTS?") == "BIEXP")
+            .then(pl.lit("MOV"))
+            .when(pl.col("GAUSS_EXISTS?") == "MOV")
+            .then(pl.lit("BIEXP"))
             .otherwise(pl.lit("BIEXP"))
             .alias("MODE")
         )
@@ -261,6 +265,7 @@ class CtrlImgProc:
 
         console.log(_cuda_msg)
 
+        self.view.btn_start_processing.setEnabled(False)
         self._bk_worker = BackgroundWorker(run_img_proc, proc_list_path, _cuda_available, use_emitter=True)
         self._bk_worker.proc_msgs.connect(self._on_progress)
         self._bk_worker.finished.connect(self._on_processing_done)
@@ -276,6 +281,7 @@ class CtrlImgProc:
             self.view.le_processing_step.setText(msg["msg"])
 
     def _on_processing_done(self) -> None:
+        self.view.btn_start_processing.setEnabled(True)
         console.log("[bold green]Processing complete.[/bold green]")
         self.check_file_status()
         self.view.le_processing_step.setText("All done!")

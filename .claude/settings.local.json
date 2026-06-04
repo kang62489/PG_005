@@ -37,7 +37,8 @@
       "PowerShell(& \".venv\\\\Scripts\\\\ruff.exe\" check img_proc.py classes\\\\bk_worker.py controllers\\\\ctrl_img_proc.py 2>&1)",
       "PowerShell(head *)",
       "PowerShell(Get-Command *)",
-      "PowerShell(& \"D:\\\\Kang_PGs\\\\PG_005\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check als_dff0.py controllers/ctrl_als_dff0.py --fix 2>&1)"
+      "PowerShell(& \"D:\\\\Kang_PGs\\\\PG_005\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check als_dff0.py controllers/ctrl_als_dff0.py --fix 2>&1)",
+      "PowerShell(C:\\\\Users\\\\KANG\\\\.local\\\\bin\\\\ruff.exe check img_proc.py)"
     ]
   }
 }

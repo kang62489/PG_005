@@ -135,7 +135,7 @@ def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101)
         window_size: Width of the centred moving-average window (frames).
 
     Returns:
-        Detrended stack, shape (n_frames, H, W), float16.
+        Detrended stack, shape (n_frames, H, W), float32.
     """
     n_frames, height, width = stack.shape
     pixel_data = stack.reshape(n_frames, -1).T.astype(np.float32)  # (n_pixels, n_frames)
@@ -153,7 +153,7 @@ def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101)
 
     detrended_stack = detrended_pixels.T.reshape(n_frames, height, width)
 
-    return detrended_stack.astype(np.float16)
+    return detrended_stack
 
 
 # ── Bi-exponential detrend ─────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: boo
         cuda_available: Route to GPU kernel if True.
 
     Returns:
-        Detrended stack, shape (n_frames, H, W), float16.
+        Detrended stack, shape (n_frames, H, W), float32.
     """
     n_frames, H, W = img.shape
     t = np.arange(n_frames, dtype=np.float32)
@@ -262,8 +262,8 @@ def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: boo
         _gpu_biexp[blocks, threads](d_img, d_pinv, d_basis, d_out)
         cuda.synchronize()
         output_flat_gpu = d_out.copy_to_host()
-        return output_flat_gpu.reshape(n_frames, H, W).astype(np.float16)
+        return output_flat_gpu.reshape(n_frames, H, W)
     # (n_pixels, n_frames) — each pixel's trace is contiguous in memory
     img_flat_cpu = img.reshape(n_frames, -1).T.astype(np.float32)
     output_flat_cpu = _cpu_biexp(img_flat_cpu, basis_pinv, basis_matrix)
-    return output_flat_cpu.T.reshape(n_frames, H, W).astype(np.float16)
+    return output_flat_cpu.T.reshape(n_frames, H, W)
