@@ -17,13 +17,12 @@ main.py (QMainWindow + QTabWidget)
   │     └── CtrlImgProc        (controllers/ctrl_img_proc.py)
   │           ├── load_pick_list()      → ModelFromDataFrame + CellDropdownDelegate
   │           ├── check_file_status()   → QFileSystemWatcher (RAW_TIFFS_DIR, PROC_TIFFS_DIR)
-  │           ├── export_checked_list() → writes *_checked.txt to data/
+  │           ├── export_proc_list()    → writes proc_YYYYMMDD_NNN.txt to data/
   │           └── start_processing()
-  │                 ├── check_cuda()           → (bool, str)  [functions/check_cuda.py]
-  │                 ├── writes cuda msg        → data/{brief}_log.txt
-  │                 ├── BackgroundWorker.start()  → runs img_proc.run(..., log_path)
-  │                 │     └── img_proc.run() swaps module console → writes to log in real-time
-  │                 └── QFileSystemWatcher.fileChanged → _on_log_changed → tb_console.setPlainText()
+  │                 ├── check_cuda()              → (bool, str)  [functions/check_cuda.py]
+  │                 └── BackgroundWorker(use_emitter=True) → runs img_proc.run(emitter=...)
+  │                       └── proc_msgs Signal(object) → _on_progress(dict) →
+  │                             le_curret_total / le_mode / le_processing_file / le_processing_step
   │
   ├── Tab: Normalization Test
   │     ├── ViewAlsDff0        (views/view_als_dff0.py)
@@ -41,9 +40,10 @@ main.py (QMainWindow + QTabWidget)
 
 classes/bk_worker.py
   └── BackgroundWorker(QThread)
-        ├── __init__(fn, *args, **kwargs)
-        ├── run() → fn(*args, **kwargs); finished.emit()
-        └── finished = Signal()
+        ├── __init__(fn, *args, use_emitter=False, **kwargs)
+        ├── run() → fn(*args, **kwargs) or fn(*args, **kwargs, emitter=proc_msgs.emit)
+        ├── finished = Signal()
+        └── proc_msgs = Signal(object)  ← emits dicts {"type": "progress"|"step", ...}
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -51,9 +51,9 @@ classes/bk_worker.py
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────┐
-│  img_proc.py                         │  ← Main Script (CLI: --brief _checked.txt)
+│  img_proc.py                         │  ← Main Script (CLI: --proc_list proc_*.txt)
 │  ──────────────────────────────────  │
-│  - Parse proc_brief_*_checked.txt    │
+│  - Parse proc_YYYYMMDD_NNN.txt       │
 │  - Route by MODE: MOV/BIEXP/BOTH     │
 │  - sample_tau → biexp_detrend        │
 │  - mov_detrend → gaussian_blur_run   │
@@ -439,7 +439,7 @@ archive/cpu_binning.py, archive/kmeans.py
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-05-22 (added Workflow 0: GUI; BackgroundWorker; processing log system;
-         check_cuda() returns (bool, str); img_proc.run() accepts log_path)
+Updated: 2026-06-04 Session 15 (proc_msgs Signal(object) dict; _on_progress() routes to GUI
+         form fields; proc_YYYYMMDD_NNN.txt naming; CUDA 12.x preference; gaussian kernel on CPU)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

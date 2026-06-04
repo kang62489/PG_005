@@ -39,8 +39,9 @@ PG_005/
 │   ├── ctrl_data_selector.py        # Controller: Data Selector tab
 │   ├── ctrl_img_proc.py             # Controller: Image Processing tab
 │   │                                #   - pick list loading, file status check
-│   │                                #   - processing log: writes to data/{brief}_log.txt
-│   │                                #   - QFileSystemWatcher.fileChanged → tb_console
+│   │                                #   - export_proc_list() → proc_YYYYMMDD_NNN.txt
+│   │                                #   - start_processing(): BackgroundWorker(use_emitter=True)
+│   │                                #   - _on_progress(dict) → routes to form fields
 │   └── ctrl_als_dff0.py             # Controller: Normalization tab (ROI switching)
 │
 ├── classes/
@@ -86,10 +87,9 @@ PG_005/
 │   ├── DATABASE_STRUCTURE.md        # Database schema and optimization details
 │   └── continue_from_here.md        # Session progress log (current TODOs)
 │
-├── data/                            # Processing briefs + logs
-│   ├── proc_brief_*.txt             # Processing briefs (picked TIFFs + modes)
-│   ├── proc_brief_*_checked.txt     # Checked briefs (with dir paths + PROC/MODE)
-│   └── {brief_stem}_log.txt         # Processing logs (written live during img_proc.run())
+├── data/                            # Pick lists + proc lists
+│   ├── pick_YYYYMMDD_NNN.txt        # Pick lists (selected TIFFs + paired ABF)
+│   └── proc_YYYYMMDD_NNN.txt        # Proc lists (dir paths + PROC/MODE per entry)
 │
 ├── scripts/
 │   ├── migrate_database.py          # Database migration script (completed 2026-02-10)
@@ -110,7 +110,7 @@ PG_005/
 
 ## Workflow 1: Image Preprocessing
 
-**Script**: `img_proc.py`  — driven by a `proc_brief_YYYYMMDD_NNN_checked.txt` brief
+**Script**: `img_proc.py`  — driven by a `proc_YYYYMMDD_NNN.txt` proc list
 
 ```
 proc_brief_*_checked.txt
@@ -179,7 +179,7 @@ This ensures effective noise suppression without distorting the spatial extent o
 |-------|-------|-----------|
 | Load | (n_frames, height, width) | uint16 |
 | Processing | (n_frames, height, width) | float32 |
-| Save (preprocessed) | (n_frames, height, width) | uint16 (clipped to 0-65535) |
+| Save (preprocessed) | (n_frames, height, width) | float16 |
 | Save (analysis results) | (n_frames, height, width) | float32 (zscore), uint8 (categorized) |
 
 ---
@@ -490,7 +490,7 @@ Use `skimage.measure.label()` to convert categorical → labeled for regionprops
 
 ### Run Preprocessing
 ```bash
-python img_proc.py --brief data/proc_brief_20260512_002_checked.txt
+python img_proc.py --proc_list data/proc_20260512_002.txt
 ```
 
 ### Run Spike-Triggered Analysis
@@ -888,6 +888,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-05-22 (added PySide6 GUI: main.py, views/, controllers/, classes/bk_worker.py;
-check_cuda() now returns (bool, str); img_proc.run() accepts log_path for live processing log;
-QFileSystemWatcher on log file → tb_console updates in real-time)*
+*Last updated: 2026-06-04 Session 15 (proc_msgs Signal(object) dict payloads; _on_progress() routes to GUI form fields; uint16 raw TIFF loading; proc_YYYYMMDD_NNN.txt naming; CUDA 12.x preferred; gaussian kernel computed on CPU via _cpu_kernel + cuda.to_device)*

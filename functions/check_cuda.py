@@ -60,12 +60,12 @@ def _setup_cuda_environment() -> tuple[bool, str]:
         except ValueError:
             other_versions.append(version_path)
 
-    # Select preferred version: CUDA 11.x first (best numba compatibility)
+    # Select preferred version: CUDA 12.x preferred, fall back to 11.x
     preferred_version = None
-    if cuda_11_versions:
-        preferred_version = cuda_11_versions[0]  # Already sorted, highest 11.x
-    elif cuda_12_versions:
-        preferred_version = cuda_12_versions[0]  # Fallback to 12.x
+    if cuda_12_versions:
+        preferred_version = cuda_12_versions[0]  # Already sorted, highest 12.x
+    elif cuda_11_versions:
+        preferred_version = cuda_11_versions[0]  # Fallback to 11.x
     elif other_versions:
         preferred_version = other_versions[0]  # Last resort
     else:

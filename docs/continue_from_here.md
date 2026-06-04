@@ -1,3 +1,60 @@
+# Log of the project progress 2026-06-04 Wed (Session 16)
+
+## Last working file
+- `als_dff0.py`
+
+## List of modified files
+- `als_dff0.py` — added `emitter=None` to `process_dff0()` and `run()`; emits `{"type": "progress", "i", "total", "file"}` per file and `{"type": "step", "msg"}` for each processing stage (Loading, ALS baseline, dF/F0, Saved)
+- `controllers/ctrl_als_dff0.py` — added `use_emitter=True` to `BackgroundWorker`; connected `proc_msgs` → new `_on_dff0_progress()` slot; sets `le_run_on` and `le_als_params` before worker starts; `_on_dff0_all_done()` now sets `le_processing_step` to "All done!"
+
+## Summary of current progress
+- Mirrored the `img_proc.py` emitter pattern into `als_dff0.py` and `ctrl_als_dff0.py` so the ALS dF/F0 pipeline now reports live progress to the GUI form fields (`le_run_on`, `le_als_params`, `le_curret_total`, `le_processing_file`, `le_processing_step`) in `view_als_dff0.py`
+- Discussed float32 → float16 → float32 dtype pipeline: GAUSS TIFFs are saved as float16 (`img_proc.py:157,190`), read back and cast to float32 in the ALS controller. The float32 array dtype is correct but precision is float16-level (~3.3 decimal digits) — lost precision cannot be recovered. float16 max ≈ 65504 may also clip values between 65504–65535.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Added emitter pipeline to `als_dff0.py` (`process_dff0` + `run`)
+- ✅ Wired emitter in `ctrl_als_dff0.py` → GUI line edits in `view_als_dff0.py`
+- ✅ Carry-over from Session 15: `le_run_on` now populated for the ALS tab as well
+
+## What should we do next? (TODOs)
+- [ ] Disable `btn_cal_dff0_all` while the dF/F0 worker is running; re-enable in `_on_dff0_all_done`
+- [ ] Disable `btn_start_processing` while the img_proc worker is running; re-enable in `_on_processing_done` (carry-over from Session 15)
+- [ ] Consider saving GAUSS TIFFs as float32 instead of float16 — float16 clips values > 65504 and loses sub-integer precision; evaluate if this matters for ALS accuracy
+
+---
+
+# Log of the project progress 2026-06-04 Wed (Session 15)
+
+## Last working file
+- `functions/gaussian_blur.py`
+
+## List of modified files
+- `classes/bk_worker.py` — `proc_msgs = Signal(str)` → `Signal(object)` to support dict payloads
+- `img_proc.py` — all `emitter()` calls now emit dicts (`{"type": "progress", ...}` / `{"type": "step", ...}`); removed `.astype(np.float16)` from `tifffile.imread()` — raw TIFFs now loaded as native `uint16`; added `dtype={img.dtype}` to load log
+- `controllers/ctrl_img_proc.py` — `_on_progress()` rewritten to parse dict and route to form fields (`le_curret_total`, `le_mode`, `le_processing_file`, `le_processing_step`); proc list filename `proc_pick_*.txt` → `proc_*.txt` (strips `pick_` prefix via `.removeprefix()`)
+- `functions/check_cuda.py` — flipped CUDA version preference: now selects 12.x before 11.x
+- `functions/gaussian_blur.py` — `_gpu_kernel` (`@cuda.jit`, grid=1) commented out; replaced by `_cpu_kernel` + `cuda.to_device()` in `_gpu_gaussian_blur` to eliminate `NumbaPerformanceWarning`
+- `pyproject.toml` — `required-environments` → `environments` (uv field rename)
+- `uv.lock` — updated for CUDA 12 packages
+
+## Summary of current progress
+- Upgraded CUDA toolkit from 11.8 to 12.8; updated `check_cuda.py` to prefer 12.x
+- Switched `proc_msgs` signal payload from `str` to `object` (dict); all emitter calls in `img_proc.py` now emit structured dicts; `_on_progress()` in `ctrl_img_proc.py` routes dict fields to correct GUI widgets
+- Fixed raw TIFF loading: was incorrectly converting to `float16` on load; now reads native `uint16` and lets downstream functions handle dtype
+- Fixed proc list filename to `proc_YYYYMMDD_NNN.txt` (was `proc_pick_YYYYMMDD_NNN.txt`)
+- Eliminated `NumbaPerformanceWarning` (grid size 1) by computing the 37-element Gaussian kernel on CPU via `_cpu_kernel` instead of a `@cuda.jit` kernel
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Rewrote `_on_progress(msg)` to parse dict and route to correct form fields
+- ✅ `le_run_on` populated with "GPU (CUDA)" or "CPU (NUMBA-JIT)" in `start_processing()`
+- ✅ Fixed raw TIFF loading dtype (uint16)
+- ✅ Fixed proc list filename prefix
+
+## What should we do next? (TODOs)
+- [ ] *(Optional)* Disable `btn_start_processing` while running; re-enable in `_on_processing_done`
+
+---
+
 # Log of the project progress 2026-06-04 Wed (Session 14)
 
 ## Last working file

@@ -83,24 +83,32 @@ def _dff0_output_path(tiff_path: Path) -> Path:
     return tiff_path.with_stem(tiff_path.stem.replace("_GAUSS", "_DFF0"))
 
 
-def process_dff0(tiff_path: Path, cuda_available: bool, lam: float, p: float, n_iter: int) -> None:
+def process_dff0(tiff_path: Path, cuda_available: bool, lam: float, p: float, n_iter: int, emitter=None) -> None:
     """ALS baseline + dF/F0 for one *_GAUSS.tif. Saves *_DFF0.tif."""
     t0 = time.time()
 
+    if emitter:
+        emitter({"type": "step", "msg": f"Loading {tiff_path.name}..."})
     console.log(f"[cyan]Loading {tiff_path.name}...")
-    stack = tifffile.imread(tiff_path).astype(np.float32)
+    stack = tifffile.imread(tiff_path)
     console.log(f"  Shape {stack.shape}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
+    if emitter:
+        emitter({"type": "step", "msg": f"Computing ALS baseline (lam={lam:g}, p={p:g}, n_iter={n_iter})..."})
     console.log(f"  Computing ALS baseline (lam={lam:g}, p={p:g}, n_iter={n_iter})...")
     baseline = als_baseline_run(stack, lam, p, n_iter, cuda_available)
     console.log(f"  Baseline done  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
+    if emitter:
+        emitter({"type": "step", "msg": "Computing dF/F0..."})
     console.log("  Computing dF/F0...")
     safe_baseline = np.where(np.abs(baseline) > EPSILON, baseline, EPSILON)
     dff0 = ((stack - baseline) / safe_baseline).astype(np.float16)
 
     out_path = _dff0_output_path(tiff_path)
     tifffile.imwrite(out_path, dff0)
+    if emitter:
+        emitter({"type": "step", "msg": f"✓ Saved {out_path.name}  ({time.time() - t0:.1f}s)"})
     console.log(f"  Saved {out_path.name}  ({time.time() - t0:.1f}s)")
 
     del stack, baseline, safe_baseline, dff0
@@ -115,6 +123,7 @@ def run(
     lam: float,
     p: float,
     n_iter: int,
+    emitter=None,
 ) -> None:
     """Parse processing list and compute dF/F0 for each *_GAUSS.tif."""
     gauss_paths, _proc_dir = _parse_proc_list_for_gauss(proc_list_path)
@@ -122,14 +131,17 @@ def run(
     console.log(f"  {len(gauss_paths)} GAUSS TIFF(s) to process  (cuda={cuda_available})")
     console.log(f"  ALS: lam={lam:g}, p={p:g}, n_iter={n_iter}")
 
-    for tiff_path in gauss_paths:
+    total = len(gauss_paths)
+    for i, tiff_path in enumerate(gauss_paths, 1):
         if not tiff_path.exists():
-            console.log(f"[SKIP] {tiff_path.name} not found")
+            console.log(f"[DROPPED] {tiff_path.name} not found")
             continue
 
+        if emitter:
+            emitter({"type": "progress", "i": i, "total": total, "file": tiff_path.name})
         console.log(f"\n{'=' * 60}")
-        console.log(f"{tiff_path.name}")
-        process_dff0(tiff_path, cuda_available, lam, p, n_iter)
+        console.log(f"{tiff_path.name} [{i}/{total}]")
+        process_dff0(tiff_path, cuda_available, lam, p, n_iter, emitter=emitter)
 
     console.log(f"\n{'=' * 60}")
     console.log("All done!")

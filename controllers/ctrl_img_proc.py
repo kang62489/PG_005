@@ -239,7 +239,7 @@ class CtrlImgProc:
                 gauss_exists, proc, mode = row_lookup[filename]
                 out_lines[i] = f"[{filename}, {gauss_exists}, {proc}, {mode}, {abf}]"
 
-        proc_list_path = self.pick_list_path.parent / f"proc_{self.pick_list_path.stem}.txt"
+        proc_list_path = self.pick_list_path.parent / f"proc_{self.pick_list_path.stem.removeprefix('pick_')}.txt"
         proc_list_path.write_text("\n".join(out_lines), encoding="utf-8")
         console.log(f"[bold green]Processing list saved → {proc_list_path}[/bold green]")
 
@@ -250,9 +250,8 @@ class CtrlImgProc:
             console.log("[yellow]No pick list loaded. Please load a pick list first.[/yellow]")
             return
 
-        proc_list_path = self.pick_list_path.parent / f"proc_{self.pick_list_path.stem}.txt"
-        if not proc_list_path.exists():
-            self.export_proc_list()
+        proc_list_path = self.pick_list_path.parent / f"proc_{self.pick_list_path.stem.removeprefix('pick_')}.txt"
+        self.export_proc_list()
 
         _cuda_available, _cuda_msg = check_cuda()
         if _cuda_available:
@@ -267,9 +266,16 @@ class CtrlImgProc:
         self._bk_worker.finished.connect(self._on_processing_done)
         self._bk_worker.start()
 
-    def _on_progress(self, msg: str) -> None:
-        self.view.tb_proc_log.append(msg)
+    def _on_progress(self, msg: object) -> None:
+        if msg.get("type") == "progress":
+            self.view.le_curret_total.setText(f"{msg['i']}/{msg['total']}")
+            self.view.le_mode.setText(msg["mode"])
+            self.view.le_processing_file.setText(msg["file"])
+            self.view.le_processing_step.setText("")
+        elif msg.get("type") == "step":
+            self.view.le_processing_step.setText(msg["msg"])
 
     def _on_processing_done(self) -> None:
         console.log("[bold green]Processing complete.[/bold green]")
         self.check_file_status()
+        self.view.le_processing_step.setText("All done!")

@@ -5,7 +5,7 @@ from PySide6.QtCore import QThread, Signal
 
 class BackgroundWorker(QThread):
     finished = Signal()
-    proc_msgs = Signal(str)
+    proc_msgs = Signal(object)
 
     def __init__(self, fn, *args, use_emitter: bool = False, **kwargs):
         super().__init__()

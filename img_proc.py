@@ -142,21 +142,21 @@ def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool, 
     t0 = time.time()
 
     console.log(f"[cyan]Loading {file}...")
-    img = tifffile.imread(raw_dir / file).astype(np.float16)
-    console.log(f"  Shape {img.shape}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
+    img = tifffile.imread(raw_dir / file)
+    console.log(f"  Shape {img.shape}  dtype={img.dtype}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
     if emitter:
-        emitter("  Detrending (MOV)...")
+        emitter({"type": "step", "msg": "Detrending (MOV)..."})
     console.log("  Detrending (MOV)...")
     detrended = mov_detrend(img, cuda_available)
 
     if emitter:
-        emitter("  Gaussian blur...")
+        emitter({"type": "step", "msg": "Gaussian blur..."})
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
     tifffile.imwrite(proc_dir / f"{stem}_MOV_GAUSS.tif", blurred.astype(np.float16))
     if emitter:
-        emitter(f"  ✓ Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)")
+        emitter({"type": "step", "msg": f"✓ Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)"})
     console.log(f"  Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
     del img, detrended, blurred
@@ -168,28 +168,28 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
     t0 = time.time()
 
     console.log(f"[cyan]Loading {file}...")
-    img = tifffile.imread(raw_dir / file).astype(np.float16)
-    console.log(f"  Shape {img.shape}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
+    img = tifffile.imread(raw_dir / file)
+    console.log(f"  Shape {img.shape}  dtype={img.dtype}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
     if emitter:
-        emitter("  Sampling pixels for tau estimation...")
+        emitter({"type": "step", "msg": "Sampling pixels for tau estimation..."})
     console.log("  Sampling pixels for tau estimation...")
     tau1, tau2 = sample_tau(img)
     console.log(f"  tau1={tau1:.1f}  tau2={tau2:.1f}  ({time.time() - t0:.1f}s)")
 
     if emitter:
-        emitter("  Detrending (BIEXP)...")
+        emitter({"type": "step", "msg": "Detrending (BIEXP)..."})
     console.log("  Detrending (BIEXP)...")
     detrended = biexp_detrend(img, tau1, tau2, cuda_available)
 
     if emitter:
-        emitter("  Gaussian blur...")
+        emitter({"type": "step", "msg": "Gaussian blur..."})
     console.log("  Gaussian blur...")
     blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
     del detrended
     tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", blurred.astype(np.float16))
     if emitter:
-        emitter(f"  ✓ Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)")
+        emitter({"type": "step", "msg": f"✓ Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)"})
     console.log(f"  Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
     del img, blurred
@@ -215,13 +215,13 @@ def run(proc_list_path: Path, cuda_available: bool, emitter=None) -> None:
         fpath = raw_dir / file
 
         if not fpath.exists():
-            console.log(f"[SKIP] {file} not found")
+            console.log(f"[DROPPED] {file} not found")
             continue
 
         if emitter:
-            emitter(f"[{i}/{total}] {file}  MODE={mode}")
+            emitter({"type": "progress", "i": i, "total": total, "file": file, "mode": mode})
         console.log(f"\n{'=' * 60}")
-        console.log(f"[{i}/{total}] {file}  MODE={mode}")
+        console.log(f"{file}  MODE={mode} [{i}/{total}]")
 
         if mode == "MOV":
             process_mov(file, raw_dir, proc_dir, cuda_available, emitter=emitter)

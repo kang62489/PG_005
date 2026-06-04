@@ -4,6 +4,7 @@ from pathlib import Path
 
 # Third-party imports
 import numpy as np
+import tifffile
 from rich.console import Console
 
 # Local application imports
@@ -27,6 +28,8 @@ class CtrlAlsDff0:
         self._gauss_tiff_paths: list[Path] = []
         self._als_test_results: list[tuple[np.ndarray, np.ndarray]] | None = None
         self._worker: BackgroundWorker | None = None
+        self._cached_tiff_path: Path | None = None
+        self._cached_stack: np.ndarray | None = None
         self.connect_signals()
 
     def connect_signals(self) -> None:
@@ -103,15 +106,20 @@ class CtrlAlsDff0:
         idx = self.view.lw_gauss_tiff.currentRow()
         tiff_path = self._gauss_tiff_paths[idx]
 
-        self._worker = BackgroundWorker(self._run_als_test_task, tiff_path, lam, p, n_iter)
+        if self._worker is not None and self._worker.isRunning():
+            console.log("[yellow]ALS test already running, please wait.[/yellow]")
+            return
+
+        self.view.btn_run_als_test.setEnabled(False)
+        self._worker = BackgroundWorker(self._als_test, tiff_path, lam, p, n_iter)
         self._worker.finished.connect(self._on_als_test_done)
         self._worker.start()
 
-    def _run_als_test_task(self, tiff_path: Path, lam: float, p: float, n_iter: int) -> None:
-        import tifffile
-
-        cuda_available, _ = check_cuda()
-        stack = tifffile.imread(tiff_path).astype(np.float32)
+    def _als_test(self, tiff_path: Path, lam: float, p: float, n_iter: int) -> None:
+        if tiff_path != self._cached_tiff_path:
+            self._cached_stack = tifffile.imread(tiff_path).astype(np.float32)
+            self._cached_tiff_path = tiff_path
+        stack = self._cached_stack
         t_frames, height, width = stack.shape
         roi = min(ROI_SIZE, height, width)
         rng = np.random.default_rng()
@@ -120,11 +128,12 @@ class CtrlAlsDff0:
             row_start = rng.integers(0, height - roi + 1)
             col_start = rng.integers(0, width - roi + 1)
             mean_series = stack[:, row_start : row_start + roi, col_start : col_start + roi].mean(axis=(1, 2))
-            baseline_3d = als_baseline_run(mean_series.reshape(t_frames, 1, 1), lam, p, n_iter, cuda_available)
+            baseline_3d = als_baseline_run(mean_series.reshape(t_frames, 1, 1), lam, p, n_iter, False)
             results.append((mean_series, baseline_3d[:, 0, 0]))
         self._als_test_results = results
 
     def _on_als_test_done(self) -> None:
+        self.view.btn_run_als_test.setEnabled(True)
         if self._als_test_results is None:
             return
         for i, (signal, baseline) in enumerate(self._als_test_results):
@@ -154,12 +163,25 @@ class CtrlAlsDff0:
         cuda_available, cuda_msg = check_cuda()
         console.log(cuda_msg)
 
-        self._worker = BackgroundWorker(run_als_dff0, self._proc_list_path, cuda_available, lam, p, n_iter)
+        self.view.le_run_on.setText("GPU (CUDA)" if cuda_available else "CPU (NUMBA-JIT)")
+        self.view.le_als_params.setText(f"lam={lam:g}, p={p:g}, n_iter={n_iter}")
+
+        self._worker = BackgroundWorker(run_als_dff0, self._proc_list_path, cuda_available, lam, p, n_iter, use_emitter=True)
+        self._worker.proc_msgs.connect(self._on_dff0_progress)
         self._worker.finished.connect(self._on_dff0_all_done)
         self._worker.start()
 
+    def _on_dff0_progress(self, msg: object) -> None:
+        if msg.get("type") == "progress":
+            self.view.le_curret_total.setText(f"{msg['i']}/{msg['total']}")
+            self.view.le_processing_file.setText(msg["file"])
+            self.view.le_processing_step.setText("")
+        elif msg.get("type") == "step":
+            self.view.le_processing_step.setText(msg["msg"])
+
     def _on_dff0_all_done(self) -> None:
         console.log("[green bold]dF/F0 calculation complete.[/green bold]")
+        self.view.le_processing_step.setText("All done!")
 
     # ── ROI switcher ───────────────────────────────────────────────────────────
 

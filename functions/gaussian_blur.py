@@ -88,22 +88,27 @@ def _cpu_gaussian_blur(stack: np.ndarray, sigma: float) -> np.ndarray:
 # ── GPU Gaussian blur ──────────────────────────────────────────────────────────
 
 
-@cuda.jit
-def _gpu_kernel(kernel_out: np.ndarray, sigma: float, size: int) -> None:
-    """CUDA kernel: each thread computes one kernel element; thread 0 normalizes."""
-    idx = cuda.grid(1)
-    if idx >= size:
-        return
-    center = size // 2
-    dist = idx - center
-    kernel_out[idx] = math.exp(-(dist * dist) / (2.0 * sigma * sigma))
-    cuda.syncthreads()
-    if idx == 0:
-        total = 0.0
-        for i in range(size):
-            total += kernel_out[i]
-        for i in range(size):
-            kernel_out[i] /= total
+# NOTE: _gpu_kernel was the original CUDA approach for building the 1D Gaussian kernel.
+# It was replaced by _cpu_kernel (see _gpu_gaussian_blur below) because the kernel is
+# only ~37 elements (sigma=6 → size=37), so launching a @cuda.jit with grid=1 block
+# causes NumbaPerformanceWarning and adds unnecessary overhead. _cpu_kernel is @jit
+# compiled on CPU and is trivially fast for this size. The heavy GPU work is in _gpu_conv.
+#
+# @cuda.jit
+# def _gpu_kernel(kernel_out: np.ndarray, sigma: float, size: int) -> None:
+#     idx = cuda.grid(1)
+#     if idx >= size:
+#         return
+#     center = size // 2
+#     dist = idx - center
+#     kernel_out[idx] = math.exp(-(dist * dist) / (2.0 * sigma * sigma))
+#     cuda.syncthreads()
+#     if idx == 0:
+#         total = 0.0
+#         for i in range(size):
+#             total += kernel_out[i]
+#         for i in range(size):
+#             kernel_out[i] /= total
 
 
 @cuda.jit
@@ -149,12 +154,10 @@ def _gpu_gaussian_blur(stack: np.ndarray, sigma: float) -> np.ndarray:
     if kernel_size % 2 == 0:
         kernel_size += 1
 
-    # Generate normalized kernel on GPU
-    kernel_gpu = cuda.device_array(kernel_size, dtype=np.float32)
-    tpb_k = min(256, kernel_size)
-    bpg_k = math.ceil(kernel_size / tpb_k)
-    _gpu_kernel[bpg_k, tpb_k](kernel_gpu, sigma, kernel_size)
-    cuda.synchronize()
+    # Build the 1D Gaussian kernel on CPU using _cpu_kernel (@jit compiled), then upload
+    # to GPU. Avoids launching a @cuda.jit with grid=1 (NumbaPerformanceWarning) since
+    # the kernel is only ~37 elements — negligible cost on CPU.
+    kernel_gpu = cuda.to_device(_cpu_kernel(sigma, kernel_size))
 
     # 2D thread blocks for image convolution (16×16 = 256 threads/block)
     threads_2d = (16, 16)

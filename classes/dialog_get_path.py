@@ -26,7 +26,7 @@ class DialogGetFile(QFileDialog):
         self.setWindowTitle(title)
 
     def get_pick_list(self):
-        self.setNameFilters(["Text Files (*.txt)",])
+        self.setNameFilters(["Pick List (pick_*.txt)",])
         self.setDirectory(self._init_dir)
         if self.exec():
             return self.selectedFiles()[0]
