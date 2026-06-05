@@ -1,11 +1,11 @@
 """
-als_dff0.py  --  ALS baseline estimation + dF/F0 calculation pipeline.
-=======================================================================
+als_cal.py  --  ALS slow-fluctuation removal pipeline.
+=========================================================
 Reads a processing list, collects all existing *_GAUSS.tif files,
-runs ALS baseline estimation on each, and saves *_DFF0.tif.
+subtracts the ALS-estimated slow fluctuation from each, and saves *_CAL.tif.
 
 Usage:
-    python als_dff0.py --proc_list data/proc_pick_20260512_002.txt [--lam 100] [--p 0.05] [--n_iter 10]
+    python als_cal.py --proc_list data/proc_pick_20260512_002.txt [--lam 100] [--p 0.05] [--n_iter 10]
 """
 
 from __future__ import annotations
@@ -18,12 +18,11 @@ import numpy as np
 import tifffile
 from rich.console import Console
 
-from functions import als_baseline_run, check_cuda, get_memory_usage
+from functions import als_cal_run, check_cuda, get_memory_usage
 from img_proc import parse_proc_list, update_proc_list_gauss_exists
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-EPSILON = np.float32(1e-6)
 console = Console()
 
 
@@ -78,13 +77,13 @@ def _parse_proc_list_for_gauss(proc_list_path: Path) -> tuple[list[Path], Path]:
 # ── Processing functions ───────────────────────────────────────────────────────
 
 
-def _dff0_output_path(tiff_path: Path) -> Path:
-    """Return output path by replacing the GAUSS suffix with DFF0."""
-    return tiff_path.with_stem(tiff_path.stem.replace("_GAUSS", "_DFF0"))
+def _cal_output_path(tiff_path: Path) -> Path:
+    """Return output path by replacing the GAUSS suffix with CORR."""
+    return tiff_path.with_stem(tiff_path.stem.replace("_GAUSS", "_CAL"))
 
 
-def process_dff0(tiff_path: Path, cuda_available: bool, lam: float, p: float, n_iter: int, emitter=None) -> None:
-    """ALS baseline + dF/F0 for one *_GAUSS.tif. Saves *_DFF0.tif."""
+def process_cal(tiff_path: Path, cuda_available: bool, lam: float, p: float, n_iter: int, emitter=None) -> None:
+    """ALS slow-fluctuation subtraction for one *_GAUSS.tif. Saves *_CAL.tif."""
     t0 = time.time()
 
     if emitter:
@@ -96,22 +95,21 @@ def process_dff0(tiff_path: Path, cuda_available: bool, lam: float, p: float, n_
     if emitter:
         emitter({"type": "step", "msg": f"Computing ALS baseline (lam={lam:g}, p={p:g}, n_iter={n_iter})..."})
     console.log(f"  Computing ALS baseline (lam={lam:g}, p={p:g}, n_iter={n_iter})...")
-    baseline = als_baseline_run(stack, lam, p, n_iter, cuda_available)
-    console.log(f"  Baseline done  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
+    slow_fluc = als_cal_run(stack, lam, p, n_iter, cuda_available)
+    console.log(f"  Slow fluctuation estimated  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
     if emitter:
-        emitter({"type": "step", "msg": "Computing dF/F0..."})
-    console.log("  Computing dF/F0...")
-    safe_baseline = np.where(np.abs(baseline) > EPSILON, baseline, EPSILON)
-    dff0 = ((stack - baseline) / safe_baseline).astype(np.float16)
+        emitter({"type": "step", "msg": "Subtracting slow fluctuation..."})
+    console.log("  Subtracting slow fluctuation...")
+    cal = (stack - slow_fluc).astype(np.float16)
 
-    out_path = _dff0_output_path(tiff_path)
-    tifffile.imwrite(out_path, dff0)
+    out_path = _cal_output_path(tiff_path)
+    tifffile.imwrite(out_path, cal)
     if emitter:
         emitter({"type": "step", "msg": f"✓ Saved {out_path.name}  ({time.time() - t0:.1f}s)"})
     console.log(f"  Saved {out_path.name}  ({time.time() - t0:.1f}s)")
 
-    del stack, baseline, safe_baseline, dff0
+    del stack, slow_fluc, cal
 
 
 # ── Pipeline runner ───────────────────────────────────────────────────────────
@@ -125,7 +123,7 @@ def run(
     n_iter: int,
     emitter=None,
 ) -> None:
-    """Parse processing list and compute dF/F0 for each *_GAUSS.tif."""
+    """Parse processing list and subtract slow fluctuation for each *_GAUSS.tif."""
     gauss_paths, _proc_dir = _parse_proc_list_for_gauss(proc_list_path)
     console.log(f"Processing list: {proc_list_path.name}")
     console.log(f"  {len(gauss_paths)} GAUSS TIFF(s) to process  (cuda={cuda_available})")
@@ -141,7 +139,7 @@ def run(
             emitter({"type": "progress", "i": i, "total": total, "file": tiff_path.name})
         console.log(f"\n{'=' * 60}")
         console.log(f"{tiff_path.name} [{i}/{total}]")
-        process_dff0(tiff_path, cuda_available, lam, p, n_iter, emitter=emitter)
+        process_cal(tiff_path, cuda_available, lam, p, n_iter, emitter=emitter)
 
     console.log(f"\n{'=' * 60}")
     console.log("All done!")
@@ -150,7 +148,7 @@ def run(
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ALS baseline + dF/F0 pipeline")
+    parser = argparse.ArgumentParser(description="ALS slow-fluctuation removal pipeline")
     parser.add_argument("--proc_list", required=True, type=Path, help="Path to processing list file (proc_*.txt)")
     parser.add_argument("--lam", type=float, default=1e2, help="ALS smoothness (default: 100)")
     parser.add_argument("--p", type=float, default=0.05, help="ALS asymmetry (default: 0.05)")

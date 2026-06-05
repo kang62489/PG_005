@@ -31,7 +31,7 @@ PG_005/
 │   ├── view_dor_query.py            # Tab: Query by DOR
 │   ├── view_data_selector.py        # Tab: Data Selector
 │   ├── view_img_proc.py             # Tab: Image Processing (pick list, console output)
-│   └── view_als_dff0.py             # Tab: Normalization Test (ALS config, 5 MplCanvas)
+│   └── view_als_cal.py              # Tab: ALS Correction (ALS config, 5 MplCanvas)
 │
 ├── controllers/                     # GUI controller layer (signals + business logic)
 │   ├── __init__.py
@@ -42,11 +42,11 @@ PG_005/
 │   │                                #   - export_proc_list() → proc_YYYYMMDD_NNN.txt
 │   │                                #   - start_processing(): BackgroundWorker(use_emitter=True)
 │   │                                #   - _on_progress(dict) → routes to form fields
-│   └── ctrl_als_dff0.py             # Controller: Normalization tab (ROI switching)
+│   └── ctrl_als_cal.py              # Controller: ALS Correction tab (ROI test + batch run)
 │
 ├── classes/
 │   ├── __init__.py                  # Lazy imports (_LAZY_IMPORTS + __getattr__)
-│   ├── bk_worker.py                 # BackgroundWorker(QThread) — runs fn(*args, **kwargs)
+│   ├── bk_worker.py                 # BackgroundWorker(QThread) — runs fn(*args, **kwargs); work_done Signal()
 │   ├── dialog_confirm.py            # DialogConfirm
 │   ├── dialog_get_path.py           # DialogGetFile, DialogGetPath
 │   ├── helper_cell_dropdown.py      # CellDropdownDelegate (editable dropdown cells)
@@ -69,9 +69,10 @@ PG_005/
 │   │   └── get_memory_use.py        # Memory usage monitoring
 │   │
 │   ├── [Preprocessing — unified CPU+GPU]
-│   │   ├── detrend.py               # MOV + BIEXP detrend (Numba JIT + CUDA kernels)
+│   │   ├── detrend.py               # MOV + BIEXP detrend → ΔF/F₀ output (Numba JIT + CUDA kernels)
 │   │   ├── gaussian_blur.py         # Separable 2D Gaussian blur (Numba JIT + CUDA)
-│   │   └── tau_estimate.py          # Bi-exp tau estimation (scipy curve_fit, 500 pixels)
+│   │   ├── tau_estimate.py          # Bi-exp tau estimation (scipy curve_fit, 500 pixels)
+│   │   └── als.py                   # ALS slow-fluctuation estimation (Thomas algorithm, CPU NumPy + CUDA GPU)
 │   │
 │   └── [Analysis]
 │       ├── kmeans.py                            # K-means clustering
@@ -124,15 +125,15 @@ proc_brief_*_checked.txt
   ↓          ↓          ↓
   Detrend → Gaussian Blur
   ↓
-  Save: *_MOV_CAL.tif / *_MOV_GAUSS.tif
-        *_BIEXP_CAL.tif / *_BIEXP_GAUSS.tif
+  Save: *_MOV_GAUSS.tif (float16, Gaussian-blurred ΔF/F₀)
+        *_BIEXP_GAUSS.tif (float16, Gaussian-blurred ΔF/F₀)
 ```
 
 ### Processing Steps
 
-1. **MOV detrend**: Centred moving-average subtraction (window=101 frames)
-2. **BIEXP detrend**: Bi-exponential baseline fit per pixel using pre-estimated tau1/tau2
-3. **Gaussian Filtering**: Spatial smoothing for signal extraction (see below)
+1. **MOV detrend**: Centred moving-average → ΔF/F₀: `(raw - trend) / trend` (window=101 frames)
+2. **BIEXP detrend**: Bi-exponential baseline fit per pixel → ΔF/F₀: `(raw - trend) / trend`
+3. **Gaussian Filtering**: Spatial smoothing of the ΔF/F₀ signal (see below)
 
 ### Gaussian Filtering for ACh Signal Extraction
 
@@ -179,7 +180,8 @@ This ensures effective noise suppression without distorting the spatial extent o
 |-------|-------|-----------|
 | Load | (n_frames, height, width) | uint16 |
 | Processing | (n_frames, height, width) | float32 |
-| Save (preprocessed) | (n_frames, height, width) | float16 |
+| Save (GAUSS TIF — ΔF/F₀ Gaussian-blurred) | (n_frames, height, width) | float16 |
+| Save (CAL TIF — ALS slow-fluc corrected) | (n_frames, height, width) | float16 |
 | Save (analysis results) | (n_frames, height, width) | float32 (zscore), uint8 (categorized) |
 
 ---
@@ -888,4 +890,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-06-04 Session 15 (proc_msgs Signal(object) dict payloads; _on_progress() routes to GUI form fields; uint16 raw TIFF loading; proc_YYYYMMDD_NNN.txt naming; CUDA 12.x preferred; gaussian kernel computed on CPU via _cpu_kernel + cuda.to_device)*
+*Last updated: 2026-06-05 Session 18 (als_dff0→als_cal rename; detrend output→ΔF/F₀; GAUSS TIFFs float16; work_done Signal; functions/als.py GPU kernel optimized; als_algorithm_concepts.md added)*

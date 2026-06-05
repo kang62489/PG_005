@@ -1,5 +1,5 @@
 ---
-name: learn_from_code
+name: learn-from-code
 description: When user ask for saving the conversations about concepts, terms, and principles from our conversations into a knowledge base, usually have keywords like "save this", "remember this", "document this", "knowledge base", "concept", "term", "principle", "summarize", etc.
 ---
 

@@ -24,10 +24,13 @@ main.py (QMainWindow + QTabWidget)
   │                       └── proc_msgs Signal(object) → _on_progress(dict) →
   │                             le_curret_total / le_mode / le_processing_file / le_processing_step
   │
-  ├── Tab: Normalization Test
-  │     ├── ViewAlsDff0        (views/view_als_dff0.py)
+  ├── Tab: ALS Correction
+  │     ├── ViewAlsCal         (views/view_als_cal.py)
   │     │     └── 5x MplCanvas in QStackedLayout
-  │     └── CtrlAlsDff0        (controllers/ctrl_als_dff0.py)
+  │     └── CtrlAlsCal         (controllers/ctrl_als_cal.py)
+  │           ├── on_run_als_test() → BackgroundWorker → _als_test() → als_cal_run()
+  │           ├── on_dff0_cal()     → BackgroundWorker(use_emitter=True) → als_cal.run()
+  │           │     └── proc_msgs → _on_dff0_progress() → form fields
   │           └── cb_switch_roi.activated → lo_als_plot.setCurrentIndex()
   │
   ├── Tab: Query by DOR
@@ -42,7 +45,7 @@ classes/bk_worker.py
   └── BackgroundWorker(QThread)
         ├── __init__(fn, *args, use_emitter=False, **kwargs)
         ├── run() → fn(*args, **kwargs) or fn(*args, **kwargs, emitter=proc_msgs.emit)
-        ├── finished = Signal()
+        ├── work_done = Signal()         ← renamed from 'finished' to avoid QThread.finished conflict
         └── proc_msgs = Signal(object)  ← emits dicts {"type": "progress"|"step", ...}
 
 
@@ -87,7 +90,8 @@ classes/bk_worker.py
              │     _blur           │      │     _blur           │
              └─────────────────────┘      └─────────────────────┘
 
-Output: *_MOV_CAL.tif, *_MOV_GAUSS.tif, *_BIEXP_CAL.tif, *_BIEXP_GAUSS.tif
+Output (img_proc.py): *_MOV_GAUSS.tif, *_BIEXP_GAUSS.tif  (float16, Gaussian-blurred ΔF/F₀)
+Output (als_cal.py):  *_CAL.tif  (float16, raw GAUSS − ALS slow fluctuation)
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -235,9 +239,13 @@ functions/
 ├── [Preprocessing — unified CPU+GPU]
 │   ├── detrend.py             → MOV (@jit _cpu_mov, @cuda.jit _gpu_mov)
 │   │                             BIEXP (@jit _cpu_biexp, @cuda.jit _gpu_biexp)
-│   │                             + align_to_min()
+│   │                             output: ΔF/F₀ = (raw - trend) / trend
 │   ├── gaussian_blur.py       → Separable 2D Gaussian (@jit CPU + @cuda.jit GPU)
-│   └── tau_estimate.py        → sample_tau() — scipy curve_fit on 500 random pixels
+│   ├── tau_estimate.py        → sample_tau() — scipy curve_fit on 500 random pixels
+│   └── als.py                 → als_cal_run() — per-pixel ALS slow-fluctuation estimation
+│                                 _cpu_als(): NumPy vectorised Thomas algorithm
+│                                 _gpu_als_kernel(): @cuda.jit, one thread per pixel
+│                                 _gpu_als(): CUDA driver (reshape, allocate, launch, copy back)
 │
 └── [Analysis]
     ├── kmeans.py              → K-means clustering suite (archived)
@@ -381,6 +389,9 @@ img_proc.py
                  mov_detrend, biexp_detrend, align_to_min,
                  sample_tau, gaussian_blur_run)
 
+als_cal.py
+  └─→ functions (als_cal_run, check_cuda, get_memory_usage)
+
 im_dynamics.py
   ├─→ classes
   │    ├─→ AbfClip
@@ -439,7 +450,7 @@ archive/cpu_binning.py, archive/kmeans.py
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-06-04 Session 15 (proc_msgs Signal(object) dict; _on_progress() routes to GUI
-         form fields; proc_YYYYMMDD_NNN.txt naming; CUDA 12.x preference; gaussian kernel on CPU)
+Updated: 2026-06-05 Session 18 (als_dff0→als_cal; detrend→ΔF/F₀; work_done Signal;
+         functions/als.py added; ALS Correction tab; ViewAlsCal/CtrlAlsCal)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

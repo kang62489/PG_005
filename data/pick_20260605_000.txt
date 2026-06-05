@@ -1,0 +1,13 @@
+Date Created: 20260605
+Analysis: Test dff0
+Purposes:
+     test dffo
+
+Picked:
+# [raw_tiff_name, paired_abf]
+[2026_01_08-0005.tif, 2026_01_08_0003.abf]
+[2026_01_08-0012.tif, 2026_01_08_0010.abf]
+[2026_01_08-0016.tif, 2026_01_08_0014.abf]
+[2026_01_08-0024.tif, 2026_01_08_0020.abf]
+
+Total 4 records picked

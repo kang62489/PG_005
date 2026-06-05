@@ -4,7 +4,7 @@ from PySide6.QtCore import QThread, Signal
 
 
 class BackgroundWorker(QThread):
-    finished = Signal()
+    work_done = Signal()
     proc_msgs = Signal(object)
 
     def __init__(self, fn, *args, use_emitter: bool = False, **kwargs):
@@ -19,4 +19,4 @@ class BackgroundWorker(QThread):
             self._fn(*self._args, **self._kwargs, emitter=self.proc_msgs.emit)
         else:
             self._fn(*self._args, **self._kwargs)
-        self.finished.emit()
+        self.work_done.emit()

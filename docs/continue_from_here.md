@@ -1,3 +1,39 @@
+# Log of the project progress 2026-06-05 Thu (Session 18)
+
+## Last working file
+- `controllers/ctrl_als_cal.py` (L38, L152), `views/view_als_cal.py` (L84)
+
+## List of modified files
+- `functions/detrend.py` — removed `edge_min` from all 4 kernels; changed output to ΔF/F₀ `(raw - trend) / trend`; removed dead last-frame blocks from `_cpu_mov` / `_gpu_mov`
+- `img_proc.py` — GAUSS TIFFs (`_MOV_GAUSS.tif`, `_BIEXP_GAUSS.tif`) saved as float16 (reverted back from float32)
+- `classes/bk_worker.py` — renamed `finished = Signal()` → `work_done = Signal()` to avoid QThread.finished conflict (was causing double print)
+- `controllers/ctrl_img_proc.py` — updated `.finished.connect` → `.work_done.connect`
+- `als_dff0.py` → `als_cal.py` — removed EPSILON + division; subtraction only; output `_CAL.tif`; functions renamed (`process_cal`, `_cal_output_path`)
+- `functions/als_baseline.py` → `functions/als.py` — renamed `als_baseline_run` → `als_cal_run`; GPU kernel optimized (eliminated `w[]` array, float64 contamination, interior branch); single-letter variables → descriptive names
+- `controllers/ctrl_als_dff0.py` → `controllers/ctrl_als_cal.py` — class `CtrlAlsCal`; `slow_fluc_3d`; `on_dff0_cal`; `btn_dff0_cal`
+- `views/view_als_dff0.py` → `views/view_als_cal.py` — class `ViewAlsCal`; `btn_dff0_cal`
+- `functions/__init__.py` — `als_cal_run` lazy-imported from `.als`
+- `controllers/__init__.py` — `CtrlAlsCal`
+- `views/__init__.py` — `ViewAlsCal`
+- `main.py` — tab label "ALS Correction"; `tab_als_cal`, `view_als_cal`, `ctrl_als_cal`
+- `docs/knowledgebase/als_algorithm_concepts.md` — **new** — full ALS algorithm Q&A: equation, L matrix, weights, Thomas algorithm, iteration concept, GPU kernel, thread/warp/block sizing
+
+## Summary of current progress
+- Refactored `als_dff0` → `als_cal` pipeline end-to-end: removed ΔF/F₀ division (ALS output is now pure slow-fluctuation subtraction); all naming updated (`slow_fluc`, `_CAL`, `als_cal_run`)
+- Fixed double-print bug: `BackgroundWorker.finished` was shadowing `QThread.finished` C++ signal causing double emission → renamed to `work_done`
+- Optimized GPU ALS kernel: eliminated one local array (48 KB → 36 KB per thread), removed float64 contamination, removed interior-loop branch
+- Changed detrend output to ΔF/F₀: `(raw - trend) / trend` across all 4 kernels
+- Documented the full ALS algorithm in `docs/knowledgebase/als_algorithm_concepts.md`
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Re-evaluate GAUSS TIFF dtype → float16 confirmed adequate for ΔF/F₀ values near zero
+
+## What should we do next? (TODOs)
+- [ ] Verify detrend ΔF/F₀ output looks correct on real data (GAUSS TIF values should be near-zero floats, not raw counts)
+- [ ] Consider connecting `pick_confirmed` signal to also switch to ALS Correction tab after image processing completes
+
+---
+
 # Log of the project progress 2026-06-05 Thu (Session 17)
 
 ## Last working file

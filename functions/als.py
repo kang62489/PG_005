@@ -1,9 +1,9 @@
 """
-als_baseline.py  --  Per-pixel ALS baseline estimation (CPU NumPy + CUDA GPU).
+als_cal.py  --  Per-pixel ALS slow-fluctuation estimation (CPU NumPy + CUDA GPU).
 
 Public API
 ----------
-als_baseline_run(stack, lam, p, n_iter, cuda_available)  ->  np.ndarray
+als_cal_run(stack, lam, p, n_iter, cuda_available)  ->  np.ndarray
 """
 
 import math
@@ -30,16 +30,21 @@ MAX_T: int = 4096   # compile-time local-array size; must be >= number of frames
 
 
 @cuda.jit
-def _gpu_als_kernel(data, baseline, lam, p, n_iter) -> None:
+def _gpu_als_kernel(data, slow_fluc, lam, p, n_iter) -> None:
     """ALS baseline per pixel using Thomas algorithm (1st-order differences).
 
-    data / baseline shape: (T, n_pixels) — frame index first for coalesced access.
+    data / slow_fluc shape: (T, n_pixels) — frame index first for coalesced access.
     Each thread handles one pixel independently.
-    Local arrays are fixed at MAX_T = 2048 frames.
+    Local arrays are fixed at MAX_T frames (compile-time constant).
 
     System solved each iteration: (W + λ L'L) z = W y
       L'L  main diag : [1, 2, 2, ..., 2, 1]
       L'L  off  diag : -1  (constant)
+
+    Optimisations vs. naive version:
+      - w[] eliminated: weight computed on the fly from z[] saved from previous iter
+      - Edge rows (i=0, i=T-1) special-cased to remove branch from the hot interior loop
+      - All scalars cast to float32 at entry to prevent float64 upcast contamination
     """
     px = cuda.grid(1)
     if px >= data.shape[1]:
@@ -47,41 +52,47 @@ def _gpu_als_kernel(data, baseline, lam, p, n_iter) -> None:
 
     T = data.shape[0]
 
-    # Thread-local arrays (stored in GPU local/register memory).
-    # Size is the module-level constant MAX_T — Numba reads it at JIT compile time.
-    z = cuda.local.array(MAX_T, dtype=np.float32)   # current baseline estimate
-    w = cuda.local.array(MAX_T, dtype=np.float32)   # ALS weights
+    # Cast scalars to float32 — prevents silent float64 upcast of float32 array ops
+    lam32 = np.float32(lam)
+    p32   = np.float32(p)
+    weight_below   = np.float32(1.0) - p32   # complement weight (data below baseline)
+    two_lam  = np.float32(2.0) * lam32  # interior diagonal multiplier
+
+    # 3 local arrays instead of 4 — w[] dropped (computed on the fly)
+    z = cuda.local.array(MAX_T, dtype=np.float32)   # baseline estimate
     c = cuda.local.array(MAX_T, dtype=np.float32)   # Thomas: modified upper diagonal
     d = cuda.local.array(MAX_T, dtype=np.float32)   # Thomas: modified RHS
 
     for i in range(T):
         z[i] = data[i, px]
-        w[i] = 1.0
 
     for _ in range(n_iter):
-        # ── Forward sweep (Thomas algorithm) ─────────────────────────────
-        denom = w[0] + lam * 1.0
-        c[0] = -lam / denom
-        d[0] = w[0] * data[0, px] / denom
+        # ── Forward sweep ────────────────────────────────────────────────
+        # i = 0  (edge — L'L diagonal = 1)
+        weight_first    = p32 if data[0, px] > z[0] else weight_below
+        denom = weight_first + lam32
+        c[0]  = -lam32 / denom
+        d[0]  = weight_first * data[0, px] / denom
 
-        for i in range(1, T):
-            lll_m = 1.0 if i == T - 1 else 2.0
-            denom = w[i] + lam * lll_m + lam * c[i - 1]
-            if i < T - 1:
-                c[i] = -lam / denom
-            d[i] = (w[i] * data[i, px] + lam * d[i - 1]) / denom
+        # i = 1 … T-2  (interior — L'L diagonal = 2, no branch needed)
+        for i in range(1, T - 1):
+            weight_cur = p32 if data[i, px] > z[i] else weight_below
+            denom      = weight_cur + two_lam + lam32 * c[i - 1]
+            c[i]       = -lam32 / denom
+            d[i]       = (weight_cur * data[i, px] + lam32 * d[i - 1]) / denom
+
+        # i = T-1  (edge — L'L diagonal = 1, c[T-1] not needed)
+        weight_last       = p32 if data[T - 1, px] > z[T - 1] else weight_below
+        denom    = weight_last + lam32 + lam32 * c[T - 2]
+        d[T - 1] = (weight_last * data[T - 1, px] + lam32 * d[T - 2]) / denom
 
         # ── Backward substitution ─────────────────────────────────────────
         z[T - 1] = d[T - 1]
         for i in range(T - 2, -1, -1):
             z[i] = d[i] - c[i] * z[i + 1]
 
-        # ── Update weights ────────────────────────────────────────────────
-        for i in range(T):
-            w[i] = p if data[i, px] > z[i] else (1.0 - p)
-
     for i in range(T):
-        baseline[i, px] = z[i]
+        slow_fluc[i, px] = z[i]
 
 
 # ── GPU driver ─────────────────────────────────────────────────────────────────
@@ -103,15 +114,15 @@ def _gpu_als(stack: np.ndarray, lam: float, p: float, n_iter: int) -> np.ndarray
     cuda.current_context().deallocations.clear()
 
     data_gpu = cuda.to_device(data_px)
-    baseline_gpu = cuda.device_array_like(data_px)
+    slow_fluc_gpu = cuda.device_array_like(data_px)
 
     threads = 128
     blocks = math.ceil(n_px / threads)
-    _gpu_als_kernel[blocks, threads](data_gpu, baseline_gpu, float(lam), float(p), int(n_iter))
+    _gpu_als_kernel[blocks, threads](data_gpu, slow_fluc_gpu, float(lam), float(p), int(n_iter))
     cuda.synchronize()
 
-    baseline_px = baseline_gpu.copy_to_host()   # (T, n_px)
-    return baseline_px.reshape(T, H, W)         # (T, H, W)
+    slow_fluc_px = slow_fluc_gpu.copy_to_host()   # (T, n_px)
+    return slow_fluc_px.reshape(T, H, W)           # (T, H, W)
 
 
 # ── CPU driver ─────────────────────────────────────────────────────────────────
@@ -160,7 +171,7 @@ def _cpu_als(stack: np.ndarray, lam: float, p: float, n_iter: int) -> np.ndarray
 # ── Public dispatch ────────────────────────────────────────────────────────────
 
 
-def als_baseline_run(
+def als_cal_run(
     stack: np.ndarray,
     lam: float = LAM,
     p: float = P,

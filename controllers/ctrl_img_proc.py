@@ -268,7 +268,7 @@ class CtrlImgProc:
         self.view.btn_start_processing.setEnabled(False)
         self._bk_worker = BackgroundWorker(run_img_proc, proc_list_path, _cuda_available, use_emitter=True)
         self._bk_worker.proc_msgs.connect(self._on_progress)
-        self._bk_worker.finished.connect(self._on_processing_done)
+        self._bk_worker.work_done.connect(self._on_processing_done)
         self._bk_worker.start()
 
     def _on_progress(self, msg: object) -> None:

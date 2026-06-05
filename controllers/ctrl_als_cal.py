@@ -9,7 +9,7 @@ from rich.console import Console
 
 # Local application imports
 from classes import BackgroundWorker, DialogGetFile
-from functions import als_baseline_run, check_cuda
+from functions import als_cal_run, check_cuda
 from utils.params import MODELS_DIR
 
 # Constants
@@ -20,7 +20,7 @@ N_ROIS = 5     # number of random ROIs to sample
 console = Console()
 
 
-class CtrlAlsDff0:
+class CtrlAlsCal:
     def __init__(self, view) -> None:
         self.view = view
         self._proc_list_path: Path | None = None
@@ -35,7 +35,7 @@ class CtrlAlsDff0:
     def connect_signals(self) -> None:
         self.view.btn_load_proc_list.clicked.connect(self.on_load_proc_list)
         self.view.btn_run_als_test.clicked.connect(self.on_run_als_test)
-        self.view.btn_cal_dff0_all.clicked.connect(self.on_cal_dff0_all)
+        self.view.btn_dff0_cal.clicked.connect(self.on_dff0_cal)
         self.view.cb_switch_roi.activated.connect(self.on_switch_roi)
 
     # ── Load Processing List ───────────────────────────────────────────────────
@@ -112,12 +112,12 @@ class CtrlAlsDff0:
 
         self.view.btn_run_als_test.setEnabled(False)
         self._worker = BackgroundWorker(self._als_test, tiff_path, lam, p, n_iter)
-        self._worker.finished.connect(self._on_als_test_done)
+        self._worker.work_done.connect(self._on_als_test_done)
         self._worker.start()
 
     def _als_test(self, tiff_path: Path, lam: float, p: float, n_iter: int) -> None:
         if tiff_path != self._cached_tiff_path:
-            self._cached_stack = tifffile.imread(tiff_path).astype(np.float32)
+            self._cached_stack = tifffile.imread(tiff_path).astype(np.float16)
             self._cached_tiff_path = tiff_path
         stack = self._cached_stack
         t_frames, height, width = stack.shape
@@ -128,20 +128,20 @@ class CtrlAlsDff0:
             row_start = rng.integers(0, height - roi + 1)
             col_start = rng.integers(0, width - roi + 1)
             mean_series = stack[:, row_start : row_start + roi, col_start : col_start + roi].mean(axis=(1, 2))
-            baseline_3d = als_baseline_run(mean_series.reshape(t_frames, 1, 1), lam, p, n_iter, False)
-            results.append((mean_series, baseline_3d[:, 0, 0]))
+            slow_fluc_3d = als_cal_run(mean_series.reshape(t_frames, 1, 1), lam, p, n_iter, False)
+            results.append((mean_series, slow_fluc_3d[:, 0, 0]))
         self._als_test_results = results
 
     def _on_als_test_done(self) -> None:
         self.view.btn_run_als_test.setEnabled(True)
         if self._als_test_results is None:
             return
-        for i, (signal, baseline) in enumerate(self._als_test_results):
+        for i, (signal, slow_fluc) in enumerate(self._als_test_results):
             frames = np.arange(len(signal))
             ax = self.view.canvases[i].axes
             ax.cla()
             ax.plot(frames, signal, color="steelblue", lw=0.8, label="Signal")
-            ax.plot(frames, baseline, color="tomato", lw=1.2, label="ALS Baseline")
+            ax.plot(frames, slow_fluc, color="tomato", lw=1.2, label="Slow Fluctuation")
             ax.set_xlabel("Frame")
             ax.set_ylabel("Intensity")
             ax.legend(fontsize=7)
@@ -149,12 +149,12 @@ class CtrlAlsDff0:
 
     # ── Calculate dF/F0 for All ────────────────────────────────────────────────
 
-    def on_cal_dff0_all(self) -> None:
+    def on_dff0_cal(self) -> None:
         if self._proc_list_path is None:
             console.log("[yellow]Load a processing list first.[/yellow]")
             return
 
-        from als_dff0 import run as run_als_dff0
+        from als_cal import run as run_als_cal
 
         lam = float(self.view.le_als_lam.text())
         p = float(self.view.le_als_p.text())
@@ -166,10 +166,10 @@ class CtrlAlsDff0:
         self.view.le_run_on.setText("GPU (CUDA)" if cuda_available else "CPU (NUMBA-JIT)")
         self.view.le_als_params.setText(f"lam={lam:g}, p={p:g}, n_iter={n_iter}")
 
-        self.view.btn_cal_dff0_all.setEnabled(False)
-        self._worker = BackgroundWorker(run_als_dff0, self._proc_list_path, cuda_available, lam, p, n_iter, use_emitter=True)
+        self.view.btn_dff0_cal.setEnabled(False)
+        self._worker = BackgroundWorker(run_als_cal, self._proc_list_path, cuda_available, lam, p, n_iter, use_emitter=True)
         self._worker.proc_msgs.connect(self._on_dff0_progress)
-        self._worker.finished.connect(self._on_dff0_all_done)
+        self._worker.work_done.connect(self._on_dff0_all_done)
         self._worker.start()
 
     def _on_dff0_progress(self, msg: object) -> None:
@@ -181,7 +181,7 @@ class CtrlAlsDff0:
             self.view.le_processing_step.setText(msg["msg"])
 
     def _on_dff0_all_done(self) -> None:
-        self.view.btn_cal_dff0_all.setEnabled(True)
+        self.view.btn_dff0_cal.setEnabled(True)
         console.log("[green bold]dF/F0 calculation complete.[/green bold]")
         self.view.le_processing_step.setText("All done!")
 

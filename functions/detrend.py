@@ -40,21 +40,11 @@ def _cpu_mov(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
     half_window = window_size // 2
 
     for pixel_idx in prange(n_pixels):
-        # Moving average at frame 0 — needed for edge_min
+        # Initialise sliding window at frame 0
         first_window_right_bound = min(n_frames, half_window)
         first_window_sum = np.float32(0.0)
         for k in range(first_window_right_bound):
             first_window_sum += pixel_data[pixel_idx, k]
-        first_window_moving_avg = first_window_sum / np.float32(first_window_right_bound)
-
-        # Moving average at last frame — needed for edge_min
-        last_window_left_bound = max(0, n_frames - 1 - half_window)
-        last_window_sum = np.float32(0.0)
-        for k in range(last_window_left_bound, n_frames):
-            last_window_sum += pixel_data[pixel_idx, k]
-        last_window_moving_avg = last_window_sum / np.float32(n_frames - last_window_left_bound)
-
-        edge_min = min(first_window_moving_avg, last_window_moving_avg)
 
         # Sliding-window pass: compute moving avg and write output in one loop
         window_left_bound = 0
@@ -62,7 +52,7 @@ def _cpu_mov(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
         running_sum = first_window_sum
         for frame_idx in range(n_frames):
             moving_avg_at_frame = running_sum / np.float32(window_right_bound - window_left_bound)
-            output[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - moving_avg_at_frame + edge_min
+            output[pixel_idx, frame_idx] = (pixel_data[pixel_idx, frame_idx] - moving_avg_at_frame) / moving_avg_at_frame
             next_window_left_bound = max(0, frame_idx + 1 - half_window)
             next_window_right_bound = min(n_frames, frame_idx + 1 + half_window)
             if next_window_right_bound > window_right_bound:
@@ -89,21 +79,11 @@ def _gpu_mov(pixel_data: np.ndarray, output: np.ndarray, window_size: int) -> No
     n_frames = pixel_data.shape[1]
     half_window = window_size // 2
 
-    # -- Moving average at frame 0 (for edge_min) ---------------------------------
+    # -- Initialise sliding window at frame 0 ------------------------------------
     first_window_right_bound = min(n_frames, half_window)
     first_window_sum = np.float32(0.0)
     for k in range(first_window_right_bound):
         first_window_sum += pixel_data[pixel_idx, k]
-    first_window_moving_avg = first_window_sum / np.float32(first_window_right_bound)
-
-    # -- Moving average at last frame (for edge_min) ------------------------------
-    last_window_left_bound = max(0, n_frames - 1 - half_window)
-    last_window_sum = np.float32(0.0)
-    for k in range(last_window_left_bound, n_frames):
-        last_window_sum += pixel_data[pixel_idx, k]
-    last_window_moving_avg = last_window_sum / np.float32(n_frames - last_window_left_bound)
-
-    edge_min = min(first_window_moving_avg, last_window_moving_avg)
 
     # -- Sliding-window pass: compute moving avg and write output in one loop -----
     window_left_bound = 0
@@ -111,7 +91,7 @@ def _gpu_mov(pixel_data: np.ndarray, output: np.ndarray, window_size: int) -> No
     running_sum = first_window_sum
     for frame_idx in range(n_frames):
         moving_avg_at_frame = running_sum / np.float32(window_right_bound - window_left_bound)
-        output[pixel_idx, frame_idx] = pixel_data[pixel_idx, frame_idx] - moving_avg_at_frame + edge_min
+        output[pixel_idx, frame_idx] = (pixel_data[pixel_idx, frame_idx] - moving_avg_at_frame) / moving_avg_at_frame
         next_window_left_bound = max(0, frame_idx + 1 - half_window)
         next_window_right_bound = min(n_frames, frame_idx + 1 + half_window)
         if next_window_right_bound > window_right_bound:
@@ -169,8 +149,8 @@ def _cpu_biexp(img_flat: np.ndarray, basis_pinv: np.ndarray, basis_matrix: np.nd
       basis_pinv    (3, T): Moore-Penrose pseudo-inverse of basis_matrix
       For each pixel trace y (T,):
         coeffs = basis_pinv @ y         # least-squares fit → (3,)
-        trend  = basis_matrix @ coeffs  # reconstructed bi-exp baseline → (T,)
-        detrended = y - trend + min(trend[0], trend[-1])  # edge normalization
+        trend  = basis_matrix @ coeffs  # reconstructed bi-exp baseline F0 → (T,)
+        dff0   = (y - trend) / trend    # ΔF/F0
     """
     n_pixels, T = img_flat.shape
     output = np.zeros_like(img_flat)
@@ -178,8 +158,7 @@ def _cpu_biexp(img_flat: np.ndarray, basis_pinv: np.ndarray, basis_matrix: np.nd
         y = img_flat[i]
         coeffs = np.dot(basis_pinv, y)        # least-squares coefficients (3,)
         trend = np.dot(basis_matrix, coeffs)   # reconstructed baseline (T,)
-        edge_min = min(trend[0], trend[T - 1])
-        output[i] = y - trend + edge_min
+        output[i] = (y - trend) / trend
     return output
 
 
@@ -211,18 +190,11 @@ def _gpu_biexp(
             s += basis_pinv[k, frame_idx] * img_flat[frame_idx, pixel_idx]
         coeffs[k] = s
 
-    trend_0 = np.float32(0.0)
-    trend_end = np.float32(0.0)
-    for k in range(3):
-        trend_0 += basis_matrix[0, k] * coeffs[k]
-        trend_end += basis_matrix[n_frames - 1, k] * coeffs[k]
-    edge_min = min(trend_0, trend_end)
-
     for frame_idx in range(n_frames):
         trend_t = np.float32(0.0)
         for k in range(3):
             trend_t += basis_matrix[frame_idx, k] * coeffs[k]
-        output[frame_idx, pixel_idx] = img_flat[frame_idx, pixel_idx] - trend_t + edge_min
+        output[frame_idx, pixel_idx] = (img_flat[frame_idx, pixel_idx] - trend_t) / trend_t
 
 
 def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: bool) -> np.ndarray:

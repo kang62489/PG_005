@@ -2,7 +2,9 @@
 # Third-party imports
 from PySide6.QtWidgets import (
     QComboBox,
+    QFormLayout,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -10,12 +12,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStackedLayout,
     QVBoxLayout,
-    QGroupBox,
-    QFormLayout,
 )
 
 
-class ViewAlsDff0:
+class ViewAlsCal:
     def __init__(self, parent=None) -> None:
         self.tab_container = parent
         self.lo_tab_container = QHBoxLayout()
@@ -81,14 +81,14 @@ class ViewAlsDff0:
         self.lo_block_3 = QVBoxLayout()
         self.lo_tab_container.addLayout(self.lo_block_3)
 
-        self.btn_cal_dff0_all = QPushButton("Calculate dF/F0 for All Gauss TIFFs")
-        self.lo_block_3.addWidget(self.btn_cal_dff0_all)
+        self.btn_dff0_cal = QPushButton("Calibrate dF/f0 slow fluctuation")
+        self.lo_block_3.addWidget(self.btn_dff0_cal)
 
         self.gb_proc_info = QGroupBox("Processing Info")
         self.lo_proc_info = QFormLayout()
         self.gb_proc_info.setLayout(self.lo_proc_info)
         self.lo_block_3.addWidget(self.gb_proc_info)
-        
+
         self.lbl_run_on = QLabel("Run on:")
         self.le_run_on = QLineEdit()
         self.le_run_on.setReadOnly(True)

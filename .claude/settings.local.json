@@ -38,7 +38,13 @@
       "PowerShell(head *)",
       "PowerShell(Get-Command *)",
       "PowerShell(& \"D:\\\\Kang_PGs\\\\PG_005\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check als_dff0.py controllers/ctrl_als_dff0.py --fix 2>&1)",
-      "PowerShell(C:\\\\Users\\\\KANG\\\\.local\\\\bin\\\\ruff.exe check img_proc.py)"
+      "PowerShell(C:\\\\Users\\\\KANG\\\\.local\\\\bin\\\\ruff.exe check img_proc.py)",
+      "WebFetch(domain:www.biorxiv.org)",
+      "WebFetch(domain:pmc.ncbi.nlm.nih.gov)",
+      "WebFetch(domain:lsa.umich.edu)",
+      "PowerShell(C:\\\\Users\\\\KANG\\\\.local\\\\bin\\\\ruff.exe check D:\\\\Kang_PGs\\\\PG_005\\\\functions\\\\detrend.py D:\\\\Kang_PGs\\\\PG_005\\\\img_proc.py)",
+      "PowerShell(ruff check *)",
+      "PowerShell(Rename-Item *)"
     ]
   }
 }
