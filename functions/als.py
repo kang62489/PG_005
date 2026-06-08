@@ -1,9 +1,9 @@
 """
-als_cal.py  --  Per-pixel ALS slow-fluctuation estimation (CPU NumPy + CUDA GPU).
+als.py  --  Per-pixel ALS slow-fluctuation estimation (CPU NumPy + CUDA GPU).
 
 Public API
 ----------
-als_cal_run(stack, lam, p, n_iter, cuda_available)  ->  np.ndarray
+als_run(stack, lam, p, n_iter, cuda_available)  ->  np.ndarray
 """
 
 import math
@@ -11,7 +11,7 @@ import os
 import warnings
 
 import numpy as np
-from numba import cuda
+from numba import cuda, njit, prange
 from numba.core.errors import NumbaPerformanceWarning
 
 # Suppress numba performance warnings and noisy CUDA log messages
@@ -125,53 +125,76 @@ def _gpu_als(stack: np.ndarray, lam: float, p: float, n_iter: int) -> np.ndarray
     return slow_fluc_px.reshape(T, H, W)           # (T, H, W)
 
 
+# ── CPU kernel ─────────────────────────────────────────────────────────────────
+
+
+@njit(parallel=True, cache=True)
+def _cpu_als_kernel(data: np.ndarray, slow_fluc: np.ndarray, lam: float, p: float, n_iter: int) -> None:
+    """ALS baseline per pixel, parallelised over pixels via prange.
+
+    Mirrors _gpu_als_kernel: each prange iteration processes one pixel with
+    thread-local T-length arrays — no large intermediate allocations.
+    data / slow_fluc shape: (T, n_pixels), dtype float32.
+    """
+    T, n_px      = data.shape
+    lam32        = np.float32(lam)
+    p32          = np.float32(p)
+    weight_below = np.float32(1.0) - p32
+    two_lam      = np.float32(2.0) * lam32
+
+    for px in prange(n_px):
+        z = np.empty(T, dtype=np.float32)
+        c = np.empty(T, dtype=np.float32)
+        d = np.empty(T, dtype=np.float32)
+
+        for i in range(T):
+            z[i] = data[i, px]
+
+        for _ in range(n_iter):
+            # ── Forward sweep ─────────────────────────────────────────
+            # i = 0  (edge — L'L diagonal = 1)
+            w0    = p32 if data[0, px] > z[0] else weight_below
+            denom = w0 + lam32
+            c[0]  = -lam32 / denom
+            d[0]  = w0 * data[0, px] / denom
+
+            # i = 1 … T-2  (interior — L'L diagonal = 2)
+            for i in range(1, T - 1):
+                wi    = p32 if data[i, px] > z[i] else weight_below
+                denom = wi + two_lam + lam32 * c[i - 1]
+                c[i]  = -lam32 / denom
+                d[i]  = (wi * data[i, px] + lam32 * d[i - 1]) / denom
+
+            # i = T-1  (edge — L'L diagonal = 1, c[T-1] not needed)
+            wT       = p32 if data[T - 1, px] > z[T - 1] else weight_below
+            denom    = wT + lam32 + lam32 * c[T - 2]
+            d[T - 1] = (wT * data[T - 1, px] + lam32 * d[T - 2]) / denom
+
+            # ── Backward substitution ──────────────────────────────────
+            z[T - 1] = d[T - 1]
+            for i in range(T - 2, -1, -1):
+                z[i] = d[i] - c[i] * z[i + 1]
+
+        for i in range(T):
+            slow_fluc[i, px] = z[i]
+
+
 # ── CPU driver ─────────────────────────────────────────────────────────────────
 
 
 def _cpu_als(stack: np.ndarray, lam: float, p: float, n_iter: int) -> np.ndarray:
-    """Run ALS pixel-wise on CPU (Thomas algorithm vectorised across pixels).
-
-    Same algorithm as the GPU kernel, but each numpy operation acts on all
-    pixels simultaneously. The only Python loop is over T (frame index).
-    """
+    """Run ALS pixel-wise on CPU via Numba parallel JIT."""
     T, H, W = stack.shape
-    y = stack.reshape(T, -1).astype(np.float64)    # (T, n_px)
-
-    lll_m = np.full(T, 2.0)
-    lll_m[0] = lll_m[-1] = 1.0
-
-    z = y.copy()
-    w = np.ones_like(y)
-    c = np.empty_like(y)
-    d = np.empty_like(y)
-
-    for _ in range(n_iter):
-        # Forward sweep — all pixels in parallel via numpy broadcast
-        denom = w[0] + lam * lll_m[0]          # (n_px,)
-        c[0] = -lam / denom
-        d[0] = w[0] * y[0] / denom
-
-        for i in range(1, T):
-            denom = w[i] + lam * lll_m[i] + lam * c[i - 1]
-            if i < T - 1:
-                c[i] = -lam / denom
-            d[i] = (w[i] * y[i] + lam * d[i - 1]) / denom
-
-        # Backward substitution
-        z[-1] = d[-1]
-        for i in range(T - 2, -1, -1):
-            z[i] = d[i] - c[i] * z[i + 1]
-
-        # Update weights
-        w = np.where(y > z, p, 1.0 - p)
-
-    return z.reshape(T, H, W).astype(np.float32)
+    data = np.ascontiguousarray(stack.reshape(T, H * W), dtype=np.float32)
+    slow_fluc = np.empty_like(data)
+    _cpu_als_kernel(data, slow_fluc, float(lam), float(p), int(n_iter))
+    return slow_fluc.reshape(T, H, W)
 
 
 # ── Public dispatch ────────────────────────────────────────────────────────────
 
 
-def als_cal_run(
+def als_run(
     stack: np.ndarray,
     lam: float = LAM,
     p: float = P,

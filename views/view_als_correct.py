@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 
-class ViewAlsCal:
+class ViewAlsCorrect:
     def __init__(self, parent=None) -> None:
         self.tab_container = parent
         self.lo_tab_container = QHBoxLayout()
@@ -81,8 +81,8 @@ class ViewAlsCal:
         self.lo_block_3 = QVBoxLayout()
         self.lo_tab_container.addLayout(self.lo_block_3)
 
-        self.btn_dff0_cal = QPushButton("Calibrate dF/f0 slow fluctuation")
-        self.lo_block_3.addWidget(self.btn_dff0_cal)
+        self.btn_run_correct = QPushButton("Calibrate dF/f0 slow fluctuation")
+        self.lo_block_3.addWidget(self.btn_run_correct)
 
         self.gb_proc_info = QGroupBox("Processing Info")
         self.lo_proc_info = QFormLayout()

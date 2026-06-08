@@ -1,11 +1,11 @@
 """
-als_cal.py  --  ALS slow-fluctuation removal pipeline.
+als_correct.py  --  ALS slow-fluctuation removal pipeline.
 =========================================================
 Reads a processing list, collects all existing *_GAUSS.tif files,
-subtracts the ALS-estimated slow fluctuation from each, and saves *_CAL.tif.
+subtracts the ALS-estimated slow fluctuation from each, and saves *_ALS.tif.
 
 Usage:
-    python als_cal.py --proc_list data/proc_pick_20260512_002.txt [--lam 100] [--p 0.05] [--n_iter 10]
+    python als_correct.py --proc_list data/proc_pick_20260512_002.txt [--lam 100] [--p 0.05] [--n_iter 10]
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import numpy as np
 import tifffile
 from rich.console import Console
 
-from functions import als_cal_run, check_cuda, get_memory_usage
+from functions import als_run, check_cuda, get_memory_usage
 from img_proc import parse_proc_list, update_proc_list_gauss_exists
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -77,39 +77,39 @@ def _parse_proc_list_for_gauss(proc_list_path: Path) -> tuple[list[Path], Path]:
 # ── Processing functions ───────────────────────────────────────────────────────
 
 
-def _cal_output_path(tiff_path: Path) -> Path:
-    """Return output path by replacing the GAUSS suffix with CORR."""
-    return tiff_path.with_stem(tiff_path.stem.replace("_GAUSS", "_CAL"))
+def _als_output_path(tiff_path: Path) -> Path:
+    """Return output path by replacing the GAUSS suffix with ALS."""
+    return tiff_path.with_stem(tiff_path.stem.replace("_GAUSS", "_ALS"))
 
 
-def process_cal(tiff_path: Path, cuda_available: bool, lam: float, p: float, n_iter: int, emitter=None) -> None:
-    """ALS slow-fluctuation subtraction for one *_GAUSS.tif. Saves *_CAL.tif."""
+def process_als(tiff_path: Path, cuda_available: bool, lam: float, p: float, n_iter: int, emitter=None) -> None:
+    """ALS slow-fluctuation subtraction for one *_GAUSS.tif. Saves *_ALS.tif."""
     t0 = time.time()
 
     if emitter:
         emitter({"type": "step", "msg": f"Loading {tiff_path.name}..."})
     console.log(f"[cyan]Loading {tiff_path.name}...")
     stack = tifffile.imread(tiff_path)
-    console.log(f"  Shape {stack.shape}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
+    console.log(f"  Shape {stack.shape}  dtype={stack.dtype}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
     if emitter:
         emitter({"type": "step", "msg": f"Computing ALS baseline (lam={lam:g}, p={p:g}, n_iter={n_iter})..."})
     console.log(f"  Computing ALS baseline (lam={lam:g}, p={p:g}, n_iter={n_iter})...")
-    slow_fluc = als_cal_run(stack, lam, p, n_iter, cuda_available)
+    slow_fluc = als_run(stack, lam, p, n_iter, cuda_available)
     console.log(f"  Slow fluctuation estimated  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
 
     if emitter:
         emitter({"type": "step", "msg": "Subtracting slow fluctuation..."})
     console.log("  Subtracting slow fluctuation...")
-    cal = (stack - slow_fluc).astype(np.float16)
+    corrected = (stack - slow_fluc).astype(np.float16)
 
-    out_path = _cal_output_path(tiff_path)
-    tifffile.imwrite(out_path, cal)
+    out_path = _als_output_path(tiff_path)
+    tifffile.imwrite(out_path, corrected)
     if emitter:
         emitter({"type": "step", "msg": f"✓ Saved {out_path.name}  ({time.time() - t0:.1f}s)"})
     console.log(f"  Saved {out_path.name}  ({time.time() - t0:.1f}s)")
 
-    del stack, slow_fluc, cal
+    del stack, slow_fluc, corrected
 
 
 # ── Pipeline runner ───────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ def run(
             emitter({"type": "progress", "i": i, "total": total, "file": tiff_path.name})
         console.log(f"\n{'=' * 60}")
         console.log(f"{tiff_path.name} [{i}/{total}]")
-        process_cal(tiff_path, cuda_available, lam, p, n_iter, emitter=emitter)
+        process_als(tiff_path, cuda_available, lam, p, n_iter, emitter=emitter)
 
     console.log(f"\n{'=' * 60}")
     console.log("All done!")

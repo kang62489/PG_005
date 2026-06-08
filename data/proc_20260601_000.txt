@@ -12,5 +12,5 @@ Picked: [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]
 
 Total 4 records picked
 
-dir_raw_tiffs: D:\Kang_PGs\PG_005\raw_tiffs
-dir_proc_tiffs: D:\Kang_PGs\PG_005\proc_tiffs
+dir_raw_tiffs: D:\MyDB\2_Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs

@@ -44,7 +44,10 @@
       "WebFetch(domain:lsa.umich.edu)",
       "PowerShell(C:\\\\Users\\\\KANG\\\\.local\\\\bin\\\\ruff.exe check D:\\\\Kang_PGs\\\\PG_005\\\\functions\\\\detrend.py D:\\\\Kang_PGs\\\\PG_005\\\\img_proc.py)",
       "PowerShell(ruff check *)",
-      "PowerShell(Rename-Item *)"
+      "PowerShell(Rename-Item *)",
+      "Bash(C:\\\\Users\\\\KANG\\\\.local\\\\bin\\\\ruff.exe check *)",
+      "PowerShell(C:\\\\Users\\\\KANG\\\\.local\\\\bin\\\\ruff.exe check D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\als_correct.py D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\controllers\\\\ctrl_als_correct.py D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\views\\\\view_als_correct.py D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\main.py D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\controllers\\\\__init__.py D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\views\\\\__init__.py)",
+      "PowerShell(C:\\\\Users\\\\KANG\\\\.local\\\\bin\\\\ruff.exe check D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\als_correct.py D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\controllers\\\\ctrl_als_correct.py D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\functions\\\\als.py D:\\\\MyDB\\\\2_Programs\\\\PG_005\\\\functions\\\\__init__.py)"
     ]
   }
 }

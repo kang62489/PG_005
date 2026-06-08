@@ -4,7 +4,7 @@ import importlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .als import als_cal_run
+    from .als import als_run
     from .check_cuda import check_cuda
     from .detrend import biexp_detrend, mov_detrend
     from .gaussian_blur import gaussian_blur_run
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .xlsx_reader import get_picked_pairs
 
 __all__ = [
-    "als_cal_run",
+    "als_run",
     "biexp_detrend",
     "check_cuda",
     "gaussian_blur_run",
@@ -31,7 +31,7 @@ __all__ = [
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
-    "als_cal_run":        (".als",                                      "als_cal_run"),
+    "als_run":        (".als",                                      "als_run"),
     "biexp_detrend":       (".detrend",                                   "biexp_detrend"),
     "mov_detrend":         (".detrend",                                   "mov_detrend"),
     "gaussian_blur_run":   (".gaussian_blur",                             "gaussian_blur_run"),

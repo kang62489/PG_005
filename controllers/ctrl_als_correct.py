@@ -9,7 +9,7 @@ from rich.console import Console
 
 # Local application imports
 from classes import BackgroundWorker, DialogGetFile
-from functions import als_cal_run, check_cuda
+from functions import als_run, check_cuda
 from utils.params import MODELS_DIR
 
 # Constants
@@ -20,7 +20,7 @@ N_ROIS = 5     # number of random ROIs to sample
 console = Console()
 
 
-class CtrlAlsCal:
+class CtrlAlsCorrect:
     def __init__(self, view) -> None:
         self.view = view
         self._proc_list_path: Path | None = None
@@ -35,7 +35,7 @@ class CtrlAlsCal:
     def connect_signals(self) -> None:
         self.view.btn_load_proc_list.clicked.connect(self.on_load_proc_list)
         self.view.btn_run_als_test.clicked.connect(self.on_run_als_test)
-        self.view.btn_dff0_cal.clicked.connect(self.on_dff0_cal)
+        self.view.btn_run_correct.clicked.connect(self.on_run_correct)
         self.view.cb_switch_roi.activated.connect(self.on_switch_roi)
 
     # ── Load Processing List ───────────────────────────────────────────────────
@@ -128,7 +128,7 @@ class CtrlAlsCal:
             row_start = rng.integers(0, height - roi + 1)
             col_start = rng.integers(0, width - roi + 1)
             mean_series = stack[:, row_start : row_start + roi, col_start : col_start + roi].mean(axis=(1, 2))
-            slow_fluc_3d = als_cal_run(mean_series.reshape(t_frames, 1, 1), lam, p, n_iter, False)
+            slow_fluc_3d = als_run(mean_series.reshape(t_frames, 1, 1), lam, p, n_iter, False)
             results.append((mean_series, slow_fluc_3d[:, 0, 0]))
         self._als_test_results = results
 
@@ -149,12 +149,15 @@ class CtrlAlsCal:
 
     # ── Calculate dF/F0 for All ────────────────────────────────────────────────
 
-    def on_dff0_cal(self) -> None:
+    def on_run_correct(self) -> None:
         if self._proc_list_path is None:
             console.log("[yellow]Load a processing list first.[/yellow]")
             return
 
-        from als_cal import run as run_als_cal
+        self._cached_stack = None
+        self._cached_tiff_path = None
+
+        from als_correct import run as run_als_correct
 
         lam = float(self.view.le_als_lam.text())
         p = float(self.view.le_als_p.text())
@@ -166,13 +169,13 @@ class CtrlAlsCal:
         self.view.le_run_on.setText("GPU (CUDA)" if cuda_available else "CPU (NUMBA-JIT)")
         self.view.le_als_params.setText(f"lam={lam:g}, p={p:g}, n_iter={n_iter}")
 
-        self.view.btn_dff0_cal.setEnabled(False)
-        self._worker = BackgroundWorker(run_als_cal, self._proc_list_path, cuda_available, lam, p, n_iter, use_emitter=True)
-        self._worker.proc_msgs.connect(self._on_dff0_progress)
-        self._worker.work_done.connect(self._on_dff0_all_done)
+        self.view.btn_run_correct.setEnabled(False)
+        self._worker = BackgroundWorker(run_als_correct, self._proc_list_path, cuda_available, lam, p, n_iter, use_emitter=True)
+        self._worker.proc_msgs.connect(self._on_correct_progress)
+        self._worker.work_done.connect(self._on_correct_done)
         self._worker.start()
 
-    def _on_dff0_progress(self, msg: object) -> None:
+    def _on_correct_progress(self, msg: object) -> None:
         if msg.get("type") == "progress":
             self.view.le_curret_total.setText(f"{msg['i']}/{msg['total']}")
             self.view.le_processing_file.setText(msg["file"])
@@ -180,8 +183,8 @@ class CtrlAlsCal:
         elif msg.get("type") == "step":
             self.view.le_processing_step.setText(msg["msg"])
 
-    def _on_dff0_all_done(self) -> None:
-        self.view.btn_dff0_cal.setEnabled(True)
+    def _on_correct_done(self) -> None:
+        self.view.btn_run_correct.setEnabled(True)
         console.log("[green bold]dF/F0 calculation complete.[/green bold]")
         self.view.le_processing_step.setText("All done!")
 

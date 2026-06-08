@@ -4,11 +4,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget
 from rich.console import Console
 
-from controllers import CtrlAlsCal, CtrlDataSelector, CtrlDorQuery, CtrlImgProc
+from controllers import CtrlAlsCorrect, CtrlDataSelector, CtrlDorQuery, CtrlImgProc
 
 # Local application imports
 from utils import APP_STATUS_MESSAGE, UISizes
-from views import ViewAlsCal, ViewDataSelector, ViewDorQuery, ViewImgProc
+from views import ViewAlsCorrect, ViewDataSelector, ViewDorQuery, ViewImgProc
 
 # Setup rich console
 console = Console()
@@ -31,14 +31,14 @@ class Main(QMainWindow):
         self.tab_pick_raws = QWidget()
         self.tab_data_selector = QWidget()
         self.tab_im_proc = QWidget()
-        self.tab_als_cal = QWidget()
+        self.tab_als_correct = QWidget()
         self.tab_align_spike = QWidget()
 
 
         self.w_main.addTab(self.tab_dor_query, "Query by DOR")
         self.w_main.addTab(self.tab_data_selector, "Data Selector")
         self.w_main.addTab(self.tab_im_proc, "Image Processing")
-        self.w_main.addTab(self.tab_als_cal, "ALS Correction")
+        self.w_main.addTab(self.tab_als_correct, "ALS Correction")
         self.w_main.addTab(self.tab_align_spike, "Spike-aligned Analysis")
 
         # Setup tabs
@@ -51,8 +51,8 @@ class Main(QMainWindow):
         self.view_img_proc = ViewImgProc(self.tab_im_proc)
         self.ctrl_img_proc = CtrlImgProc(self.view_img_proc)
 
-        self.view_als_cal = ViewAlsCal(self.tab_als_cal)
-        self.ctrl_als_cal = CtrlAlsCal(self.view_als_cal)
+        self.view_als_correct = ViewAlsCorrect(self.tab_als_correct)
+        self.ctrl_als_correct = CtrlAlsCorrect(self.view_als_correct)
 
         # Connect dor_changed signal from ctrl_dor_query to ctrl_data_selector
         self.ctrl_dor_query.dor_changed.connect(self.ctrl_data_selector.on_dor_changed)
