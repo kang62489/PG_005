@@ -23,7 +23,6 @@
 - ✅ All changes above fully completed within this session
 
 ## What should we do next? (TODOs)
-- [ ] Apply watcher-disconnect pattern to `ctrl_als_correct.py` (same double-fire risk during ALS correction)
 - [ ] Complete the flow of ABFClip
 - [ ] Complete the layout of tab spike_alignment
 

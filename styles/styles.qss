@@ -1,0 +1,5 @@
+/* Label */
+QLabel {
+    font-size: 16px;
+    background-color: #E5E4E2;
+}

@@ -1,5 +1,6 @@
 ## Modules
 # Third-party imports
+from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget
 from rich.console import Console
@@ -7,8 +8,8 @@ from rich.console import Console
 from controllers import CtrlAlsCorrect, CtrlDataSelector, CtrlDorQuery, CtrlImgProc
 
 # Local application imports
-from utils import APP_STATUS_MESSAGE, UISizes
-from views import ViewAlsCorrect, ViewDataSelector, ViewDorQuery, ViewImgProc
+from utils import APP_STATUS_MESSAGE, UISizes, STYLES_DIR
+from views import ViewAlsCorrect, ViewDataSelector, ViewDorQuery, ViewImgProc, ViewAlignSpike
 
 # Setup rich console
 console = Console()
@@ -19,6 +20,10 @@ class Main(QMainWindow):
         super().__init__()
         self.setWindowTitle("Analyzer for Cholinergic Influence Domain (ACID)")
         self.setFixedSize(UISizes.MAIN_WINDOW_SIZE[0], UISizes.MAIN_WINDOW_SIZE[1])
+
+        # Load and apply stylesheet
+        # with Path.open(STYLES_DIR / "styles.qss") as f:
+        #     self.setStyleSheet(f.read())
 
         # Set status bar message
         self.statusBar().showMessage(APP_STATUS_MESSAGE)
@@ -53,6 +58,8 @@ class Main(QMainWindow):
 
         self.view_als_correct = ViewAlsCorrect(self.tab_als_correct)
         self.ctrl_als_correct = CtrlAlsCorrect(self.view_als_correct)
+
+        self.view_als_correct = ViewAlignSpike(self.tab_align_spike)
 
         # Connect dor_changed signal from ctrl_dor_query to ctrl_data_selector
         self.ctrl_dor_query.dor_changed.connect(self.ctrl_data_selector.on_dor_changed)
