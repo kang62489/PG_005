@@ -3,8 +3,7 @@ Analysis: Test dff0
 Purposes:
      test dffo
 
-Picked:
-# [raw_tiff_name, paired_abf]
+Picked: [raw_tiff_name, paired_abf]
 [2026_01_08-0005.tif, 2026_01_08_0003.abf]
 [2026_01_08-0012.tif, 2026_01_08_0010.abf]
 [2026_01_08-0016.tif, 2026_01_08_0014.abf]

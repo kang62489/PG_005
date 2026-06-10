@@ -25,12 +25,13 @@ main.py (QMainWindow + QTabWidget)
   │                             le_curret_total / le_mode / le_processing_file / le_processing_step
   │
   ├── Tab: ALS Correction
-  │     ├── ViewAlsCal         (views/view_als_cal.py)
+  │     ├── ViewAlsCorrect     (views/view_als_correct.py)
   │     │     └── 5x MplCanvas in QStackedLayout
-  │     └── CtrlAlsCal         (controllers/ctrl_als_cal.py)
-  │           ├── on_run_als_test() → BackgroundWorker → _als_test() → als_cal_run()
-  │           ├── on_dff0_cal()     → BackgroundWorker(use_emitter=True) → als_cal.run()
-  │           │     └── proc_msgs → _on_dff0_progress() → form fields
+  │     └── CtrlAlsCorrect     (controllers/ctrl_als_correct.py)
+  │           ├── on_run_als_test() → BackgroundWorker → _als_test()
+  │           │     └── [deferred] import tifffile; from functions import als_run
+  │           ├── on_run_correct()  → BackgroundWorker(use_emitter=True) → als_correct.run()
+  │           │     └── proc_msgs → _on_correct_progress() → form fields
   │           └── cb_switch_roi.activated → lo_als_plot.setCurrentIndex()
   │
   ├── Tab: Query by DOR
@@ -232,7 +233,7 @@ functions/
 │    └── get_picked_pairs() → Returns list of {exp_date, img_serial, abf_serial, objective, SLICE, AT}
 │
 ├── [Hardware/CUDA]
-│   ├── check_cuda.py          → Verify CUDA availability
+│   ├── check_cuda.py          → Verify CUDA availability (numba imported lazily inside check_cuda())
 │   ├── test_cuda.py           → Test CUDA with sample kernel
 │   └── get_memory_use.py      → Memory usage monitoring
 │
@@ -450,7 +451,7 @@ archive/cpu_binning.py, archive/kmeans.py
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated: 2026-01-15
-Updated: 2026-06-05 Session 18 (als_dff0→als_cal; detrend→ΔF/F₀; work_done Signal;
-         functions/als.py added; ALS Correction tab; ViewAlsCal/CtrlAlsCal)
+Updated: 2026-06-10 Session 19 (startup fix: numba deferred in check_cuda.py + als.py;
+         tifffile/als_run deferred in ctrl_als_correct.py; corrected ALS tab controller name)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

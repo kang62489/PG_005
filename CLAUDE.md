@@ -15,7 +15,7 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 ### Code Editing
 1. Consider impact on both CPU and GPU pipelines if changing preprocessing
 2. Check and fix ruff problems of **python files** after editing according to the settings in `pyproject.toml`.
-   - Run ruff directly: `C:\Users\KANG\.local\bin\ruff.exe check <files>`
+   - Run ruff directly: `ruff check <files>` (installed via `uv tool install ruff`, shim at `C:\Users\Kang\scoop\persist\uv\tools\shims\ruff.exe`)
    - Do **not** use `uv run ruff` — it triggers package reinstalls even with the venv active, causing file-lock errors when the GUI is running.
 
 ### Type Annotation Rules

@@ -17,6 +17,10 @@ User says:
 2. Check modified files and then summarize the changes
 3. Check current working plans (if any) and then summarize the progress
 4. List candidates of TODOs based on the summaries of above 2 and 3, ask user to choose
+   - Derive TODOs from TODAY'S actual changes only — never copy carry-overs from old session logs blindly
+   - Think: "what is unfinished, what has a side effect elsewhere, what might break downstream?"
+   - Do NOT write the file until the user has confirmed the TODO list
+   - NEVER skip asking the user to confirm the TODO list — this step is mandatory
 5. Log the last working file name and line number
 6. Ask user to see if any extra messages or todos need to be added
 7. Summarize above into a reporting sections in the markdown file

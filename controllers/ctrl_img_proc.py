@@ -15,7 +15,7 @@ from functions import check_cuda
 from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_TIFFS_DIR
 
 # Constants
-CHECK_COLUMNS = ["DOR", "TIFF_SERIAL", "IMG_READY", "PROC", "PROC_READY"]
+CHECK_COLUMNS = ["DOR", "TIFF_SERIAL", "IMG_READY", "GAUSS_EXISTS?", "ALS_EXISTS?", "PROC", "MODE"]
 DETREND_PATTERN = re.compile(r"(BIEXP|MOV)")
 
 # Set up rich console
@@ -39,15 +39,17 @@ class CtrlImgProc:
 
     def _set_proc_delegate(self) -> None:
         self._proc_delegate = CellDropdownDelegate(["YES", "SKIP"])
-        proc_col_idx = 4  # DOR=0, TIFF_SERIAL=1, IMG_READY=2, GAUSS_EXISTS?=3, PROC=4, MODE=5
+        proc_col_idx = 5  # DOR=0, TIFF_SERIAL=1, IMG_READY=2, GAUSS_EXISTS?=3, ALS_EXISTS?=4, PROC=5, MODE=6
         self.view.tv_pick_list.setItemDelegateForColumn(proc_col_idx, self._proc_delegate)
         self.view.tv_pick_list.setEditTriggers(
             QAbstractItemView.EditTrigger.CurrentChanged | QAbstractItemView.EditTrigger.SelectedClicked
         )
 
     def _set_mode_delegate(self) -> None:
-        self._mode_delegate = CellDropdownDelegate(["BIEXP", "MOV", "BOTH", "NONE"])
-        mode_col_idx = 5  # DOR=0, TIFF_SERIAL=1, IMG_READY=2, GAUSS_EXISTS?=3, PROC=4, MODE=5
+        self._mode_delegate = CellDropdownDelegate(
+            lambda index: ["BIEXP", "MOV", "BOTH"] if index.siblingAtColumn(5).data() == "YES" else ["NONE"]
+        )
+        mode_col_idx = 6  # DOR=0, TIFF_SERIAL=1, IMG_READY=2, GAUSS_EXISTS?=3, ALS_EXISTS?=4, PROC=5, MODE=6
         self.view.tv_pick_list.setItemDelegateForColumn(mode_col_idx, self._mode_delegate)
         self.view.tv_pick_list.setEditTriggers(
             QAbstractItemView.EditTrigger.CurrentChanged | QAbstractItemView.EditTrigger.SelectedClicked
@@ -122,6 +124,7 @@ class CtrlImgProc:
             pl.col("Filename").str.split("-").list.last().str.replace(r"\.tif$", "").alias("TIFF_SERIAL"),
             pl.lit("").alias("IMG_READY"),
             pl.lit("").alias("GAUSS_EXISTS?"),
+            pl.lit("").alias("ALS_EXISTS?"),
             pl.lit("").alias("PROC"),
             pl.lit("").alias("MODE")
         )
@@ -146,15 +149,24 @@ class CtrlImgProc:
             return "BIEXP & MOV"
         return gauss_list[0]
 
+    def _als_exists(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
+        als_files = list(dir_path.glob(f"{dor}-{tiff_serial}*_ALS*.tif"))
+        als_list = [m.group(1) for f in als_files if (m := DETREND_PATTERN.search(f.name))]
+        if not als_list:
+            return "No"
+        if "BIEXP" in als_list and "MOV" in als_list:
+            return "BIEXP & MOV"
+        return als_list[0]
+
     def _on_proc_changed(self, top_left, _bottom_right, _roles) -> None:
-        # only respond to changes in the "PROC" column (index 4)
-        if top_left.column() != 4:
+        # only respond to changes in the "PROC" column (index 5)
+        if top_left.column() != 5:
             return
         proc_val = top_left.data() # should be "YES" or "SKIP"
         mode_val: str = "BIEXP" if proc_val == "YES" else "NONE"
-        # update the cell value to the MODE column (index 5) in the table view
+        # update the cell value to the MODE column (index 6) in the table view
         model = self.view.tv_pick_list.model()
-        model.setData(model.index(top_left.row(), 5), mode_val)
+        model.setData(model.index(top_left.row(), 6), mode_val)
 
     def check_file_status(self) -> None:
         """Check file status based on the pick list and update the check table."""
@@ -181,19 +193,18 @@ class CtrlImgProc:
             pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
                 lambda row_dict: self._gauss_exists(dir_processed, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("GAUSS_EXISTS?"),
+            pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
+                lambda row_dict: self._als_exists(dir_processed, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
+                return_dtype=pl.Utf8).alias("ALS_EXISTS?"),
         ).with_columns(
-            pl.when(pl.col("GAUSS_EXISTS?") == "BIEXP & MOV")
-            .then(pl.lit("SKIP"))
-            .otherwise(pl.lit("YES"))
+            pl.when(pl.col("GAUSS_EXISTS?") == "No")
+            .then(pl.lit("YES"))
+            .otherwise(pl.lit("SKIP"))
             .alias("PROC")
         ).with_columns(
-            pl.when(pl.col("GAUSS_EXISTS?") == "BIEXP & MOV")
-            .then(pl.lit("NONE"))
-            .when(pl.col("GAUSS_EXISTS?") == "BIEXP")
-            .then(pl.lit("MOV"))
-            .when(pl.col("GAUSS_EXISTS?") == "MOV")
+            pl.when(pl.col("PROC") == "YES")
             .then(pl.lit("BIEXP"))
-            .otherwise(pl.lit("BIEXP"))
+            .otherwise(pl.lit("NONE"))
             .alias("MODE")
         )
 
@@ -204,6 +215,7 @@ class CtrlImgProc:
 
         all_ready = (self.df_file_status["IMG_READY"] == "READY").all()
         self.view.btn_export_proc_list.setEnabled(all_ready)
+        self.view.btn_start_processing.setEnabled(all_ready)
 
     def export_proc_list(self) -> None:
         model = self.view.tv_pick_list.model()
@@ -212,7 +224,7 @@ class CtrlImgProc:
 
         df = model._data  # noqa: SLF001  # captures any user edits to PROC and MODE columns
         row_lookup = {
-            f"{row['DOR']}-{row['TIFF_SERIAL']}.tif": (row["GAUSS_EXISTS?"], row["PROC"], row["MODE"])
+            f"{row['DOR']}-{row['TIFF_SERIAL']}.tif": (row["GAUSS_EXISTS?"], row["ALS_EXISTS?"], row["PROC"], row["MODE"])
             for row in df.iter_rows(named=True)
         }
 
@@ -231,7 +243,7 @@ class CtrlImgProc:
         # Update "Picked:" line to include schema, then replace bracket entries.
         picked_idx = next(i for i, ln in enumerate(out_lines) if ln.strip().startswith("Picked:"))
         total_idx = next(i for i, ln in enumerate(out_lines) if ln.strip().startswith("Total"))
-        out_lines[picked_idx] = "Picked: [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]"
+        out_lines[picked_idx] = "Picked: [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]"
         for i in range(picked_idx + 1, total_idx - 1):
             pick_line = out_lines[i].strip()
             if not pick_line.startswith("["):
@@ -240,8 +252,8 @@ class CtrlImgProc:
             filename = parts[0]
             abf = parts[1] if len(parts) > 1 else "N/A"
             if filename in row_lookup:
-                gauss_exists, proc, mode = row_lookup[filename]
-                out_lines[i] = f"[{filename}, {gauss_exists}, {proc}, {mode}, {abf}]"
+                gauss_exists, als_exists, proc, mode = row_lookup[filename]
+                out_lines[i] = f"[{filename}, {gauss_exists}, {als_exists}, {proc}, {mode}, {abf}]"
 
         proc_list_path = self.pick_list_path.parent / f"proc_{self.pick_list_path.stem.removeprefix('pick_')}.txt"
         proc_list_path.write_text("\n".join(out_lines), encoding="utf-8")
@@ -265,6 +277,7 @@ class CtrlImgProc:
 
         console.log(_cuda_msg)
 
+        self.dirs_watcher.directoryChanged.disconnect(self.check_file_status)
         self.view.btn_start_processing.setEnabled(False)
         self._bk_worker = BackgroundWorker(run_img_proc, proc_list_path, _cuda_available, use_emitter=True)
         self._bk_worker.proc_msgs.connect(self._on_progress)
@@ -281,6 +294,7 @@ class CtrlImgProc:
             self.view.le_processing_step.setText(msg["msg"])
 
     def _on_processing_done(self) -> None:
+        self.dirs_watcher.directoryChanged.connect(self.check_file_status)
         self.view.btn_start_processing.setEnabled(True)
         console.log("[bold green]Processing complete.[/bold green]")
         self.check_file_status()

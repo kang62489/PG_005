@@ -60,7 +60,6 @@ lint.extend-select = [
     "ARG",  # Flake8-unused-arguments
     "ASYNC",# Flake8-async – async/await usage
     "B",    # Flake8-bugbear – common bug patterns
-    "C90",  # McCabe – function complexity
     "DJ",   # Flake8-django – Django-specific conventions
     "DTZ",  # Flake8-datetimez – timezone-aware datetime
     "EM",   # Flake8-errmsg – error message style

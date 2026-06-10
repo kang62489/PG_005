@@ -7,13 +7,14 @@ from PySide6.QtWidgets import QComboBox, QStyledItemDelegate, QWidget
 class CellDropdownDelegate(QStyledItemDelegate):
     """A delegate that shows a QComboBox for editable cells."""
 
-    def __init__(self, menu_options: list[str], parent: QWidget | None = None) -> None:
+    def __init__(self, menu_options, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.menu_options = menu_options
 
-    def createEditor(self, parent, _option, _index) -> QComboBox:
+    def createEditor(self, parent, _option, index) -> QComboBox:
+        options = self.menu_options(index) if callable(self.menu_options) else self.menu_options
         editor = QComboBox(parent)
-        editor.addItems(self.menu_options)
+        editor.addItems(options)
         # Connect the currentIndexChanged signal to commitData to ensure changes are saved immediately
         editor.activated.connect(lambda: self.commitData.emit(editor))
         return editor

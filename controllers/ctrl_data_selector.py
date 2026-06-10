@@ -177,8 +177,7 @@ class CtrlDataSelector(QObject):
             for purpose_line in purpose_lines:
                 lines.append(f"{indent} {purpose_line}")
 
-        lines.append("\nPicked:")
-        lines.append("# [raw_tiff_name, paired_abf]")
+        lines.append("\nPicked: [raw_tiff_name, paired_abf]")
 
         if self.df_pick_list.is_empty() or "Filename" not in self.df_pick_list.columns:
             lines.append("  (No records picked yet)")

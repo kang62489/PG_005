@@ -64,7 +64,7 @@ PG_005/
 │   ├── xlsx_reader.py               # Read metadata from REC_*.xlsx files
 │   │
 │   ├── [Hardware/CUDA]
-│   │   ├── check_cuda.py            # check_cuda() → (bool, str): CUDA status + log messages
+│   │   ├── check_cuda.py            # check_cuda() → (bool, str): CUDA status + log messages (numba imported lazily inside function)
 │   │   ├── test_cuda.py             # Test CUDA functionality
 │   │   └── get_memory_use.py        # Memory usage monitoring
 │   │
@@ -890,4 +890,4 @@ categorizer = SpatialCategorizer(method="watershed", min_distance=5)
 
 ---
 
-*Last updated: 2026-06-05 Session 18 (als_dff0→als_cal rename; detrend output→ΔF/F₀; GAUSS TIFFs float16; work_done Signal; functions/als.py GPU kernel optimized; als_algorithm_concepts.md added)*
+*Last updated: 2026-06-10 Session 19 (startup optimization: numba deferred in check_cuda.py + als.py; tifffile/als_run deferred in ctrl_als_correct.py; C90 removed from ruff; ruff migrated to uv shim)*

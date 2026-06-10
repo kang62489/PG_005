@@ -120,32 +120,25 @@ def _setup_cuda_environment() -> tuple[bool, str]:
     return True, f"CUDA environment configured for {version_name} at {cuda_path}"
 
 
-# Run setup when module is imported (BEFORE numba import)
-_SETUP_SUCCESS, _SETUP_MESSAGE = _setup_cuda_environment()
-
-
 # ============================================================================
-# PART 2: Import numba (AFTER environment setup)
-# ============================================================================
-
-from numba import cuda
-
-# ============================================================================
-# PART 3: CUDA checking function
+# PART 2: CUDA checking function (numba imported lazily on first call)
 # ============================================================================
 
 
 def check_cuda() -> tuple[bool, str]:
     """Check CUDA availability and print diagnostic information"""
+    _setup_success, _setup_message = _setup_cuda_environment()
+    from numba import cuda
+
     messages: list[str] = []
 
     # Print setup status
-    if _SETUP_SUCCESS:
-        console.log(f"[dim]{_SETUP_MESSAGE}[/dim]")
-        messages.append(_SETUP_MESSAGE)
+    if _setup_success:
+        console.log(f"[dim]{_setup_message}[/dim]")
+        messages.append(_setup_message)
     else:
-        console.log(f"[yellow]Setup warning: {_SETUP_MESSAGE}[/yellow]")
-        messages.append(f"Setup warning: {_SETUP_MESSAGE}")
+        console.log(f"[yellow]Setup warning: {_setup_message}[/yellow]")
+        messages.append(f"Setup warning: {_setup_message}")
 
     try:
         # Check if CUDA is available through Numba

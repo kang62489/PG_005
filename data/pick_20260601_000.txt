@@ -3,8 +3,7 @@ Analysis: test
 Purposes:
      refactor
 
-Picked:
-# [raw_tiff_name, paired_abf]
+Picked: [raw_tiff_name, paired_abf]
 [2026_03_20-0028.tif, 2026_03_20_0015.abf]
 [2026_03_20-0029.tif, 2026_03_20_0016.abf]
 [2026_03_20-0040.tif, 2026_03_20_0025.abf]

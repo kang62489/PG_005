@@ -4,12 +4,11 @@ from pathlib import Path
 
 # Third-party imports
 import numpy as np
-import tifffile
 from rich.console import Console
 
 # Local application imports
 from classes import BackgroundWorker, DialogGetFile
-from functions import als_run, check_cuda
+from functions import check_cuda
 from utils.params import MODELS_DIR
 
 # Constants
@@ -116,6 +115,9 @@ class CtrlAlsCorrect:
         self._worker.start()
 
     def _als_test(self, tiff_path: Path, lam: float, p: float, n_iter: int) -> None:
+        import tifffile
+
+        from functions import als_run
         if tiff_path != self._cached_tiff_path:
             self._cached_stack = tifffile.imread(tiff_path).astype(np.float16)
             self._cached_tiff_path = tiff_path
