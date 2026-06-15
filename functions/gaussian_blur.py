@@ -22,7 +22,7 @@ os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "40")
 # ── CPU Gaussian blur ──────────────────────────────────────────────────────────
 
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=True, cache=True)
 def _cpu_kernel(sigma: float, size: int | None = None) -> np.ndarray:
     """Build a normalized 1D Gaussian kernel. Size auto-set to 6σ (odd) if not given."""
     if size is None:
@@ -35,7 +35,7 @@ def _cpu_kernel(sigma: float, size: int | None = None) -> np.ndarray:
     return kernel / kernel.sum()
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _cpu_conv(arr: np.ndarray, kernel: np.ndarray, axis: int) -> np.ndarray:
     """
     Apply a 1D kernel along `axis` with edge normalization.
@@ -69,7 +69,7 @@ def _cpu_conv(arr: np.ndarray, kernel: np.ndarray, axis: int) -> np.ndarray:
     return result
 
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=True, cache=True)
 def _cpu_gaussian_blur(stack: np.ndarray, sigma: float) -> np.ndarray:
     """
     Separable 2D Gaussian blur on CPU (parallel over frames).

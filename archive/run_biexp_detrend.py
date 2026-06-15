@@ -14,7 +14,6 @@ Note: Kept as a standalone archive/reference script.
       functions/tau_estimate.py, and functions/gaussian_blur.py.
 """
 
-from __future__ import annotations
 
 import math
 import time

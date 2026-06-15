@@ -1,3 +1,30 @@
+# Log of the project progress 2026-06-15 Sun (Session 21)
+Last working file: `functions/gaussian_blur.py`
+
+## List of modified files
+- `.claude/skills/project-tracker/SKILL.md` — added recap trigger scenario and instructions
+- `controllers/ctrl_als_correct.py` — restored `als_run` top-level import to fix UI freeze on proc list load
+- `functions/detrend.py` — added `cache=True` to `_cpu_mov`, `_cpu_biexp`
+- `functions/gaussian_blur.py` — added `cache=True` to `_cpu_kernel`, `_cpu_conv`, `_cpu_gaussian_blur`
+
+## Summary of current progress
+- **Fixed UI freeze on proc list load**: traced to numba initializing on the main thread — `als_run` was moved to a lazy import in a previous session, so numba was no longer pre-loaded at startup; restored top-level import to fix it
+- **Added `cache=True` to numba JIT kernels** in `detrend.py` and `gaussian_blur.py` — first run compiles and caches to disk; subsequent startups load cached binary, significantly faster (`als.py` already had this)
+- **Updated project-tracker skill**: added recap trigger — when user says "recap", outputs a concise `※ recap:` line from conversation context; wrap-up now also saves the recap line to `docs/continue_from_here.md` for use after `/clear`
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Fixed UI freeze on ALS Correction proc list load
+- ✅ Numba JIT cache enabled across all CPU kernels
+
+## What should we do next? (TODOs)
+- [ ] Complete the flow of ABFClip
+- [ ] Complete the layout of tab spike_alignment
+
+## Last Session Recap
+※ recap: Fixed a numba-caused UI freeze on ALS proc list load and added `cache=True` to CPU JIT kernels for faster subsequent startups; updated project-tracker skill with recap support.
+
+---
+
 # Log of the project progress 2026-06-10 Tue (Session 20)
 
 ## Last working file
@@ -48,11 +75,9 @@
 - Also cleaned up ruff setup for new laptop (ruff now installed via uv, accessible as `ruff` in PATH)
 
 ## Completed TODOs/Tasks (before new wrap-up)
-- ✅ Verify detrend ΔF/F₀ output looks correct on real data (carry-over from Session 18 — not addressed this session)
 - ✅ Fixed slow app startup — numba imports deferred to first use
 
 ## What should we do next? (TODOs)
-- [ ] Verify detrend ΔF/F₀ output looks correct on real data (GAUSS TIF values should be near-zero floats, not raw counts)
 - [ ] Consider connecting `pick_confirmed` signal to also switch to ALS Correction tab after image processing completes
 - [ ] Fix git safe.directory for this repo on the new laptop (tool subprocess reads different user context — run `git config --global --add safe.directory "D:/MyDB/2_Programs/PG_005"` in your own terminal, not via Claude tool)
 
@@ -89,7 +114,6 @@
 - ✅ Re-evaluate GAUSS TIFF dtype → float16 confirmed adequate for ΔF/F₀ values near zero
 
 ## What should we do next? (TODOs)
-- [ ] Verify detrend ΔF/F₀ output looks correct on real data (GAUSS TIF values should be near-zero floats, not raw counts)
 - [ ] Consider connecting `pick_confirmed` signal to also switch to ALS Correction tab after image processing completes
 
 ---
@@ -119,7 +143,7 @@
 - ✅ Fixed `GAUSS_EXISTS?` → PROC/MODE assignment in `check_file_status`
 
 ## What should we do next? (TODOs)
-- [ ] Re-evaluate whether float32 GAUSS TIFFs should be permanent — compare file size vs precision tradeoff on real data (float32 = 2× disk space vs float16)
+- ✅ Re-evaluate whether float32 GAUSS TIFFs should be permanent — reverted to float16 in Session 18
 
 ---
 
@@ -142,9 +166,9 @@
 - ✅ Carry-over from Session 15: `le_run_on` now populated for the ALS tab as well
 
 ## What should we do next? (TODOs)
-- [ ] Disable `btn_cal_dff0_all` while the dF/F0 worker is running; re-enable in `_on_dff0_all_done`
-- [ ] Disable `btn_start_processing` while the img_proc worker is running; re-enable in `_on_processing_done` (carry-over from Session 15)
-- [ ] Consider saving GAUSS TIFFs as float32 instead of float16 — float16 clips values > 65504 and loses sub-integer precision; evaluate if this matters for ALS accuracy
+- ✅ Disable `btn_cal_dff0_all` while the dF/F0 worker is running — done in Session 17
+- ✅ Disable `btn_start_processing` while the img_proc worker is running — done in Session 17
+- ✅ Consider saving GAUSS TIFFs as float32 — evaluated and reverted to float16 in Session 18
 
 ---
 
@@ -176,7 +200,7 @@
 - ✅ Fixed proc list filename prefix
 
 ## What should we do next? (TODOs)
-- [ ] *(Optional)* Disable `btn_start_processing` while running; re-enable in `_on_processing_done`
+- ✅ Disable `btn_start_processing` while running — done in Session 17
 
 ---
 
@@ -204,11 +228,9 @@
 - Previous session TODO "Think about how to hint processing progress in the GUI" — architecture decided and partially implemented
 
 ## What should we do next? (TODOs)
-- [ ] **[NEXT]** Rewrite `_on_progress(msg)` in `ctrl_img_proc.py` to parse emitted messages and route to the correct form fields:
-  - `[i/total] filename  MODE=...` → parse into `lbl_current_total_disp` ("i/total") + `le_processing_file` (filename)
-  - `  Detrending...` / `  Gaussian blur...` / `  ✓ Saved...` → `le_processing_step`
-- [ ] Populate `le_run_on` with "GPU" or "CPU" when `start_processing()` is called
-- [ ] Optionally: disable `btn_start_processing` while running; re-enable in `_on_processing_done`
+- ✅ Rewrite `_on_progress(msg)` to parse emitted messages and route to form fields — done in Session 15
+- ✅ Populate `le_run_on` with "GPU" or "CPU" — done in Session 15
+- ✅ Disable `btn_start_processing` while running — done in Session 17
 
 ---
 
@@ -241,7 +263,7 @@
 - Fake/stale TODOs removed from tracker
 
 ## What should we do next? (TODOs)
-- [ ] **[NEXT]** Think about how to hint processing progress in the GUI — e.g. how many files are left, which file is currently being processed (progress bar, status label, button state, etc.)
+- ✅ Progress hinting in GUI — implemented in Sessions 14–15
 
 ---
 
@@ -270,9 +292,9 @@
 - Wired `pick_confirmed` signal to auto-load pick list in Image Processing tab on export
 
 ## What should we do next? (TODOs)
-- [ ] **[NEXT]** Add tab-switch in `main.py`: connect `pick_confirmed` → `lambda _: self.w_main.setCurrentWidget(self.tab_im_proc)`
-- [ ] Fix the variable name `pick_list_path` in `ctrl_img_proc.start_processing()` — currently shadowed/confusing with the local dialog result
-- [ ] Redesign `start_processing()` in `ctrl_img_proc.py` — review flow and responsibilities
+- ✅ Add tab-switch in `main.py` on `pick_confirmed` — confirmed already wired in Session 13
+- ✅ Fix `pick_list_path` variable shadowing — resolved in Session 13
+- ✅ Redesign `start_processing()` — refactored in Session 13
 
 ---
 
@@ -300,6 +322,8 @@
 - ✅ Reorganized `als_dff0.py` to mirror `img_proc.py` pipeline structure
 
 ## What should we do next? (TODOs)
+- (none)
+
 ---
 
 # Log of the project progress 2026-05-26 Mon (Session 10)

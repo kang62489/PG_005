@@ -33,4 +33,9 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 ## Other advices
 **Try answering user's questions before proposing any code modification**
 **Properly spacing or separating responses/replys into more reader-friendly format, such as sections or blocks**
-*Use emoji to make the text lively. *
+*Use emoji to make the text lively.*
+
+### Wrap-up / Project Tracker Rules
+- **NEVER blindly copy carry-over TODOs from old session logs.** Only include TODOs that are genuinely unfinished based on today's actual changes.
+- If a TODO appears in a previous session log, verify it is still relevant and unfinished before including it — do NOT assume it carries over automatically.
+- **Always use interactive multi-select (AskUserQuestion) for TODO confirmation** — never just print a list and ask for text confirmation.

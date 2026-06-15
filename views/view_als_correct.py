@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+# Local application imports
+from utils import UISizes
 
 class ViewAlsCorrect:
     def __init__(self, parent=None) -> None:
@@ -36,6 +38,7 @@ class ViewAlsCorrect:
 
         self.lw_gauss_tiff = QListWidget()
         self.lo_block_1.addWidget(self.lw_gauss_tiff)
+        self.lw_gauss_tiff.setFixedWidth(UISizes.LW_GAUSS_TIFFS_WIDTH)
 
     def setup_block_2(self) -> None:
         self.lo_block_2 = QVBoxLayout()
@@ -88,6 +91,7 @@ class ViewAlsCorrect:
         self.lo_proc_info = QFormLayout()
         self.gb_proc_info.setLayout(self.lo_proc_info)
         self.lo_block_3.addWidget(self.gb_proc_info)
+        self.gb_proc_info.setFixedWidth(UISizes.GB_PROC_INFO_WIDTH)
 
         self.lbl_run_on = QLabel("Run on:")
         self.le_run_on = QLineEdit()

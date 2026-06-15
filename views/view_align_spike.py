@@ -4,7 +4,17 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QPushButton,
+    QTableView,
+    QFormLayout,
+    QLabel,
+    QRadioButton,
+    QButtonGroup,
+    QLineEdit,
+    QTextEdit,
 )
+
+# Local application imports
+from utils import UISizes
 
 class ViewAlignSpike:
     def __init__(self, parent=None) -> None:
@@ -15,6 +25,7 @@ class ViewAlignSpike:
 
     def setup_blocks(self) -> None:
         self.setup_block_1()
+        self.setup_block_2()
 
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
@@ -22,3 +33,72 @@ class ViewAlignSpike:
 
         self.btn_load_proc_list = QPushButton("Load Processed List")
         self.lo_block_1.addWidget(self.btn_load_proc_list)
+
+        self.tv_proc_list = QTableView()
+        self.lo_block_1.addWidget(self.tv_proc_list)
+
+    def setup_block_2(self) -> None:
+        self.lo_block_2 = QVBoxLayout()
+        self.lo_tab_container.addLayout(self.lo_block_2)
+
+        self.lo_conditions = QFormLayout()
+        self.lo_block_2.addLayout(self.lo_conditions)
+
+        self.lbl_cond_1 = QLabel("Detrending Method:")
+        # QButtonGroup is a QObject not a QWidget or QLayout, so it can't be added to the layout directly.
+        self.gb_detrend = QButtonGroup()
+        self.rb_detrend_1 = QRadioButton("BIEXP")
+        self.rb_detrend_2 = QRadioButton("MOV")
+        self.gb_detrend.addButton(self.rb_detrend_1)
+        self.gb_detrend.addButton(self.rb_detrend_2)
+
+        self.rb_detrend_1.setChecked(True)  # Default to BIEXP detrending
+
+        self.lo_detrend = QHBoxLayout()
+        self.lo_detrend.addWidget(self.rb_detrend_1)
+        self.lo_detrend.addWidget(self.rb_detrend_2)
+
+        self.lbl_cond_2 = QLabel("Normalization:")
+        self.gb_norm = QButtonGroup()
+        self.rb_norm_1 = QRadioButton("dF/F0 (Gauss)")
+        self.rb_norm_2 = QRadioButton("dF/F0 (Gauss + ALS)")
+        self.gb_norm.addButton(self.rb_norm_1)
+        self.gb_norm.addButton(self.rb_norm_2)
+
+        self.rb_norm_1.setChecked(True)  # Default to Gauss-only normalization
+
+        self.lo_norm = QHBoxLayout()
+        self.lo_norm.addWidget(self.rb_norm_1)
+        self.lo_norm.addWidget(self.rb_norm_2)
+
+        self.lo_conditions.addRow(self.lbl_cond_1, self.lo_detrend)
+        self.lo_conditions.addRow(self.lbl_cond_2, self.lo_norm)
+
+        self.te_export_path = QTextEdit()
+        self.te_export_path.setFixedSize(UISizes.TE_EXPORT_PATH)
+        self.btn_export_browse = QPushButton("Browse...")
+        self.btn_export_browse.setFixedWidth(UISizes.BTN_BROWSE_WIDTH)
+        self.lo_conditions.addRow(self.te_export_path, self.btn_export_browse)
+
+
+        self.btn_run_analysis = QPushButton("Run Analysis")
+        self.lo_conditions.addRow(self.btn_run_analysis)
+
+        self.lo_processing_info = QFormLayout()
+        self.lo_block_2.addLayout(self.lo_processing_info)
+
+        self.lbl_processing_info = QLabel("Processing Info:")
+        self.lo_processing_info.addRow(self.lbl_processing_info)
+
+        self.lbl_run_on = QLabel("Run On: ")
+        self.le_run_on = QLineEdit()
+
+        self.lbl_current_total = QLabel("Current/Total: ")
+        self.le_current_total = QLineEdit()
+
+        self.lbl_status = QLabel("Status: ")
+        self.le_status = QLineEdit()
+
+        self.lo_processing_info.addRow(self.lbl_run_on, self.le_run_on)
+        self.lo_processing_info.addRow(self.lbl_current_total, self.le_current_total)
+        self.lo_processing_info.addRow(self.lbl_status, self.le_status)

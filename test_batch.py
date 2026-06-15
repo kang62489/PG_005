@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Test batch processing with just a few pairs from a specific date."""
 
-from __future__ import annotations
 
 import argparse
 from pathlib import Path

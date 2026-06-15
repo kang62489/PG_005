@@ -4,6 +4,9 @@ import datetime
 from dataclasses import dataclass
 from pathlib import Path
 
+# Third-party imports
+from PySide6.QtCore import QSize
+
 # Application Info
 APP_NAME = "ACID"
 APP_VERSION = "beta-0.1.0"
@@ -46,3 +49,11 @@ class UISizes:
     TV_REC_SUMMARY_WIDTH: int = 1200
     TE_DIRS_HEIGHT: int = 60
 
+    # Tab: ALS Correction
+    LW_GAUSS_TIFFS_WIDTH: int = 250
+    GB_PROC_INFO_WIDTH: int = 400
+
+
+    # Tab: Spike-aligned Analysis
+    TE_EXPORT_PATH = QSize(600, 60)
+    BTN_BROWSE_WIDTH: int = 60

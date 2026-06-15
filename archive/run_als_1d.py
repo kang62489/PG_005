@@ -15,7 +15,6 @@ Tune with:
   NITER -- number of iterations   (10-50 is usually enough)
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

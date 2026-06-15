@@ -4,6 +4,8 @@ description: Create a markdown file to log and track the project's current progr
 ---
 
 ## Example Scenarios
+
+### Wrap-up (full session log)
 User says:
 - I'm going to take a break now
 - I'm going to sleep now
@@ -11,25 +13,42 @@ User says:
 - I'm done for today
 - can you wrap up what we have done today
 
+### Recap (concise summary only)
+User says:
+- recap
+- give me a recap
+- what did we do today
+- summarize what we did
+
 
 ## What this skill does
+
+### For wrap-up triggers
 1. Show that this skill is triggered.
 2. Check modified files and then summarize the changes
 3. Check current working plans (if any) and then summarize the progress
-4. List candidates of TODOs based on the summaries of above 2 and 3, ask user to choose
+4. Ask user to confirm TODOs via **interactive multi-select (AskUserQuestion)**
    - Derive TODOs from TODAY'S actual changes only — never copy carry-overs from old session logs blindly
    - Think: "what is unfinished, what has a side effect elsewhere, what might break downstream?"
-   - Do NOT write the file until the user has confirmed the TODO list
-   - NEVER skip asking the user to confirm the TODO list — this step is mandatory
 5. Log the last working file name and line number
-6. Ask user to see if any extra messages or todos need to be added
-7. Summarize above into a reporting sections in the markdown file
-8. Update the ``docs/continue_from_here.md`` file accordingly
-9. Print the contents of `doc/continue_from_here.md` file to the terminal
+6. Ask user if any extra notes or TODOs need to be added
+7. Write everything to `docs/continue_from_here.md`, including a `## Last Session Recap` line:
+   ```
+   ※ recap: <1-2 sentences: what was worked on, what was fixed/added, and whether anything is pending>
+   ```
+8. Print the contents of `docs/continue_from_here.md` to the terminal
 
-## Where files go
-
-**Save to**: `docs/continue_from_here.md`
+### For recap triggers
+1. First check if conversation context is available (i.e. this is not a fresh/cleared session)
+   - **If context exists**: generate the recap line directly from the conversation
+   - **If no context** (fresh session): read `docs/continue_from_here.md` and use the `## Last Session Recap` line saved there
+2. Output the recap line in this exact format:
+   ```
+   ※ recap: <1-2 sentences: what was worked on, what was fixed/added, and whether anything is pending>
+   ```
+   - Be specific — name the feature/bug/file, not generic descriptions
+   - Keep it under 40 words
+   - No file writing, no TODO prompts — just the recap line
 
 ## Markdown format to use
 
@@ -66,5 +85,8 @@ Last working line: <line_number>
 - TODO 1
 - TODO 2
 - TODO 3
+
+## Last Session Recap
+※ recap: <concise 1-2 sentence summary of what was done and what is pending>
 
 ```

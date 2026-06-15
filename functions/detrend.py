@@ -23,7 +23,7 @@ os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "40")
 # ── Moving-average detrend ─────────────────────────────────────────────────────
 
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=True, cache=True)
 def _cpu_mov(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
     """
     Numba JIT moving-average detrend on CPU (parallel over pixels).
@@ -139,7 +139,7 @@ def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101)
 # ── Bi-exponential detrend ─────────────────────────────────────────────────────
 
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=True, cache=True)
 def _cpu_biexp(img_flat: np.ndarray, basis_pinv: np.ndarray, basis_matrix: np.ndarray) -> np.ndarray:
     """
     Numba JIT per-pixel bi-exp detrend on CPU (parallel over pixels).

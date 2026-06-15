@@ -14,7 +14,6 @@ Usage:
     python img_proc.py --proc_list data/proc_pick_20260512_002.txt
 """
 
-from __future__ import annotations
 
 import argparse
 import time
@@ -44,7 +43,7 @@ console = Console()
 # ── Proc list parsing ─────────────────────────────────────────────────────────
 
 
-def _parse_bracket_entry(proc_list_line: str) -> dict | None:
+def _parse_bracket(proc_list_line: str) -> dict | None:
     """Parse one '[filename, gauss_exists, do_processing, detrend_mode, ...]' bracket line.
 
     Proc list format (5 fields):
@@ -81,18 +80,16 @@ def parse_proc_list(proc_list_path: Path) -> tuple[list[dict], Path, Path]:
     in_picked = False
 
     for line in text.splitlines():
-        stripped = line.strip()
-
-        if stripped.startswith("Picked:"):
+        if line.strip().startswith("Picked:"):
             in_picked = True
             continue
 
         if in_picked:
-            if stripped.startswith("["):
-                entry = _parse_bracket_entry(stripped)
+            if line.strip().startswith("["):
+                entry = _parse_bracket(line.strip())
                 if entry:
                     entries.append(entry)
-            elif not stripped.startswith("#"):
+            else:
                 in_picked = False
 
         if line.startswith("dir_raw_tiffs:"):

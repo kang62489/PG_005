@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Batch process all tiff/abf pairs from rec_summary metadata."""
 
-from __future__ import annotations
 
 import argparse
 import sqlite3

@@ -8,7 +8,6 @@ Usage:
     python als_correct.py --proc_list data/proc_pick_20260512_002.txt [--lam 100] [--p 0.05] [--n_iter 10]
 """
 
-from __future__ import annotations
 
 import argparse
 import time
@@ -19,7 +18,7 @@ import tifffile
 from rich.console import Console
 
 from functions import als_run, check_cuda, get_memory_usage
-from img_proc import parse_proc_list, update_proc_list_gauss_exists
+from img_proc import update_proc_list_gauss_exists
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -29,8 +28,9 @@ console = Console()
 # ── Proc list parsing ─────────────────────────────────────────────────────────
 
 
-def _gauss_paths_from_bracket(parts: list[str], proc_dir: Path) -> list[Path]:
-    """Return existing GAUSS TIFF paths for one parsed bracket-line parts list."""
+def _parse_bracket(stripped: str, proc_dir: Path) -> list[Path]:
+    """Return existing GAUSS TIFF paths for one bracket line."""
+    parts = [p.strip() for p in stripped.strip("[]").split(",")]
     if len(parts) < 2:
         return []
     stem = Path(parts[0]).stem
@@ -47,28 +47,35 @@ def _gauss_paths_from_bracket(parts: list[str], proc_dir: Path) -> list[Path]:
     return paths
 
 
-def _parse_proc_list_for_gauss(proc_list_path: Path) -> tuple[list[Path], Path]:
+def parse_proc_list(proc_list_path: Path) -> tuple[list[Path], Path]:
     """Return all existing *_GAUSS.tif paths and proc_dir from an updated proc list."""
-    _, _, proc_dir = parse_proc_list(proc_list_path)
+    proc_dir: Path | None = None
+    for line in proc_list_path.read_text().splitlines():
+        if line.startswith("dir_proc_tiffs:"):
+            proc_dir = Path(line.split(":", 1)[1].strip())
+            break
+    if proc_dir is None:
+        msg = f"Missing dir_proc_tiffs in {proc_list_path}"
+        raise ValueError(msg)
     update_proc_list_gauss_exists(proc_list_path, proc_dir)
 
+    text = proc_list_path.read_text()
     gauss_paths: list[Path] = []
     seen_paths: set[Path] = set()
     in_picked = False
 
-    for line in proc_list_path.read_text().splitlines():
-        stripped = line.strip()
-        if stripped.startswith("Picked:"):
+    for line in text.splitlines():
+        if line.strip().startswith("Picked:"):
             in_picked = True
-        elif in_picked:
-            if stripped.startswith("["):
-                parts = [p.strip() for p in stripped.strip("[]").split(",")]
-                for path in _gauss_paths_from_bracket(parts, proc_dir):
+            continue
+        if in_picked:
+            if line.strip().startswith("["):
+                for path in _parse_bracket(line.strip(), proc_dir):
                     resolved_path = path.resolve()
                     if resolved_path not in seen_paths:
                         seen_paths.add(resolved_path)
                         gauss_paths.append(path)
-            elif not stripped.startswith("#"):
+            else:
                 in_picked = False
 
     return gauss_paths, proc_dir
@@ -124,7 +131,7 @@ def run(
     emitter=None,
 ) -> None:
     """Parse processing list and subtract slow fluctuation for each *_GAUSS.tif."""
-    gauss_paths, _proc_dir = _parse_proc_list_for_gauss(proc_list_path)
+    gauss_paths, _proc_dir = parse_proc_list(proc_list_path)
     console.log(f"Processing list: {proc_list_path.name}")
     console.log(f"  {len(gauss_paths)} GAUSS TIFF(s) to process  (cuda={cuda_available})")
     console.log(f"  ALS: lam={lam:g}, p={p:g}, n_iter={n_iter}")
