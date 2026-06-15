@@ -1,106 +1,145 @@
 """
 spike_analysis.py  --  Spike-aligned image analysis pipeline.
 =============================================================
-Reads a processing list, loads the appropriate processed TIFF (*_GAUSS.tif or
-*_ALS.tif) together with its paired ABF file, runs spike detection and alignment,
-spatial categorization, region analysis, and exports results.
+Reads an analysis list (ana_list_*.txt), loads the appropriate processed TIFF
+(*_GAUSS.tif or *_ALS.tif) together with its paired ABF file, runs spike
+detection and alignment, spatial categorization, region analysis, and exports
+results.
 
-Proc list format (5 fields per entry):
-  [raw_tiff_name, gauss_exists, do_processing, detrend_mode, paired_abf]
+Ana list format (5 fields per bracket entry):
+  [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
 
 Detrend mode selects which processed TIFF prefix is loaded:
   BIEXP -> *_BIEXP_GAUSS.tif  or  *_BIEXP_ALS.tif
   MOV   -> *_MOV_GAUSS.tif    or  *_MOV_ALS.tif
 
 Usage:
-    python spike_analysis.py --proc_list data/proc_20260601_000.txt [--detrend BIEXP] [--use_als]
+    python spike_analysis.py --ana_list data/ana_list_20260601_000.txt [--detrend BIEXP] [--use_als]
 """
 
 import argparse
 from pathlib import Path
 
-from utils.params import RAW_ABFS_DIR
+from rich.console import Console
 
-# ── Proc list parsing ─────────────────────────────────────────────────────────
+from classes import AbfClip
+
+console = Console()
 
 
-def _parse_bracket(stripped: str, proc_dir: Path, detrend_mode: str, use_als: bool) -> dict | None:
-    """Return {"tiff_path", "abf_path"} for one bracket line, or None if the target TIFF is missing."""
+# ── Ana list parsing ──────────────────────────────────────────────────────────
+
+
+def _parse_bracket(
+    stripped: str,
+    proc_dir: Path,
+    raw_abfs_dir: Path,
+    detrend_mode: str,
+    use_als: bool,
+) -> dict | None:
+    """Return {"proc_tiff_path", "raw_abf_path"} for one bracket line, or None if guards fail."""
     parts = [p.strip() for p in stripped.strip("[]").split(",")]
     if len(parts) < 5:
         return None
-    stem = Path(parts[0]).stem
-    abf_name = parts[4]
+    raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist = parts[:5]
 
-    suffix = "_ALS.tif" if use_als else "_GAUSS.tif"
-    candidate = proc_dir / f"{stem}_{detrend_mode}{suffix}"
-    if not candidate.exists():
+    if use_als and als_exist != "YES":
+        return None
+    if not use_als and gauss_exist != "YES":
+        return None
+    if abf_exist != "YES":
         return None
 
+    stem = Path(raw_tiff_name).stem
+    suffix = "_ALS.tif" if use_als else "_GAUSS.tif"
+
     return {
-        "tiff_path": candidate,
-        "abf_path": RAW_ABFS_DIR / abf_name,
+        "proc_tiff_path": proc_dir / f"{stem}_{detrend_mode}{suffix}",
+        "raw_abf_path": raw_abfs_dir / paired_abf,
     }
 
 
-def parse_proc_list(
-    proc_list_path: Path,
+def parse_ana_list(
+    ana_list_path: Path,
     detrend_mode: str = "BIEXP",
     use_als: bool = False,
-) -> tuple[list[dict], Path]:
-    """Return spike analysis entries and proc_dir from a proc list file.
+) -> tuple[list[dict], Path, str, str]:
+    """Parse an ana list file and return entries with resolved paths.
 
     Args:
-        proc_list_path: Path to the proc list file (proc_*.txt).
-        detrend_mode:   Which detrend variant to load — "BIEXP" or "MOV".
-        use_als:        If True, load *_ALS.tif; otherwise load *_GAUSS.tif.
+        ana_list_path: Path to the ana list file (ana_list_*.txt).
+        detrend_mode:  Which detrend variant to load — "BIEXP" or "MOV".
+        use_als:       If True, load *_ALS.tif; otherwise load *_GAUSS.tif.
 
     Returns:
-        (entries, proc_dir) where each entry is:
-            {"tiff_path": Path, "abf_path": Path}
-        Only entries whose target TIFF exists on disk are included.
+        (entries, results_dir, detrend_mode, normalization) where each entry is:
+            {"proc_tiff_path": Path, "raw_abf_path": Path}
+        Only entries passing all existence guards are included.
     """
+    lines = ana_list_path.read_text().splitlines()
+
     proc_dir: Path | None = None
-    for line in proc_list_path.read_text().splitlines():
+    raw_abfs_dir: Path | None = None
+    results_dir: Path | None = None
+
+    for line in lines:
         if line.startswith("dir_proc_tiffs:"):
             proc_dir = Path(line.split(":", 1)[1].strip())
-            break
-    if proc_dir is None:
-        msg = f"Missing dir_proc_tiffs in {proc_list_path}"
+        elif line.startswith("dir_raw_abfs:"):
+            raw_abfs_dir = Path(line.split(":", 1)[1].strip())
+        elif line.startswith("dir_results:"):
+            results_dir = Path(line.split(":", 1)[1].strip())
+
+    missing = [
+        k
+        for k, v in {
+            "dir_proc_tiffs": proc_dir,
+            "dir_raw_abfs": raw_abfs_dir,
+            "dir_results": results_dir,
+        }.items()
+        if v is None
+    ]
+    if missing:
+        msg = f"Missing footer keys in {ana_list_path}: {', '.join(missing)}"
         raise ValueError(msg)
 
-    text = proc_list_path.read_text()
     entries: list[dict] = []
     in_picked = False
 
-    for line in text.splitlines():
+    for line in lines:
         if line.strip().startswith("Picked:"):
             in_picked = True
             continue
         if in_picked:
             if line.strip().startswith("["):
-                entry = _parse_bracket(line.strip(), proc_dir, detrend_mode, use_als)
+                entry = _parse_bracket(line.strip(), proc_dir, raw_abfs_dir, detrend_mode, use_als)
                 if entry:
                     entries.append(entry)
             else:
                 in_picked = False
 
-    return entries, proc_dir
-
-# ABFClip
-
+    normalization = "ALS" if use_als else "GAUSS"
+    return entries, results_dir, detrend_mode, normalization
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Spike-aligned image analysis pipeline")
-    parser.add_argument("--proc_list", required=True, type=Path, help="Path to proc list file (proc_*.txt)")
+    parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_list_*.txt)")
     parser.add_argument("--detrend", choices=["BIEXP", "MOV"], default="BIEXP", help="Detrend mode (default: BIEXP)")
     parser.add_argument("--use_als", action="store_true", help="Load *_ALS.tif instead of *_GAUSS.tif")
     args = parser.parse_args()
 
-    entries, proc_dir = parse_proc_list(args.proc_list, args.detrend, args.use_als)
-    print(f"Found {len(entries)} entries in {args.proc_list.name}")
-    for e in entries:
-        print(f"  {e['tiff_path'].name}  +  {e['abf_path'].name}")
+    entries, results_dir, detrend_mode, normalization = parse_ana_list(args.ana_list, args.detrend, args.use_als)
+    console.print(f"Found {len(entries)} entries in {args.ana_list.name}")
+
+    for entry in entries:
+        console.print(f"\n[cyan]{entry['proc_tiff_path'].name}  +  {entry['raw_abf_path'].name}[/cyan]")
+        clip = AbfClip(
+            proc_tiff_path=entry["proc_tiff_path"],
+            raw_abf_path=entry["raw_abf_path"],
+            results_dir=results_dir,
+            detrend_mode=detrend_mode,
+            normalization=normalization,
+        )

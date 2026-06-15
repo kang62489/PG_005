@@ -35,7 +35,9 @@
       "WebFetch(domain:pmc.ncbi.nlm.nih.gov)",
       "WebFetch(domain:lsa.umich.edu)",
       "PowerShell(ruff check *)",
-      "PowerShell(Rename-Item *)"
+      "PowerShell(Rename-Item *)",
+      "Bash(C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe check *)",
+      "PowerShell(& \"C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe\" check *)"
     ]
   }
 }

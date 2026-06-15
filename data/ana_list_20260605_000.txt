@@ -1,0 +1,18 @@
+Date Created: 20260605
+Analysis: Test dff0
+Purposes:
+     test dffo
+
+Picked: [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
+[2026_01_08-0005.tif, YES, No, 2026_01_08_0003.abf, YES]
+[2026_01_08-0012.tif, No, No, 2026_01_08_0010.abf, YES]
+[2026_01_08-0016.tif, No, No, 2026_01_08_0014.abf, YES]
+[2026_01_08-0024.tif, No, No, 2026_01_08_0020.abf, YES]
+
+Total 4 records picked
+
+dir_raw_tiffs: D:\MyDB\2_Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs
+
+dir_raw_abfs: D:\MyDB\2_Programs\PG_005\raw_abfs
+dir_results: D:\MyDB\2_Programs\PG_005\results

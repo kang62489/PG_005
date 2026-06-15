@@ -1,20 +1,21 @@
 ## Modules
 # Third-party imports
 from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QVBoxLayout,
-    QPushButton,
-    QTableView,
-    QFormLayout,
-    QLabel,
-    QRadioButton,
     QButtonGroup,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QTableView,
     QTextEdit,
+    QVBoxLayout,
 )
 
 # Local application imports
 from utils import UISizes
+
 
 class ViewAlignSpike:
     def __init__(self, parent=None) -> None:
@@ -31,8 +32,23 @@ class ViewAlignSpike:
         self.lo_block_1 = QVBoxLayout()
         self.lo_tab_container.addLayout(self.lo_block_1)
 
+        self.lbl_dir_raw_abfs = QLabel("Directory of Raw ABFs: ")
+        self.lo_block_1.addWidget(self.lbl_dir_raw_abfs)
+
+        self.lo_dir_raw_abfs = QHBoxLayout()
+        self.te_dir_raw_abfs = QTextEdit()
+        self.te_dir_raw_abfs.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
+        self.btn_browse_raw_abfs = QPushButton("Browse...")
+        self.lo_dir_raw_abfs.addWidget(self.te_dir_raw_abfs)
+        self.lo_dir_raw_abfs.addWidget(self.btn_browse_raw_abfs)
+        self.lo_block_1.addLayout(self.lo_dir_raw_abfs)
+
+        self.lo_proc_list_btns = QHBoxLayout()
         self.btn_load_proc_list = QPushButton("Load Processed List")
-        self.lo_block_1.addWidget(self.btn_load_proc_list)
+        self.btn_confirm_analyzing_list = QPushButton("Confirm Analyzing List")
+        self.lo_proc_list_btns.addWidget(self.btn_load_proc_list)
+        self.lo_proc_list_btns.addWidget(self.btn_confirm_analyzing_list)
+        self.lo_block_1.addLayout(self.lo_proc_list_btns)
 
         self.tv_proc_list = QTableView()
         self.lo_block_1.addWidget(self.tv_proc_list)
