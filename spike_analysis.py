@@ -26,7 +26,7 @@ import tifffile
 from rich.console import Console
 
 # Local application imports
-from classes import AbfClip
+from classes import AbfClip, SpatialCategorizer
 from functions import spike_centered_median, zscore_img_segs
 
 console = Console()
@@ -165,3 +165,7 @@ if __name__ == "__main__":
         median_path = results_dir / f"{clip.proc_tiff_path.stem}_median.tif"
         tifffile.imwrite(median_path, median_segment.astype(np.float32))
         console.print(f"[green]Saved median → {median_path.name}[/green]")
+
+        categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
+        categorizer.fit(median_segment)
+        console.print(f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), thresholds: {categorizer.thresholds_used}[/green]")

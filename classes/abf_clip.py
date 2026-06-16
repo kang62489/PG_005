@@ -57,6 +57,7 @@ class AbfClip:
         self.spike_detection()
         self.get_available_spiking_frames()
         self.clip_time_abf_img_segments()
+        self._export_spike_xlsx()
 
     def load_abf(self) -> None:
         self.loaded_abf = pyabf.ABF(self.raw_abf_path)
@@ -91,8 +92,6 @@ class AbfClip:
         self.peak_values = self.Vm[self.peak_indices]
         self.df_peaks = pl.DataFrame({"Time": self.peak_times, "Peaks": self.peak_values})
 
-        self._export_spike_xlsx()
-
     def _export_spike_xlsx(self) -> None:
         wb = Workbook()
 
@@ -107,7 +106,24 @@ class AbfClip:
         for row in self.df_peaks.iter_rows(named=False):
             ws_peaks.append(list(row))
 
-        xlsx_path = self.results_dir / f"{self.raw_abf_path.stem}_spike_detection.xlsx"
+        if self.lst_abf_sample_ranges:
+            ws_segs = wb.create_sheet("ABF_segments")
+            headers: list = []
+            for i in range(len(self.lst_abf_sample_ranges)):
+                headers += [f"rec_time(abf_seg_{i})", f"Vm(abf_seg_{i})"]
+            ws_segs.append(headers)
+
+            segments = [
+                (self.rec_time[start:end], self.Vm[start:end])
+                for start, end in self.lst_abf_sample_ranges
+            ]
+            for r in range(len(segments[0][0])):
+                row: list = []
+                for time_seg, vm_seg in segments:
+                    row += [float(time_seg[r]), float(vm_seg[r])]
+                ws_segs.append(row)
+
+        xlsx_path = self.results_dir / f"ABF_{self.exp_date}_{self.abf_serial}_spike_analysis.xlsx"
         wb.save(xlsx_path)
         console.print(f"[green]Saved spike detection → {xlsx_path}[/green]")
 

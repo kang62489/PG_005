@@ -52,12 +52,12 @@ class SpatialCategorizer:
         >>> categorizer.fit(image_segment)
     """
 
-    METHODS: ClassVar[list[str]] = ["connected", "watershed", "morphological"]
+    GROUPING_METHODS: ClassVar[list[str]] = ["connected", "watershed", "morphological"]
     THRESHOLD_METHODS: ClassVar[list[str]] = ["manual", "multiotsu", "li_double", "otsu_double"]
 
     def __init__(
         self,
-        method: str,
+        grouping_method: str,
         threshold_method: str = "li_double",
         *,
         global_threshold: bool = True,
@@ -79,8 +79,8 @@ class SpatialCategorizer:
             - SpatialCategorizer.watershed(...)
             - SpatialCategorizer.morphological(...)
         """
-        if method not in self.METHODS:
-            msg = f"Unknown method: {method}. Choose from {self.METHODS}"
+        if grouping_method not in self.GROUPING_METHODS:
+            msg = f"Unknown grouping_method: {grouping_method}. Choose from {self.GROUPING_METHODS}"
             raise ValueError(msg)
         if threshold_method not in self.THRESHOLD_METHODS:
             msg = f"Unknown threshold_method: {threshold_method}. Choose from {self.THRESHOLD_METHODS}"
@@ -98,7 +98,7 @@ class SpatialCategorizer:
             if threshold_bright is None:
                 threshold_bright = 0.0
 
-        self.method = method
+        self.grouping_method = grouping_method
         self.threshold_method = threshold_method
         self.threshold_dim = threshold_dim
         self.threshold_bright = threshold_bright
@@ -139,7 +139,7 @@ class SpatialCategorizer:
             SpatialCategorizer instance
         """
         return cls(
-            method="connected",
+            grouping_method="connected",
             threshold_method=threshold_method,
             global_threshold=global_threshold,
             threshold_dim=threshold_dim,
@@ -173,7 +173,7 @@ class SpatialCategorizer:
             SpatialCategorizer instance
         """
         return cls(
-            method="watershed",
+            grouping_method="watershed",
             threshold_method=threshold_method,
             global_threshold=global_threshold,
             threshold_dim=threshold_dim,
@@ -206,7 +206,7 @@ class SpatialCategorizer:
             SpatialCategorizer instance
         """
         return cls(
-            method="morphological",
+            grouping_method="morphological",
             threshold_method=threshold_method,
             global_threshold=global_threshold,
             threshold_dim=threshold_dim,
@@ -224,13 +224,7 @@ class SpatialCategorizer:
         Returns:
             self (for method chaining)
         """
-        # Convert to list of frames
-        if image_segment.ndim == NDIM_SINGLE_FRAME:
-            # input segment only has demention of ndim is 2 => (width, height)
-            self.source_frames = [image_segment]
-        else:
-            # multiple frames in the segment ndim is 3 or higher => (frames, height, width) or (channels, frames, height, width)
-            self.source_frames = [image_segment[i] for i in range(image_segment.shape[0])]
+        self.source_frames = [image_segment[i] for i in range(image_segment.shape[0])]
 
         # Calculate global thresholds if needed
         if self.global_threshold and self.threshold_method != "manual":
@@ -243,7 +237,7 @@ class SpatialCategorizer:
         self.frame_regions = []
 
         for frame_idx, frame in enumerate(self.source_frames):
-            categorized, stats = self._categorize_frame(frame, frame_idx)
+            categorized, stats = self._dispatch_frame(frame, frame_idx)
             self.categorized_frames.append(categorized)
             self.frame_regions.append(stats)
 
@@ -269,20 +263,19 @@ class SpatialCategorizer:
         else:
             self.thresholds_used = (self.threshold_dim, self.threshold_bright)
 
-    def _categorize_frame(self, frame: np.ndarray, frame_idx: int) -> tuple[np.ndarray, dict]:
-        """Categorize a single frame using the selected method."""
+    def _dispatch_frame(self, frame: np.ndarray, frame_idx: int) -> tuple[np.ndarray, dict]:
         thresh_dim, thresh_bright = self.thresholds_used
 
-        if self.method == "connected":
-            return self._method_connected(frame, frame_idx, thresh_dim, thresh_bright)
-        if self.method == "watershed":
-            return self._method_watershed(frame, frame_idx, thresh_dim, thresh_bright)
-        if self.method == "morphological":
-            return self._method_morphological(frame, frame_idx, thresh_dim, thresh_bright)
-        msg = f"Unknown method: {self.method}"
+        if self.grouping_method == "connected":
+            return self._apply_connected(frame, frame_idx, thresh_dim, thresh_bright)
+        if self.grouping_method == "watershed":
+            return self._apply_watershed(frame, frame_idx, thresh_dim, thresh_bright)
+        if self.grouping_method == "morphological":
+            return self._apply_morphological(frame, frame_idx, thresh_dim, thresh_bright)
+        msg = f"Unknown grouping_method: {self.grouping_method}"
         raise ValueError(msg)
 
-    def _method_connected(
+    def _apply_connected(
         self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
     ) -> tuple[np.ndarray, dict]:
         """Connected components analysis."""
@@ -308,7 +301,7 @@ class SpatialCategorizer:
 
         return categorized, {"frame_idx": frame_idx, "thresholds": self.thresholds_used}
 
-    def _method_watershed(
+    def _apply_watershed(
         self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
     ) -> tuple[np.ndarray, dict]:
         """Watershed segmentation."""
@@ -344,7 +337,7 @@ class SpatialCategorizer:
 
         return categorized, {"frame_idx": frame_idx, "thresholds": self.thresholds_used}
 
-    def _method_morphological(
+    def _apply_morphological(
         self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
     ) -> tuple[np.ndarray, dict]:
         """Morphological cleanup."""
@@ -370,11 +363,11 @@ class SpatialCategorizer:
         bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
         bright_cleaned = binary_erosion(bright_cleaned, structure=struct)
 
-        result = np.zeros_like(frame, dtype=int)
-        result[dim_cleaned] = 1
-        result[bright_cleaned] = 2
+        categorized = np.zeros_like(frame, dtype=int)
+        categorized[dim_cleaned] = 1
+        categorized[bright_cleaned] = 2
 
-        return result, {"frame_idx": frame_idx, "thresholds": self.thresholds_used}
+        return categorized, {"frame_idx": frame_idx, "thresholds": self.thresholds_used}
 
     def get_results(self) -> dict:
         """
@@ -388,7 +381,7 @@ class SpatialCategorizer:
             "categorized_frames": self.categorized_frames,
             "frame_regions": self.frame_regions,
             "thresholds_used": self.thresholds_used,
-            "method": self.method,
+            "grouping_method": self.grouping_method,
             "threshold_method": self.threshold_method,
         }
 
@@ -398,28 +391,3 @@ class SpatialCategorizer:
             "threshold_method": self.threshold_method,
             "categorized_frames": self.categorized_frames,
         }
-
-
-# Convenience function for backward compatibility
-def process_segment_spatial(
-    image_segment: np.ndarray,
-    method: str = "connected",
-    *,
-    global_threshold: bool = True,
-    **kwargs: float,
-) -> tuple[list[np.ndarray], list[dict]]:
-    """
-    Process image segment using spatial methods (backward compatible function).
-
-    Args:
-        image_segment: 3D array (frames, height, width)
-        method: Categorization method
-        global_threshold: If True, use global thresholds
-        **kwargs: Additional parameters
-
-    Returns:
-        categorized_frames, frame_regions
-    """
-    categorizer = SpatialCategorizer(method=method, global_threshold=global_threshold, **kwargs)
-    categorizer.fit(image_segment)
-    return categorizer.categorized_frames, categorizer.frame_regions
