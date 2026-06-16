@@ -16,13 +16,18 @@ Detrend mode selects which processed TIFF prefix is loaded:
 Usage:
     python spike_analysis.py --ana_list data/ana_list_20260601_000.txt [--detrend BIEXP] [--use_als]
 """
-
+# Standard library imports
 import argparse
 from pathlib import Path
 
+# Third-party imports
+import numpy as np
+import tifffile
 from rich.console import Console
 
+# Local application imports
 from classes import AbfClip
+from functions import spike_centered_median, zscore_img_segs
 
 console = Console()
 
@@ -36,19 +41,19 @@ def _parse_bracket(
     raw_abfs_dir: Path,
     detrend_mode: str,
     use_als: bool,
-) -> dict | None:
-    """Return {"proc_tiff_path", "raw_abf_path"} for one bracket line, or None if guards fail."""
+) -> tuple[dict | None, str | None]:
+    """Return (entry, skip_reason) for one bracket line."""
     parts = [p.strip() for p in stripped.strip("[]").split(",")]
     if len(parts) < 5:
-        return None
+        return None, "fewer than 5 fields"
     raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist = parts[:5]
 
     if use_als and als_exist != "YES":
-        return None
+        return None, f"als_exist={als_exist}"
     if not use_als and gauss_exist != "YES":
-        return None
+        return None, f"gauss_exist={gauss_exist}"
     if abf_exist != "YES":
-        return None
+        return None, f"abf_exist={abf_exist}"
 
     stem = Path(raw_tiff_name).stem
     suffix = "_ALS.tif" if use_als else "_GAUSS.tif"
@@ -56,7 +61,7 @@ def _parse_bracket(
     return {
         "proc_tiff_path": proc_dir / f"{stem}_{detrend_mode}{suffix}",
         "raw_abf_path": raw_abfs_dir / paired_abf,
-    }
+    }, None
 
 
 def parse_ana_list(
@@ -112,9 +117,11 @@ def parse_ana_list(
             continue
         if in_picked:
             if line.strip().startswith("["):
-                entry = _parse_bracket(line.strip(), proc_dir, raw_abfs_dir, detrend_mode, use_als)
+                entry, skip_reason = _parse_bracket(line.strip(), proc_dir, raw_abfs_dir, detrend_mode, use_als)
                 if entry:
                     entries.append(entry)
+                else:
+                    console.print(f"[yellow]Skipped {line.strip()}: {skip_reason}[/yellow]")
             else:
                 in_picked = False
 
@@ -143,3 +150,18 @@ if __name__ == "__main__":
             detrend_mode=detrend_mode,
             normalization=normalization,
         )
+
+        if not clip.lst_img_frame_ranges:
+            console.print("[yellow]No valid segments — skipping z-score step.[/yellow]")
+            continue
+
+        lst_zscore = zscore_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
+        console.print(f"[green]Z-score normalized {len(lst_zscore)} segment(s)[/green]")
+
+        median_segment, zscore_range = spike_centered_median(lst_zscore)
+        del lst_zscore
+        console.print(f"[green]Median shape: {median_segment.shape}, z-score range: [{zscore_range[0]:.2f}, {zscore_range[1]:.2f}][/green]")
+
+        median_path = results_dir / f"{clip.proc_tiff_path.stem}_median.tif"
+        tifffile.imwrite(median_path, median_segment.astype(np.float32))
+        console.print(f"[green]Saved median → {median_path.name}[/green]")

@@ -8,12 +8,8 @@ from rich.console import Console
 console = Console()
 
 
-@njit(parallel=True)
-def _median_axis0(stacked: np.ndarray) -> np.ndarray:
-    """Compute median along axis-0 (segments) of a (S, F, H, W) array.
-
-    Parallelised over H rows using numba prange.
-    """
+@njit(parallel=True, cache=True)
+def _cpu_median_axis0(stacked: np.ndarray) -> np.ndarray:
     s_count, n_frames, height, width = stacked.shape
     result = np.empty((n_frames, height, width), dtype=np.float64)
     mid = s_count // 2
@@ -54,7 +50,7 @@ def spike_centered_median(
 
     # All segments are identical shape — stack then run numba parallel median
     stacked = np.stack(lst_img_segments, axis=0).astype(np.float64)  # (S, F, H, W)
-    result = _median_axis0(stacked)
+    result = _cpu_median_axis0(stacked)
 
     # Calculate z-score range (1st and 99th percentile) for consistent color scaling
     vmin, vmax = np.percentile(result, [1, 99])

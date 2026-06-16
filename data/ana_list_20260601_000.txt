@@ -1,13 +1,13 @@
-Date Created: 20260605
-Analysis: Test dff0
+Date Created: 20260601
+Analysis: test
 Purposes:
-     test dffo
+     refactor
 
 Picked: [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
-[2026_01_08-0005.tif, YES, No, 2026_01_08_0003.abf, YES]
-[2026_01_08-0012.tif, YES, No, 2026_01_08_0010.abf, YES]
-[2026_01_08-0016.tif, YES, No, 2026_01_08_0014.abf, YES]
-[2026_01_08-0024.tif, YES, No, 2026_01_08_0020.abf, YES]
+[2026_03_20-0028.tif, YES, YES, 2026_03_20_0015.abf, YES]
+[2026_03_20-0029.tif, YES, YES, 2026_03_20_0016.abf, YES]
+[2026_03_20-0040.tif, YES, YES, 2026_03_20_0025.abf, YES]
+[2026_03_20-0041.tif, YES, YES, 2026_03_20_0026.abf, YES]
 
 Total 4 records picked
 

@@ -1,0 +1,12 @@
+Date Created: 20260616
+Analysis: test_pipeline
+Purposes:
+     new
+
+Picked: [raw_tiff_name, paired_abf]
+[2025_12_15-0013.tif, 2025_12_15_0009.abf]
+[2025_12_15-0014.tif, 2025_12_15_0010.abf]
+[2025_12_15-0024.tif, 2025_12_15_0018.abf]
+[2025_12_15-0025.tif, 2025_12_15_0019.abf]
+
+Total 4 records picked

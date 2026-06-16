@@ -9,11 +9,11 @@ if TYPE_CHECKING:
     from .detrend import biexp_detrend, mov_detrend
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
-    from .imaging_segments_zscore_normalization import img_seg_zscore_norm
     from .spike_centered_processes import spike_centered_avg, spike_centered_median
     from .tau_estimate import sample_tau
     from .test_cuda import test_cuda
     from .xlsx_reader import get_picked_pairs
+    from .zscore_img_segs import zscore_img_segs
 
 __all__ = [
     "als_run",
@@ -22,7 +22,7 @@ __all__ = [
     "gaussian_blur_run",
     "get_memory_usage",
     "get_picked_pairs",
-    "img_seg_zscore_norm",
+    "zscore_img_segs",
     "mov_detrend",
     "sample_tau",
     "spike_centered_avg",
@@ -36,7 +36,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "mov_detrend":         (".detrend",                                   "mov_detrend"),
     "gaussian_blur_run":   (".gaussian_blur",                             "gaussian_blur_run"),
     "get_memory_usage":    (".get_memory_use",                            "get_memory_usage"),
-    "img_seg_zscore_norm": (".imaging_segments_zscore_normalization",     "img_seg_zscore_norm"),
+    "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
     "spike_centered_avg":  (".spike_centered_processes",                  "spike_centered_avg"),
     "spike_centered_median": (".spike_centered_processes",                "spike_centered_median"),
     "sample_tau":          (".tau_estimate",                              "sample_tau"),

@@ -1,3 +1,38 @@
+# Log of the project progress 2026-06-16 Mon (Session 24)
+Last working file: `spike_analysis.py`
+Last working line: ~160
+
+## List of modified files
+- `classes/abf_clip.py` — removed `spike_min_height` from `spike_detection()`; removed dead segment accessors (`get_img_segment`, `get_abf_segment`, `get_time_segment`); `get_export_data()` now includes `tiff_full_path`/`abf_full_path` (Option B, keeps `abf_serial`/`img_serial`); removed `min_interval_frames`; renamed `max_interval_frames` → `set_interval_frames`; `set_interval_frames` now auto-derived as `min(mode(min_available_frames), 20)` via two-pass approach in `get_available_spiking_frames()`
+- `functions/imaging_segments_zscore_normalization.py` → **renamed** to `functions/zscore_img_segs.py`; function renamed `img_seg_zscore_norm` → `zscore_img_segs`; new signature takes `proc_tiff_path: Path` + `lst_img_frame_ranges`; opens TIFF once for all segments
+- `functions/__init__.py` — lazy import updated to `zscore_img_segs` from `.zscore_img_segs`
+- `functions/spike_centered_processes.py` — renamed `_median_axis0` → `_cpu_median_axis0`; added `cache=True`
+- `spike_analysis.py` — added `zscore_img_segs` + `spike_centered_median` to pipeline; `del lst_zscore` after median; temp median TIFF save to `results_dir`; `_parse_bracket` now returns `(entry, skip_reason)` tuple for diagnostic skip output; added `numpy`/`tifffile` imports
+
+## Summary of current progress
+- **`AbfClip` refined**: spike detection uses prominence only (no absolute height); segment accessors removed; `set_interval_frames` fully auto-derived from data mode (capped at 20) — uniform segment lengths guaranteed
+- **`zscore_img_segs` redesigned**: renamed from `imaging_segments_zscore_normalization`, new signature takes path + frame ranges, opens TIFF in single pass
+- **`spike_centered_processes.py`**: `_cpu_median_axis0` renamed + cached; GPU version discussed and decided against (MAX_S constraint + fallback risk not worth it)
+- **`spike_analysis.py` pipeline extended**: `AbfClip` → `zscore_img_segs` → `spike_centered_median` → temp TIFF save; skip diagnostics now show reason (e.g. `abf_exist=No`)
+
+## Completed TODOs (from Session 23)
+- ✅ Fixed `AbfClip` spike detection (removed `spike_min_height`, prominence-only)
+- ✅ Redesigned `zscore_img_segs` with path-based loading
+- ✅ Wired `zscore_img_segs` + `spike_centered_median` into `spike_analysis.py`
+- ✅ Unified segment frame lengths via auto-derived `set_interval_frames`
+
+## What should we do next? (TODOs)
+- [ ] Redesign and optimize `SpatialCategorizer` and `RegionAnalyzer` before wiring into pipeline
+- [ ] Remove temp median TIFF save in `spike_analysis.py` once pipeline is verified
+- [ ] Wire `SpatialCategorizer` → `RegionAnalyzer` → `ResultsExporter` into `spike_analysis.py`
+- [ ] Wire `btn_run_analysis` in `ctrl_align_spike.py` to call the pipeline
+- [ ] Archive `im_dynamics.py`, `batch_process.py`, `test_batch.py` once pipeline is complete
+
+## Last Session Recap
+※ recap: Refined AbfClip (prominence-only detection, auto set_interval_frames from mode), redesigned zscore_img_segs with path-based TIFF loading, extended spike_analysis.py pipeline to zscore→median; next is redesigning SpatialCategorizer and RegionAnalyzer.
+
+---
+
 # Log of the project progress 2026-06-15 Sun (Session 23)
 Last working file: `classes/abf_clip.py`
 Last working line: ~160 (`get_export_data`)

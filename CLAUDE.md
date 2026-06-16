@@ -12,6 +12,11 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 4. Use emoji to make the text lively.
 
 
+### Environment Setup
+- When running Python-related shell commands, check if `.venv/Scripts/activate` exists. If it does, prepend activation to the same command so the venv is active for that call:
+  - **PowerShell**: `& .venv\Scripts\Activate.ps1; <cmd>`
+  - **Bash**: `source .venv/Scripts/activate && <cmd>`
+
 ### Code Editing
 1. Consider impact on both CPU and GPU pipelines if changing preprocessing
 2. Check and fix ruff problems of **python files** after editing according to the settings in `pyproject.toml`.

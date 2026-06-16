@@ -4,10 +4,10 @@ Purposes:
      test dffo
 
 Picked: [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]
-[2026_01_08-0005.tif, BIEXP & MOV, No, YES, BIEXP, 2026_01_08_0003.abf]
-[2026_01_08-0012.tif, No, No, SKIP, NONE, 2026_01_08_0010.abf]
-[2026_01_08-0016.tif, No, No, SKIP, NONE, 2026_01_08_0014.abf]
-[2026_01_08-0024.tif, No, No, SKIP, NONE, 2026_01_08_0020.abf]
+[2026_01_08-0005.tif, BIEXP & MOV, No, SKIP, NONE, 2026_01_08_0003.abf]
+[2026_01_08-0012.tif, BIEXP, No, YES, BIEXP, 2026_01_08_0010.abf]
+[2026_01_08-0016.tif, BIEXP, No, YES, BIEXP, 2026_01_08_0014.abf]
+[2026_01_08-0024.tif, BIEXP, No, YES, BIEXP, 2026_01_08_0020.abf]
 
 Total 4 records picked
 

@@ -71,7 +71,17 @@ class Main(QMainWindow):
         self.ctrl_data_selector.pick_confirmed.connect(lambda _: self.w_main.setCurrentIndex(2))
 
         self.setCentralWidget(self.w_main)
+        self.center_on_screen()
         self.show()
+
+    def center_on_screen(self) -> None:
+        """Center the window on the current screen."""
+        screen = self.screen()
+        screen_geometry = screen.availableGeometry()
+        window_geometry = self.frameGeometry()
+        center_point = screen_geometry.center()
+        window_geometry.moveCenter(center_point)
+        self.move(window_geometry.topLeft())
 
 
 app = QApplication()

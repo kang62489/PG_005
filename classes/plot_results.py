@@ -85,14 +85,7 @@ class MplCanvas(FigureCanvasQTAgg):
 
 
 # Common functions
-def center_on_screen(window: QMainWindow) -> None:
-    """Center the window on the current screen."""
-    screen = window.screen()
-    screen_geometry = screen.availableGeometry()
-    window_geometry = window.frameGeometry()
-    center_point = screen_geometry.center()
-    window_geometry.moveCenter(center_point)
-    window.move(window_geometry.topLeft())
+
 
 
 def _add_scale_bar(

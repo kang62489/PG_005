@@ -14,15 +14,17 @@ Usage:
     python img_proc.py --proc_list data/proc_pick_20260512_002.txt
 """
 
-
+# Standard library imports
 import argparse
 import time
 from pathlib import Path
 
+# Third-party imports
 import numpy as np
 import tifffile
 from rich.console import Console
 
+# Local application imports
 from functions import (
     biexp_detrend,
     check_cuda,
@@ -53,9 +55,9 @@ def _parse_bracket(proc_list_line: str) -> dict | None:
     do_processing is SKIP, or detrend_mode is NONE.
     """
     parts = [p.strip() for p in proc_list_line.strip("[]").split(",")]
-    if len(parts) < 4:
+    if len(parts) < 5:
         return None
-    filename, proc, mode = parts[0], parts[2], parts[3]
+    filename, proc, mode = parts[0], parts[3], parts[4]
     if proc == "SKIP" or mode == "NONE":
         return None
     return {"file": filename, "proc": proc, "mode": mode}

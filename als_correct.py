@@ -8,15 +8,17 @@ Usage:
     python als_correct.py --proc_list data/proc_pick_20260512_002.txt [--lam 100] [--p 0.05] [--n_iter 10]
 """
 
-
+# Standard library imports
 import argparse
 import time
 from pathlib import Path
 
+# Third-party imports
 import numpy as np
 import tifffile
 from rich.console import Console
 
+# Local application imports
 from functions import als_run, check_cuda, get_memory_usage
 from img_proc import update_proc_list_gauss_exists
 

@@ -24,8 +24,6 @@ class AbfClip:
         detrend_mode: str,
         normalization: str,
         fs_imgs: float = 20,
-        min_interval_frames: int = 4,
-        max_interval_frames: int = 4,
     ) -> None:
         self.proc_tiff_path = proc_tiff_path
         self.raw_abf_path = raw_abf_path
@@ -33,8 +31,7 @@ class AbfClip:
         self.detrend_mode = detrend_mode
         self.normalization = normalization
         self.fs_imgs = fs_imgs
-        self.min_interval_frames = min_interval_frames
-        self.max_interval_frames = max_interval_frames
+        self.set_interval_frames: int = 0
 
         # Derive metadata from path names for export compatibility
         abf_parts = raw_abf_path.stem.split("_")
@@ -65,7 +62,7 @@ class AbfClip:
         self.loaded_abf = pyabf.ABF(self.raw_abf_path)
 
     def spike_detection(
-        self, spike_min_height: float = 0, spike_min_distance: int = 1500, spike_min_prominence: float = 10
+        self, spike_min_distance: int = 3000, spike_min_prominence: float = 20.0
     ) -> None:
         self.abf_time = self.loaded_abf.sweepX
         self.abf_dataset = self.loaded_abf.data
@@ -80,7 +77,7 @@ class AbfClip:
         self.rec_time: np.ndarray = self.abf_time[self.abf_idx_tstart : self.abf_idx_tend]
 
         self.peak_indices, _properties = find_peaks(
-            self.Vm, height=spike_min_height, distance=spike_min_distance, prominence=spike_min_prominence
+            self.Vm, distance=spike_min_distance, prominence=spike_min_prominence
         )
         self.num_found_spikes = len(self.peak_indices)
 
@@ -141,26 +138,38 @@ class AbfClip:
         inter_spike_frames = np.insert(inter_spike_frames, 0, leading_interval_frames).astype(int)
         inter_spike_frames = np.append(inter_spike_frames, trailing_inverval_frames).astype(int)
 
+        # Pass 1: collect min_available_frames for all spikes → derive set_interval_frames from mode
+        all_min_available: list[int] = []
+        for idx_of_spike in range(len(self.spike_frame_indices)):
+            left_frames: int = inter_spike_frames[idx_of_spike]
+            right_frames: int = inter_spike_frames[idx_of_spike + 1]
+            all_min_available.append(int(np.min([left_frames, right_frames])))
+
+        all_min_series = pl.Series("Min_Available_Frames", all_min_available, dtype=pl.Int64)
+        self.set_interval_frames = min(int(all_min_series.mode().min()), 20)
+        console.print(
+            f"[bold cyan]Min_Available_Frames — max: {all_min_series.max()}, "
+            f"mode: {all_min_series.mode().to_list()} → set_interval_frames = {self.set_interval_frames}[/bold cyan]"
+        )
+
+        # Pass 2: filter spikes using auto-derived set_interval_frames
         lst_skipped_spikes = []
         lst_picked_spikes = []
 
         for idx_of_spike, frame_of_spike in enumerate(self.spike_frame_indices):
-            left_frames: int = inter_spike_frames[idx_of_spike]
-            right_frames: int = inter_spike_frames[idx_of_spike + 1]
-            min_available_frames: int = np.min([left_frames, right_frames])
+            min_available_frames = all_min_available[idx_of_spike]
 
-            if min_available_frames < self.min_interval_frames:
+            if min_available_frames < self.set_interval_frames:
                 lst_skipped_spikes.append(
                     {"Spike_Frame_Index": frame_of_spike, "Min_Available_Frames": min_available_frames}
                 )
                 continue
 
-            set_interval_frames = min(min_available_frames, self.max_interval_frames)
             lst_picked_spikes.append(
                 {
                     "Spike_Frame_Index": frame_of_spike,
                     "Min_Available_Frames": min_available_frames,
-                    "Set_Interval_Frames": set_interval_frames,
+                    "Set_Interval_Frames": self.set_interval_frames,
                 }
             )
 
@@ -208,26 +217,13 @@ class AbfClip:
             f"Total segments: {len(self.lst_img_frame_ranges)} image ranges, {len(self.lst_abf_sample_ranges)} ABF ranges"
         )
 
-    # ── Segment accessors ──────────────────────────────────────────────────────
-
-    def get_img_segment(self, i: int) -> np.ndarray:
-        left, right = self.lst_img_frame_ranges[i]
-        with tifffile.TiffFile(self.proc_tiff_path) as tif:
-            return np.array([tif.pages[j].asarray() for j in range(left, right + 1)])
-
-    def get_abf_segment(self, i: int) -> np.ndarray:
-        start, end = self.lst_abf_sample_ranges[i]
-        return self.Vm[start:end]
-
-    def get_time_segment(self, i: int) -> np.ndarray:
-        start, end = self.lst_abf_sample_ranges[i]
-        return self.rec_time[start:end]
-
     # ── Export ─────────────────────────────────────────────────────────────────
 
     def get_export_data(self) -> dict:
         return {
             "exp_date": self.exp_date,
+            "tiff_full_path": self.proc_tiff_path,
+            "abf_full_path": self.raw_abf_path,
             "abf_serial": self.abf_serial,
             "img_serial": self.img_serial,
             "num_found_spikes": self.num_found_spikes,
