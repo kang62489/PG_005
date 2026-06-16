@@ -2,6 +2,8 @@
 # Standard library imports
 import sys
 
+from functions.imaging_segments_zscore_normalization import img_seg_zscore_norm
+
 # Third-party imports
 from PySide6.QtWidgets import QApplication
 
@@ -16,7 +18,6 @@ from classes import (
     ResultsExporter,
     SpatialCategorizer,
 )
-from functions.imaging_segments_zscore_normalization import img_seg_zscore_norm
 from functions.spike_centered_processes import spike_centered_median
 
 # Setup QApplication
@@ -73,8 +74,7 @@ for time_seg, abf_seg, img_seg in zip(
 categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
 categorizer.fit(med_img_segment_zscore)
 
-region_analyzer = RegionAnalyzer(obj=OBJECTIVE)
-region_analyzer.fit(categorizer.categorized_frames)
+region_analyzer = RegionAnalyzer(categorizer.categorized_frames, obj=OBJECTIVE)
 
 # Export results
 exporter = ResultsExporter()

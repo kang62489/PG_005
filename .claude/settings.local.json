@@ -37,7 +37,9 @@
       "PowerShell(ruff check *)",
       "PowerShell(Rename-Item *)",
       "Bash(C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe check *)",
-      "PowerShell(& \"C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe\" check *)"
+      "PowerShell(& \"C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe\" check *)",
+      "Bash(.venv\\\\Scripts\\\\Activate.ps1)",
+      "PowerShell(C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe check *)"
     ]
   }
 }

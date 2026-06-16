@@ -141,8 +141,7 @@ def analyze_pair(
 
         # 7. Region analysis
         t0 = time.perf_counter()
-        region_analyzer = RegionAnalyzer(obj=objective)
-        region_analyzer.fit(categorized_frames)
+        region_analyzer = RegionAnalyzer(categorized_frames, obj=objective)
         region_summary = region_analyzer.get_summary()
         region_data = region_analyzer.get_results()
         t_region = time.perf_counter() - t0

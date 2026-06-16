@@ -40,30 +40,28 @@ class NumpyEncoder(json.JSONEncoder):
 
 
 def optimize_region_data(region_data: dict) -> dict:
-    """Optimize region data by keeping only largest bright regions.
+    """Strip contours and internal fields from region data before JSON serialization.
 
-    Reduces JSON size from ~5MB to ~5KB per experiment by removing:
-    - dim_regions (all regions)
-    - bright_regions (all regions)
-    - dim_category (category stats)
-    - bright_category (category stats)
-    - dim_largest (not needed)
-
-    Keeps only:
-    - bright_largest (largest bright region per frame with spans)
-    - obj (microscope objective)
-    - um_per_pixel (scale factor)
+    Keeps only scalar measurements for each largest-bright region (area, centroid,
+    spans) — contour arrays and the internal _label field are removed to keep
+    the stored JSON small.
 
     Args:
         region_data: Full region analysis dict from RegionAnalyzer.get_results()
 
     Returns:
-        Optimized dict with only largest bright regions
+        Serialization-safe dict with only largest bright regions
     """
+    _strip = {"contour", "_label"}
+    raw = region_data.get("bright_largest") or []
+    bright_largest = [
+        {k: v for k, v in r.items() if k not in _strip} if r is not None else None
+        for r in raw
+    ]
     return {
-        "bright_largest": region_data.get("bright_largest"),
-        "obj": region_data.get("obj"),
-        "um_per_pixel": region_data.get("um_per_pixel"),
+        "bright_largest": bright_largest,
+        "obj":            region_data.get("obj"),
+        "um_per_pixel":   region_data.get("um_per_pixel"),
     }
 
 
@@ -238,7 +236,7 @@ class ResultsExporter:
             else:
                 mask = frame == 2  # CATEGORY_BRIGHT
                 labeled = sk_label(mask)
-                region_mask = labeled == largest["label"]
+                region_mask = labeled == largest["_label"]
                 output_frames.append(find_boundaries(region_mask, mode="inner").astype(np.uint8))
         tifffile.imwrite(
             files_dir / f"{exp_prefix}_categorized.tif",
@@ -277,8 +275,8 @@ class ResultsExporter:
 
         if spike_frame_region:
             centroid_y, centroid_x = spike_frame_region["centroid"]
-            x_span_pixels = spike_frame_region["x_span_pixels"]
-            y_span_pixels = spike_frame_region["y_span_pixels"]
+            x_span_pixels = spike_frame_region["x_span_px"]
+            y_span_pixels = spike_frame_region["y_span_px"]
             x_span_um = spike_frame_region["x_span_um"]
             y_span_um = spike_frame_region["y_span_um"]
         else:

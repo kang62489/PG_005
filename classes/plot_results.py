@@ -45,6 +45,14 @@ mpl.rcParams["savefig.directory"] = ""
 cs = Console()
 
 
+def center_on_screen(window: QMainWindow) -> None:
+    screen = window.screen()
+    screen_geometry = screen.availableGeometry()
+    window_geometry = window.frameGeometry()
+    window_geometry.moveCenter(screen_geometry.center())
+    window.move(window_geometry.topLeft())
+
+
 # customized toolbar
 class CustomToolbar(NavigationToolbar):
     toolitems: ClassVar[list[tuple[str, str, str, str]]] = [("Save", "Save the figure", "filesave", "save_figure")]
@@ -410,9 +418,7 @@ class PlotSpatialDist(QMainWindow):
         self.img_serial = img_serial
         self.n_spikes = n_spikes
 
-        # Fit RegionAnalyzer for contours, centroids, and area
-        self.ra_ins = RegionAnalyzer(obj=obj)
-        self.ra_ins.fit(self.sc_ins.categorized_frames)
+        self.ra_ins = RegionAnalyzer(self.sc_ins.categorized_frames, obj=obj)
 
         self.lo_main = QVBoxLayout()
 
@@ -541,7 +547,7 @@ class PlotSpatialDist(QMainWindow):
         ax_vm.grid(True, which="minor", alpha=0.3)
 
         # Main title with threshold info and metadata
-        title = f"Spatial Categorization: {self.sc_ins.method.upper()}"
+        title = f"Spatial Categorization: {self.sc_ins.grouping_method.upper()}"
         if self.exp_date and self.abf_serial and self.img_serial:
             title += f" | {self.exp_date} abf{self.abf_serial}_img{self.img_serial}"
         if self.sc_ins.thresholds_used:
@@ -566,6 +572,7 @@ class PlotRegion(QMainWindow):
         zscore_range: tuple[float, float] | None = None,
         n_spikes: int | None = None,
         *,
+        zscore_only: bool = False,
         show: bool = True,
     ) -> None:
         super().__init__()
@@ -576,6 +583,7 @@ class PlotRegion(QMainWindow):
         self.obj = obj
         self.zscore_range = zscore_range  # (vmin, vmax) for consistent color scaling
         self.n_spikes = n_spikes
+        self.zscore_only = zscore_only
 
         # Get frame info
         self.n_frames = len(self.sc_ins.source_frames)
@@ -597,15 +605,15 @@ class PlotRegion(QMainWindow):
         self.cb_frame.addItems(frame_items)
         self.lo_main.addWidget(self.cb_frame, 0, Qt.AlignCenter)
 
-        # Row 2: Three QStackedWidgets side by side
+        # Row 2: stacked panels (zscore always; cat + voltage only when not zscore_only)
         self.lo_stacks = QHBoxLayout()
         self.sw_zscore = QStackedWidget()
-        self.sw_cat = QStackedWidget()
-        self.sw_voltage = QStackedWidget()
-
         self.lo_stacks.addWidget(self.sw_zscore)
-        self.lo_stacks.addWidget(self.sw_cat)
-        self.lo_stacks.addWidget(self.sw_voltage)
+        if not zscore_only:
+            self.sw_cat = QStackedWidget()
+            self.sw_voltage = QStackedWidget()
+            self.lo_stacks.addWidget(self.sw_cat)
+            self.lo_stacks.addWidget(self.sw_voltage)
         self.lo_main.addLayout(self.lo_stacks)
 
         # Set up main widget
@@ -626,18 +634,18 @@ class PlotRegion(QMainWindow):
         # Set initial frame to spike frame (center)
         self.cb_frame.setCurrentIndex(self.half_frames)
 
-        # Set window size to accommodate all three stacks
-        self.resize(1400, 480)
+        self.resize(500 if zscore_only else 1400, 480)
         if show:
             self.show()
             center_on_screen(self)
 
     def switch_frame(self, idx: int) -> None:
-        """Switch all three stacks to the selected frame."""
+        """Switch all visible stacks to the selected frame."""
         if idx >= 0:
             self.sw_zscore.setCurrentIndex(idx)
-            self.sw_cat.setCurrentIndex(idx)
-            self.sw_voltage.setCurrentIndex(idx)
+            if not self.zscore_only:
+                self.sw_cat.setCurrentIndex(idx)
+                self.sw_voltage.setCurrentIndex(idx)
 
     def plotting(self) -> None:
         """Create canvases for each frame and add to stacks."""
@@ -650,8 +658,9 @@ class PlotRegion(QMainWindow):
 
         for frame_idx in range(self.n_frames):
             self._create_zscore_canvas(frame_idx, vmin, vmax)
-            self._create_categorized_canvas(frame_idx)
-            self._create_voltage_canvas(frame_idx)
+            if not self.zscore_only:
+                self._create_categorized_canvas(frame_idx)
+                self._create_voltage_canvas(frame_idx)
 
     def _create_zscore_canvas(self, frame_idx: int, vmin: float, vmax: float) -> None:
         """Stack 1: Z-scored image + contours + centroids + colorbar."""
@@ -665,14 +674,19 @@ class PlotRegion(QMainWindow):
         im_z = ax_z.imshow(orig, cmap="gray", vmin=vmin, vmax=vmax, interpolation="nearest")
         fig_z.colorbar(im_z, ax=ax_z, fraction=0.046, pad=0.04, label="Z-Score")
 
-        # Draw contour for largest bright region only
+        # Draw contour for largest dim region
+        dim_largest = frame_result["dim_largest"]
+        if dim_largest is not None:
+            contour = dim_largest["contour"]
+            if contour is not None:
+                ax_z.plot(contour[:, 1], contour[:, 0], color="cyan", linewidth=1.5)
+            dy, dx = dim_largest["centroid"]
+            ax_z.scatter(dx, dy, c="white", s=80, marker="+", linewidths=2, zorder=20)
+
+        # Draw contour for largest bright region
         bright_largest = frame_result["bright_largest"]
         if bright_largest is not None:
-            # Get contour for the largest bright region
-            from classes.region_analyzer import CATEGORY_BRIGHT
-
-            cat_frame = self.sc_ins.categorized_frames[frame_idx]
-            contour = self.ra_ins.get_largest_region_contour(cat_frame, CATEGORY_BRIGHT, bright_largest["label"])
+            contour = bright_largest["contour"]
             if contour is not None:
                 ax_z.plot(contour[:, 1], contour[:, 0], color="magenta", linewidth=1.5)
 
@@ -681,8 +695,8 @@ class PlotRegion(QMainWindow):
             ax_z.scatter(x, y, c="black", s=80, marker="+", linewidths=2, zorder=20)
 
             # Draw span lines (cross-hair from centroid)
-            x_span_px = bright_largest["x_span_pixels"]
-            y_span_px = bright_largest["y_span_pixels"]
+            x_span_px = bright_largest["x_span_px"]
+            y_span_px = bright_largest["y_span_px"]
             x_span_um = bright_largest["x_span_um"]
             y_span_um = bright_largest["y_span_um"]
 
@@ -718,6 +732,7 @@ class PlotRegion(QMainWindow):
         ax_z.axis("off")
 
         # Add legend for contour, centroid, and spans
+        ax_z.plot([], [], color="cyan", linewidth=1.5, label="Largest dim contour")
         ax_z.plot([], [], color="magenta", linewidth=1.5, label="Largest bright contour")
         ax_z.plot(
             [], [], marker="+", color="black", linestyle="", markersize=8, markeredgewidth=2, label="Bright centroid"
