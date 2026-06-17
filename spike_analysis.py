@@ -205,7 +205,7 @@ if __name__ == "__main__":
         console.print(f"[green]Median shape: {median_segment.shape}, z-score range: [{zscore_range[0]:.2f}, {zscore_range[1]:.2f}][/green]")
 
 
-        median_path = results_dir / f"{clip.proc_tiff_path.stem}_median.tif"
+        median_path = results_dir / f"{clip.proc_tiff_path.stem}_MED.tif"
         tifffile.imwrite(median_path, median_segment.astype(np.float32))
         console.print(f"[green]Saved median → {median_path.name}[/green]")
 
@@ -213,7 +213,7 @@ if __name__ == "__main__":
         categorizer.fit(median_segment)
         console.print(f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), thresholds: {categorizer.thresholds_used}[/green]")
 
-        cat_path = results_dir / f"{clip.proc_tiff_path.stem}_categorized.tif"
+        cat_path = results_dir / f"{clip.proc_tiff_path.stem}_CAT.tif"
         tifffile.imwrite(cat_path, np.array(categorizer.categorized_frames, dtype=np.uint8))
         console.print(f"[green]Saved categorized → {cat_path.name}[/green]")
 

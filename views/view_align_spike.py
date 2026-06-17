@@ -106,15 +106,11 @@ class ViewAlignSpike:
         self.lbl_processing_info = QLabel("Processing Info:")
         self.lo_processing_info.addRow(self.lbl_processing_info)
 
-        self.lbl_run_on = QLabel("Run On: ")
-        self.le_run_on = QLineEdit()
-
         self.lbl_current_total = QLabel("Current/Total: ")
         self.le_current_total = QLineEdit()
 
         self.lbl_status = QLabel("Status: ")
         self.le_status = QLineEdit()
 
-        self.lo_processing_info.addRow(self.lbl_run_on, self.le_run_on)
         self.lo_processing_info.addRow(self.lbl_current_total, self.le_current_total)
         self.lo_processing_info.addRow(self.lbl_status, self.le_status)
