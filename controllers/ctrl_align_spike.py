@@ -8,7 +8,7 @@ from rich.console import Console
 
 # Local application imports
 from classes import DialogGetFile, DialogGetPath, ModelFromDataFrame
-from functions import abf_ready, als_ready, build_filename_index, gauss_ready
+from functions import abf_ready, als_ready, build_filename_index, build_proc_file_index, gauss_ready
 from utils.params import MODELS_DIR, RAW_ABFS_DIR, RESULTS_DIR
 
 console = Console()
@@ -70,9 +70,9 @@ class CtrlAlignSpike:
             return
 
         detrend = self._detrend_mode()
-        # List each directory once and reuse the name sets for every row, instead of
+        # Scan each directory once and reuse the index for every row, instead of
         # one .exists() stat per row (was N x 3 individual round-trips, slow on network mounts)
-        proc_files = build_filename_index(proc_dir, "*.tif")
+        proc_file_index = build_proc_file_index(proc_dir)
         abf_files = build_filename_index(self._raw_abfs_dir(), "*.abf")
 
         rows = []
@@ -94,8 +94,8 @@ class CtrlAlignSpike:
                     rows.append({
                         "DOR": dor,
                         "TIFF_SERIAL": tiff_serial,
-                        "GAUSS_EXIST?": gauss_ready(proc_files, tiff_stem, detrend),
-                        "ALS_EXIST?": als_ready(proc_files, tiff_stem, detrend),
+                        "GAUSS_EXIST?": gauss_ready(proc_file_index, dor, tiff_serial, detrend),
+                        "ALS_EXIST?": als_ready(proc_file_index, dor, tiff_serial, detrend),
                         "ABF_SERIAL": abf_serial,
                         "ABF_READY?": abf_ready(abf_files, abf_name),
                     })

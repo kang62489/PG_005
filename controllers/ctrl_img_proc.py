@@ -9,7 +9,7 @@ from rich.console import Console
 
 # Local application imports
 from classes import BackgroundWorker, CellDropdownDelegate, DialogGetFile, DialogGetPath, ModelFromDataFrame
-from functions import als_mode, build_filename_index, build_proc_file_index, check_cuda, gauss_mode, raw_tiff_ready
+from functions import als_exists, build_filename_index, build_proc_file_index, check_cuda, gauss_exists, raw_tiff_ready
 from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_TIFFS_DIR
 
 # Constants
@@ -161,10 +161,10 @@ class CtrlImgProc:
                 lambda row_dict: raw_tiff_ready(raw_tiff_index, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("IMG_READY"),
             pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
-                lambda row_dict: gauss_mode(proc_file_index, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
+                lambda row_dict: gauss_exists(proc_file_index, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("GAUSS_EXISTS?"),
             pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
-                lambda row_dict: als_mode(proc_file_index, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
+                lambda row_dict: als_exists(proc_file_index, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("ALS_EXISTS?"),
         ).with_columns(
             pl.when(pl.col("GAUSS_EXISTS?") == "No")

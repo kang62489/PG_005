@@ -8,7 +8,7 @@ detection and alignment, spatial categorization, and region analysis.
 For each entry, the objective (10X / 40X / 60X) is looked up automatically
 from rec_data.db using the raw TIFF filename.
 
-Ana list format (5 fields per bracket entry):
+Ana list format (column names declared on the 'Picked:' line):
   [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
 
 Detrend mode selects which processed TIFF prefix is loaded:
@@ -32,7 +32,7 @@ from rich.console import Console
 
 # Local application imports
 from classes import AbfClip, RegionAnalyzer, SpatialCategorizer
-from functions import spike_centered_median, zscore_img_segs
+from functions import list_parser, spike_centered_median, zscore_img_segs
 
 console = Console()
 
@@ -64,41 +64,6 @@ def _lookup_obj(db_path: Path, raw_tiff_name: str) -> str | None:
 # ── Ana list parsing ──────────────────────────────────────────────────────────
 
 
-def _parse_bracket(
-    stripped: str,
-    proc_dir: Path,
-    raw_abfs_dir: Path,
-    detrend_mode: str,
-    use_als: bool,
-    db_path: Path,
-) -> tuple[dict | None, str | None]:
-    """Return (entry, skip_reason) for one bracket line."""
-    parts = [p.strip() for p in stripped.strip("[]").split(",")]
-    if len(parts) < 5:
-        return None, "fewer than 5 fields"
-    raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist = parts[:5]
-
-    if use_als and als_exist != "YES":
-        return None, f"als_exist={als_exist}"
-    if not use_als and gauss_exist != "YES":
-        return None, f"gauss_exist={gauss_exist}"
-    if abf_exist != "YES":
-        return None, f"abf_exist={abf_exist}"
-
-    obj = _lookup_obj(db_path, raw_tiff_name)
-    if obj is None:
-        return None, f"{raw_tiff_name!r} not found in rec_data.db"
-
-    stem = Path(raw_tiff_name).stem
-    suffix = "_ALS.tif" if use_als else "_GAUSS.tif"
-
-    return {
-        "proc_tiff_path": proc_dir / f"{stem}_{detrend_mode}{suffix}",
-        "raw_abf_path":   raw_abfs_dir / paired_abf,
-        "obj":            obj,
-    }, None
-
-
 def parse_ana_list(
     ana_list_path: Path,
     db_path: Path,
@@ -118,51 +83,39 @@ def parse_ana_list(
             {"proc_tiff_path": Path, "raw_abf_path": Path, "obj": str}
         Only entries passing all existence and DB-lookup guards are included.
     """
-    lines = ana_list_path.read_text().splitlines()
+    table, io_dirs = list_parser(ana_list_path)
 
-    proc_dir: Path | None = None
-    raw_abfs_dir: Path | None = None
-    results_dir: Path | None = None
-
-    for line in lines:
-        if line.startswith("dir_proc_tiffs:"):
-            proc_dir = Path(line.split(":", 1)[1].strip())
-        elif line.startswith("dir_raw_abfs:"):
-            raw_abfs_dir = Path(line.split(":", 1)[1].strip())
-        elif line.startswith("dir_results:"):
-            results_dir = Path(line.split(":", 1)[1].strip())
-
-    missing = [
-        k
-        for k, v in {
-            "dir_proc_tiffs": proc_dir,
-            "dir_raw_abfs":   raw_abfs_dir,
-            "dir_results":    results_dir,
-        }.items()
-        if v is None
-    ]
+    missing = [k for k in ("dir_proc_tiffs", "dir_raw_abfs", "dir_results") if k not in io_dirs]
     if missing:
         msg = f"Missing footer keys in {ana_list_path}: {', '.join(missing)}"
         raise ValueError(msg)
+    proc_dir = Path(io_dirs["dir_proc_tiffs"])
+    raw_abfs_dir = Path(io_dirs["dir_raw_abfs"])
+    results_dir = Path(io_dirs["dir_results"])
+
+    exist_col = "als_exist" if use_als else "gauss_exist"
+    suffix = "_ALS.tif" if use_als else "_GAUSS.tif"
 
     entries: list[dict] = []
-    in_picked = False
-
-    for line in lines:
-        if line.strip().startswith("Picked:"):
-            in_picked = True
+    for row in table.iter_rows(named=True):
+        if row[exist_col] != "YES":
+            console.print(f"[yellow]Skipped {row['raw_tiff_name']}: {exist_col}={row[exist_col]}[/yellow]")
             continue
-        if in_picked:
-            if line.strip().startswith("["):
-                entry, skip_reason = _parse_bracket(
-                    line.strip(), proc_dir, raw_abfs_dir, detrend_mode, use_als, db_path
-                )
-                if entry:
-                    entries.append(entry)
-                else:
-                    console.print(f"[yellow]Skipped {line.strip()}: {skip_reason}[/yellow]")
-            else:
-                in_picked = False
+        if row["abf_exist"] != "YES":
+            console.print(f"[yellow]Skipped {row['raw_tiff_name']}: abf_exist={row['abf_exist']}[/yellow]")
+            continue
+
+        obj = _lookup_obj(db_path, row["raw_tiff_name"])
+        if obj is None:
+            console.print(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
+            continue
+
+        stem = Path(row["raw_tiff_name"]).stem
+        entries.append({
+            "proc_tiff_path": proc_dir / f"{stem}_{detrend_mode}{suffix}",
+            "raw_abf_path":   raw_abfs_dir / row["paired_abf"],
+            "obj":            obj,
+        })
 
     normalization = "ALS" if use_als else "GAUSS"
     return entries, results_dir, detrend_mode, normalization
@@ -196,14 +149,14 @@ if __name__ == "__main__":
         if not clip.lst_img_frame_ranges:
             console.print("[yellow]No valid segments — skipping z-score step.[/yellow]")
             continue
-        
+
         # Coverts each segment to z-score normalized values using the baseline frames before the spike frame.
         lst_zscore = zscore_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
         console.print(f"[green]Z-score normalized {len(lst_zscore)} segment(s)[/green]")
 
         # Merge all segments into a single median segment, aligned by the spike frame.
         median_segment, zscore_range = spike_centered_median(lst_zscore)
-        
+
         # Free memory from lst_zscore since it's no longer needed after computing the median.
         del lst_zscore
         console.print(f"[green]Median shape: {median_segment.shape}, z-score range: [{zscore_range[0]:.2f}, {zscore_range[1]:.2f}][/green]")

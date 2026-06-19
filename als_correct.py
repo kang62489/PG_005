@@ -19,7 +19,7 @@ import tifffile
 from rich.console import Console
 
 # Local application imports
-from functions import als_run, check_cuda, get_memory_usage
+from functions import als_run, check_cuda, get_memory_usage, list_parser
 from img_proc import update_proc_list_gauss_exists
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -30,55 +30,35 @@ console = Console()
 # ── Proc list parsing ─────────────────────────────────────────────────────────
 
 
-def _parse_bracket(stripped: str, proc_dir: Path) -> list[Path]:
-    """Return existing GAUSS TIFF paths for one bracket line."""
-    parts = [p.strip() for p in stripped.strip("[]").split(",")]
-    if len(parts) < 2:
-        return []
-    stem = Path(parts[0]).stem
-    gauss_exists = parts[1]
-    paths: list[Path] = []
-    if gauss_exists in ("BIEXP", "BIEXP & MOV"):
-        candidate = proc_dir / f"{stem}_BIEXP_GAUSS.tif"
-        if candidate.exists():
-            paths.append(candidate)
-    if gauss_exists in ("MOV", "BIEXP & MOV"):
-        candidate = proc_dir / f"{stem}_MOV_GAUSS.tif"
-        if candidate.exists():
-            paths.append(candidate)
-    return paths
-
-
 def parse_proc_list(proc_list_path: Path) -> tuple[list[Path], Path]:
     """Return all existing *_GAUSS.tif paths and proc_dir from an updated proc list."""
-    proc_dir: Path | None = None
-    for line in proc_list_path.read_text().splitlines():
-        if line.startswith("dir_proc_tiffs:"):
-            proc_dir = Path(line.split(":", 1)[1].strip())
-            break
-    if proc_dir is None:
+    table, io_dirs = list_parser(proc_list_path)
+    if "dir_proc_tiffs" not in io_dirs:
         msg = f"Missing dir_proc_tiffs in {proc_list_path}"
         raise ValueError(msg)
-    update_proc_list_gauss_exists(proc_list_path, proc_dir)
+    proc_dir = Path(io_dirs["dir_proc_tiffs"])
 
-    text = proc_list_path.read_text()
+    update_proc_list_gauss_exists(proc_list_path, proc_dir)
+    table, _io_dirs = list_parser(proc_list_path)  # re-read: gauss_exists just changed on disk
+
     gauss_paths: list[Path] = []
     seen_paths: set[Path] = set()
-    in_picked = False
 
-    for line in text.splitlines():
-        if line.strip().startswith("Picked:"):
-            in_picked = True
-            continue
-        if in_picked:
-            if line.strip().startswith("["):
-                for path in _parse_bracket(line.strip(), proc_dir):
-                    resolved_path = path.resolve()
-                    if resolved_path not in seen_paths:
-                        seen_paths.add(resolved_path)
-                        gauss_paths.append(path)
-            else:
-                in_picked = False
+    for row in table.iter_rows(named=True):
+        stem = Path(row["raw_tiff_name"]).stem
+        gauss_exists = row["gauss_exists"]
+        candidates = []
+        if gauss_exists in ("BIEXP", "BIEXP & MOV"):
+            candidates.append(proc_dir / f"{stem}_BIEXP_GAUSS.tif")
+        if gauss_exists in ("MOV", "BIEXP & MOV"):
+            candidates.append(proc_dir / f"{stem}_MOV_GAUSS.tif")
+        for path in candidates:
+            if not path.exists():
+                continue
+            resolved_path = path.resolve()
+            if resolved_path not in seen_paths:
+                seen_paths.add(resolved_path)
+                gauss_paths.append(path)
 
     return gauss_paths, proc_dir
 

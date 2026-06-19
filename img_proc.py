@@ -7,8 +7,8 @@ Reads a proc list, routes each file by mode:
   BOTH  -> BIEXP then MOV
   NONE  -> skip
 
-Proc list format (5 fields per entry):
-  [filename, gauss_exists, do_processing, detrend_mode, paired_abf]
+Proc list format (column names declared on the 'Picked:' line):
+  [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]
 
 Usage:
     python img_proc.py --proc_list data/proc_pick_20260512_002.txt
@@ -30,6 +30,7 @@ from functions import (
     check_cuda,
     gaussian_blur_run,
     get_memory_usage,
+    list_parser,
     mov_detrend,
     sample_tau,
 )
@@ -45,63 +46,29 @@ console = Console()
 # ── Proc list parsing ─────────────────────────────────────────────────────────
 
 
-def _parse_bracket(proc_list_line: str) -> dict | None:
-    """Parse one '[filename, gauss_exists, do_processing, detrend_mode, ...]' bracket line.
-
-    Proc list format (5 fields):
-        [filename, gauss_exists, do_processing, detrend_mode, paired_abf]
-
-    Returns a dict {"file", "proc", "mode"} or None if fields are missing,
-    do_processing is SKIP, or detrend_mode is NONE.
-    """
-    parts = [p.strip() for p in proc_list_line.strip("[]").split(",")]
-    if len(parts) < 5:
-        return None
-    filename, proc, mode = parts[0], parts[3], parts[4]
-    if proc == "SKIP" or mode == "NONE":
-        return None
-    return {"file": filename, "proc": proc, "mode": mode}
-
-
 def parse_proc_list(proc_list_path: Path) -> tuple[list[dict], Path, Path]:
     """
     Parse a proc list file (proc_*.txt).
 
-    Extracts the "Picked:" block as a list of entries and reads
-    dir_raw_tiffs / dir_proc_tiffs from the footer.
-
     Returns:
         (entries, raw_dir, proc_dir) where each entry is
         {"file": str, "proc": str, "mode": str}.
-        Entries with MODE == "NONE" are excluded.
+        Entries with do_processing == "SKIP" or detrend_mode == "NONE" are excluded.
     """
-    text = proc_list_path.read_text()
-    entries: list[dict] = []
-    raw_dir: Path | None = None
-    proc_dir: Path | None = None
-    in_picked = False
+    table, io_dirs = list_parser(proc_list_path)
 
-    for line in text.splitlines():
-        if line.strip().startswith("Picked:"):
-            in_picked = True
-            continue
-
-        if in_picked:
-            if line.strip().startswith("["):
-                entry = _parse_bracket(line.strip())
-                if entry:
-                    entries.append(entry)
-            else:
-                in_picked = False
-
-        if line.startswith("dir_raw_tiffs:"):
-            raw_dir = Path(line.split(":", 1)[1].strip())
-        elif line.startswith("dir_proc_tiffs:"):
-            proc_dir = Path(line.split(":", 1)[1].strip())
-
-    if raw_dir is None or proc_dir is None:
-        msg = f"Missing dir_raw_tiffs or dir_proc_tiffs in {proc_list_path}"
+    missing = [k for k in ("dir_raw_tiffs", "dir_proc_tiffs") if k not in io_dirs]
+    if missing:
+        msg = f"Missing {', '.join(missing)} in {proc_list_path}"
         raise ValueError(msg)
+    raw_dir = Path(io_dirs["dir_raw_tiffs"])
+    proc_dir = Path(io_dirs["dir_proc_tiffs"])
+
+    entries = [
+        {"file": row["raw_tiff_name"], "proc": row["do_processing"], "mode": row["detrend_mode"]}
+        for row in table.iter_rows(named=True)
+        if row["do_processing"] != "SKIP" and row["detrend_mode"] != "NONE"
+    ]
 
     return entries, raw_dir, proc_dir
 
@@ -109,28 +76,33 @@ def parse_proc_list(proc_list_path: Path) -> tuple[list[dict], Path, Path]:
 # ── Proc list update ──────────────────────────────────────────────────────────
 
 
+def _refresh_gauss_row(row: dict[str, str], proc_dir: Path) -> dict[str, str]:
+    """Recompute gauss_exists, do_processing, and detrend_mode for one row from actual files in proc_dir."""
+    stem = Path(row["raw_tiff_name"]).stem
+    has_biexp = (proc_dir / f"{stem}_BIEXP_GAUSS.tif").exists()
+    has_mov = (proc_dir / f"{stem}_MOV_GAUSS.tif").exists()
+    gauss_exists = (
+        "BIEXP & MOV" if has_biexp and has_mov
+        else "BIEXP" if has_biexp
+        else "MOV" if has_mov
+        else "No"
+    )
+    do_processing = "YES" if gauss_exists == "No" else "SKIP"
+    detrend_mode = "BIEXP" if do_processing == "YES" else "NONE"
+    return {**row, "gauss_exists": gauss_exists, "do_processing": do_processing, "detrend_mode": detrend_mode}
+
+
 def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
-    """Rewrite gauss_exists, do_processing, and detrend_mode (cols 1, 3, 4) based on actual files in proc_dir."""
+    """Rewrite gauss_exists, do_processing, and detrend_mode based on actual files in proc_dir."""
+    table, _io_dirs = list_parser(proc_list_path)
+    refreshed_rows = iter(_refresh_gauss_row(row, proc_dir) for row in table.iter_rows(named=True))
+
     lines = proc_list_path.read_text().splitlines()
     updated = []
     for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("["):
-            parts = [p.strip() for p in stripped.strip("[]").split(",")]
-            if len(parts) >= 5:
-                stem = Path(parts[0]).stem
-                has_biexp = (proc_dir / f"{stem}_BIEXP_GAUSS.tif").exists()
-                has_mov = (proc_dir / f"{stem}_MOV_GAUSS.tif").exists()
-                gauss_exists = (
-                    "BIEXP & MOV" if has_biexp and has_mov
-                    else "BIEXP" if has_biexp
-                    else "MOV" if has_mov
-                    else "No"
-                )
-                parts[1] = gauss_exists
-                parts[3] = "YES" if gauss_exists == "No" else "SKIP"
-                parts[4] = "BIEXP" if parts[3] == "YES" else "NONE"
-                line = "[" + ", ".join(parts) + "]"
+        if line.strip().startswith("["):
+            row = next(refreshed_rows)
+            line = "[" + ", ".join(row[col] for col in table.columns) + "]"
         updated.append(line)
     proc_list_path.write_text("\n".join(updated))
 

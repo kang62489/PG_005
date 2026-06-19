@@ -13,9 +13,9 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 
 
 ### Environment Setup
-- When running Python-related shell commands, check if `.venv/Scripts/activate` exists. If it does, prepend activation to the same command so the venv is active for that call:
-  - **PowerShell**: `& .venv\Scripts\Activate.ps1; <cmd>`
-  - **Bash**: `source .venv/Scripts/activate && <cmd>`
+- When running Python-related shell commands, invoke the venv's interpreter binary directly instead of activating the venv: `.venv/Scripts/python.exe <script> ...` (Bash) or `.venv\Scripts\python.exe <script> ...` (PowerShell). Do not activate-then-chain.
+- **Never use chained/piped shell commands** (`;`, `&&`, `||`, `|`, backticks, `$()`) in any Bash or PowerShell tool call, for any purpose — including venv activation. Run each command as its own single, bare invocation, even if that means multiple separate tool calls. Claude Code's permission allowlist only matches single bare commands; any chain operator forces a confirmation prompt regardless of whether the individual pieces are already allowlisted.
+- Default to the PowerShell tool for shell commands on this Windows machine; only use Bash for genuinely POSIX-specific commands.
 
 ### Code Editing
 1. Consider impact on both CPU and GPU pipelines if changing preprocessing

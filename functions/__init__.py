@@ -9,16 +9,17 @@ if TYPE_CHECKING:
     from .detrend import biexp_detrend, mov_detrend
     from .file_status import (
         abf_ready,
-        als_mode,
+        als_exists,
         als_ready,
         build_filename_index,
         build_proc_file_index,
-        gauss_mode,
+        gauss_exists,
         gauss_ready,
         raw_tiff_ready,
     )
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
+    from .list_parser import list_parser
     from .spike_centered_processes import spike_centered_avg, spike_centered_median
     from .tau_estimate import sample_tau
     from .test_cuda import test_cuda
@@ -27,18 +28,19 @@ if TYPE_CHECKING:
 
 __all__ = [
     "abf_ready",
-    "als_mode",
+    "als_exists",
     "als_ready",
     "als_run",
     "biexp_detrend",
     "build_filename_index",
     "build_proc_file_index",
     "check_cuda",
-    "gauss_mode",
+    "gauss_exists",
     "gauss_ready",
     "gaussian_blur_run",
     "get_memory_usage",
     "get_picked_pairs",
+    "list_parser",
     "zscore_img_segs",
     "mov_detrend",
     "raw_tiff_ready",
@@ -53,15 +55,16 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "biexp_detrend":       (".detrend",                                   "biexp_detrend"),
     "mov_detrend":         (".detrend",                                   "mov_detrend"),
     "abf_ready":           (".file_status",                               "abf_ready"),
-    "als_mode":            (".file_status",                               "als_mode"),
+    "als_exists":          (".file_status",                               "als_exists"),
     "als_ready":           (".file_status",                               "als_ready"),
     "build_filename_index": (".file_status",                              "build_filename_index"),
     "build_proc_file_index": (".file_status",                             "build_proc_file_index"),
-    "gauss_mode":          (".file_status",                               "gauss_mode"),
+    "gauss_exists":        (".file_status",                               "gauss_exists"),
     "gauss_ready":         (".file_status",                               "gauss_ready"),
     "raw_tiff_ready":      (".file_status",                               "raw_tiff_ready"),
     "gaussian_blur_run":   (".gaussian_blur",                             "gaussian_blur_run"),
     "get_memory_usage":    (".get_memory_use",                            "get_memory_usage"),
+    "list_parser":         (".list_parser",                               "list_parser"),
     "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
     "spike_centered_avg":  (".spike_centered_processes",                  "spike_centered_avg"),
     "spike_centered_median": (".spike_centered_processes",                "spike_centered_median"),

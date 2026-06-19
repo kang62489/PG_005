@@ -225,4 +225,4 @@ dir_raw_tiffs: Z:\Kang\Cluster\raw_tiffs
 dir_proc_tiffs: Z:\Kang\Cluster\proc_tiffs
 
 dir_raw_abfs: Z:\Kang\Cluster\raw_abfs
-dir_results: D:\MyDB\2_Programs\PG_005\results
+dir_results: Z:/Kang/Cluster/results

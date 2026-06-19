@@ -16,6 +16,11 @@ def raw_tiff_ready(index: set[str], dor: str, tiff_serial: str) -> str:
     return "READY" if f"{dor}-{tiff_serial}.tif" in index else "MISSING"
 
 
+def abf_ready(index: set[str], abf_name: str) -> str:
+    """Check YES/No for a paired ABF filename against a pre-built filename index."""
+    return "YES" if abf_name in index else "No"
+
+
 def build_proc_file_index(dir_path: Path) -> dict[str, dict[str, list[str]]]:
     """Scan dir_path once, indexing GAUSS/ALS modes by '{dor}-{tiff_serial}' stem."""
     index: dict[str, dict[str, list[str]]] = {}
@@ -27,7 +32,7 @@ def build_proc_file_index(dir_path: Path) -> dict[str, dict[str, list[str]]]:
     return index
 
 
-def gauss_mode(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str) -> str:
+def gauss_exists(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str) -> str:
     """Return which detrend mode(s) have a GAUSS file, or 'No' if none."""
     gauss_list = index.get(f"{dor}-{tiff_serial}", {}).get("GAUSS", [])
     if not gauss_list:
@@ -37,7 +42,7 @@ def gauss_mode(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: st
     return gauss_list[0]
 
 
-def als_mode(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str) -> str:
+def als_exists(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str) -> str:
     """Return which detrend mode(s) have an ALS file, or 'No' if none."""
     als_list = index.get(f"{dor}-{tiff_serial}", {}).get("ALS", [])
     if not als_list:
@@ -47,16 +52,11 @@ def als_mode(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str)
     return als_list[0]
 
 
-def gauss_ready(index: set[str], tiff_stem: str, detrend: str) -> str:
-    """Check YES/No for a specific detrend-mode GAUSS file against a pre-built filename index."""
-    return "YES" if f"{tiff_stem}_{detrend}_GAUSS.tif" in index else "No"
+def gauss_ready(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str, detrend: str) -> str:
+    """Check YES/No for one specific detrend mode's GAUSS file against a pre-built proc file index."""
+    return "YES" if detrend in index.get(f"{dor}-{tiff_serial}", {}).get("GAUSS", []) else "No"
 
 
-def als_ready(index: set[str], tiff_stem: str, detrend: str) -> str:
-    """Check YES/No for a specific detrend-mode ALS file against a pre-built filename index."""
-    return "YES" if f"{tiff_stem}_{detrend}_ALS.tif" in index else "No"
-
-
-def abf_ready(index: set[str], abf_name: str) -> str:
-    """Check YES/No for a paired ABF filename against a pre-built filename index."""
-    return "YES" if abf_name in index else "No"
+def als_ready(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str, detrend: str) -> str:
+    """Check YES/No for one specific detrend mode's ALS file against a pre-built proc file index."""
+    return "YES" if detrend in index.get(f"{dor}-{tiff_serial}", {}).get("ALS", []) else "No"
