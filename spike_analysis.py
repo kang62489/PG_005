@@ -196,19 +196,23 @@ if __name__ == "__main__":
         if not clip.lst_img_frame_ranges:
             console.print("[yellow]No valid segments — skipping z-score step.[/yellow]")
             continue
-
+        
+        # Coverts each segment to z-score normalized values using the baseline frames before the spike frame.
         lst_zscore = zscore_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
         console.print(f"[green]Z-score normalized {len(lst_zscore)} segment(s)[/green]")
 
+        # Merge all segments into a single median segment, aligned by the spike frame.
         median_segment, zscore_range = spike_centered_median(lst_zscore)
+        
+        # Free memory from lst_zscore since it's no longer needed after computing the median.
         del lst_zscore
         console.print(f"[green]Median shape: {median_segment.shape}, z-score range: [{zscore_range[0]:.2f}, {zscore_range[1]:.2f}][/green]")
-
 
         median_path = results_dir / f"{clip.proc_tiff_path.stem}_MED.tif"
         tifffile.imwrite(median_path, median_segment.astype(np.float32))
         console.print(f"[green]Saved median → {median_path.name}[/green]")
 
+        # Real analysis starts here: categorize the z scores for further region analysis (using skimage.measure).
         categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
         categorizer.fit(median_segment)
         console.print(f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), thresholds: {categorizer.thresholds_used}[/green]")

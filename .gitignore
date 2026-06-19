@@ -15,6 +15,9 @@ wheels/
 # VS Code and temporary files
 .vscode/
 
+# Claude Code auto-memory (personal, not for version control)
+.claude/memory/
+
 *tmp
 
 # Large data files

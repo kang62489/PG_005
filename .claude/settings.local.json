@@ -1,4 +1,5 @@
 {
+  "autoMemoryDirectory": ".claude/memory",
   "env": {
     "EDITOR": "code"
   },
@@ -38,7 +39,8 @@
       "PowerShell(Rename-Item *)",
       "PowerShell(& \"C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe\" check *)",
       "PowerShell(C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe check *)",
-      "PowerShell(& .venv\\\\Scripts\\\\Activate.ps1; C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe check *)"
+      "PowerShell(& .venv\\\\Scripts\\\\Activate.ps1; C:\\\\Users\\\\Kang\\\\scoop\\\\persist\\\\uv\\\\tools\\\\shims\\\\ruff.exe check *)",
+      "Bash(git status *)"
     ]
   }
 }

@@ -46,8 +46,10 @@ class ViewAlignSpike:
         self.lo_proc_list_btns = QHBoxLayout()
         self.btn_load_proc_list = QPushButton("Load Processed List")
         self.btn_confirm_analyzing_list = QPushButton("Confirm Analyzing List")
+        self.btn_refresh_status = QPushButton("Refresh Status")
         self.lo_proc_list_btns.addWidget(self.btn_load_proc_list)
         self.lo_proc_list_btns.addWidget(self.btn_confirm_analyzing_list)
+        self.lo_proc_list_btns.addWidget(self.btn_refresh_status)
         self.lo_block_1.addLayout(self.lo_proc_list_btns)
 
         self.tv_proc_list = QTableView()

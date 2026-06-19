@@ -1,3 +1,86 @@
+# Log of the project progress 2026-06-19 Fri (Session 27)
+Last working file: `controllers/ctrl_align_spike.py`
+Last working line: 111-112 (`all_abf_ready` / `btn_confirm_analyzing_list.setEnabled`)
+
+## List of modified files
+- `controllers/ctrl_align_spike.py` — `__init__` now disables `btn_confirm_analyzing_list` by default; `_load_entries()` computes `all_abf_ready = bool(rows) and (df["ABF_READY?"] == "YES").all()` and enables the button only when every loaded row's `ABF_READY?` is `"YES"` (mirrors how `btn_export_proc_list`/`btn_start_processing` gate on `IMG_READY` in `ctrl_img_proc.py`)
+- `docs/knowledgebase/scan_once_lookup_many_pattern.md` — **new**: documents the "scan once, look up many times" pattern — why `check_file_status` in both `ctrl_img_proc.py` and `ctrl_align_spike.py` got faster (avoiding `O(rows × files)` re-globbing and N individual `.exists()` round-trips, costly on network-mounted drives); includes the actual before/after code from both controllers and a concrete 3-row/5-file worked example
+
+## Summary of current progress
+- Explained (with real before/after code and worked numeric examples) why `check_file_status` is faster: both controllers moved from "ask the filesystem once per row" (re-glob per row in `ctrl_img_proc.py`, individual `.exists()` per row in `ctrl_align_spike.py`) to "scan the directory once, build a dict/set index, then do O(1) lookups per row"
+- Wired `btn_confirm_analyzing_list` enable/disable state to the `ABF_READY?` column so it can't be clicked until every entry has its paired ABF file present
+- Captured the scan-once-lookup-many pattern as a new knowledgebase entry for future reuse
+
+## Completed TODOs (from Session 26)
+- (none of Session 26's 4 TODOs were addressed this session — only "RegionAnalyzer/export schema review" was confirmed as still relevant going forward; the other three were dropped from active tracking)
+
+## What should we do next? (TODOs)
+- [ ] Validate the new ideas of analysis output — review whether the bright/dim largest-region stats from `RegionAnalyzer` are meaningful/correct before deciding the export schema and wiring `ResultsExporter` ([[project_spike_analysis_todos]] memory still applies)
+- [ ] Add color-coding (e.g. green/red) to YES/No values in the EXIST/READY columns (`GAUSS_EXISTS?`, `ALS_EXISTS?`, `ABF_READY?`, `IMG_READY`, etc.) across check tables for easier visual recognition
+- [ ] Export buttons (`export_proc_list`, `export_ana_list`, etc.) give no GUI feedback when done besides a console log — consider adding a completion info dialog or status indicator
+
+## Last Session Recap
+※ recap: Explained why `check_file_status` got faster in both controllers (scan-once/index pattern, documented to knowledgebase with worked example) and wired `btn_confirm_analyzing_list` to enable only when all `ABF_READY?` are "YES"; pending: RegionAnalyzer/export schema validation, color-coded status columns, and export completion feedback.
+
+---
+
+# Log of the project progress 2026-06-18 Thu (Session 26)
+Last working file: `spike_analysis.py`
+Last working line: ~220 (`RegionAnalyzer` / `get_frame_results` output) — unchanged, no code edited this session
+
+## List of modified files
+- (none — ops/troubleshooting session only, no repo files touched)
+
+## Summary of current progress
+- Diagnosed why `proc_tiffs/` writes on the saion cluster were hitting a hard cap despite `df -h ~` showing 28T free: `/home` (`lan01.emcisilon.oist.jp:/hpc_home`) is a shared 50T Isilon filesystem, but enforces a separate **per-user 50GB quota** invisible to `df` — only surfaces as "disk quota exceeded" on write
+- Moved analysis output from `/home/.../proc_tiffs/` to `/work/WickensU/kang/proc_tiffs/`, a separate large-quota work filesystem — confirmed via MobaXterm SFTP that the 175-file BIEXP detrend + Gaussian blur batch now runs cleanly without hitting quota
+- No code or config changes made — this was purely cluster storage triage
+
+## Completed TODOs (from Session 25)
+- (none — this was an ops aside, Session 25's open TODOs are unaffected)
+
+## What should we do next? (TODOs)
+- [ ] Validate the new ideas of analysis output — review whether the bright/dim largest-region stats from `RegionAnalyzer` are meaningful/correct before deciding the export schema and wiring `ResultsExporter` ([[project_spike_analysis_todos]] memory still applies: largest-region detection criteria + export schema both need design review)
+- [ ] Wire `btn_run_analysis` in `ctrl_align_spike.py` to call the `spike_analysis.py` pipeline (still unconnected)
+- [ ] Remove temp `_MED.tif`/`_CAT.tif` debug saves in `spike_analysis.py` once pipeline is verified
+- [ ] Archive `im_dynamics.py`, `batch_process.py`, `test_batch.py` once pipeline is complete (still present in repo root)
+
+## Last Session Recap
+※ recap: Diagnosed a saion cluster `/home` 50GB per-user quota (invisible to `df -h`, separate from the 28T shown free on the shared 50T filesystem) and moved pipeline output to `/work/WickensU/kang/proc_tiffs/`, where the 175-file BIEXP+Gaussian batch now runs without hitting quota. No code changed; Session 25's open TODOs (RegionAnalyzer/export schema validation, `btn_run_analysis` wiring, debug-save cleanup, script archiving) remain.
+
+---
+
+# Log of the project progress 2026-06-18 Thu (Session 25)
+Last working file: `spike_analysis.py`
+Last working line: ~220 (`RegionAnalyzer` / `get_frame_results` output)
+
+## List of modified files
+- `views/view_align_spike.py` — removed dead `lbl_run_on`/`le_run_on` row (`Run On:` field); `spike_analysis.py` has no CUDA branch to report, and `ctrl_align_spike.py` never set it
+- `spike_analysis.py` — renamed debug TIFF outputs `_median.tif` → `_MED.tif`, `_categorized.tif` → `_CAT.tif`
+- `data/pick_list.json` — reset to `[]`
+- `docs/knowledgebase/hpc_slurm_gpu_workflow.md` — **new**: day-to-day Slurm GPU job submission routine for `img_proc.py` on saion (node probing loop → `srun --pty bash` reservation → activate venv + run)
+- `.claude/settings.local.json` — added `Bash(git status *)` permission
+- `CLAUDE.md` — softened separation-line guidance (don't wrap every small subsection in `===` banners)
+- Committed as `444c86f "commit for running on cluster"`; `CLAUDE.md`/`settings.local.json` tweaks above are still uncommitted
+
+## Summary of current progress
+- Confirmed `spike_analysis.py`'s pipeline (`AbfClip` → `zscore_img_segs` → `spike_centered_median` → `SpatialCategorizer` → `RegionAnalyzer`) has no CUDA/GPU branch — cleaned the GUI accordingly
+- Discussed and documented the cluster GPU job workflow (node probing via `srun nvidia-smi` loop, `--time` day-hours format, `sinfo`/`nodelist` lookups) into a new knowledgebase doc
+- `SpatialCategorizer` and `RegionAnalyzer` are wired into `spike_analysis.py` and producing bright/dim region stats (area, x/y span) per spike frame — `ResultsExporter` still not wired up
+
+## Completed TODOs (from Session 24)
+- ✅ Removed unused `Run On:` field from `view_align_spike.py`
+
+## What should we do next? (TODOs)
+- [ ] Validate the new ideas of analysis output — review whether the bright/dim largest-region stats from `RegionAnalyzer` are meaningful/correct before deciding the export schema and wiring `ResultsExporter` ([[project_spike_analysis_todos]] memory still applies: largest-region detection criteria + export schema both need design review)
+- [ ] Wire `btn_run_analysis` in `ctrl_align_spike.py` to call the `spike_analysis.py` pipeline (still unconnected)
+- [ ] Remove temp `_MED.tif`/`_CAT.tif` debug saves in `spike_analysis.py` once pipeline is verified
+- [ ] Archive `im_dynamics.py`, `batch_process.py`, `test_batch.py` once pipeline is complete (still present in repo root)
+
+## Last Session Recap
+※ recap: Removed the dead "Run On:" GUI field (spike_analysis.py has no CUDA branch), documented the saion cluster Slurm GPU job workflow into a new knowledgebase file, and confirmed RegionAnalyzer is wired into the pipeline — but its output still needs validation before deciding the ResultsExporter schema.
+
+---
 # Log of the project progress 2026-06-16 Mon (Session 24)
 Last working file: `spike_analysis.py`
 Last working line: ~160

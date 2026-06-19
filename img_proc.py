@@ -110,7 +110,7 @@ def parse_proc_list(proc_list_path: Path) -> tuple[list[dict], Path, Path]:
 
 
 def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
-    """Rewrite gauss_exists (col 1) of each bracket row based on actual files in proc_dir."""
+    """Rewrite gauss_exists, do_processing, and detrend_mode (cols 1, 3, 4) based on actual files in proc_dir."""
     lines = proc_list_path.read_text().splitlines()
     updated = []
     for line in lines:
@@ -121,12 +121,15 @@ def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
                 stem = Path(parts[0]).stem
                 has_biexp = (proc_dir / f"{stem}_BIEXP_GAUSS.tif").exists()
                 has_mov = (proc_dir / f"{stem}_MOV_GAUSS.tif").exists()
-                parts[1] = (
+                gauss_exists = (
                     "BIEXP & MOV" if has_biexp and has_mov
                     else "BIEXP" if has_biexp
                     else "MOV" if has_mov
                     else "No"
                 )
+                parts[1] = gauss_exists
+                parts[3] = "YES" if gauss_exists == "No" else "SKIP"
+                parts[4] = "BIEXP" if parts[3] == "YES" else "NONE"
                 line = "[" + ", ".join(parts) + "]"
         updated.append(line)
     proc_list_path.write_text("\n".join(updated))

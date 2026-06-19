@@ -1,22 +1,19 @@
 ## Modules
 # Standard library imports
-import re
 from pathlib import Path
 
 # Third-party imports
 import polars as pl
-from PySide6.QtCore import QFileSystemWatcher
 from PySide6.QtWidgets import QAbstractItemView
 from rich.console import Console
 
 # Local application imports
 from classes import BackgroundWorker, CellDropdownDelegate, DialogGetFile, DialogGetPath, ModelFromDataFrame
-from functions import check_cuda
+from functions import als_mode, build_filename_index, build_proc_file_index, check_cuda, gauss_mode, raw_tiff_ready
 from utils.params import MODELS_DIR, PROC_TIFFS_DIR, RAW_TIFFS_DIR
 
 # Constants
 CHECK_COLUMNS = ["DOR", "TIFF_SERIAL", "IMG_READY", "GAUSS_EXISTS?", "ALS_EXISTS?", "PROC", "MODE"]
-DETREND_PATTERN = re.compile(r"(BIEXP|MOV)")
 
 # Set up rich console
 console = Console()
@@ -28,14 +25,10 @@ class CtrlImgProc:
         self.view.te_dir_raw_images.setPlainText(str(RAW_TIFFS_DIR))
         self.view.te_dir_processed.setReadOnly(True)
         self.view.te_dir_processed.setPlainText(str(PROC_TIFFS_DIR))
-        self._init_dir_watcher()
         self._set_proc_delegate()
         self._set_mode_delegate()
         self.connect_signals()
         self.view.btn_export_proc_list.setEnabled(False)
-
-    def _init_dir_watcher(self) -> None:
-        self.dirs_watcher = QFileSystemWatcher([str(RAW_TIFFS_DIR), str(PROC_TIFFS_DIR)])
 
     def _set_proc_delegate(self) -> None:
         self._proc_delegate = CellDropdownDelegate(["YES", "SKIP"])
@@ -61,22 +54,18 @@ class CtrlImgProc:
         self.view.btn_browse_processed.clicked.connect(self._browse_processed)
         self.view.btn_export_proc_list.clicked.connect(self.export_proc_list)
         self.view.btn_start_processing.clicked.connect(self.start_processing)
-        self.dirs_watcher.directoryChanged.connect(self.check_file_status)
+        self.view.btn_refresh_status.clicked.connect(self.check_file_status)
 
     def _browse_raw_images(self) -> None:
         path = DialogGetPath(title="Select Directory of Raw TIFFs").get_path()
         if path:
-            self.dirs_watcher.removePath(self.view.te_dir_raw_images.toPlainText().strip())
             self.view.te_dir_raw_images.setPlainText(path)
-            self.dirs_watcher.addPath(path)
             self.check_file_status()
 
     def _browse_processed(self) -> None:
         path = DialogGetPath(title="Select Directory of Processed TIFFs").get_path()
         if path:
-            self.dirs_watcher.removePath(self.view.te_dir_processed.toPlainText().strip())
             self.view.te_dir_processed.setPlainText(path)
-            self.dirs_watcher.addPath(path)
             self.check_file_status()
 
     def load_pick_list(self, path_str: str = "") -> None:
@@ -134,30 +123,6 @@ class CtrlImgProc:
         console.log(f"[green]Loaded {len(self.df_check_list)} entries from '{self.pick_list_path.name}'.[/green]")
         self.check_file_status()
 
-    def _raw_tiff_ready(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
-        """Helper function to check if a file exists based on DOR and TIFF_SERIAL."""
-        examine_file = dir_path / f"{dor}-{tiff_serial}.tif"
-        file_status = "READY" if examine_file.exists() else "MISSING"
-        return file_status
-
-    def _gauss_exists(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
-        examine_file_gauss = list(dir_path.glob(f"{dor}-{tiff_serial}*_GAUSS*.tif"))
-        gauss_list = [m.group(1) for f in examine_file_gauss if (m := DETREND_PATTERN.search(f.name))]
-        if not gauss_list:
-            return "No"
-        if "BIEXP" in gauss_list and "MOV" in gauss_list:
-            return "BIEXP & MOV"
-        return gauss_list[0]
-
-    def _als_exists(self, dir_path: Path, dor: str, tiff_serial: str) -> str:
-        als_files = list(dir_path.glob(f"{dor}-{tiff_serial}*_ALS*.tif"))
-        als_list = [m.group(1) for f in als_files if (m := DETREND_PATTERN.search(f.name))]
-        if not als_list:
-            return "No"
-        if "BIEXP" in als_list and "MOV" in als_list:
-            return "BIEXP & MOV"
-        return als_list[0]
-
     def _on_proc_changed(self, top_left, _bottom_right, _roles) -> None:
         # only respond to changes in the "PROC" column (index 5)
         if top_left.column() != 5:
@@ -182,19 +147,24 @@ class CtrlImgProc:
         dir_raw_tiffs = Path(self.view.te_dir_raw_images.toPlainText().strip())
         dir_processed = Path(self.view.te_dir_processed.toPlainText().strip())
 
+        # Scan each directory once and reuse the index for every row, instead of
+        # re-globbing/stat-ing per row (was O(rows x files), slow on network mounts)
+        raw_tiff_index = build_filename_index(dir_raw_tiffs, "*.tif")
+        proc_file_index = build_proc_file_index(dir_processed)
+
         # Check each entry in self.df_check_list for file existence and update status columns
         # Using map_elements and pl.struct() for multiple columns as variables
         # second.with_columns() is used to add the "PROC" columns after "GAUSS_EXISTS?" is generated
 
         self.df_file_status = self.df_check_list.with_columns(
             pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
-                lambda row_dict: self._raw_tiff_ready(dir_raw_tiffs, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
+                lambda row_dict: raw_tiff_ready(raw_tiff_index, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("IMG_READY"),
             pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
-                lambda row_dict: self._gauss_exists(dir_processed, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
+                lambda row_dict: gauss_mode(proc_file_index, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("GAUSS_EXISTS?"),
             pl.struct(["DOR", "TIFF_SERIAL"]).map_elements(
-                lambda row_dict: self._als_exists(dir_processed, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
+                lambda row_dict: als_mode(proc_file_index, row_dict["DOR"], row_dict["TIFF_SERIAL"]),
                 return_dtype=pl.Utf8).alias("ALS_EXISTS?"),
         ).with_columns(
             pl.when(pl.col("GAUSS_EXISTS?") == "No")
@@ -277,7 +247,6 @@ class CtrlImgProc:
 
         console.log(_cuda_msg)
 
-        self.dirs_watcher.directoryChanged.disconnect(self.check_file_status)
         self.view.btn_start_processing.setEnabled(False)
         self._bk_worker = BackgroundWorker(run_img_proc, proc_list_path, _cuda_available, use_emitter=True)
         self._bk_worker.proc_msgs.connect(self._on_progress)
@@ -294,7 +263,6 @@ class CtrlImgProc:
             self.view.le_processing_step.setText(msg["msg"])
 
     def _on_processing_done(self) -> None:
-        self.dirs_watcher.directoryChanged.connect(self.check_file_status)
         self.view.btn_start_processing.setEnabled(True)
         console.log("[bold green]Processing complete.[/bold green]")
         self.check_file_status()

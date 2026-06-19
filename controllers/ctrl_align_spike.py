@@ -4,11 +4,11 @@ from pathlib import Path
 
 # Third-party imports
 import polars as pl
-from PySide6.QtCore import QFileSystemWatcher
 from rich.console import Console
 
 # Local application imports
 from classes import DialogGetFile, DialogGetPath, ModelFromDataFrame
+from functions import abf_ready, als_ready, build_filename_index, gauss_ready
 from utils.params import MODELS_DIR, RAW_ABFS_DIR, RESULTS_DIR
 
 console = Console()
@@ -18,16 +18,12 @@ class CtrlAlignSpike:
     def __init__(self, view) -> None:
         self.view = view
         self._proc_list_path: Path | None = None
-        self._watched_proc_dir: Path | None = None
         self._entries: list[dict] = []
         self.view.te_dir_raw_abfs.setReadOnly(True)
         self.view.te_dir_raw_abfs.setPlainText(str(RAW_ABFS_DIR))
         self.view.te_export_path.setPlainText(str(RESULTS_DIR))
-        self._init_dir_watcher()
+        self.view.btn_confirm_analyzing_list.setEnabled(False)
         self.connect_signals()
-
-    def _init_dir_watcher(self) -> None:
-        self.dirs_watcher = QFileSystemWatcher([str(RAW_ABFS_DIR)])
 
     def connect_signals(self) -> None:
         self.view.btn_browse_raw_abfs.clicked.connect(self.on_browse_raw_abfs)
@@ -35,7 +31,7 @@ class CtrlAlignSpike:
         self.view.btn_export_browse.clicked.connect(self.on_browse_export_path)
         self.view.gb_detrend.buttonClicked.connect(lambda _: self._load_entries())
         self.view.gb_norm.buttonClicked.connect(lambda _: self._load_entries())
-        self.dirs_watcher.directoryChanged.connect(self.check_file_status)
+        self.view.btn_refresh_status.clicked.connect(self.check_file_status)
         self.view.btn_confirm_analyzing_list.clicked.connect(self.export_ana_list)
 
     # ── Helpers ────────────────────────────────────────────────────────────────
@@ -62,14 +58,6 @@ class CtrlAlignSpike:
         if not path_str:
             return
         self._proc_list_path = Path(path_str)
-
-        proc_dir = self._proc_dir()
-        if proc_dir:
-            if self._watched_proc_dir:
-                self.dirs_watcher.removePath(str(self._watched_proc_dir))
-            self._watched_proc_dir = proc_dir
-            self.dirs_watcher.addPath(str(proc_dir))
-
         self._load_entries()
 
     def _load_entries(self) -> None:
@@ -82,6 +70,11 @@ class CtrlAlignSpike:
             return
 
         detrend = self._detrend_mode()
+        # List each directory once and reuse the name sets for every row, instead of
+        # one .exists() stat per row (was N x 3 individual round-trips, slow on network mounts)
+        proc_files = build_filename_index(proc_dir, "*.tif")
+        abf_files = build_filename_index(self._raw_abfs_dir(), "*.abf")
+
         rows = []
         in_picked = False
 
@@ -101,10 +94,10 @@ class CtrlAlignSpike:
                     rows.append({
                         "DOR": dor,
                         "TIFF_SERIAL": tiff_serial,
-                        "GAUSS_EXIST?": "YES" if (proc_dir / f"{tiff_stem}_{detrend}_GAUSS.tif").exists() else "No",
-                        "ALS_EXIST?": "YES" if (proc_dir / f"{tiff_stem}_{detrend}_ALS.tif").exists() else "No",
+                        "GAUSS_EXIST?": gauss_ready(proc_files, tiff_stem, detrend),
+                        "ALS_EXIST?": als_ready(proc_files, tiff_stem, detrend),
                         "ABF_SERIAL": abf_serial,
-                        "ABF_READY?": "YES" if (self._raw_abfs_dir() / abf_name).exists() else "No",
+                        "ABF_READY?": abf_ready(abf_files, abf_name),
                     })
                 else:
                     in_picked = False
@@ -116,6 +109,9 @@ class CtrlAlignSpike:
         })
         self.view.tv_proc_list.setModel(ModelFromDataFrame(df))
 
+        all_abf_ready = bool(rows) and (df["ABF_READY?"] == "YES").all()
+        self.view.btn_confirm_analyzing_list.setEnabled(all_abf_ready)
+
         console.log(f"[green]{len(rows)} entries loaded from '{self._proc_list_path.name}'.[/green]")
 
     def check_file_status(self) -> None:
@@ -126,9 +122,7 @@ class CtrlAlignSpike:
     def on_browse_raw_abfs(self) -> None:
         path = DialogGetPath(title="Select Directory of Raw ABFs").get_path()
         if path:
-            self.dirs_watcher.removePath(self.view.te_dir_raw_abfs.toPlainText().strip())
             self.view.te_dir_raw_abfs.setPlainText(path)
-            self.dirs_watcher.addPath(path)
             self._load_entries()
 
     def on_browse_export_path(self) -> None:

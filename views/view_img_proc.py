@@ -1,6 +1,16 @@
 ## Modules
 # Third-party imports
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableView, QFormLayout, QTextEdit, QVBoxLayout, QLineEdit, QGroupBox
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTableView,
+    QTextEdit,
+    QVBoxLayout,
+)
 
 # Local application imports
 from utils.params import UISizes
@@ -50,6 +60,10 @@ class ViewImgProc:
 
         self.btn_load_pick_list = QPushButton("Load Pick List")
         self.lo_buttons.addWidget(self.btn_load_pick_list)
+
+        self.btn_refresh_status = QPushButton("Refresh Status")
+        self.lo_buttons.addWidget(self.btn_refresh_status)
+
         self.btn_export_proc_list = QPushButton("Export Proc List")
         self.lo_buttons.addWidget(self.btn_export_proc_list)
 
@@ -71,7 +85,7 @@ class ViewImgProc:
         self.lo_proc_info = QFormLayout()
         self.gb_proc_info.setLayout(self.lo_proc_info)
         self.lo_block_2.addWidget(self.gb_proc_info)
-        
+
         self.lbl_run_on = QLabel("Run on:")
         self.le_run_on = QLineEdit()
         self.le_run_on.setReadOnly(True)
@@ -79,7 +93,7 @@ class ViewImgProc:
         self.lbl_current_total = QLabel("Current/Total:")
         self.le_curret_total = QLineEdit()
         self.le_curret_total.setReadOnly(True)
-        
+
         self.lbl_mode = QLabel("Mode:")
         self.le_mode = QLineEdit()
         self.le_mode.setReadOnly(True)
@@ -98,7 +112,7 @@ class ViewImgProc:
         self.lo_proc_info.addRow(self.lbl_mode, self.le_mode)
         self.lo_proc_info.addRow(self.lbl_processing_file, self.le_processing_file)
         self.lo_proc_info.addRow(self.lbl_processing_step, self.le_processing_step)
-        
+
 
 
 
