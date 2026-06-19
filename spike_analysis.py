@@ -18,47 +18,23 @@ Detrend mode selects which processed TIFF prefix is loaded:
 Usage:
     python spike_analysis.py --ana_list data/ana_list_20260601_000.txt
                              [--detrend BIEXP] [--use_als]
-                             [--db data/rec_data.db]
+                             [--db data/rec_data.db] [--exp_db data/exp_info.db]
 """
 # Standard library imports
 import argparse
-import sqlite3
 from pathlib import Path
 
 # Third-party imports
 import numpy as np
+import polars as pl
 import tifffile
 from rich.console import Console
 
 # Local application imports
 from classes import AbfClip, RegionAnalyzer, SpatialCategorizer
-from functions import list_parser, spike_centered_median, zscore_img_segs
+from functions import list_parser, lookup_rec_from_db, spike_centered_median, zscore_img_segs
 
 console = Console()
-
-
-# ── DB metadata lookup ────────────────────────────────────────────────────────
-
-
-def _lookup_obj(db_path: Path, raw_tiff_name: str) -> str | None:
-    """Look up the objective for a raw TIFF filename in rec_data.db.
-
-    Derives the table name from the date prefix of the filename
-    (e.g. '2025_12_15-0042.tif' → table 'REC_2025_12_15').
-
-    Returns the OBJ string (e.g. '10X') or None if not found.
-    """
-    date = Path(raw_tiff_name).stem.split("-")[0]  # "2025_12_15"
-    table = f"REC_{date}"
-    try:
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        cur.execute(f"SELECT OBJ FROM {table} WHERE Filename = ?", (raw_tiff_name,))
-        row = cur.fetchone()
-        conn.close()
-    except sqlite3.OperationalError:
-        return None
-    return row[0] if row else None
 
 
 # ── Ana list parsing ──────────────────────────────────────────────────────────
@@ -66,22 +42,21 @@ def _lookup_obj(db_path: Path, raw_tiff_name: str) -> str | None:
 
 def parse_ana_list(
     ana_list_path: Path,
-    db_path: Path,
     detrend_mode: str = "BIEXP",
     use_als: bool = False,
-) -> tuple[list[dict], Path, str, str]:
-    """Parse an ana list file and return entries with resolved paths and metadata.
+) -> tuple[pl.DataFrame, Path, str, str]:
+    """Parse an ana list file and filter rows by existence flags.
 
     Args:
         ana_list_path: Path to the ana list file (ana_list_*.txt).
-        db_path:       Path to rec_data.db for objective lookup.
         detrend_mode:  Which detrend variant to load — "BIEXP" or "MOV".
         use_als:       If True, load *_ALS.tif; otherwise load *_GAUSS.tif.
 
     Returns:
-        (entries, results_dir, detrend_mode, normalization) where each entry is:
-            {"proc_tiff_path": Path, "raw_abf_path": Path, "obj": str}
-        Only entries passing all existence and DB-lookup guards are included.
+        (entries, results_dir, detrend_mode, normalization). entries keeps every
+        original ana-list column plus proc_tiff_path/raw_abf_path, restricted to
+        rows passing the gauss_exist/als_exist and abf_exist guards. Resolving OBJ
+        from rec_data.db is left to the caller (see lookup_rec_from_db).
     """
     table, io_dirs = list_parser(ana_list_path)
 
@@ -95,8 +70,9 @@ def parse_ana_list(
 
     exist_col = "als_exist" if use_als else "gauss_exist"
     suffix = "_ALS.tif" if use_als else "_GAUSS.tif"
+    normalization = "ALS" if use_als else "GAUSS"
 
-    entries: list[dict] = []
+    passing_rows: list[dict] = []
     for row in table.iter_rows(named=True):
         if row[exist_col] != "YES":
             console.print(f"[yellow]Skipped {row['raw_tiff_name']}: {exist_col}={row[exist_col]}[/yellow]")
@@ -105,19 +81,12 @@ def parse_ana_list(
             console.print(f"[yellow]Skipped {row['raw_tiff_name']}: abf_exist={row['abf_exist']}[/yellow]")
             continue
 
-        obj = _lookup_obj(db_path, row["raw_tiff_name"])
-        if obj is None:
-            console.print(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
-            continue
-
         stem = Path(row["raw_tiff_name"]).stem
-        entries.append({
-            "proc_tiff_path": proc_dir / f"{stem}_{detrend_mode}{suffix}",
-            "raw_abf_path":   raw_abfs_dir / row["paired_abf"],
-            "obj":            obj,
-        })
+        row["proc_tiff_path"] = str(proc_dir / f"{stem}_{detrend_mode}{suffix}")
+        row["raw_abf_path"] = str(raw_abfs_dir / row["paired_abf"])
+        passing_rows.append(row)
 
-    normalization = "ALS" if use_als else "GAUSS"
+    entries = pl.DataFrame(passing_rows) if passing_rows else pl.DataFrame()
     return entries, results_dir, detrend_mode, normalization
 
 
@@ -129,18 +98,28 @@ if __name__ == "__main__":
     parser.add_argument("--detrend", choices=["BIEXP", "MOV"], default="BIEXP", help="Detrend mode (default: BIEXP)")
     parser.add_argument("--use_als", action="store_true", help="Load *_ALS.tif instead of *_GAUSS.tif")
     parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db (default: data/rec_data.db)")
+    parser.add_argument("--exp_db", type=Path, default=Path("data/exp_info.db"), help="Path to exp_info.db (default: data/exp_info.db)")
     args = parser.parse_args()
 
     entries, results_dir, detrend_mode, normalization = parse_ana_list(
-        args.ana_list, args.db, args.detrend, args.use_als
+        args.ana_list, args.detrend, args.use_als
     )
+    ref_df = lookup_rec_from_db(entries, args.db, args.exp_db)
     console.print(f"Found {len(entries)} entries in {args.ana_list.name}")
 
-    for entry in entries:
-        console.print(f"\n[cyan]{entry['proc_tiff_path'].name}  +  {entry['raw_abf_path'].name}  [{entry['obj']}][/cyan]")
+    for row in entries.iter_rows(named=True):
+        match = ref_df.filter(pl.col("Filename") == row["raw_tiff_name"])
+        if match.is_empty():
+            console.print(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
+            continue
+        obj = match["OBJ"].item()
+
+        proc_tiff_path = Path(row["proc_tiff_path"])
+        raw_abf_path = Path(row["raw_abf_path"])
+        console.print(f"\n[cyan]{proc_tiff_path.name}  +  {raw_abf_path.name}  [{obj}][/cyan]")
         clip = AbfClip(
-            proc_tiff_path=entry["proc_tiff_path"],
-            raw_abf_path=entry["raw_abf_path"],
+            proc_tiff_path=proc_tiff_path,
+            raw_abf_path=raw_abf_path,
             results_dir=results_dir,
             detrend_mode=detrend_mode,
             normalization=normalization,
@@ -174,7 +153,7 @@ if __name__ == "__main__":
         tifffile.imwrite(cat_path, np.array(categorizer.categorized_frames, dtype=np.uint8))
         console.print(f"[green]Saved categorized → {cat_path.name}[/green]")
 
-        region_analyzer = RegionAnalyzer(categorizer.categorized_frames, obj=entry["obj"])
+        region_analyzer = RegionAnalyzer(categorizer.categorized_frames, obj=obj)
         spike_frame_idx = len(categorizer.categorized_frames) // 2
         spike = region_analyzer.get_frame_results(spike_frame_idx)
 

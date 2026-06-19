@@ -26,6 +26,29 @@ RAW_TIFFS_DIR = BASE_DIR / "raw_tiffs"
 RAW_ABFS_DIR = BASE_DIR / "raw_abfs"
 PROC_TIFFS_DIR = BASE_DIR / "proc_tiffs"
 
+# REC_* column ordering (rec_data.db)
+@dataclass
+class ColumnSorter:
+    """Class to store REC_* table column groupings/ordering for rec_data.db."""
+
+    CORE_COLUMNS: tuple[str, ...] = ("Filename", "Timestamp", "OBJ", "EXC", "EMI", "FRAMES", "SLICE", "AT", "SENSOR", "PAIRED_ABF")
+    FLUIDIC_COLUMNS: tuple[str, ...] = (
+        "PUFF",
+        "PUFF_CONC",
+        "PUFF_DURATION",
+        "PUFF_COUNT",
+        "PUFF_GAP",
+        "PUFF_PRESSURE",
+        "BATHED_IN",
+        "BATHED_CONC",
+        "FLOWED",
+    )
+    IMG_COND_COLUMNS: tuple[str, ...] = ("EXPO", "LEVEL", "FPS")
+    EPHY_COND_COLUMNS: tuple[str, ...] = ("HOLD", "STIM")
+    OTHER_COLUMNS: tuple[str, ...] = ("ANIMAL_ID", "FILTER", "LIGHT_ON", "PUMP")
+    MEMO_COLUMNS: tuple[str, ...] = ("SPIKES", "NOTE")
+    IGNORE_COLUMNS: tuple[str, ...] = ("CAM_TRIG_MODE", "EXT_STIM_TRIG", "LED_TRIG_MODE", "PUFF_TIP_POS", "PUFF_TIP_SIZE", "Ra")
+
 
 # UI Sizes
 @dataclass

@@ -13,13 +13,12 @@ from rich.console import Console
 
 # Local application imports
 from classes import DialogPickList
-from utils.params import MODELS_DIR, REC_DB_PATH
+from utils.params import MODELS_DIR, REC_DB_PATH, ColumnSorter
 
 # Set up rich console
 console = Console()
 
 # Constants
-CORE_COLUMNS = ("Filename", "Timestamp", "OBJ", "EXC", "EMI", "FRAMES", "SLICE", "AT", "SENSOR", "PAIRED_ABF")
 PICK_LIST_JSON_PATH = MODELS_DIR / "pick_list.json"
 
 
@@ -275,8 +274,8 @@ class CtrlDataSelector(QObject):
         # Re-apply CORE_COLUMNS ordering after concat (diagonal concat uses df_saved column order,
         # so new columns from new_rows would be appended instead of placed correctly)
         all_cols = df_merged.columns
-        core_in_merged = [c for c in CORE_COLUMNS if c in all_cols]
-        extra_cols = sorted(c for c in all_cols if c not in CORE_COLUMNS)
+        core_in_merged = [c for c in ColumnSorter.CORE_COLUMNS if c in all_cols]
+        extra_cols = sorted(c for c in all_cols if c not in ColumnSorter.CORE_COLUMNS)
         df_merged = df_merged.select(core_in_merged + extra_cols)
 
         self.save_pick_list(df_merged.sort("Filename"))
@@ -294,8 +293,8 @@ class CtrlDataSelector(QObject):
         # Build column order: CORE columns first (in defined order), then extras alphabetically
         model = self.view.tv_rec_summary.model()
         all_cols = [model.headerData(c, Qt.Orientation.Horizontal) for c in range(model.columnCount())]
-        core_in_table = [c for c in CORE_COLUMNS if c in all_cols]
-        extra_cols = sorted(c for c in all_cols if c not in CORE_COLUMNS)
+        core_in_table = [c for c in ColumnSorter.CORE_COLUMNS if c in all_cols]
+        extra_cols = sorted(c for c in all_cols if c not in ColumnSorter.CORE_COLUMNS)
         ordered_cols = core_in_table + extra_cols
 
         selected_row_data = []

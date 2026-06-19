@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
+    from .query_databases import lookup_rec_from_db, populate_animal_id_values
     from .spike_centered_processes import spike_centered_avg, spike_centered_median
     from .tau_estimate import sample_tau
     from .test_cuda import test_cuda
@@ -41,8 +42,10 @@ __all__ = [
     "get_memory_usage",
     "get_picked_pairs",
     "list_parser",
+    "lookup_rec_from_db",
     "zscore_img_segs",
     "mov_detrend",
+    "populate_animal_id_values",
     "raw_tiff_ready",
     "sample_tau",
     "spike_centered_avg",
@@ -65,6 +68,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "gaussian_blur_run":   (".gaussian_blur",                             "gaussian_blur_run"),
     "get_memory_usage":    (".get_memory_use",                            "get_memory_usage"),
     "list_parser":         (".list_parser",                               "list_parser"),
+    "lookup_rec_from_db":  (".query_databases",                           "lookup_rec_from_db"),
+    "populate_animal_id_values": (".query_databases",                     "populate_animal_id_values"),
     "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
     "spike_centered_avg":  (".spike_centered_processes",                  "spike_centered_avg"),
     "spike_centered_median": (".spike_centered_processes",                "spike_centered_median"),

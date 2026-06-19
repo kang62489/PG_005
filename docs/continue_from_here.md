@@ -1,3 +1,35 @@
+# Log of the project progress 2026-06-19 Fri (Session 28)
+Last working file: `spike_analysis.py`
+Last working line: 67 (`def parse_ana_list`)
+
+## List of modified files
+- `functions/list_parser.py` — **new**: shared `list_parser(path) -> (table, io_dirs)` + private `_df_builder`. Reads the `Picked: [...]` header into column names, reads every bracket row in full (raises `ValueError` on field-count mismatch instead of silently truncating), and collects `dir_*:` lines into `io_dirs`
+- `functions/__init__.py` — registered `list_parser` in the lazy-import table
+- `spike_analysis.py` — deleted `_parse_bracket`; `parse_ana_list` now reads `ana_list_*.txt` via `list_parser` and filters/builds entries by column name (`gauss_exist`/`als_exist`/`abf_exist`/`paired_abf`) instead of `parts[:5]`
+- `img_proc.py` — deleted `_parse_bracket`; `parse_proc_list` reads `proc_*.txt` via `list_parser` by column name. `update_proc_list_gauss_exists` rewritten to recompute `gauss_exists`/`do_processing`/`detrend_mode` by name and re-serialize each row using the table's actual column order, so `als_exists`/`paired_abf` can't be clobbered by a position shift. Fixed stale "5 fields" docstring
+- `als_correct.py` — deleted its own `_parse_bracket`; `parse_proc_list` reads `gauss_exists` by name instead of `parts[1]`
+- `controllers/ctrl_align_spike.py`, `controllers/ctrl_img_proc.py`, `functions/file_status.py`, `CLAUDE.md`, `data/ana_list_20260618_000.txt` — carried in the same commit from earlier in this session: `gauss_mode`/`als_mode` renamed to `gauss_exists`/`als_exists` and consolidated onto one proc-file index in `file_status.py`; CLAUDE.md gained explicit "never use chained shell commands" + "default to PowerShell" rules after repeated permission-prompt friction
+
+## Summary of current progress
+- Identified that `spike_analysis.py`, `img_proc.py`, and `als_correct.py` each hand-rolled their own positional bracket-row parser (`_parse_bracket`) for the pick/proc/ana list `.txt` format, with at least one (`img_proc.py`) already drifted out of sync with its own docstring — a silent-corruption risk since these functions also write back to disk
+- Designed and built one shared `list_parser` that treats the `Picked: [...]` header as the actual schema source instead of decorative text, builds a `pl.DataFrame` from it, and exposes `dir_*` paths via `io_dirs` — named-column access throughout, no more magic indices
+- Migrated all three scripts onto it, including the trickier write-back path in `update_proc_list_gauss_exists`
+- Verified `list_parser` against real `ana_list`/`proc_list`/`pick_list` data files (correct columns + row counts + `io_dirs`), and verified the write-back round-trip preserves untouched columns (`als_exists`, `paired_abf`) correctly
+- User began manual GUI validation of the refactored pipeline; interrupted by this wrap-up
+
+## Completed TODOs (from Session 27)
+- (none of Session 27's 3 TODOs were addressed this session — this session's scope was entirely the list-parsing refactor. RegionAnalyzer/export schema review, color-coded status columns, and export completion feedback are unchanged and not re-confirmed here)
+
+## What should we do next? (TODOs)
+- [ ] Finish manual GUI validation of the refactored `spike_analysis.py` / `img_proc.py` / `als_correct.py` pipeline (started this session, interrupted by wrap-up)
+- [ ] Complete the rec_data.db query functions for the picked list
+- [ ] (Deferred, not yet scheduled) Bring `controllers/ctrl_img_proc.py` (`load_pick_list`, `export_proc_list`) and `controllers/ctrl_align_spike.py` (`_load_entries`, `_proc_dir`, `export_ana_list`) onto `list_parser` — same positional-parsing pattern still exists there, left out this session due to GUI risk (hardcoded Qt column indices)
+
+## Last Session Recap
+※ recap: Built a shared `list_parser` (functions/list_parser.py) that reads pick/proc/ana list files by column name instead of positional indices, and migrated spike_analysis.py/img_proc.py/als_correct.py (incl. the gauss_exists write-back) onto it; GUI validation was in progress when interrupted, and rec_data.db query functions for the picked list are still to be completed.
+
+---
+
 # Log of the project progress 2026-06-19 Fri (Session 27)
 Last working file: `controllers/ctrl_align_spike.py`
 Last working line: 111-112 (`all_abf_ready` / `btn_confirm_analyzing_list.setEnabled`)
