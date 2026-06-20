@@ -1,3 +1,76 @@
+# Log of the project progress 2026-06-21 Sun (Session 31)
+Last working file: `spike_analysis.py`
+Last working line: 120 (`write_cell_summary_xlsx(cell_df, cell_summary_path)` / confirmation print, in `__main__`)
+
+## List of modified files
+- `functions/query_databases.py` — **new**: `count_unique_cells(ref_df) -> pl.DataFrame` — groups `ref_df` by `(ANIMAL_ID, SLICE, AT)` (the cell-identity triple, e.g. `neoChAT-677, 2R, CELL_1`), aggregates each group's `Filename` values into a sorted `Filenames` list + `n_images` count, sorted for stable output
+- `functions/xlsx_writer.py` — **new**: `write_cell_summary_xlsx(cell_df, output_path)` — writes a `count_unique_cells()` result to a single-sheet xlsx via `openpyxl` directly (not `polars.write_excel`, since that needs `xlsxwriter`, which isn't installed and wasn't added as a new dependency); joins each row's `Filenames` list into a comma-separated string since xlsx cells can't hold a real list
+- `functions/__init__.py` — registered `count_unique_cells` (from `.query_databases`) and `write_cell_summary_xlsx` (from `.xlsx_writer`) in the lazy-import table + `__all__`
+- `spike_analysis.py` — `__main__` now computes `cell_df = count_unique_cells(ref_df)` right after `ref_df`, prints `Found {N} entries ... -> {M} unique cells`, then immediately saves it via `write_cell_summary_xlsx` to `results_dir / f"{args.ana_list.stem}_cells.xlsx"` with a confirmation print — both before the per-row `AbfClip` processing loop
+- Created and deleted a throwaway `_diag_at_check.py` mid-session to check `AT` column severity (SITE_* vs CELL_*) before building the real function — job done, removed
+
+## Summary of current progress
+- **Motivating question**: today's pick (`ana_list_20260618_000.txt`, 214 entries) doesn't mean 214 distinct cells — needed to know the real cell count and which images belong to which cell, plus first check how bad the known `AT = SITE_*` (vs `CELL_*`) data-quality issue actually is
+- **Severity check (diagnostic, not code)**: for this specific 214-row pick, **0** rows have `AT = SITE_*` — all are clean `CELL_1`/`CELL_2`. Across the *whole* `rec_data.db`, though, `SITE_*` is 62.9% (1160/1844) of all `AT` values — every `REC_*` table before 2024-10-03 used `SITE_*` exclusively (the `CELL_*` convention didn't exist yet), and many dates after that still mix `CELL_*`/`SITE_*` within the same day. Also spotted one naming inconsistency: `REC_2025_04_03` has a stray `CELL1` (no underscore) instead of `CELL_1`
+- User explicitly decided: no special-casing/guard needed for `SITE_*` going forward, since recordings are now made through the program and that ambiguity won't recur
+- Built `count_unique_cells()` using `(ANIMAL_ID, SLICE, AT)` as the cell key — verified against the real pick: **214 images → 43 unique cells**, 3–10 images each
+- Added `write_cell_summary_xlsx()` and wired it into `spike_analysis.py` right after the cell count is computed
+- **Tested end-to-end**: temporarily pointed the ana list's `dir_results` footer at a local folder (since `Z:\Kang\Cluster\results` isn't mounted on this dev machine) to confirm the real pipeline run reaches and executes the xlsx-save step — confirmed `Found 214 entries in ana_list_20260618_000.txt -> 43 unique cells` + `Saved cell summary -> ana_list_20260618_000_cells.xlsx`, with the xlsx's 44 rows (header + 43 cells) verified by reading it back; reverted the footer edit afterward so the data file is unchanged from the user's perspective (`git diff` confirms no net change to `data/ana_list_20260618_000.txt`). The pipeline's next step still fails reaching `Z:\Kang\Cluster\proc_tiffs\...` — pre-existing, unrelated to this work, and only reproducible on a machine with the `Z:` drive mapped
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Determine the exact number of distinct cells in a picked ana_list, and which image files belong to each (`count_unique_cells`)
+- ✅ Checked severity of the `AT = SITE_*` vs `CELL_*` issue before designing the grouping key — confirmed not present in today's pick, decided out of scope going forward per user
+- ✅ Save the cell summary as xlsx to `results_dir` (`write_cell_summary_xlsx`, wired into `spike_analysis.py`)
+
+## What should we do next? (TODOs)
+- (none new from today — both candidate follow-ups (wiring `cell_df`/xlsx export into `ResultsExporter` proper, and normalizing the stray `CELL1` value in `REC_2025_04_03`) were explicitly marked out-of-scope-for-now by the user; Session 30's backlog above remains open and untouched this session)
+
+## Last Session Recap
+※ recap: Added `count_unique_cells()` (groups picked entries by `ANIMAL_ID`+`SLICE`+`AT` into distinct cells — verified 214 images → 43 cells for `ana_list_20260618_000.txt`) and `write_cell_summary_xlsx()`, wired both into `spike_analysis.py`'s `__main__`; confirmed via a temporary local `dir_results` override that the real pipeline reaches and executes the xlsx-save step. Also checked the known `AT=SITE_*` data-quality issue's severity (0% in today's pick, 63% historically pre-Oct-2024) — user decided no special-casing needed going forward.
+
+---
+
+# Log of the project progress 2026-06-21 Sun (Session 30)
+Last working file: `classes/plot_results.py`
+Last working line: 266 (`_add_scale_bar(..., font_size=6)` in `_plot_frame_panel`)
+
+## List of modified files
+- `classes/region_analyzer.py` — `get_temporal_traces(segment)`: missing-region trace default changed from `NaN`-filled to `0`-filled (per explicit user decision: "0"); added new public method `area_in_combined_region(frame, category) -> float` — counts pixels of a given category (BRIGHT/DIM) inside the union of `bright_largest`/`dim_largest` masks for *any* frame, returns µm² (used by row-1 panels to show a dynamic per-frame area instead of a static repeated number)
+- `classes/plot_results.py` — `_plot_frame_panel` reworked per user feedback over several rounds:
+  1. Row-1 panels now overlay the **spike frame's fixed** `bright_largest`/`dim_largest` contours on every panel (previously each panel ran independent per-frame detection via `find_largest_regions`)
+  2. A pixel-coloring overlay (bright/dim pixels within the combined area, tinted magenta/cyan) was added then **reverted** — user found it visually bad
+  3. x/y-span crosshair for bright is now shown **only on the spike frame panel** (`show_span=is_spike_frame`); dim never shows centroid/span, only its contour
+  4. Bright/dim area numbers in non-spike-frame titles are now **dynamic per-frame counts** via the new `area_in_combined_region()`, not a static repeated spike-frame value; spike frame panel alone keeps the full `[x, y, area]` text
+  5. `_overlay_region()` gained `show_centroid`/`show_span` flags, and now handles `dim_largest["contour"]` being a *list* of arrays (merged dim can be disjoint) vs. bright's single array
+  6. Cosmetic: row 2 (trace panel) height increased (`height_ratios=[3, 1.2]` → `[3, 2.2]`, figure height 7 → 8.5), grid added to the trace panel, scale-bar text shrunk (`font_size=6`) so `"200 µm"` no longer overflows the row-1 panel border
+- Deleted `_diag_spatiotemporal_summary.py`, `_diag_temporal_traces.py`, `_diag_trace_values.py` — temporary scripts used to visually validate every round of the above; their job is done
+
+## Summary of current progress
+- `plot_spatiotemporal_summary()` (the static export figure for spike-aligned region analysis) is now visually finalized after ~8 rounds of iteration this session: fixed spike-frame contours on all panels, no pixel-coloring overlay, span shown only on the spike frame, dynamic area counts elsewhere, taller/gridded trace panel, readable scale bar
+- `get_temporal_traces()` finalized at the simple fixed-mask design (no category-filtering, no distant-region, no bbox-union — all of those were tried and reverted in earlier parts of this session/prior sessions) with `0` as the missing-region default
+- Confirmed via direct discussion: exporting these figures needs the **function** `plot_spatiotemporal_summary()` (a plain function building a `Figure` directly, no `pyplot`, no `show()` — fully headless) but **not** any class; however importing `classes/plot_results.py` at all still pulls in PySide6 because GUI window classes live in the same file — flagged for future refactor (not done this session)
+- User redirected next priority: implement the already-decided export filename/folder design, and additionally design a way to quickly find/browse specific results
+
+## Completed TODOs (from Session 29, continued)
+- ✅ Finished item 3 visual finalization: `get_temporal_traces()` + `plot_spatiotemporal_summary()` row-1/row-2 design locked in (see above) — the original Session 29 TODO "finish item 3: peak-to-peak latency + recovery-duration metric" is **partially superseded**: peak-latency annotation is implemented (`Peak Latency: {ms} ms` in the trace panel title), but the recovery-duration metric was never revisited this session — still open if still wanted
+- ✅ Cleaned up `_diag_spatiotemporal_summary.py`, `_diag_temporal_traces.py`, `_diag_trace_values.py`
+
+## What should we do next? (TODOs)
+- [ ] **Priority**: Implement the compact export filename code (`{exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_{TYPE}.ext`) and flat `results/{exp_date}/{category}/` folder structure in `ResultsExporter` (design already decided in Session 29's "export/output redesign" note above)
+- [ ] **Priority**: Design a way to quickly find/browse specific exported results (e.g. by animal/slice/site/date) — new idea, no design yet, likely depends on the filename/folder structure above plus the `ANIMAL_ID`/`CELL_KEY` SQLite columns
+- [ ] Wire `btn_run_analysis` in `ctrl_align_spike.py` to call `spike_analysis.py`'s pipeline, with GUI line-edits showing live progress/steps (mirrors the existing `img_proc.py`/ALS emitter pattern) — still unconnected
+- [ ] Decide fate of `RegionAnalyzer.find_largest_regions()` — no longer used by the actual export figure (row 1 switched to fixed spike-frame regions this session); currently dead code outside of (now-deleted) diagnostics
+- [ ] Wire `plot_spatiotemporal_summary()` into the real `ResultsExporter` pipeline — it only existed in the (now-deleted) diagnostic script so far
+- [ ] Refactor `classes/plot_results.py`: split plain `Figure`-returning export functions away from the `QMainWindow` GUI classes (`PlotPeaks`/`PlotSegs`/`PlotSpatialDist`/`PlotRegion`), since the GUI classes currently force a PySide6 import even for headless PNG export ([[project_plot_results_refactor]] memory)
+- [ ] Add `ANIMAL_ID` column + derived `CELL_KEY` to `ResultsExporter`'s `experiments` SQLite table (carried over from Session 29, still not done)
+- [ ] Build ROI + Otsu + `regionprops`-centroid soma detection on `EMI=RED` images, then contour-overlay export + centroid-to-soma distance calc (carried over from Session 29, item 5)
+- [ ] Implement actual `ref_df` saving (CSV vs parquet, location/naming) — deferred since Session 29
+
+## Last Session Recap
+※ recap: Finalized `plot_spatiotemporal_summary()`'s row-1 panels (fixed spike-frame contours on all frames, dynamic per-frame area counts, no pixel coloring, span only on spike frame) and `get_temporal_traces()` (0-default for missing regions), then deleted the validation diagnostic scripts. Next priority: implement the decided export filename/folder structure and design a results find/browse feature.
+
+---
+
 # Log of the project progress 2026-06-20 Sat (Session 29)
 Last working file: `classes/region_analyzer.py`
 Last working line: 182 (`def get_temporal_traces`)

@@ -88,7 +88,7 @@ class RegionAnalyzer:
         Unlike the spike-frame's `dim_largest` (a merge of every dim component
         related to the bright region), this looks at bright/dim each on their
         own — no spatial relation between them. Used for the per-frame summary
-        panels in the spatiotemporal figure (see classes/plot_results.py).
+        panels in the spatiotemporal figure (see functions/plot_results.py).
 
         Args:
             frame: 2D array (0=background, 1=dim, 2=bright) for any frame.
@@ -178,6 +178,25 @@ class RegionAnalyzer:
             "_mask":     dim_mask,  # internal: reused by get_temporal_traces
         }
 
+    def area_in_combined_region(self, frame: np.ndarray, category: int) -> float:
+        """Area (µm²) of `category` pixels in `frame`, restricted to the spike frame's bright+dim area.
+
+        Args:
+            frame: 2D array (0=background, 1=dim, 2=bright) for any frame.
+            category: CATEGORY_BRIGHT or CATEGORY_DIM.
+
+        Returns:
+            Area in µm² (0.0 if neither bright_largest nor dim_largest was found).
+        """
+        area_mask = np.zeros(frame.shape, dtype=bool)
+        if self.bright_largest is not None:
+            area_mask |= self.bright_largest["_mask"]
+        if self.dim_largest is not None:
+            area_mask |= self.dim_largest["_mask"]
+
+        pixel_count = int(np.count_nonzero(area_mask & (frame == category)))
+        return self._area_to_um2(pixel_count)
+
     # ── Unit conversion helpers ────────────────────────────────────────────────
 
     def _px_to_um(self, pixels: float) -> float:
@@ -213,18 +232,17 @@ class RegionAnalyzer:
 
         Returns:
             dict with "bright_trace"/"dim_trace"/"total_trace": 1D arrays (n_frames,).
-            bright_trace/dim_trace are NaN-filled if the corresponding region was not
-            detected in the spike frame; total_trace = bright_trace + dim_trace (NaN
-            if either is NaN).
+            bright_trace/dim_trace are 0-filled if the corresponding region was not
+            detected in the spike frame; total_trace = bright_trace + dim_trace.
         """
         n_frames = segment.shape[0]
 
-        bright_trace = np.full(n_frames, np.nan)
+        bright_trace = np.zeros(n_frames)
         if self.bright_largest is not None:
             mask = self.bright_largest["_mask"]
             bright_trace = np.array([frame[mask].mean() for frame in segment])
 
-        dim_trace = np.full(n_frames, np.nan)
+        dim_trace = np.zeros(n_frames)
         if self.dim_largest is not None:
             mask = self.dim_largest["_mask"]
             dim_trace = np.array([frame[mask].mean() for frame in segment])

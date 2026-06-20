@@ -34,7 +34,7 @@ The current goal is to build a Python/PySide6 GUI for managing the full analysis
 
 - New analysis methods: add to `classes/`.
 - New processing functions: add to `functions/` with both CPU/GPU if applicable.
-- New plots: extend `classes/plot_results.py`.
+- New plots: extend `functions/plot_results.py` (headless `Figure`-returning functions); GUI canvas widget lives in `classes/mpl_canvas.py`.
 
 ## Local Codex Notes
 

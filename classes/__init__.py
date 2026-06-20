@@ -10,13 +10,13 @@ if TYPE_CHECKING:
     from .helper_cell_dropdown import CellDropdownDelegate
     from .helper_checkable_dropdown import CheckableDropdown
     from .model_from_dataframe import ModelFromDataFrame
-    from .plot_results import MplCanvas, PlotPeaks, PlotRegion, PlotSegs, PlotSpatialDist
+    from .mpl_canvas import MplCanvas
     from .region_analyzer import RegionAnalyzer
     from .results_exporter import ResultsExporter
     from .spatial_categorization import SpatialCategorizer
 
 from .dialog_confirm import DialogConfirm
-from .dialog_get_path import DialogGetPath, DialogGetFile
+from .dialog_get_path import DialogGetFile, DialogGetPath
 
 __all__ = [
     "AbfClip",
@@ -29,10 +29,6 @@ __all__ = [
     "DialogPickList",
     "ModelFromDataFrame",
     "MplCanvas",
-    "PlotPeaks",
-    "PlotRegion",
-    "PlotSegs",
-    "PlotSpatialDist",
     "RegionAnalyzer",
     "ResultsExporter",
     "SpatialCategorizer",
@@ -45,11 +41,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "DialogPickList": (".dialog_pick_list", "DialogPickList"),
     "CheckableDropdown": (".helper_checkable_dropdown", "CheckableDropdown"),
     "ModelFromDataFrame": (".model_from_dataframe", "ModelFromDataFrame"),
-    "MplCanvas": (".plot_results", "MplCanvas"),
-    "PlotPeaks": (".plot_results", "PlotPeaks"),
-    "PlotRegion": (".plot_results", "PlotRegion"),
-    "PlotSegs": (".plot_results", "PlotSegs"),
-    "PlotSpatialDist": (".plot_results", "PlotSpatialDist"),
+    "MplCanvas": (".mpl_canvas", "MplCanvas"),
     "RegionAnalyzer": (".region_analyzer", "RegionAnalyzer"),
     "ResultsExporter": (".results_exporter", "ResultsExporter"),
     "SpatialCategorizer": (".spatial_categorization", "SpatialCategorizer"),

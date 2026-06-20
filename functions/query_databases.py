@@ -142,3 +142,20 @@ def lookup_rec_from_db(table: pl.DataFrame, db_path: Path, exp_db_path: Path) ->
 
     result = _sort_rec_columns(pl.concat(frames, how="diagonal_relaxed"))
     return populate_animal_id_values(result, exp_db_path)
+
+
+def count_unique_cells(ref_df: pl.DataFrame) -> pl.DataFrame:
+    """Reduce ref_df rows to one row per unique cell, listing each cell's filenames.
+
+    A cell is identified by its (ANIMAL_ID, SLICE, AT) triple -- e.g.
+    ('neoChAT-677', '2R', 'CELL_1'). Multiple raw_tiff_name entries in an ana
+    list commonly share the same cell (repeated recordings of the same slice).
+
+    Returns one row per unique cell with columns: ANIMAL_ID, SLICE, AT,
+    Filenames (sorted list of Filename values for that cell), n_images.
+    """
+    return (
+        ref_df.group_by(["ANIMAL_ID", "SLICE", "AT"])
+        .agg(pl.col("Filename").sort().alias("Filenames"), pl.len().alias("n_images"))
+        .sort(["ANIMAL_ID", "SLICE", "AT"])
+    )

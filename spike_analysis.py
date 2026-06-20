@@ -25,14 +25,19 @@ import argparse
 from pathlib import Path
 
 # Third-party imports
-import numpy as np
 import polars as pl
-import tifffile
 from rich.console import Console
 
 # Local application imports
-from classes import AbfClip, RegionAnalyzer, SpatialCategorizer
-from functions import list_parser, lookup_rec_from_db, spike_centered_median, zscore_img_segs
+from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
+from functions import (
+    count_unique_cells,
+    list_parser,
+    lookup_rec_from_db,
+    spike_centered_median,
+    write_cell_summary_xlsx,
+    zscore_img_segs,
+)
 
 console = Console()
 
@@ -90,24 +95,32 @@ def parse_ana_list(
     return entries, results_dir, detrend_mode, normalization
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Pipeline runner ───────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Spike-aligned image analysis pipeline")
-    parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_list_*.txt)")
-    parser.add_argument("--detrend", choices=["BIEXP", "MOV"], default="BIEXP", help="Detrend mode (default: BIEXP)")
-    parser.add_argument("--use_als", action="store_true", help="Load *_ALS.tif instead of *_GAUSS.tif")
-    parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db (default: data/rec_data.db)")
-    parser.add_argument("--exp_db", type=Path, default=Path("data/exp_info.db"), help="Path to exp_info.db (default: data/exp_info.db)")
-    args = parser.parse_args()
 
-    entries, results_dir, detrend_mode, normalization = parse_ana_list(
-        args.ana_list, args.detrend, args.use_als
-    )
-    ref_df = lookup_rec_from_db(entries, args.db, args.exp_db)
-    console.print(f"Found {len(entries)} entries in {args.ana_list.name}")
+def run(
+    ana_list_path: Path,
+    detrend_mode: str = "BIEXP",
+    use_als: bool = False,
+    db_path: Path = Path("data/rec_data.db"),
+    exp_db_path: Path = Path("data/exp_info.db"),
+    emitter=None,
+) -> None:
+    """Run the full spike-aligned analysis pipeline for every entry in an ana list."""
+    entries, results_dir, detrend_mode, normalization = parse_ana_list(ana_list_path, detrend_mode, use_als)
+    ref_df = lookup_rec_from_db(entries, db_path, exp_db_path)
+    cell_df = count_unique_cells(ref_df)
+    console.print(f"Found {len(entries)} entries in {ana_list_path.name} -> {len(cell_df)} unique cells")
 
-    for row in entries.iter_rows(named=True):
+    cell_summary_path = results_dir / f"{ana_list_path.stem}_cells.xlsx"
+    write_cell_summary_xlsx(cell_df, cell_summary_path)
+    console.print(f"Saved cell summary -> {cell_summary_path.name}")
+
+    animal_index_map = ResultsExporter.build_animal_index_map(ref_df["ANIMAL_ID"].unique())
+    exporter = ResultsExporter(results_root=results_dir)
+
+    total = len(entries)
+    for i, row in enumerate(entries.iter_rows(named=True), 1):
         match = ref_df.filter(pl.col("Filename") == row["raw_tiff_name"])
         if match.is_empty():
             console.print(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
@@ -116,6 +129,8 @@ if __name__ == "__main__":
 
         proc_tiff_path = Path(row["proc_tiff_path"])
         raw_abf_path = Path(row["raw_abf_path"])
+        if emitter:
+            emitter({"type": "progress", "i": i, "total": total, "file": proc_tiff_path.name})
         console.print(f"\n[cyan]{proc_tiff_path.name}  +  {raw_abf_path.name}  [{obj}][/cyan]")
         clip = AbfClip(
             proc_tiff_path=proc_tiff_path,
@@ -129,6 +144,8 @@ if __name__ == "__main__":
             console.print("[yellow]No valid segments — skipping z-score step.[/yellow]")
             continue
 
+        if emitter:
+            emitter({"type": "step", "msg": "Z-score normalizing segments..."})
         # Coverts each segment to z-score normalized values using the baseline frames before the spike frame.
         lst_zscore = zscore_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
         console.print(f"[green]Z-score normalized {len(lst_zscore)} segment(s)[/green]")
@@ -140,19 +157,13 @@ if __name__ == "__main__":
         del lst_zscore
         console.print(f"[green]Median shape: {median_segment.shape}, z-score range: [{zscore_range[0]:.2f}, {zscore_range[1]:.2f}][/green]")
 
-        median_path = results_dir / f"{clip.proc_tiff_path.stem}_MED.tif"
-        tifffile.imwrite(median_path, median_segment.astype(np.float32))
-        console.print(f"[green]Saved median → {median_path.name}[/green]")
-
+        if emitter:
+            emitter({"type": "step", "msg": "Categorizing spike frame..."})
         # Real analysis starts here: categorize the z scores for further region analysis (using skimage.measure).
         spike_frame_idx = median_segment.shape[0] // 2
         categorizer = SpatialCategorizer.morphological(threshold_method="base977_otsu")
         categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
         console.print(f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), thresholds: {categorizer.thresholds_used}[/green]")
-
-        cat_path = results_dir / f"{clip.proc_tiff_path.stem}_CAT.tif"
-        tifffile.imwrite(cat_path, np.array(categorizer.categorized_frames, dtype=np.uint8))
-        console.print(f"[green]Saved categorized → {cat_path.name}[/green]")
 
         region_analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj=obj)
         spike_frame = region_analyzer.get_results()
@@ -173,4 +184,44 @@ if __name__ == "__main__":
             )
         else:
             console.print("[yellow]No dim region in spike frame[/yellow]")
+
+        if emitter:
+            emitter({"type": "step", "msg": "Exporting results..."})
+        export_data = clip.get_export_data()
+        dirs = exporter.export_all(
+            exp_date=export_data["exp_date"],
+            abf_serial=export_data["abf_serial"],
+            img_serial=export_data["img_serial"],
+            animal_idx=animal_index_map[match["ANIMAL_ID"].item()],
+            slice_val=match["SLICE"].item(),
+            at=match["AT"].item(),
+            detrend_mode=detrend_mode,
+            normalization=normalization,
+            num_found_spikes=export_data["num_found_spikes"],
+            n_spikes_analyzed=export_data["n_spikes_analyzed"],
+            threshold_method=categorizer.threshold_method,
+            objective=obj,
+            um_per_pixel=region_analyzer.um_per_pixel,
+            median_stack=median_segment,
+            categorized_frames=categorizer.categorized_frames,
+            region_summary=region_analyzer.get_summary(),
+            region_data=spike_frame,
+        )
+        console.print(f"[green]Exported median + categorized → {dirs['median'].parent.name}/[/green]")
+
+    console.print("\n[bold green]All done![/bold green]")
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Spike-aligned image analysis pipeline")
+    parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_list_*.txt)")
+    parser.add_argument("--detrend", choices=["BIEXP", "MOV"], default="BIEXP", help="Detrend mode (default: BIEXP)")
+    parser.add_argument("--use_als", action="store_true", help="Load *_ALS.tif instead of *_GAUSS.tif")
+    parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db (default: data/rec_data.db)")
+    parser.add_argument("--exp_db", type=Path, default=Path("data/exp_info.db"), help="Path to exp_info.db (default: data/exp_info.db)")
+    args = parser.parse_args()
+
+    run(args.ana_list, args.detrend, args.use_als, args.db, args.exp_db)
 

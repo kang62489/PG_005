@@ -33,7 +33,7 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 ### Adding New Features
 - New analysis methods → add to `classes/`
 - New processing functions → add to `functions/` with both CPU/GPU if applicable
-- New plots → extend `classes/plot_results.py`
+- New plots → extend `functions/plot_results.py` (headless `Figure`-returning functions); GUI canvas widget lives in `classes/mpl_canvas.py`
 
 ## Other advices
 **Try answering user's questions before proposing any code modification**

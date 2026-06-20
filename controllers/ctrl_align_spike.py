@@ -7,7 +7,7 @@ import polars as pl
 from rich.console import Console
 
 # Local application imports
-from classes import DialogGetFile, DialogGetPath, ModelFromDataFrame
+from classes import BackgroundWorker, DialogGetFile, DialogGetPath, ModelFromDataFrame
 from functions import abf_ready, als_ready, build_filename_index, build_proc_file_index, gauss_ready
 from utils.params import MODELS_DIR, RAW_ABFS_DIR, RESULTS_DIR
 
@@ -18,6 +18,7 @@ class CtrlAlignSpike:
     def __init__(self, view) -> None:
         self.view = view
         self._proc_list_path: Path | None = None
+        self._ana_list_path: Path | None = None
         self._entries: list[dict] = []
         self.view.te_dir_raw_abfs.setReadOnly(True)
         self.view.te_dir_raw_abfs.setPlainText(str(RAW_ABFS_DIR))
@@ -33,6 +34,7 @@ class CtrlAlignSpike:
         self.view.gb_norm.buttonClicked.connect(lambda _: self._load_entries())
         self.view.btn_refresh_status.clicked.connect(self.check_file_status)
         self.view.btn_confirm_analyzing_list.clicked.connect(self.export_ana_list)
+        self.view.btn_run_analysis.clicked.connect(self.on_run_analysis)
 
     # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -175,4 +177,34 @@ class CtrlAlignSpike:
         stem = self._proc_list_path.stem.removeprefix("proc_")
         ana_list_path = self._proc_list_path.parent / f"ana_list_{stem}.txt"
         ana_list_path.write_text("\n".join(out_lines), encoding="utf-8")
+        self._ana_list_path = ana_list_path
         console.log(f"[bold green]Analysis list saved → {ana_list_path}[/bold green]")
+
+    # ── Run Analysis ──────────────────────────────────────────────────────────
+
+    def on_run_analysis(self) -> None:
+        from spike_analysis import run as run_spike_analysis
+
+        if self._ana_list_path is None:
+            console.log("[yellow]No analysis list confirmed yet. Click 'Confirm Analyzing List' first.[/yellow]")
+            return
+
+        self.view.btn_run_analysis.setEnabled(False)
+        self._bk_worker = BackgroundWorker(
+            run_spike_analysis, self._ana_list_path, self._detrend_mode(), self._use_als(), use_emitter=True
+        )
+        self._bk_worker.proc_msgs.connect(self._on_progress)
+        self._bk_worker.work_done.connect(self._on_analysis_done)
+        self._bk_worker.start()
+
+    def _on_progress(self, msg: object) -> None:
+        if msg.get("type") == "progress":
+            self.view.le_current_total.setText(f"{msg['i']}/{msg['total']}")
+            self.view.le_status.setText(msg["file"])
+        elif msg.get("type") == "step":
+            self.view.le_status.setText(msg["msg"])
+
+    def _on_analysis_done(self) -> None:
+        self.view.btn_run_analysis.setEnabled(True)
+        self.view.le_status.setText("All done!")
+        console.log("[bold green]Spike analysis complete.[/bold green]")
