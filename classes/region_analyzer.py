@@ -46,6 +46,10 @@ class RegionAnalyzer:
         contour    : bright -> (N, 2) array of [row, col] contour points, or None
                      dim    -> list of such arrays (one per disjoint piece), or None
 
+    Also exposes find_largest_regions(frame) for finding the largest bright/dim
+    component independently in any frame (no spatial relation between them) —
+    used for per-frame summary panels rather than the spike-frame's related dim.
+
     Example:
         >>> categorizer = SpatialCategorizer.morphological()
         >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)
@@ -69,7 +73,7 @@ class RegionAnalyzer:
         self.pixel_per_um = PIXEL_SCALE[obj]
         self.um_per_pixel = 1.0 / self.pixel_per_um
 
-        self.bright_largest = self._find_largest_bright(spike_frame)
+        self.bright_largest = self._find_largest_category(spike_frame, CATEGORY_BRIGHT)
 
         if self.bright_largest is None:
             self.dim_largest = None
@@ -78,9 +82,29 @@ class RegionAnalyzer:
 
     # ── Core analysis ─────────────────────────────────────────────────────────
 
-    def _find_largest_bright(self, frame: np.ndarray) -> dict | None:
-        """Find the largest bright connected component and measure it."""
-        labeled = label(frame == CATEGORY_BRIGHT)
+    def find_largest_regions(self, frame: np.ndarray) -> dict:
+        """Find the largest bright and largest dim component independently in a frame.
+
+        Unlike the spike-frame's `dim_largest` (a merge of every dim component
+        related to the bright region), this looks at bright/dim each on their
+        own — no spatial relation between them. Used for the per-frame summary
+        panels in the spatiotemporal figure (see classes/plot_results.py).
+
+        Args:
+            frame: 2D array (0=background, 1=dim, 2=bright) for any frame.
+
+        Returns:
+            dict with "bright"/"dim" keys, each a region dict (see class docstring)
+            or None if that category has no connected component in this frame.
+        """
+        return {
+            "bright": self._find_largest_category(frame, CATEGORY_BRIGHT),
+            "dim":    self._find_largest_category(frame, CATEGORY_DIM),
+        }
+
+    def _find_largest_category(self, frame: np.ndarray, category: int) -> dict | None:
+        """Find the largest connected component of the given category and measure it."""
+        labeled = label(frame == category)
         candidates = list(regionprops(labeled))
 
         if not candidates:
@@ -106,6 +130,7 @@ class RegionAnalyzer:
             "y_span_um": self._px_to_um(y_span_px),
             "contour":   contour,
             "_bbox":     (min_row, min_col, max_row, max_col),  # internal: dim search-window construction
+            "_mask":     region_mask,  # internal: reused by get_temporal_traces
         }
 
     def _find_related_dim(self, frame: np.ndarray, bright_bbox: tuple[int, int, int, int]) -> dict | None:
@@ -150,6 +175,7 @@ class RegionAnalyzer:
             "x_span_um": self._px_to_um(x_span_px),
             "y_span_um": self._px_to_um(y_span_px),
             "contour":   find_contours(dim_mask, level=0.5),
+            "_mask":     dim_mask,  # internal: reused by get_temporal_traces
         }
 
     # ── Unit conversion helpers ────────────────────────────────────────────────
@@ -176,6 +202,36 @@ class RegionAnalyzer:
             "has_dim_region":    self.dim_largest is not None,
             "has_bright_region": self.bright_largest is not None,
         }
+
+    def get_temporal_traces(self, segment: np.ndarray) -> dict:
+        """Mean intensity per frame within the spike frame's fixed bright/dim masks.
+
+        Args:
+            segment: 3D array (frames, height, width) sharing the spike frame's
+                (height, width) — e.g. the z-scored median segment the categorizer
+                was fit on.
+
+        Returns:
+            dict with "bright_trace"/"dim_trace"/"total_trace": 1D arrays (n_frames,).
+            bright_trace/dim_trace are NaN-filled if the corresponding region was not
+            detected in the spike frame; total_trace = bright_trace + dim_trace (NaN
+            if either is NaN).
+        """
+        n_frames = segment.shape[0]
+
+        bright_trace = np.full(n_frames, np.nan)
+        if self.bright_largest is not None:
+            mask = self.bright_largest["_mask"]
+            bright_trace = np.array([frame[mask].mean() for frame in segment])
+
+        dim_trace = np.full(n_frames, np.nan)
+        if self.dim_largest is not None:
+            mask = self.dim_largest["_mask"]
+            dim_trace = np.array([frame[mask].mean() for frame in segment])
+
+        total_trace = bright_trace + dim_trace
+
+        return {"bright_trace": bright_trace, "dim_trace": dim_trace, "total_trace": total_trace}
 
     def get_export_data(self) -> dict:
         """Data for export (contours and internal fields stripped by exporter)."""
