@@ -13,7 +13,7 @@ from rich.console import Console
 
 # Local application imports
 from classes import DialogPickList
-from utils.params import MODELS_DIR, REC_DB_PATH, ColumnSorter
+from utils import MODELS_DIR, REC_DB_PATH, ColumnSorter
 
 # Set up rich console
 console = Console()

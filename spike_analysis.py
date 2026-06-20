@@ -145,31 +145,31 @@ if __name__ == "__main__":
         console.print(f"[green]Saved median → {median_path.name}[/green]")
 
         # Real analysis starts here: categorize the z scores for further region analysis (using skimage.measure).
-        categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
-        categorizer.fit(median_segment)
+        spike_frame_idx = median_segment.shape[0] // 2
+        categorizer = SpatialCategorizer.morphological(threshold_method="base977_otsu")
+        categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
         console.print(f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), thresholds: {categorizer.thresholds_used}[/green]")
 
         cat_path = results_dir / f"{clip.proc_tiff_path.stem}_CAT.tif"
         tifffile.imwrite(cat_path, np.array(categorizer.categorized_frames, dtype=np.uint8))
         console.print(f"[green]Saved categorized → {cat_path.name}[/green]")
 
-        region_analyzer = RegionAnalyzer(categorizer.categorized_frames, obj=obj)
-        spike_frame_idx = len(categorizer.categorized_frames) // 2
-        spike = region_analyzer.get_frame_results(spike_frame_idx)
+        region_analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj=obj)
+        spike_frame = region_analyzer.get_results()
 
-        bright = spike["bright_largest"]
-        dim = spike["dim_largest"]
-        if bright:
+        bright_area = spike_frame["bright_largest"]
+        dim_area = spike_frame["dim_largest"]
+        if bright_area:
             console.print(
-                f"[magenta]Bright (spike frame): area={bright['area_um2']:.1f} µm²  "
-                f"x-span={bright['x_span_um']:.1f} µm  y-span={bright['y_span_um']:.1f} µm[/magenta]"
+                f"[magenta]Bright (spike frame): area={bright_area['area_um2']:.1f} µm²  "
+                f"x-span={bright_area['x_span_um']:.1f} µm  y-span={bright_area['y_span_um']:.1f} µm[/magenta]"
             )
         else:
             console.print("[yellow]No bright region in spike frame[/yellow]")
-        if dim:
+        if dim_area:
             console.print(
-                f"[cyan]Dim (spike frame):    area={dim['area_um2']:.1f} µm²  "
-                f"x-span={dim['x_span_um']:.1f} µm  y-span={dim['y_span_um']:.1f} µm[/cyan]"
+                f"[cyan]Dim (spike frame):    area={dim_area['area_um2']:.1f} µm²  "
+                f"x-span={dim_area['x_span_um']:.1f} µm  y-span={dim_area['y_span_um']:.1f} µm[/cyan]"
             )
         else:
             console.print("[yellow]No dim region in spike frame[/yellow]")

@@ -10,6 +10,7 @@ from .params import (
     MODELS_DIR,
     REC_DB_PATH,
     STYLES_DIR,
+    ColumnSorter,
     UISizes,
 )
 
@@ -20,6 +21,7 @@ __all__ = [
     "APP_STATUS_MESSAGE",
     "APP_VERSION",
     "BASE_DIR",
+    "ColumnSorter",
     "EXP_DB_PATH",
     "LOG_DIR",
     "MODELS_DIR",

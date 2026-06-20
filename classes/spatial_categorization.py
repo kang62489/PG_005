@@ -34,7 +34,7 @@ class SpatialCategorizer:
 
     Attributes:
         method: Categorization method ('connected', 'watershed', 'morphological')
-        threshold_method: Auto-thresholding method ('manual', 'multiotsu', 'li_double', 'otsu_double')
+        threshold_method: Auto-thresholding method ('manual', 'multiotsu', 'base977_li', 'base977_otsu')
         threshold_dim: Manual threshold for dim signal
         threshold_bright: Manual threshold for bright signal
         min_region_size: Minimum pixels per region
@@ -53,12 +53,12 @@ class SpatialCategorizer:
     """
 
     GROUPING_METHODS: ClassVar[list[str]] = ["connected", "watershed", "morphological"]
-    THRESHOLD_METHODS: ClassVar[list[str]] = ["manual", "multiotsu", "li_double", "otsu_double"]
+    THRESHOLD_METHODS: ClassVar[list[str]] = ["manual", "multiotsu", "base977_li", "base977_otsu"]
 
     def __init__(
         self,
         grouping_method: str,
-        threshold_method: str = "li_double",
+        threshold_method: str = "base977_li",
         *,
         global_threshold: bool = True,
         # Manual threshold (only when threshold_method="manual")
@@ -118,7 +118,7 @@ class SpatialCategorizer:
     @classmethod
     def connected(
         cls,
-        threshold_method: str = "li_double",
+        threshold_method: str = "base977_li",
         *,
         global_threshold: bool = True,
         threshold_dim: float | None = None,
@@ -129,7 +129,7 @@ class SpatialCategorizer:
         Create a SpatialCategorizer using connected components method.
 
         Args:
-            threshold_method: 'manual', 'multiotsu', 'li_double', or 'otsu_double'
+            threshold_method: 'manual', 'multiotsu', 'base977_li', or 'base977_otsu'
             global_threshold: Use global thresholds across all frames
             threshold_dim: Manual dim threshold (required if threshold_method='manual')
             threshold_bright: Manual bright threshold (required if threshold_method='manual')
@@ -150,7 +150,7 @@ class SpatialCategorizer:
     @classmethod
     def watershed(
         cls,
-        threshold_method: str = "li_double",
+        threshold_method: str = "base977_li",
         *,
         global_threshold: bool = True,
         threshold_dim: float | None = None,
@@ -162,7 +162,7 @@ class SpatialCategorizer:
         Create a SpatialCategorizer using watershed segmentation.
 
         Args:
-            threshold_method: 'manual', 'multiotsu', 'li_double', or 'otsu_double'
+            threshold_method: 'manual', 'multiotsu', 'base977_li', or 'base977_otsu'
             global_threshold: Use global thresholds across all frames
             threshold_dim: Manual dim threshold (required if threshold_method='manual')
             threshold_bright: Manual bright threshold (required if threshold_method='manual')
@@ -185,7 +185,7 @@ class SpatialCategorizer:
     @classmethod
     def morphological(
         cls,
-        threshold_method: str = "li_double",
+        threshold_method: str = "base977_li",
         *,
         global_threshold: bool = True,
         threshold_dim: float | None = None,
@@ -196,7 +196,7 @@ class SpatialCategorizer:
         Create a SpatialCategorizer using morphological cleanup.
 
         Args:
-            threshold_method: 'manual', 'multiotsu', 'li_double', or 'otsu_double'
+            threshold_method: 'manual', 'multiotsu', 'base977_li', or 'base977_otsu'
             global_threshold: Use global thresholds across all frames
             threshold_dim: Manual dim threshold (required if threshold_method='manual')
             threshold_bright: Manual bright threshold (required if threshold_method='manual')
@@ -214,12 +214,16 @@ class SpatialCategorizer:
             kernel_size=kernel_size,
         )
 
-    def fit(self, image_segment: np.ndarray) -> "SpatialCategorizer":
+    def fit(self, image_segment: np.ndarray, spike_frame_idx: int | None = None) -> "SpatialCategorizer":
         """
         Fit the categorizer to an image segment.
 
         Args:
             image_segment: 3D array (frames, height, width) or 2D array (single frame)
+            spike_frame_idx: Index of the spike frame within image_segment. Required when
+                threshold_method is 'base977_li'/'base977_otsu' and global_threshold=True —
+                frames before this index are treated as the baseline window used to set
+                thresh_dim (baseline mean + 2*std).
 
         Returns:
             self (for method chaining)
@@ -228,7 +232,7 @@ class SpatialCategorizer:
 
         # Calculate global thresholds if needed
         if self.global_threshold and self.threshold_method != "manual":
-            self._calculate_global_thresholds()
+            self._calculate_global_thresholds(spike_frame_idx)
         else:
             self.thresholds_used = (self.threshold_dim, self.threshold_bright)
 
@@ -243,20 +247,28 @@ class SpatialCategorizer:
 
         return self
 
-    def _calculate_global_thresholds(self) -> None:
+    def _calculate_global_thresholds(self, spike_frame_idx: int | None) -> None:
         """Calculate thresholds using all frames combined."""
         all_pixels = np.concatenate([f.flatten() for f in self.source_frames])
 
         if self.threshold_method == "multiotsu":
             thresholds = threshold_multiotsu(all_pixels, classes=3)
             self.thresholds_used = (thresholds[0], thresholds[1])
-        elif self.threshold_method == "li_double":
-            thresh_dim = threshold_li(all_pixels)
+        elif self.threshold_method == "base977_li":
+            if spike_frame_idx is None:
+                msg = "spike_frame_idx is required for threshold_method='base977_li' when global_threshold=True"
+                raise ValueError(msg)
+            baseline_pixels = np.concatenate([f.flatten() for f in self.source_frames[:spike_frame_idx]])
+            thresh_dim = baseline_pixels.mean() + 2 * baseline_pixels.std()
             signal_pixels = all_pixels[all_pixels > thresh_dim]
             thresh_bright = threshold_li(signal_pixels) if len(signal_pixels) > 0 else thresh_dim
             self.thresholds_used = (thresh_dim, thresh_bright)
-        elif self.threshold_method == "otsu_double":
-            thresh_dim = threshold_otsu(all_pixels)
+        elif self.threshold_method == "base977_otsu":
+            if spike_frame_idx is None:
+                msg = "spike_frame_idx is required for threshold_method='base977_otsu' when global_threshold=True"
+                raise ValueError(msg)
+            baseline_pixels = np.concatenate([f.flatten() for f in self.source_frames[:spike_frame_idx]])
+            thresh_dim = baseline_pixels.mean() + 2 * baseline_pixels.std()
             signal_pixels = all_pixels[all_pixels > thresh_dim]
             thresh_bright = threshold_otsu(signal_pixels) if len(signal_pixels) > 0 else thresh_dim
             self.thresholds_used = (thresh_dim, thresh_bright)

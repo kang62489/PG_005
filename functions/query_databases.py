@@ -8,7 +8,7 @@ import polars as pl
 from rich.console import Console
 
 # Local application imports
-from utils.params import ColumnSorter
+from utils import ColumnSorter
 
 console = Console()
 

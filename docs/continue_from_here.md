@@ -1,3 +1,67 @@
+# Log of the project progress 2026-06-20 Sat (Session 29)
+Last working file: `spike_analysis.py`
+Last working line: 156 (`region_analyzer = RegionAnalyzer(categorizer.categorized_frames, obj=obj)`)
+
+## List of modified files
+- `utils/params.py` — added `ColumnSorter` dataclass (`UISizes`-style, accessed without instantiation): `CORE_COLUMNS`, `FLUIDIC_COLUMNS`, `IMG_COND_COLUMNS`, `EPHY_COND_COLUMNS`, `OTHER_COLUMNS`, `MEMO_COLUMNS`, `IGNORE_COLUMNS` — derived by actually inspecting column frequency across all 56 `REC_*` tables in `rec_data.db`, not guessed
+- `functions/query_databases.py` — **new**: `lookup_rec_from_db(table, db_path, exp_db_path)` batch-queries `rec_data.db` grouped by date table (one query per `REC_{date}`, not per row), reads each table's real columns via `PRAGMA table_info` first (schemas vary by date), diagonally concatenates so missing columns become null; chains `_sort_rec_columns` (drops `IGNORE_COLUMNS`, orders the rest by `ColumnSorter` group priority) and `populate_animal_id_values` (fills missing `ANIMAL_ID` from `exp_info.db`'s `BASIC_INFO` DOR→Animal_ID mapping; handles 1-candidate "fill all" and 2-candidate "fill by elimination" cases) as its last two steps
+- `functions/__init__.py` — registered `lookup_rec_from_db`/`populate_animal_id_values` in the lazy-import table
+- `controllers/ctrl_data_selector.py` — local `CORE_COLUMNS` tuple replaced with `ColumnSorter.CORE_COLUMNS` import
+- `spike_analysis.py` — deleted `_lookup_obj` entirely; `parse_ana_list` now only parses + existence-filters the ana list (returns `entries: pl.DataFrame` with `proc_tiff_path`/`raw_abf_path` columns added, no DB lookup); `__main__` computes `ref_df = lookup_rec_from_db(entries, db, exp_db)` once, then queries it **live per row** (`ref_df.filter(pl.col("Filename") == ...)`) for `OBJ` instead of flattening into a lookup dict — kept intentionally so `ref_df` stays a full, separately-queryable/saveable table rather than being collapsed away
+- `.claude/settings.local.json` — new permission entries accumulated from today's tool calls
+
+## Summary of current progress
+- Generalized the old per-row, single-column `_lookup_obj` into a batched, schema-tolerant, multi-column `rec_data.db` lookup, with column ordering now policy-driven (`ColumnSorter`) instead of whatever SQL happened to return
+- Added cross-database enrichment: `ANIMAL_ID` gaps in the compiled table get backfilled from `exp_info.db` using a clear, verified 1-or-2-candidate rule (confirmed via real data that no DOR ever has more than 2 animals)
+- Relocated all three DB-query functions out of `spike_analysis.py` into `functions/query_databases.py`, matching the project's existing public/private function-module convention
+- Rewired `parse_ana_list`/`__main__` end-to-end so `obj` resolution goes through the new batched lookup instead of `_lookup_obj`; verified against `ana_list_20260601_000.txt` (correctly resolved `OBJ='10X'`) — the only failure hit afterward was a missing test `.abf` file on disk, unrelated to the refactor
+- Hit a rough patch mid-session: left `parse_ana_list` and `__main__` in a mismatched state (signature/return-type changed in one but not the other) after a couple of rejected edits — caught and fully fixed within this session, verified by re-running the script
+
+## Completed TODOs (from Session 28)
+- ✅ Complete the rec_data.db query functions for the picked list — done via `lookup_rec_from_db`/`populate_animal_id_values` in `functions/query_databases.py`
+
+## Completed TODOs (from Session 29)
+- ✅ Exported `ColumnSorter` via `utils/__init__.py`; switched `functions/query_databases.py` and `controllers/ctrl_data_selector.py` to import it (and `MODELS_DIR`/`REC_DB_PATH`) from `utils` instead of `utils.params` directly
+- ✅ Item 1 (split-range thresholding) — see revised design note above; implemented as baseline-mean+2σ cutoff instead of the originally planned two-range split, with `base977_otsu`/`base977_li` renaming
+
+## Design idea logged this session (not yet implemented): export/output redesign
+Motivating problem: 214 picked ana_list entries don't mean 214 distinct cells — the same animal/slice/site can appear in multiple recordings (different days, detrend modes, etc.), and the team wants to know the true distinct-cell count plus a way to group/sort exports for downstream stats without making the export folder structure too deep to browse.
+
+Decided direction:
+- **Stop using folder depth to encode identity.** A `DOR/Animal_ID/Slice/AT/...` nested folder tree is both too deep to browse and still useless for grouping (you'd have to walk the filesystem to count cells). Split the concern in two:
+  1. **Filenames** stay flat under `results/{exp_date}/{category}/` (`categorized/`, `median/`, `regions/`, `spatials/` — categories already exist in `ResultsExporter`), but gain a compact, scannable code: `{exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_{TYPE}.ext`, e.g. `2025_12_15-0014_A1S1RC1_BIEXP_GAUSS_CAT.tif`.
+     - `A{n}` = sequential index per **distinct animal within the current export batch** (not the literal `ANIMAL_ID`, which is a long strain code like `neoChAT-204` in real data — confirmed via `exp_info.db.BASIC_INFO`) — purely for fast visual "is this a different cell?" scanning.
+     - `S{slice}` = the `SLICE` column verbatim (e.g. `1R`).
+     - `C{site}` = derived from `AT` (e.g. `SITE_1` → `C1`, take trailing number after the prefix).
+  2. **Full metadata** (real `Animal_ID`, `OBJ`, `SLICE`, `AT`, etc.) goes into figure titles/captions once plotting exists (`classes/plot_results.py`), not into filenames.
+  3. **Distinct-cell counting and grouped statistics happen against the SQLite `experiments` table** (`classes/results_exporter.py`), not the filesystem — needs an `ANIMAL_ID` column added (currently missing; only `SLICE`/`AT` exist) plus a derived `CELL_KEY = f"{ANIMAL_ID}_{SLICE}_{AT}"`. Then "214 recordings → N distinct cells" is `df.group_by(["ANIMAL_ID","SLICE","AT"]).len()` against that table.
+
+## Design ideas logged this session (not yet implemented): analysis fixes (higher priority than export)
+User explicitly reordered: these 5 analysis-correctness items come **before** the export/output redesign below.
+
+1. ✅ **Done — implementation diverged from the original split-range design.** Originally planned: split `_calculate_global_thresholds()` into two frame ranges (background pass on `[start, spike_frame]`, signal pass on `[spike_frame, end]`). Testing showed that was degenerate — `functions/zscore_img_segs.py` z-scores each pixel against its *own* baseline mean/std, so baseline-only pixels are just ~N(0,1) noise with no real background/signal bimodality; Otsu/Li on that pool just bisects the noise near its center, marking ~half of baseline as "dim". **Actual fix**: `thresh_dim = baseline_pixels.mean() + 2*baseline_pixels.std()` (baseline = frames `[0, spike_frame_idx)`; ~97.7% of pure-noise baseline pixels stay below this cutoff), then `thresh_bright = threshold_otsu/li(all_pixels[all_pixels > thresh_dim])` pooled across the **whole** segment. Methods renamed `otsu_double`/`li_double` → `base977_otsu`/`base977_li` to reflect the new algorithm. `fit()` now takes `spike_frame_idx` (passed from `spike_analysis.py` as `median_segment.shape[0] // 2`). Verified visually against `2025_12_15-0013_BIEXP_GAUSS_CAT.tif` — clean bright blob + coherent dim halo + mostly-black background.
+2. **Replace old interactive plots with export-oriented ones** — `classes/plot_results.py`'s `PlotPeaks`/`PlotSegs`/`PlotSpatialDist`/`PlotRegion` are live `QMainWindow` viewers (comboboxes, play buttons), not batch-export-friendly. Build new static-figure functions for `ResultsExporter.export_figure()` instead of adapting the old ones — old ones to be ignored/dropped, not reused.
+3. **New temporal trace analysis** — use the **spike frame's** dim/bright masks (fixed, not per-frame) to compute mean z-score within each mask across every frame in the segment → `dim_trace`/`bright_trace`. Find each trace's peak → latency = time between bright-peak and dim-peak. `combined = bright_trace + dim_trace` → measure recovery duration (time to decay back near baseline; exact closeness threshold still TBD).
+4. **Constrain dim region to spatially relate to bright region** — `RegionAnalyzer._find_largest` currently finds largest-dim and largest-bright independently (could be unrelated blobs). Fix: find largest bright first, then the dim region must be the largest dim CC **whose centroid falls inside the bright region's mask** (discard other dim CCs even if larger).
+5. **Red-channel soma-distance analysis** — replace `_CAT.tif` export with a contour overlay (bright+dim outlines) drawn on the corresponding `EMI=RED` recording (labels the patched cell body), then measure centroid-to-soma distance. Soma position method (user-specified): define an ROI, apply Otsu threshold within it, then `skimage.measure.regionprops` centroid to find the cell center — not fully automatic on the whole frame, and not manual-click.
+
+## What should we do next? (TODOs)
+- [ ] Build new export-oriented static-figure plotting functions; drop the old interactive `Plot*` classes from the new pipeline (item 2 above)
+- [ ] Implement spike-frame-anchored `dim_trace`/`bright_trace` temporal analysis + peak-to-peak latency + recovery-duration metric (item 3 above)
+- [ ] Constrain `RegionAnalyzer`'s dim-region selection to require centroid-inside-bright-mask (item 4 above)
+- [ ] Build ROI + Otsu + `regionprops`-centroid soma detection on `EMI=RED` images, then contour-overlay export + centroid-to-soma distance calc (item 5 above)
+- [ ] Implement actual `ref_df` saving — format (CSV vs parquet) and location/naming convention were both explicitly deferred today ("don't think about that now"); only the live-query usage was built, not persistence
+- [ ] Add `ANIMAL_ID` column + derived `CELL_KEY` to `ResultsExporter`'s `experiments` SQLite table (see export/output design idea above)
+- [ ] Implement the compact filename code (`A{n}S{slice}C{site}`) in `ResultsExporter`'s export filenames
+- [ ] Wire `ResultsExporter.export_all(...)` into `spike_analysis.py`'s per-row loop — `AbfClip.get_export_data()` / `RegionAnalyzer.get_summary()`/`get_results()` already match its expected input shape, just never called from the new pipeline
+- [ ] Decide: should `ResultsExporter` write to the ana_list's `dir_results`, or keep its own separate `results/` root? (open design question, blocks the wiring step above)
+- [ ] Archive `im_dynamics.py`, `batch_process.py`, `test_batch.py` once the new pipeline + exporter wiring is confirmed working (long-standing carry-over TODO)
+
+## Last Session Recap
+※ recap: Exported `ColumnSorter` via `utils/__init__.py` (small cleanup), then designed (no code) two sets of fixes: 5 analysis-correctness items (split-range thresholding, export-ready plots, spike-frame-anchored dim/bright temporal traces + latency/recovery metrics, centroid-in-bright dim constraint, RED-channel soma-distance analysis) prioritized **ahead of** the export/output redesign (cell-grouping via DB not folders, compact batch-relative filename codes). Nothing implemented yet — next session starts with item 1 (split-range thresholding).
+
+---
+
 # Log of the project progress 2026-06-19 Fri (Session 28)
 Last working file: `spike_analysis.py`
 Last working line: 67 (`def parse_ana_list`)

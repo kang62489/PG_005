@@ -1,8 +1,9 @@
 """
 Region analysis for categorized images.
 
-For each frame, finds the single largest connected component in the bright and dim
-categories, then measures its area, centroid, spans, and contour.
+For the spike frame, finds the largest bright connected component, then
+collects every dim connected component spatially related to it, merging
+them into one combined dim region.
 """
 
 import numpy as np
@@ -20,39 +21,45 @@ PIXEL_SCALE = {
     "60X": 4.5,
 }
 
+# Dim-region search window = the bright region's own bbox, expanded by this
+# many multiples of its own span on each side (no extra pixel constant to tune).
+DIM_SEARCH_MARGIN = 0.2
+
 
 class RegionAnalyzer:
     """
-    Find and measure the largest bright and dim regions in categorized frames.
+    Find the largest bright region and its related dim region in a single (spike) frame.
 
-    For each frame, identifies the single largest connected component per
-    category and calculates its area, centroid, spans, and contour.
+    Finds the largest bright connected component, then collects every dim
+    connected component whose bounding box overlaps a window around the
+    bright region (the bright bbox expanded by DIM_SEARCH_MARGIN * its own
+    span on each side), merging them into one combined dim region.
 
     Result dict per region:
         centroid   : (row, col) in pixels
         area_px    : area in pixels
         area_um2   : area in µm²
-        x_span_px  : horizontal span in pixels (west + east from centroid)
-        y_span_px  : vertical span in pixels (north + south from centroid)
+        x_span_px  : horizontal span in pixels
+        y_span_px  : vertical span in pixels
         x_span_um  : horizontal span in µm
         y_span_um  : vertical span in µm
-        contour    : (N, 2) array of [row, col] contour points, or None
+        contour    : bright -> (N, 2) array of [row, col] contour points, or None
+                     dim    -> list of such arrays (one per disjoint piece), or None
 
     Example:
         >>> categorizer = SpatialCategorizer.morphological()
-        >>> categorizer.fit(image_segment)
-        >>> analyzer = RegionAnalyzer(categorizer.categorized_frames, obj="10X")
-        >>> spike = analyzer.get_frame_results(len(categorizer.categorized_frames) // 2)
+        >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)
+        >>> analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj="10X")
+        >>> results = analyzer.get_results()
     """
 
-    def __init__(self, categorized_frames: list[np.ndarray], obj: str = "10X", min_area: int = 0) -> None:
+    def __init__(self, spike_frame: np.ndarray, obj: str = "10X") -> None:
         """
-        Analyze categorized frames immediately on construction.
+        Analyze the spike frame immediately on construction.
 
         Args:
-            categorized_frames: List of 2D arrays (0=background, 1=dim, 2=bright)
+            spike_frame: 2D array (0=background, 1=dim, 2=bright) for the spike frame only.
             obj: Objective magnification ("10X", "40X", "60X")
-            min_area: Minimum region area in pixels; smaller components are ignored
         """
         if obj not in PIXEL_SCALE:
             msg = f"Unknown objective: {obj}. Choose from {list(PIXEL_SCALE.keys())}"
@@ -61,44 +68,36 @@ class RegionAnalyzer:
         self.obj = obj
         self.pixel_per_um = PIXEL_SCALE[obj]
         self.um_per_pixel = 1.0 / self.pixel_per_um
-        self.min_area = min_area
 
-        self.dim_largest: list[dict | None] = []
-        self.bright_largest: list[dict | None] = []
+        self.bright_largest = self._find_largest_bright(spike_frame)
 
-        for frame in categorized_frames:
-            self.dim_largest.append(self._find_largest(frame, CATEGORY_DIM))
-            self.bright_largest.append(self._find_largest(frame, CATEGORY_BRIGHT))
+        if self.bright_largest is None:
+            self.dim_largest = None
+        else:
+            self.dim_largest = self._find_related_dim(spike_frame, self.bright_largest["_bbox"])
 
     # ── Core analysis ─────────────────────────────────────────────────────────
 
-    def _find_largest(self, frame: np.ndarray, category: int) -> dict | None:
-        """Find the largest connected component of a category and measure it."""
-        mask = frame == category
-        labeled = label(mask)
-        candidates = [r for r in regionprops(labeled) if r.area >= self.min_area]
+    def _find_largest_bright(self, frame: np.ndarray) -> dict | None:
+        """Find the largest bright connected component and measure it."""
+        labeled = label(frame == CATEGORY_BRIGHT)
+        candidates = list(regionprops(labeled))
 
         if not candidates:
             return None
 
         region = max(candidates, key=lambda r: r.area)
-        centroid_row, centroid_col = region.centroid
-        rows, cols = region.coords[:, 0], region.coords[:, 1]
+        min_row, min_col, max_row, max_col = region.bbox
 
-        north = float(np.max(centroid_row - rows[rows < centroid_row])) if np.any(rows < centroid_row) else 0.0
-        south = float(np.max(rows[rows > centroid_row] - centroid_row)) if np.any(rows > centroid_row) else 0.0
-        west  = float(np.max(centroid_col - cols[cols < centroid_col])) if np.any(cols < centroid_col) else 0.0
-        east  = float(np.max(cols[cols > centroid_col] - centroid_col)) if np.any(cols > centroid_col) else 0.0
-
-        x_span_px = west + east
-        y_span_px = north + south
+        x_span_px = max_col - min_col
+        y_span_px = max_row - min_row
 
         region_mask = labeled == region.label
         raw_contours = find_contours(region_mask, level=0.5)
         contour = max(raw_contours, key=len) if raw_contours else None
 
         return {
-            "centroid":  (centroid_row, centroid_col),
+            "centroid":  region.centroid,
             "area_px":   region.area,
             "area_um2":  self._area_to_um2(region.area),
             "x_span_px": x_span_px,
@@ -106,7 +105,51 @@ class RegionAnalyzer:
             "x_span_um": self._px_to_um(x_span_px),
             "y_span_um": self._px_to_um(y_span_px),
             "contour":   contour,
-            "_label":    region.label,  # internal: used by exporter for boundary TIFF
+            "_bbox":     (min_row, min_col, max_row, max_col),  # internal: dim search-window construction
+        }
+
+    def _find_related_dim(self, frame: np.ndarray, bright_bbox: tuple[int, int, int, int]) -> dict | None:
+        """Merge every dim component whose bbox overlaps the bright region's search window."""
+        bright_min_row, bright_min_col, bright_max_row, bright_max_col = bright_bbox
+        x_span_px = bright_max_col - bright_min_col
+        y_span_px = bright_max_row - bright_min_row
+
+        window_min_row = bright_min_row - DIM_SEARCH_MARGIN * y_span_px
+        window_max_row = bright_max_row + DIM_SEARCH_MARGIN * y_span_px
+        window_min_col = bright_min_col - DIM_SEARCH_MARGIN * x_span_px
+        window_max_col = bright_max_col + DIM_SEARCH_MARGIN * x_span_px
+
+        labeled = label(frame == CATEGORY_DIM)
+        dim_mask = np.zeros_like(frame, dtype=bool)
+
+        for region in regionprops(labeled):
+            min_row, min_col, max_row, max_col = region.bbox
+            overlaps = (
+                min_row < window_max_row
+                and max_row > window_min_row
+                and min_col < window_max_col
+                and max_col > window_min_col
+            )
+            if overlaps:
+                dim_mask |= labeled == region.label
+
+        if not np.any(dim_mask):
+            return None
+
+        rows, cols = np.nonzero(dim_mask)
+        x_span_px = int(cols.max()) + 1 - int(cols.min())
+        y_span_px = int(rows.max()) + 1 - int(rows.min())
+        area_px = int(dim_mask.sum())
+
+        return {
+            "centroid":  (float(rows.mean()), float(cols.mean())),
+            "area_px":   area_px,
+            "area_um2":  self._area_to_um2(area_px),
+            "x_span_px": x_span_px,
+            "y_span_px": y_span_px,
+            "x_span_um": self._px_to_um(x_span_px),
+            "y_span_um": self._px_to_um(y_span_px),
+            "contour":   find_contours(dim_mask, level=0.5),
         }
 
     # ── Unit conversion helpers ────────────────────────────────────────────────
@@ -119,29 +162,19 @@ class RegionAnalyzer:
 
     # ── Result accessors ──────────────────────────────────────────────────────
 
-    def get_frame_results(self, frame_idx: int) -> dict:
-        """Get dim and bright largest-region results for a single frame."""
-        return {
-            "dim_largest":    self.dim_largest[frame_idx],
-            "bright_largest": self.bright_largest[frame_idx],
-        }
-
     def get_results(self) -> dict:
-        """Get all per-frame results."""
+        """Get dim and bright largest-region results for the spike frame."""
         return {
             "dim_largest":    self.dim_largest,
             "bright_largest": self.bright_largest,
-            "obj":            self.obj,
-            "um_per_pixel":   self.um_per_pixel,
         }
 
     def get_summary(self) -> dict:
-        """Summary statistics across all frames."""
+        """Summary for the spike frame."""
         return {
-            "obj":                    self.obj,
-            "n_frames":               len(self.dim_largest),
-            "total_dim_regions":      sum(1 for r in self.dim_largest    if r is not None),
-            "total_bright_regions":   sum(1 for r in self.bright_largest if r is not None),
+            "obj":               self.obj,
+            "has_dim_region":    self.dim_largest is not None,
+            "has_bright_region": self.bright_largest is not None,
         }
 
     def get_export_data(self) -> dict:
