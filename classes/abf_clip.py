@@ -43,6 +43,7 @@ class AbfClip:
         self.lst_abf_sample_ranges: list[tuple[int, int]] = []
         self.df_skipped_spikes: pl.DataFrame | None = None
         self.df_picked_spikes: pl.DataFrame | None = None
+        self.df_collapsed_peaks: pl.DataFrame | None = None
 
         # Hardware constants
         self.TTL_5V_HIGH: float = 2.0
@@ -106,6 +107,12 @@ class AbfClip:
         for row in self.df_peaks.iter_rows(named=False):
             ws_peaks.append(list(row))
 
+        if self.df_collapsed_peaks is not None and not self.df_collapsed_peaks.is_empty():
+            ws_collapsed = wb.create_sheet("Collapsed_Peaks")
+            ws_collapsed.append(self.df_collapsed_peaks.columns)
+            for row in self.df_collapsed_peaks.iter_rows(named=False):
+                ws_collapsed.append(list(row))
+
         if self.lst_abf_sample_ranges:
             ws_segs = wb.create_sheet("ABF_segments")
             headers: list = []
@@ -148,7 +155,45 @@ class AbfClip:
             self.first_dropped = 1
             self.last_dropped = self.abf_img_frame_num_diff - 1
 
-        self.spike_frame_indices = np.floor(self.peak_indices / self.points_per_frame).astype(int) - self.first_dropped
+        spike_frame_indices_raw = np.floor(self.peak_indices / self.points_per_frame).astype(int) - self.first_dropped
+
+        # Multiple spikes firing within one 1/fs_imgs camera window land in the same image frame
+        # — the frame's pixel data is identical regardless of how many spikes occurred in it, so
+        # keep only the first (burst onset) per frame; counting each separately only drags
+        # set_interval_frames down without adding real windowing information.
+        _, first_occurrence = np.unique(spike_frame_indices_raw, return_index=True)
+        keep_idx = np.sort(first_occurrence)
+        dropped_idx = np.setdiff1d(np.arange(len(spike_frame_indices_raw)), keep_idx)
+
+        if len(dropped_idx) > 0:
+            kept_frame_to_time = {
+                int(spike_frame_indices_raw[k]): float(self.peak_times[k]) for k in keep_idx
+            }
+            lst_collapsed = [
+                {
+                    "Frame_Index": int(spike_frame_indices_raw[d]),
+                    "Dropped_Peak_Time": float(self.peak_times[d]),
+                    "Dropped_Peak_Value": float(self.peak_values[d]),
+                    "Kept_Peak_Time": kept_frame_to_time[int(spike_frame_indices_raw[d])],
+                }
+                for d in dropped_idx
+            ]
+            console.log(
+                f"[yellow]Collapsed {len(dropped_idx)} peak(s) sharing a frame with an earlier peak[/yellow]"
+            )
+        else:
+            lst_collapsed = []
+
+        self.df_collapsed_peaks = pl.DataFrame(
+            lst_collapsed,
+            schema={
+                "Frame_Index": pl.Int64,
+                "Dropped_Peak_Time": pl.Float64,
+                "Dropped_Peak_Value": pl.Float64,
+                "Kept_Peak_Time": pl.Float64,
+            },
+        )
+        self.spike_frame_indices = spike_frame_indices_raw[keep_idx]
 
         inter_spike_frames = (np.diff(self.spike_frame_indices) - 1).astype(int)
         leading_interval_frames: int = self.spike_frame_indices[0] - 1

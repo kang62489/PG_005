@@ -11,13 +11,13 @@ console = Console()
 @njit(parallel=True, cache=True)
 def _cpu_median_axis0(stacked: np.ndarray) -> np.ndarray:
     s_count, n_frames, height, width = stacked.shape
-    result = np.empty((n_frames, height, width), dtype=np.float64)
+    result = np.empty((n_frames, height, width), dtype=np.float32)
     mid = s_count // 2
 
     for h in prange(height):
         for w in range(width):
             for f in range(n_frames):
-                vals = np.empty(s_count, dtype=np.float64)
+                vals = np.empty(s_count, dtype=np.float32)
                 for s in range(s_count):
                     vals[s] = stacked[s, f, h, w]
                 vals.sort()
@@ -48,8 +48,11 @@ def spike_centered_median(
 
     console.log(f"Spike-centered median: {n_segments} segments")
 
-    # All segments are identical shape — stack then run numba parallel median
-    stacked = np.stack(lst_img_segments, axis=0).astype(np.float64)  # (S, F, H, W)
+    # All segments are identical shape — stack then run numba parallel median.
+    # float32 (not float64): source GAUSS/ALS tiffs are saved as float16, so float32 already
+    # has more precision than the data ever carried, at half the memory of float64. float16
+    # itself isn't usable here — numba has no array data model for it.
+    stacked = np.stack(lst_img_segments, axis=0).astype(np.float32)  # (S, F, H, W)
     result = _cpu_median_axis0(stacked)
 
     # Calculate z-score range (1st and 99th percentile) for consistent color scaling
