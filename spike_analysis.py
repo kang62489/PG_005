@@ -22,6 +22,7 @@ Usage:
 """
 # Standard library imports
 import argparse
+import time
 from pathlib import Path
 
 # Third-party imports
@@ -34,6 +35,7 @@ from functions import (
     count_unique_cells,
     list_parser,
     lookup_rec_from_db,
+    plot_spatiotemporal_summary,
     spike_centered_median,
     write_cell_summary_xlsx,
     zscore_img_segs,
@@ -80,10 +82,10 @@ def parse_ana_list(
     passing_rows: list[dict] = []
     for row in table.iter_rows(named=True):
         if row[exist_col] != "YES":
-            console.print(f"[yellow]Skipped {row['raw_tiff_name']}: {exist_col}={row[exist_col]}[/yellow]")
+            console.log(f"[yellow]Skipped {row['raw_tiff_name']}: {exist_col}={row[exist_col]}[/yellow]")
             continue
         if row["abf_exist"] != "YES":
-            console.print(f"[yellow]Skipped {row['raw_tiff_name']}: abf_exist={row['abf_exist']}[/yellow]")
+            console.log(f"[yellow]Skipped {row['raw_tiff_name']}: abf_exist={row['abf_exist']}[/yellow]")
             continue
 
         stem = Path(row["raw_tiff_name"]).stem
@@ -107,23 +109,27 @@ def run(
     emitter=None,
 ) -> None:
     """Run the full spike-aligned analysis pipeline for every entry in an ana list."""
+    run_t0 = time.time()
     entries, results_dir, detrend_mode, normalization = parse_ana_list(ana_list_path, detrend_mode, use_als)
     ref_df = lookup_rec_from_db(entries, db_path, exp_db_path)
     cell_df = count_unique_cells(ref_df)
-    console.print(f"Found {len(entries)} entries in {ana_list_path.name} -> {len(cell_df)} unique cells")
+    console.log(f"Found {len(entries)} entries in {ana_list_path.name} -> {len(cell_df)} unique cells")
 
-    cell_summary_path = results_dir / f"{ana_list_path.stem}_cells.xlsx"
+    xlsx_dir = results_dir / "xlsx"
+    xlsx_dir.mkdir(parents=True, exist_ok=True)
+    cell_summary_path = xlsx_dir / f"{ana_list_path.stem}_cells.xlsx"
     write_cell_summary_xlsx(cell_df, cell_summary_path)
-    console.print(f"Saved cell summary -> {cell_summary_path.name}")
+    console.log(f"Saved cell summary -> {cell_summary_path.name}")
 
     animal_index_map = ResultsExporter.build_animal_index_map(ref_df["ANIMAL_ID"].unique())
     exporter = ResultsExporter(results_root=results_dir)
 
     total = len(entries)
     for i, row in enumerate(entries.iter_rows(named=True), 1):
+        entry_t0 = time.time()
         match = ref_df.filter(pl.col("Filename") == row["raw_tiff_name"])
         if match.is_empty():
-            console.print(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
+            console.log(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
             continue
         obj = match["OBJ"].item()
 
@@ -131,7 +137,7 @@ def run(
         raw_abf_path = Path(row["raw_abf_path"])
         if emitter:
             emitter({"type": "progress", "i": i, "total": total, "file": proc_tiff_path.name})
-        console.print(f"\n[cyan]{proc_tiff_path.name}  +  {raw_abf_path.name}  [{obj}][/cyan]")
+        console.log(f"\n[cyan]{proc_tiff_path.name}  +  {raw_abf_path.name}  [{obj}]  [{i}/{total}][/cyan]")
         clip = AbfClip(
             proc_tiff_path=proc_tiff_path,
             raw_abf_path=raw_abf_path,
@@ -141,21 +147,21 @@ def run(
         )
 
         if not clip.lst_img_frame_ranges:
-            console.print("[yellow]No valid segments — skipping z-score step.[/yellow]")
+            console.log("[yellow]No valid segments — skipping z-score step.[/yellow]")
             continue
 
         if emitter:
             emitter({"type": "step", "msg": "Z-score normalizing segments..."})
         # Coverts each segment to z-score normalized values using the baseline frames before the spike frame.
         lst_zscore = zscore_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
-        console.print(f"[green]Z-score normalized {len(lst_zscore)} segment(s)[/green]")
+        console.log(f"[green]Z-score normalized {len(lst_zscore)} segment(s)  ({time.time() - entry_t0:.1f}s)[/green]")
 
         # Merge all segments into a single median segment, aligned by the spike frame.
         median_segment, zscore_range = spike_centered_median(lst_zscore)
 
         # Free memory from lst_zscore since it's no longer needed after computing the median.
         del lst_zscore
-        console.print(f"[green]Median shape: {median_segment.shape}, z-score range: [{zscore_range[0]:.2f}, {zscore_range[1]:.2f}][/green]")
+        console.log(f"[green]Median shape: {median_segment.shape}, z-score range: [{zscore_range[0]:.2f}, {zscore_range[1]:.2f}][/green]")
 
         if emitter:
             emitter({"type": "step", "msg": "Categorizing spike frame..."})
@@ -163,38 +169,48 @@ def run(
         spike_frame_idx = median_segment.shape[0] // 2
         categorizer = SpatialCategorizer.morphological(threshold_method="base977_otsu")
         categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
-        console.print(f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), thresholds: {categorizer.thresholds_used}[/green]")
+        console.log(
+            f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), thresholds: {categorizer.thresholds_used}"
+            f"  ({time.time() - entry_t0:.1f}s)[/green]"
+        )
 
-        region_analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj=obj)
+        region_analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj=obj, min_area_um2=400)
         spike_frame = region_analyzer.get_results()
 
         bright_area = spike_frame["bright_largest"]
         dim_area = spike_frame["dim_largest"]
         if bright_area:
-            console.print(
+            console.log(
                 f"[magenta]Bright (spike frame): area={bright_area['area_um2']:.1f} µm²  "
                 f"x-span={bright_area['x_span_um']:.1f} µm  y-span={bright_area['y_span_um']:.1f} µm[/magenta]"
             )
         else:
-            console.print("[yellow]No bright region in spike frame[/yellow]")
+            console.log("[yellow]No bright region in spike frame[/yellow]")
         if dim_area:
-            console.print(
+            console.log(
                 f"[cyan]Dim (spike frame):    area={dim_area['area_um2']:.1f} µm²  "
                 f"x-span={dim_area['x_span_um']:.1f} µm  y-span={dim_area['y_span_um']:.1f} µm[/cyan]"
             )
         else:
-            console.print("[yellow]No dim region in spike frame[/yellow]")
+            console.log("[yellow]No dim region in spike frame[/yellow]")
 
         if emitter:
             emitter({"type": "step", "msg": "Exporting results..."})
         export_data = clip.get_export_data()
+        animal_id = match["ANIMAL_ID"].item()
+        slice_val = match["SLICE"].item()
+        at = match["AT"].item()
+        frame_duration_ms = clip.ts_imgs * 1000
+        peak_latency_ms = region_analyzer.get_peak_latency_ms(median_segment, spike_frame_idx, frame_duration_ms)
+
         dirs = exporter.export_all(
             exp_date=export_data["exp_date"],
             abf_serial=export_data["abf_serial"],
             img_serial=export_data["img_serial"],
-            animal_idx=animal_index_map[match["ANIMAL_ID"].item()],
-            slice_val=match["SLICE"].item(),
-            at=match["AT"].item(),
+            animal_idx=animal_index_map[animal_id],
+            animal_id=animal_id,
+            slice_val=slice_val,
+            at=at,
             detrend_mode=detrend_mode,
             normalization=normalization,
             num_found_spikes=export_data["num_found_spikes"],
@@ -204,12 +220,33 @@ def run(
             um_per_pixel=region_analyzer.um_per_pixel,
             median_stack=median_segment,
             categorized_frames=categorizer.categorized_frames,
+            zscore_range=zscore_range,
             region_summary=region_analyzer.get_summary(),
             region_data=spike_frame,
+            peak_latency_ms=peak_latency_ms,
         )
-        console.print(f"[green]Exported median + categorized → {dirs['median'].parent.name}/[/green]")
 
-    console.print("\n[bold green]All done![/bold green]")
+        title_info = {
+            "animal_id": animal_id,
+            "slice": slice_val,
+            "at": at,
+            "obj": obj,
+            "tiff_serial": export_data["img_serial"],
+            "abf_serial": export_data["abf_serial"],
+        }
+        fig = plot_spatiotemporal_summary(
+            categorizer, region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, title_info
+        )
+        stem = ResultsExporter.build_export_stem(
+            export_data["exp_date"], export_data["img_serial"], animal_index_map[animal_id],
+            slice_val, at, detrend_mode, normalization, "SPATIAL",
+        )
+        exporter.export_figure("region_sta", fig, f"{stem}.png")
+
+        dir_names = "/, ".join(d.name for d in dirs.values())
+        console.log(f"[green]✓ Exported {dir_names}/, region_sta/  (entry: {time.time() - entry_t0:.1f}s)[/green]")
+
+    console.log(f"\n[bold green]All done!  (total: {time.time() - run_t0:.1f}s)[/bold green]")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

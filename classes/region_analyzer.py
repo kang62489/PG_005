@@ -26,6 +26,13 @@ PIXEL_SCALE = {
 DIM_SEARCH_MARGIN = 0.2
 
 
+def _nanargmax_relative(trace: np.ndarray, spike_frame_idx: int) -> int | None:
+    """Index (relative to the spike frame) of trace's peak, or None if trace is all-NaN."""
+    if np.all(np.isnan(trace)):
+        return None
+    return int(np.nanargmax(trace)) - spike_frame_idx
+
+
 class RegionAnalyzer:
     """
     Find the largest bright region and its related dim region in a single (spike) frame.
@@ -46,10 +53,6 @@ class RegionAnalyzer:
         contour    : bright -> (N, 2) array of [row, col] contour points, or None
                      dim    -> list of such arrays (one per disjoint piece), or None
 
-    Also exposes find_largest_regions(frame) for finding the largest bright/dim
-    component independently in any frame (no spatial relation between them) —
-    used for per-frame summary panels rather than the spike-frame's related dim.
-
     Example:
         >>> categorizer = SpatialCategorizer.morphological()
         >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)
@@ -57,13 +60,16 @@ class RegionAnalyzer:
         >>> results = analyzer.get_results()
     """
 
-    def __init__(self, spike_frame: np.ndarray, obj: str = "10X") -> None:
+    def __init__(self, spike_frame: np.ndarray, obj: str = "10X", min_area_um2: float = 0.0) -> None:
         """
         Analyze the spike frame immediately on construction.
 
         Args:
             spike_frame: 2D array (0=background, 1=dim, 2=bright) for the spike frame only.
             obj: Objective magnification ("10X", "40X", "60X")
+            min_area_um2: Connected components smaller than this (in um^2) are ignored —
+                both when picking the largest bright component and when merging dim
+                components into the combined dim region. Default 0.0 disables filtering.
         """
         if obj not in PIXEL_SCALE:
             msg = f"Unknown objective: {obj}. Choose from {list(PIXEL_SCALE.keys())}"
@@ -72,6 +78,8 @@ class RegionAnalyzer:
         self.obj = obj
         self.pixel_per_um = PIXEL_SCALE[obj]
         self.um_per_pixel = 1.0 / self.pixel_per_um
+        self.min_area_um2 = min_area_um2
+        self._min_area_px = min_area_um2 * (self.pixel_per_um ** 2)
 
         self.bright_largest = self._find_largest_category(spike_frame, CATEGORY_BRIGHT)
 
@@ -82,30 +90,10 @@ class RegionAnalyzer:
 
     # ── Core analysis ─────────────────────────────────────────────────────────
 
-    def find_largest_regions(self, frame: np.ndarray) -> dict:
-        """Find the largest bright and largest dim component independently in a frame.
-
-        Unlike the spike-frame's `dim_largest` (a merge of every dim component
-        related to the bright region), this looks at bright/dim each on their
-        own — no spatial relation between them. Used for the per-frame summary
-        panels in the spatiotemporal figure (see functions/plot_results.py).
-
-        Args:
-            frame: 2D array (0=background, 1=dim, 2=bright) for any frame.
-
-        Returns:
-            dict with "bright"/"dim" keys, each a region dict (see class docstring)
-            or None if that category has no connected component in this frame.
-        """
-        return {
-            "bright": self._find_largest_category(frame, CATEGORY_BRIGHT),
-            "dim":    self._find_largest_category(frame, CATEGORY_DIM),
-        }
-
     def _find_largest_category(self, frame: np.ndarray, category: int) -> dict | None:
         """Find the largest connected component of the given category and measure it."""
         labeled = label(frame == category)
-        candidates = list(regionprops(labeled))
+        candidates = [r for r in regionprops(labeled) if r.area >= self._min_area_px]
 
         if not candidates:
             return None
@@ -148,6 +136,8 @@ class RegionAnalyzer:
         dim_mask = np.zeros_like(frame, dtype=bool)
 
         for region in regionprops(labeled):
+            if region.area < self._min_area_px:
+                continue
             min_row, min_col, max_row, max_col = region.bbox
             overlaps = (
                 min_row < window_max_row
@@ -250,6 +240,24 @@ class RegionAnalyzer:
         total_trace = bright_trace + dim_trace
 
         return {"bright_trace": bright_trace, "dim_trace": dim_trace, "total_trace": total_trace}
+
+    def get_peak_latency_ms(self, segment: np.ndarray, spike_frame_idx: int, frame_duration_ms: float) -> float | None:
+        """Peak-to-peak latency (dim peak minus bright peak) in milliseconds.
+
+        Args:
+            segment: 3D array (frames, height, width) — see get_temporal_traces.
+            spike_frame_idx: index of the spike frame within the segment.
+            frame_duration_ms: milliseconds per frame.
+
+        Returns:
+            Latency in ms, or None if either trace's peak could not be located.
+        """
+        traces = self.get_temporal_traces(segment)
+        bright_peak_rel = _nanargmax_relative(traces["bright_trace"], spike_frame_idx)
+        dim_peak_rel = _nanargmax_relative(traces["dim_trace"], spike_frame_idx)
+        if bright_peak_rel is None or dim_peak_rel is None:
+            return None
+        return (dim_peak_rel - bright_peak_rel) * frame_duration_ms
 
     def get_export_data(self) -> dict:
         """Data for export (contours and internal fields stripped by exporter)."""

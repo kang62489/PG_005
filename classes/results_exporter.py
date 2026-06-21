@@ -4,7 +4,7 @@ Results exporter for saving analysis outputs.
 Exports analysis results to:
 - SQLite database (metadata, spike-frame region measurements, region_analysis JSON)
 - TIFF files (spike-centered median stack, categorized frames for ImageJ overlay)
-- PNG figures (spatial plot, region plot)
+- PNG figures (spatiotemporal summary plot)
 
 Filenames use a compact code: {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_{TYPE}.
 See ResultsExporter's class docstring for the full folder layout.
@@ -50,26 +50,6 @@ def _derive_site_code(at: str) -> str:
     return f"C{match.group(1)}"
 
 
-def _build_export_stem(
-    exp_date: str,
-    img_serial: str,
-    animal_idx: int,
-    slice_val: str,
-    at: str,
-    detrend_mode: str,
-    normalization: str,
-    file_type: str,
-) -> str:
-    """Build the compact export filename stem (no extension).
-
-    Code: {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_{TYPE}
-    A{n} is a batch-local sequential animal index (not the real ANIMAL_ID), so the
-    code stays short and scannable across a whole ana-list run.
-    """
-    site_code = _derive_site_code(at)
-    return f"{exp_date}-{img_serial}_A{animal_idx}S{slice_val}{site_code}_{detrend_mode}_{normalization}_{file_type}"
-
-
 def optimize_region_data(region_data: dict) -> dict:
     """Strip contours and internal fields from region data before JSON serialization.
 
@@ -99,18 +79,19 @@ class ResultsExporter:
     """
     Export analysis results to files and SQLite database.
 
-    Output structure:
+    Output structure (flat — exp_date is already encoded in every filename, so
+    no per-date folder layer is needed):
         results/
         ├── results.db
-        └── {exp_date}/
-            ├── median/
-            │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_MED.tif
-            ├── categorized/
-            │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_CAT.tif
-            ├── regions/
-            │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_region_plot.png
-            └── spatials/
-                └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_spatial_plot.png
+        ├── median/
+        │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_MED.tif
+        ├── categorized/
+        │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_CAT.tif
+        └── region_sta/
+            └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_SPATIAL.png
+
+    region_sta/ is created on demand by export_figure() — export_all() only creates
+    median/ and categorized/.
 
     A{n} is a batch-local sequential animal index (see build_animal_index_map),
     not the real ANIMAL_ID; S{slice} is the SLICE value verbatim; C{site} is
@@ -137,6 +118,26 @@ class ResultsExporter:
         """
         return {animal_id: i + 1 for i, animal_id in enumerate(sorted(set(animal_ids)))}
 
+    @staticmethod
+    def build_export_stem(
+        exp_date: str,
+        img_serial: str,
+        animal_idx: int,
+        slice_val: str,
+        at: str,
+        detrend_mode: str,
+        normalization: str,
+        file_type: str,
+    ) -> str:
+        """Build the compact export filename stem (no extension).
+
+        Code: {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_{TYPE}
+        A{n} is a batch-local sequential animal index (not the real ANIMAL_ID), so the
+        code stays short and scannable across a whole ana-list run.
+        """
+        site_code = _derive_site_code(at)
+        return f"{exp_date}-{img_serial}_A{animal_idx}S{slice_val}{site_code}_{detrend_mode}_{normalization}_{file_type}"
+
     def _init_db(self) -> None:
         """Create database and tables if not exist."""
         self.results_root.mkdir(parents=True, exist_ok=True)
@@ -156,7 +157,7 @@ class ResultsExporter:
                 has_bright_region INTEGER,
                 has_dim_region INTEGER,
                 region_analysis TEXT,
-                data_dir TEXT,
+                ANIMAL_ID TEXT,
                 SLICE TEXT,
                 AT TEXT,
                 centroid_y REAL,
@@ -165,6 +166,13 @@ class ResultsExporter:
                 y_span_pixels REAL,
                 x_span_um REAL,
                 y_span_um REAL,
+                bright_area_um2 REAL,
+                dim_area_um2 REAL,
+                dim_x_span_um REAL,
+                dim_y_span_um REAL,
+                peak_latency_ms REAL,
+                zscore_min REAL,
+                zscore_max REAL,
                 UNIQUE(exp_date, abf_serial, img_serial)
             )
         """)
@@ -179,6 +187,7 @@ class ResultsExporter:
         img_serial: str,
         # Filename-code metadata
         animal_idx: int,
+        animal_id: str,
         slice_val: str,
         at: str,
         # Processing metadata
@@ -194,9 +203,11 @@ class ResultsExporter:
         # Data to save
         median_stack: np.ndarray,
         categorized_frames: list[np.ndarray],
+        zscore_range: tuple[float, float],
         # Analysis results
         region_summary: dict,
         region_data: dict,
+        peak_latency_ms: float | None,
     ) -> dict[str, Path]:
         """
         Export all results and update database.
@@ -206,6 +217,7 @@ class ResultsExporter:
             abf_serial: ABF file serial number
             img_serial: Image file serial number
             animal_idx: Batch-local sequential animal index (see build_animal_index_map)
+            animal_id: Real ANIMAL_ID (e.g. "neoChAT-677"), stored in the DB record
             slice_val: SLICE value verbatim (e.g. "2R")
             at: AT location (e.g. "SITE_1"/"CELL_1")
             detrend_mode: Detrend mode used ("BIEXP"/"MOV")
@@ -217,18 +229,17 @@ class ResultsExporter:
             um_per_pixel: Micrometers per pixel scale
             median_stack: Spike-centered median z-score stack
             categorized_frames: Categorized frames (0=bg, 1=dim, 2=bright)
+            zscore_range: (min, max) z-score across median_stack, from spike_centered_median()
             region_summary: Summary dict from RegionAnalyzer.get_summary()
             region_data: Spike-frame region dict from RegionAnalyzer.get_results()
+            peak_latency_ms: Dim-minus-bright peak latency, from RegionAnalyzer.get_peak_latency_ms()
 
         Returns:
-            dict with keys "median", "categorized", "regions", "spatials" → Path to each subfolder
+            dict with keys "median", "categorized" → Path to each subfolder
         """
-        date_dir = self.results_root / exp_date
         dirs = {
-            "median": date_dir / "median",
-            "categorized": date_dir / "categorized",
-            "regions": date_dir / "regions",
-            "spatials": date_dir / "spatials",
+            "median": self.results_root / "median",
+            "categorized": self.results_root / "categorized",
         }
         for d in dirs.values():
             d.mkdir(parents=True, exist_ok=True)
@@ -251,23 +262,32 @@ class ResultsExporter:
             um_per_pixel=um_per_pixel,
             region_summary=region_summary,
             region_data=region_data,
-            data_dir=exp_date,
+            zscore_range=zscore_range,
+            animal_id=animal_id,
             slice_val=slice_val,
             at=at,
+            peak_latency_ms=peak_latency_ms,
         )
 
         return dirs
 
-    def export_figure(self, exp_dir: Path, figure: "Figure", filename: str = "plot.png") -> None:
+    def export_figure(self, category: str, figure: "Figure", filename: str) -> Path:
         """
-        Save figure to experiment directory.
+        Save a figure under results_root/{category}/, creating the folder on demand.
 
         Args:
-            exp_dir: Experiment data directory
-            figure: Matplotlib figure to save (QPixmap from window.grab())
-            filename: Name of the output file (default: "plot.png")
+            category: Subfolder name (e.g. "region_sta")
+            figure: Matplotlib figure to save
+            filename: Name of the output file
+
+        Returns:
+            Path the figure was saved to
         """
-        figure.save(str(exp_dir / filename))
+        out_dir = self.results_root / category
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / filename
+        figure.savefig(out_path)
+        return out_path
 
     def _export_median_stack(
         self,
@@ -282,7 +302,7 @@ class ResultsExporter:
         normalization: str,
     ) -> None:
         """Save the spike-centered median stack as a float32 TIFF."""
-        stem = _build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization, "MED")
+        stem = self.build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization, "MED")
         tifffile.imwrite(files_dir / f"{stem}.tif", median_stack.astype(np.float32))
 
     def _export_categorized_stack(
@@ -298,7 +318,7 @@ class ResultsExporter:
         normalization: str,
     ) -> None:
         """Save the categorized stack (0=bg, 1=dim, 2=bright) as a uint8 TIFF."""
-        stem = _build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization, "CAT")
+        stem = self.build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization, "CAT")
         tifffile.imwrite(files_dir / f"{stem}.tif", np.array(categorized_frames, dtype=np.uint8))
 
     def _upsert_record(
@@ -313,9 +333,11 @@ class ResultsExporter:
         um_per_pixel: float,
         region_summary: dict,
         region_data: dict,
-        data_dir: str,
+        zscore_range: tuple[float, float],
+        animal_id: str,
         slice_val: str,
         at: str,
+        peak_latency_ms: float | None,
     ) -> None:
         """Insert or update experiment record in SQLite.
 
@@ -331,8 +353,17 @@ class ResultsExporter:
             y_span_pixels = bright_largest["y_span_px"]
             x_span_um = bright_largest["x_span_um"]
             y_span_um = bright_largest["y_span_um"]
+            bright_area_um2 = bright_largest["area_um2"]
         else:
-            centroid_y = centroid_x = x_span_pixels = y_span_pixels = x_span_um = y_span_um = None
+            centroid_y = centroid_x = x_span_pixels = y_span_pixels = x_span_um = y_span_um = bright_area_um2 = None
+
+        dim_largest = optimized_region_data.get("dim_largest")
+        if dim_largest:
+            dim_area_um2 = dim_largest["area_um2"]
+            dim_x_span_um = dim_largest["x_span_um"]
+            dim_y_span_um = dim_largest["y_span_um"]
+        else:
+            dim_area_um2 = dim_x_span_um = dim_y_span_um = None
 
         conn = sqlite3.connect(self.db_path)
         conn.execute(
@@ -342,9 +373,11 @@ class ResultsExporter:
                 objective, um_per_pixel, threshold_method,
                 n_spikes_detected, n_spikes_analyzed,
                 has_bright_region, has_dim_region,
-                region_analysis, data_dir, SLICE, AT,
-                centroid_y, centroid_x, x_span_pixels, y_span_pixels, x_span_um, y_span_um
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                region_analysis, ANIMAL_ID, SLICE, AT,
+                centroid_y, centroid_x, x_span_pixels, y_span_pixels, x_span_um, y_span_um,
+                bright_area_um2, dim_area_um2, dim_x_span_um, dim_y_span_um, peak_latency_ms,
+                zscore_min, zscore_max
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -359,7 +392,7 @@ class ResultsExporter:
                 region_summary["has_bright_region"],
                 region_summary["has_dim_region"],
                 json.dumps(optimized_region_data, cls=NumpyEncoder),
-                data_dir,
+                animal_id,
                 slice_val,
                 at,
                 centroid_y,
@@ -368,6 +401,13 @@ class ResultsExporter:
                 y_span_pixels,
                 x_span_um,
                 y_span_um,
+                bright_area_um2,
+                dim_area_um2,
+                dim_x_span_um,
+                dim_y_span_um,
+                peak_latency_ms,
+                zscore_range[0],
+                zscore_range[1],
             ),
         )
         conn.commit()

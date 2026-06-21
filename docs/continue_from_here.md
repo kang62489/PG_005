@@ -1,4 +1,45 @@
-# Log of the project progress 2026-06-21 Sun (Session 31)
+# Log of the project progress 2026-06-21 Sun (Session 32)
+Last working file: `classes/results_exporter.py`
+Last working line: 330 (`zscore_range: tuple[float, float],` param in `_upsert_record`)
+
+## List of modified files
+- `classes/results_exporter.py` — major resync + redesign: discovered `export_all()`/`_upsert_record()` were stale against the Session 29 `RegionAnalyzer` redesign (still assumed a per-frame list of `bright_largest` dicts and `n_frames`/`total_dim_regions`/`total_bright_regions` — would have crashed if called). Fully reworked: new compact filename code via `_build_export_stem()`/`_derive_site_code()` (`{exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_{TYPE}`), new `build_animal_index_map()` staticmethod (batch-local 1-based animal index), flat `results/{category}/` folder layout (dropped the per-date subfolder — `exp_date` is already in every filename), `SLICE` column fixed `INTEGER`→`TEXT`, `n_frames`/`total_dim_regions`/`total_bright_regions` replaced with `has_bright_region`/`has_dim_region`, dropped the now-redundant `data_dir` column, added a real `ANIMAL_ID` column (separate from the batch-local `A{n}` filename index) and `zscore_min`/`zscore_max` columns (the median stack's z-score range, previously only printed to console), `export_figure()` fixed to call `figure.savefig()` (was calling the wrong `.save()` API) and now creates its target folder on demand instead of upfront
+- `spike_analysis.py` — extracted the `__main__` pipeline body into a callable `run(ana_list_path, detrend_mode, use_als, db_path, exp_db_path, emitter=None)`, mirroring `img_proc.py`'s established pattern so the GUI can call it; wired `ResultsExporter.export_all()` into the per-row loop (replacing the old inline `_MED.tif`/`_CAT.tif` saves); all `console.print` → `console.log`; added per-step/per-entry/total elapsed-time reporting (mirrors `img_proc.py`'s timing style)
+- `controllers/ctrl_align_spike.py` — wired `btn_run_analysis.clicked` → `BackgroundWorker` → `spike_analysis.run()`, routing progress into `le_current_total`/`le_status` (mirrors `ctrl_img_proc.py`'s `start_processing()`); `export_ana_list()` now stores `self._ana_list_path` so the run button knows what to run
+- `classes/region_analyzer.py` — removed dead `find_largest_regions()` method (verified zero call sites anywhere in the repo) and its docstring mention
+- `classes/plot_results.py` → **moved to `functions/plot_results.py`** (file had only pure `Figure`-returning functions left after class cleanup, matching the project's classes-vs-functions convention) — also deleted 4 unused/broken GUI viewer classes (`PlotPeaks`/`PlotSegs`/`PlotSpatialDist`/`PlotRegion`; two were already broken against the current `RegionAnalyzer` API, none had any live caller) and their dead support code (`CustomToolbar`/`WindowToolbar`/`center_on_screen`)
+- `classes/mpl_canvas.py` — **new**: `MplCanvas` moved out of `plot_results.py` into its own file (still actively used by `views/view_als_correct.py`)
+- `classes/__init__.py`, `functions/__init__.py` — updated lazy-import tables for the moves/deletions above
+- `CLAUDE.md`, `AGENTS.md` — updated the "New plots" rule to point to `functions/plot_results.py` (was `classes/plot_results.py`)
+- Deleted stale `results/results.db` (42-row old-schema test DB, dated 2026-02-17, predated all tracked sessions)
+
+## Summary of current progress
+- Picked up Session 30's #1 priority backlog item (compact export filename + folder structure for `ResultsExporter`), but discovered along the way that `ResultsExporter` was completely out of sync with the current `RegionAnalyzer` API — fixed both in the same pass, verified end-to-end against real local test data (`2025_12_15-0013_BIEXP_GAUSS_*.tif`)
+- Wired `btn_run_analysis` (a TODO carried since Session 25) by extracting `spike_analysis.py`'s pipeline into a callable `run(emitter=None)`, exactly mirroring `img_proc.py`/`ctrl_img_proc.py`'s existing `BackgroundWorker` pattern
+- Cleaned up `classes/plot_results.py` end-to-end: deleted 4 dead/broken GUI classes, split `MplCanvas` into its own file, then moved the remaining pure-function module to `functions/` — fully resolves the long-standing "forces PySide6 import for headless export" memory note
+- User test-ran the pipeline on the **deigo** OIST HPC cluster — walked through `srun`/partition troubleshooting (`AssocMaxWallDurationPerJobLimit` on `short`, switched to `compute`, succeeded), then real-world testing surfaced 2 concrete design issues: unnecessary per-date folder nesting, and unused `regions`/`spatials` folders — both fixed (flattened layout; those 2 folders now created on-demand only, by `export_figure()`)
+- Final round of fixes per direct user review of the remaining old backlog (each verified against current code before acting, not assumed): removed dead `find_largest_regions()`, added a real `ANIMAL_ID` column to `ResultsExporter`'s `experiments` table, and decided `ref_df` persistence is unnecessary now that `results.db` is the actual persistence layer (dropped from backlog)
+- Last fix of the session: the median stack's z-score range (computed by `spike_centered_median()`) was only ever printed to console — added `zscore_min`/`zscore_max` columns so it's queryable from `results.db` like everything else
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Implement the compact export filename code (`A{n}S{slice}C{site}`) + flat folder structure in `ResultsExporter` (Session 30 priority #1)
+- ✅ Wire `btn_run_analysis` in `ctrl_align_spike.py` to call the pipeline (carried since Session 25)
+- ✅ Refactor `classes/plot_results.py` (split GUI from headless) — went further than planned, moved to `functions/`
+- ✅ Decide fate of `RegionAnalyzer.find_largest_regions()` — removed (confirmed dead code)
+- ✅ Add `ANIMAL_ID` column to `ResultsExporter`'s `experiments` SQLite table
+- ✅ Decided: `ref_df` saving is unnecessary (`results.db` already serves that role) — dropped from backlog
+- ✅ Save the median stack's z-score range (`zscore_min`/`zscore_max`) to `results.db`
+
+## What should we do next? (TODOs)
+- [ ] Design a way to quickly find/browse exported results (by animal/slice/site/date) — carried from Session 30, still untouched
+- [ ] ROI + Otsu + `regionprops`-centroid soma detection on `EMI=RED` images, then contour-overlay export + centroid-to-soma distance calc — confirmed this session as the next priority after the browse/find feature
+
+## Last Session Recap
+※ recap: Resynced `ResultsExporter` to the current `RegionAnalyzer` API and implemented the compact filename/flat-folder export design; wired `btn_run_analysis` via a new `spike_analysis.run(emitter=None)`; cleaned up `plot_results.py` (deleted dead GUI classes, moved pure functions to `functions/`); fixed 2 issues found testing on the deigo cluster (folder nesting, unused subfolders); added `ANIMAL_ID` + `zscore_min`/`zscore_max` to the DB and removed dead code. Next: results browse/find feature, then soma detection.
+
+---
+
+
 Last working file: `spike_analysis.py`
 Last working line: 120 (`write_cell_summary_xlsx(cell_df, cell_summary_path)` / confirmation print, in `__main__`)
 

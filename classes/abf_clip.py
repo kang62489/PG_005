@@ -123,7 +123,9 @@ class AbfClip:
                     row += [float(time_seg[r]), float(vm_seg[r])]
                 ws_segs.append(row)
 
-        xlsx_path = self.results_dir / f"ABF_{self.exp_date}_{self.abf_serial}_spike_analysis.xlsx"
+        xlsx_dir = self.results_dir / "xlsx"
+        xlsx_dir.mkdir(parents=True, exist_ok=True)
+        xlsx_path = xlsx_dir / f"ABF_{self.exp_date}_{self.abf_serial}_spike_analysis.xlsx"
         wb.save(xlsx_path)
         console.print(f"[green]Saved spike detection → {xlsx_path}[/green]")
 

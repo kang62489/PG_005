@@ -20,7 +20,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
-from classes.region_analyzer import CATEGORY_BRIGHT, CATEGORY_DIM, RegionAnalyzer
+from classes.region_analyzer import CATEGORY_BRIGHT, CATEGORY_DIM, RegionAnalyzer, _nanargmax_relative
 
 # ── Static export figures ───────────────────────────────────────────────────
 
@@ -248,8 +248,8 @@ def _plot_trace_panel(
     if dim_peak_rel is not None:
         ax.axvline(dim_peak_rel, color="cyan", linestyle=":", alpha=0.7)
 
-    if bright_peak_rel is not None and dim_peak_rel is not None:
-        latency_ms = (dim_peak_rel - bright_peak_rel) * frame_duration_ms
+    latency_ms = region_analyzer.get_peak_latency_ms(median_segment, spike_frame_idx, frame_duration_ms)
+    if latency_ms is not None:
         latency_line = f"Peak Latency: {latency_ms:.1f} ms"
     else:
         latency_line = "Peak Latency: N/A (region not detected)"
@@ -260,10 +260,3 @@ def _plot_trace_panel(
     ax.set_title(f"Temporal change of bright and dim area\n{latency_line}", fontsize=10)
     ax.legend(loc="upper right", fontsize=8)
     ax.grid(True, alpha=0.3)
-
-
-def _nanargmax_relative(trace: np.ndarray, spike_frame_idx: int) -> int | None:
-    """Index (relative to the spike frame) of trace's peak, or None if trace is all-NaN."""
-    if np.all(np.isnan(trace)):
-        return None
-    return int(np.nanargmax(trace)) - spike_frame_idx
