@@ -1,3 +1,70 @@
+# Log of the project progress 2026-06-21 Sun (Session 34)
+Last working file: `spike_analysis.py`
+Last working line: 321 (`f"[green]✓ Exported {dir_names}/, region_sta/, full_traces/ ...` in `run()`)
+
+## List of modified files
+- `classes/abf_clip.py` — fixed a real crash hit on the cluster (`2024_12_19_0012`): `get_available_spiking_frames()`'s `inter_spike_frames` could go negative when two detected spikes floor-divide to the same/adjacent frame index, which could make `set_interval_frames` itself negative and invert `left_bound`/`right_bound` into an empty frame range — `zscore_img_segs` then collapsed `np.mean`/`np.std` on a 1-D empty array to a scalar and crashed on `baseline_std[baseline_std == 0] = 1`. Fixed with one `np.clip(inter_spike_frames, 0, None)` (root cause, not a band-aid — verified numerically against the exact collision scenario before/after); also converted the remaining `console.print` calls in this file (and `functions/query_databases.py`, `functions/spike_centered_processes.py`) to `console.log` for consistency with the rest of the pipeline
+- `functions/plot_results.py` — `_plot_trace_panel`'s `window` param is now `int | None` (`None` = don't crop the x-axis); new `plot_full_trace()` — standalone single-panel export figure of the same bright/dim/total trace data, spanning the *entire* segment instead of the ±4-frame window used in `plot_spatiotemporal_summary()`'s row-2 panel
+- `functions/__init__.py` — registered `plot_full_trace` in the lazy-import table
+- `spike_analysis.py` — wired `plot_full_trace()` into `run()`, exported to a new `results/full_traces/` folder (filename stem uses `file_type="TRACE"`, same naming convention as `region_sta`'s `"SPATIAL"`)
+
+## Summary of current progress
+- Diagnosed and fixed a real production crash from the user's own cluster run — traced the exact mechanism (spike-frame collision → negative inter-spike margin → negative `set_interval_frames` → inverted bounds → empty array → scalar mean/std → crash) before writing the fix, then verified the clamp neutralizes the exact collision scenario with an isolated numeric check (not guessed/assumed fixed)
+- Swept the remaining `console.print` calls in pipeline-adjacent files (excluding other tabs' controllers, which are out of scope) to `console.log`, per direct user request
+- Added `plot_full_trace()` for the bright/dim/total temporal trace across the whole segment (previously only viewable cropped to ±4 frames inside the combined summary figure) — generated a real PNG from local test data (`2025_12_15-0013`) to confirm it renders correctly (flat baseline, sharp spike-aligned peak, decay) before considering it done; demo script/PNG deleted after
+- User committed all of today's work (`60068e3 basic statistics completely`) — working tree is fully clean, nothing left uncommitted
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Root-caused and fixed the cluster crash on `2024_12_19_0012` (negative `set_interval_frames` from colliding spike frame indices)
+- ✅ Converted remaining `console.print` → `console.log` in `abf_clip.py`/`query_databases.py`/`spike_centered_processes.py`
+- ✅ Added `plot_full_trace()` + wired it into `run()`, exporting to `results/full_traces/`
+
+## What should we do next? (TODOs)
+- [ ] **Start Step 3**: the GUI "Results Browser" tab from `.claude/plans/kind-mapping-codd.md` — browse `results.db` + view `region_sta/`/`full_traces/` PNGs; `compute_region_stats()`/`get_cell_recording_status()` are already built and proven, ready to wire into a new `views/view_results_browser.py` + `controllers/ctrl_results_browser.py`
+
+## Last Session Recap
+※ recap: Fixed a real cluster crash in `abf_clip.py` (negative inter-spike margin could invert a frame range into an empty array), swept remaining `console.print`→`console.log` in pipeline files, and added `plot_full_trace()` (full-segment trace PNG, exported to `results/full_traces/`). All committed (`60068e3`). Next: build the GUI Results Browser tab (Step 3, plan already written).
+
+---
+
+# Log of the project progress 2026-06-21 Sun (Session 33)
+Last working file: `spike_analysis.py`
+Last working line: 160 (`"Per-Neuron Recording List (filename, detected) [detected/total]:\n"` in `_build_stats_report`)
+
+## List of modified files
+- `classes/region_analyzer.py` — added back `min_area_um2` constructor parameter (previously removed in an earlier session as an "undiscoverable magic number" — now reintroduced as an explicit, documented argument): filters candidates in `_find_largest_category()` before picking the largest, and skips undersized components in `_find_related_dim()` before merging into the combined dim region; added module-level `_nanargmax_relative()` helper and `get_peak_latency_ms(segment, spike_frame_idx, frame_duration_ms)` (extracted from the figure's inline calc, single source of truth for both the DB value and the figure title)
+- `functions/plot_results.py` — `_plot_trace_panel` now calls `region_analyzer.get_peak_latency_ms()` instead of computing latency inline; removed the now-duplicate local `_nanargmax_relative` (imports the one in `region_analyzer.py`)
+- `classes/results_exporter.py` — wired the previously-unused `plot_spatiotemporal_summary()` figure into real exports (renamed its output folder `spatials`→`region_sta`); promoted `_build_export_stem`→public `ResultsExporter.build_export_stem()` staticmethod and `_derive_site_code`→public `ResultsExporter.derive_site_code()` staticmethod (both needed cross-module reuse from `spike_analysis.py`); added `bright_area_um2`/`dim_area_um2`/`dim_x_span_um`/`dim_y_span_um`/`peak_latency_ms`/`med_filename` columns to `results.db`'s `experiments` table
+- `classes/abf_clip.py` — per-entry spike-detection xlsx now saved under a new `results/xlsx/` subfolder instead of loose at `results/` root
+- `functions/query_databases.py` — three new DB-query functions: `compute_region_stats()` (mean±std of bright/dim area + peak latency, averaged per unique cell, cells with no detected bright region excluded), `get_excluded_recordings()` (which images/cells were excluded), `get_cell_recording_status()` (per-recording detection status, used to build the per-neuron file list); all three share one `_bright_excluded_expr()` predicate so they can't disagree on what counts as "excluded"
+- `functions/__init__.py` — registered the 3 new query functions in the lazy-import table
+- `spike_analysis.py` — `RegionAnalyzer(...)` now called with `min_area_um2=400`; new `_format_neuron_line()` + `_build_stats_report()` build a "Region Analysis Statistics" text block (neurons-detected summary, mean/std/n_detected table, per-neuron `(filename, detected)` breakdown with line-wrapping for multi-recording neurons) appended to the bottom of the ana_list file at the end of every `run()`; the spike-frame overlay figure (`plot_spatiotemporal_summary`) is now actually exported per entry; cell-summary xlsx moved under `results/xlsx/`
+- `data/ana_list_20260605_000.txt` — user ran the real pipeline on this file mid-session (their own action, not mine) — confirms the appended report renders correctly in production; that particular run showed 0/2 neurons detected (not investigated further this session, by request)
+- Committed mid-session by the user as `82c8305` (everything up through the `min_area_um2`/`region_sta` rename/`xlsx/` folder work); the DB-query-functions + `med_filename` + report-formatting work above is **not yet committed**
+
+## Summary of current progress
+- Resumed from Session 32 by answering a design question (does `RegionAnalyzer` use dilation/erosion for noise removal? — no, that's upstream in `SpatialCategorizer._apply_morphological()`; `RegionAnalyzer` only picks the largest connected component), which led directly into reintroducing `min_area_um2` as a real, documented filter parameter
+- Discovered and closed Step 1/2 gaps from the postponed `.claude/plans/kind-mapping-codd.md` plan: the spike-frame overlay figure was computed but never exported by the real pipeline, and `results.db` had no flat columns for dim-region size, bright/dim area, or peak latency
+- Built and proved `compute_region_stats()` against a **real** pipeline run (not synthetic) — used local test data (`2025_12_15-0013/0014/0024/0025` + paired ABFs) to run the actual pipeline end-to-end, producing 2 real cells (`neoChAT-676` × `3R`/`4R`, `CELL_1`) with real bright/dim/latency numbers; all demo scripts and the temporary results dir were deleted after verification (project convention: throwaway diagnostic scripts get deleted once their job is done)
+- Iterated the appended-report format through 2 rounds of user feedback: first replaced a flat "Excluded images/cells: N" summary with a per-neuron `(filename, detected)` breakdown (user wanted to know *which* recordings failed, not just a count) — required adding a persisted `med_filename` column since the filename couldn't be reconstructed from `results.db` alone; then fixed spacing (blank line after `dir_results:`) and added line-wrapping + a header for multi-recording neurons, matching a screenshot the user provided of their real output
+- User independently ran the real pipeline on `ana_list_20260605_000.txt` partway through the session and committed the in-progress work (`82c8305`) — confirms the report append mechanism works correctly against production data, though that specific run detected 0/2 neurons (flagged but explicitly not chosen as a follow-up TODO this session)
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Re-added `min_area_um2` to `RegionAnalyzer` (constructor + both finder methods), wired to `400` in `spike_analysis.py`
+- ✅ Renamed export folder `spatials`→`region_sta`; added `results/xlsx/` subfolder for both xlsx outputs
+- ✅ Wired the spike-frame overlay figure into the real export pipeline (was computed but never saved)
+- ✅ Added `bright_area_um2`/`dim_area_um2`/`dim_x_span_um`/`dim_y_span_um`/`peak_latency_ms`/`med_filename` columns to `results.db`
+- ✅ Built `compute_region_stats()`, `get_excluded_recordings()`, `get_cell_recording_status()` — verified against a real pipeline run, not just synthetic data
+- ✅ Appended a "Region Analysis Statistics" report (summary line, metrics table, per-neuron detection breakdown) to the bottom of `ana_list_*.txt` after each run, with 2 rounds of formatting fixes per direct user feedback
+
+## What should we do next? (TODOs)
+- [ ] **Start Step 3**: the GUI "Results Browser" tab from `.claude/plans/kind-mapping-codd.md` — browse `results.db` + view `region_sta/` PNGs; `compute_region_stats()`/`get_cell_recording_status()` are already built and proven, ready to wire into a new `views/view_results_browser.py` + `controllers/ctrl_results_browser.py`
+
+## Last Session Recap
+※ recap: Re-added `min_area_um2` filtering to `RegionAnalyzer`, wired the previously-unused overlay figure into real exports (renamed `spatials`→`region_sta`), and added 6 new `results.db` columns (areas, peak latency, `med_filename`). Built and proved (against a real pipeline run) 3 new stats functions, then wired a per-neuron detection report into the bottom of `ana_list_*.txt`, iterated twice on its format per user feedback. Next: build the GUI Results Browser tab (Step 3, plan already written).
+
+---
+
 # Log of the project progress 2026-06-21 Sun (Session 32)
 Last working file: `classes/results_exporter.py`
 Last working line: 330 (`zscore_range: tuple[float, float],` param in `_upsert_record`)

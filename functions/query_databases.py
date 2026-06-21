@@ -124,7 +124,7 @@ def lookup_rec_from_db(table: pl.DataFrame, db_path: Path, exp_db_path: Path) ->
             rec_table = f"REC_{date}"
             db_columns = [row[1] for row in conn.execute(f"PRAGMA table_info({rec_table})").fetchall()]
             if not db_columns:
-                console.print(f"[yellow]Skipped {rec_table}: table not found in rec_data.db[/yellow]")
+                console.log(f"[yellow]Skipped {rec_table}: table not found in rec_data.db[/yellow]")
                 continue
 
             raw_tiff_names = rows_for_date["raw_tiff_name"].to_list()
@@ -142,6 +142,102 @@ def lookup_rec_from_db(table: pl.DataFrame, db_path: Path, exp_db_path: Path) ->
 
     result = _sort_rec_columns(pl.concat(frames, how="diagonal_relaxed"))
     return populate_animal_id_values(result, exp_db_path)
+
+
+def _bright_excluded_expr(col: str = "bright_area_um2") -> pl.Expr:
+    """True where `col` shows no real bright-region detection (null or zero)."""
+    return pl.col(col).is_null() | (pl.col(col) == 0)
+
+
+def _read_experiments(results_db_path: Path) -> pl.DataFrame:
+    """Read the full experiments table from results.db into a polars DataFrame."""
+    conn = sqlite3.connect(results_db_path)
+    try:
+        return pl.read_database(query="SELECT * FROM experiments", connection=conn)
+    finally:
+        conn.close()
+
+
+def get_excluded_recordings(results_db_path: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Recordings/cells with no detected bright region -- the ones compute_region_stats() excludes.
+
+    Returns:
+        (excluded_images, excluded_cells):
+            excluded_images: one row per individual recording where bright_area_um2 is
+                null/0 (columns: exp_date, abf_serial, img_serial, ANIMAL_ID, SLICE, AT).
+            excluded_cells: cells (ANIMAL_ID, SLICE, AT) where every one of that cell's
+                recordings failed to detect a bright region.
+    """
+    id_cols = ["exp_date", "abf_serial", "img_serial", "ANIMAL_ID", "SLICE", "AT"]
+    df = _read_experiments(results_db_path)
+
+    if df.is_empty():
+        empty = pl.DataFrame(schema=dict.fromkeys(id_cols, pl.Utf8))
+        return empty, empty.select("ANIMAL_ID", "SLICE", "AT")
+
+    excluded_images = df.filter(_bright_excluded_expr()).select(id_cols)
+
+    per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg(pl.col("bright_area_um2").mean())
+    excluded_cells = per_cell.filter(_bright_excluded_expr()).select("ANIMAL_ID", "SLICE", "AT")
+
+    return excluded_images, excluded_cells
+
+
+def get_cell_recording_status(results_db_path: Path) -> pl.DataFrame:
+    """Per-recording bright-region detection status, for building per-cell file lists.
+
+    Returns one row per recording (sorted by cell, then filename), columns:
+    ANIMAL_ID, SLICE, AT, med_filename, detected (True if a bright region was
+    found in that recording's spike frame).
+    """
+    df = _read_experiments(results_db_path)
+
+    if df.is_empty():
+        return pl.DataFrame(
+            schema={"ANIMAL_ID": pl.Utf8, "SLICE": pl.Utf8, "AT": pl.Utf8, "med_filename": pl.Utf8, "detected": pl.Boolean}
+        )
+
+    return df.select(
+        "ANIMAL_ID", "SLICE", "AT", "med_filename", (~_bright_excluded_expr()).alias("detected")
+    ).sort(["ANIMAL_ID", "SLICE", "AT", "med_filename"])
+
+
+def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
+    """Mean +/- std of bright/dim area and peak latency, averaged per unique cell.
+
+    Multiple recordings of the same cell (ANIMAL_ID, SLICE, AT) are first
+    collapsed to one row per cell (per-cell mean across its own recordings).
+    Cells with no detected bright region (bright_area_um2 null/0 across every
+    one of that cell's recordings -- i.e. spike-frame categorization never
+    found a bright blob) are excluded before computing mean/std, since there's
+    no real measurement to average for a cell that was never actually
+    recorded. n_detected/n_total let you see how many cells were usable out of
+    how many were attempted.
+
+    Returns one row per metric (bright_area_um2, dim_area_um2, peak_latency_ms)
+    with columns: metric, mean, std, n_detected, n_total.
+    """
+    metric_cols = ["bright_area_um2", "dim_area_um2", "peak_latency_ms"]
+    df = _read_experiments(results_db_path)
+
+    if df.is_empty():
+        return pl.DataFrame(
+            schema={"metric": pl.Utf8, "mean": pl.Float64, "std": pl.Float64, "n_detected": pl.Int64, "n_total": pl.Int64}
+        )
+
+    per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg([pl.col(c).mean().alias(c) for c in metric_cols])
+    n_total = per_cell.height
+
+    detected = per_cell.filter(~_bright_excluded_expr())
+    n_detected = detected.height
+
+    return pl.DataFrame({
+        "metric": metric_cols,
+        "mean": [detected[c].mean() for c in metric_cols],
+        "std": [detected[c].std() for c in metric_cols],
+        "n_detected": [n_detected] * len(metric_cols),
+        "n_total": [n_total] * len(metric_cols),
+    })
 
 
 def count_unique_cells(ref_df: pl.DataFrame) -> pl.DataFrame:

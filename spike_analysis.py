@@ -23,18 +23,23 @@ Usage:
 # Standard library imports
 import argparse
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Third-party imports
 import polars as pl
 from rich.console import Console
+from tabulate import tabulate
 
 # Local application imports
 from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
 from functions import (
+    compute_region_stats,
     count_unique_cells,
+    get_cell_recording_status,
     list_parser,
     lookup_rec_from_db,
+    plot_full_trace,
     plot_spatiotemporal_summary,
     spike_centered_median,
     write_cell_summary_xlsx,
@@ -97,6 +102,67 @@ def parse_ana_list(
     return entries, results_dir, detrend_mode, normalization
 
 
+def _format_neuron_line(label: str, pairs: list[str], ratio: str) -> str:
+    """Format one neuron's recording list, wrapping one (filename, detected) pair per line.
+
+    A single-recording neuron stays on one line; multi-recording neurons get
+    each pair on its own line, indented to align under the opening bracket.
+    """
+    prefix = f"{label} ["
+    if len(pairs) <= 1:
+        body = pairs[0] if pairs else ""
+        return f"{prefix}{body}] {ratio}"
+
+    indent = " " * len(prefix)
+    lines = [f"{prefix}{pairs[0]},"]
+    lines += [f"{indent}{p}," for p in pairs[1:-1]]
+    lines.append(f"{indent}{pairs[-1]}] {ratio}")
+    return "\n".join(lines)
+
+
+def _build_stats_report(db_path: Path) -> str:
+    """Format the region-analysis summary block appended to the ana list after a run.
+
+    Returns "" if results.db has no rows yet (nothing to report).
+    """
+    stats = compute_region_stats(db_path)
+    if stats.is_empty():
+        return ""
+
+    n_detected = stats["n_detected"][0]
+    n_total = stats["n_total"][0]
+
+    table_rows = [
+        {
+            "Metric": r["metric"],
+            "Mean": f"{r['mean']:.2f}" if r["mean"] is not None else "N/A",
+            "Std": f"{r['std']:.2f}" if r["std"] is not None else "N/A",
+            "n_detected": r["n_detected"],
+        }
+        for r in stats.to_dicts()
+    ]
+    table = tabulate(table_rows, headers="keys", tablefmt="pretty")
+
+    recordings = get_cell_recording_status(db_path)
+    neuron_lines = []
+    for (animal_id, slice_val, at), group in recordings.group_by(["ANIMAL_ID", "SLICE", "AT"], maintain_order=True):
+        site_code = ResultsExporter.derive_site_code(at)
+        label = f"{animal_id}_S{slice_val}{site_code}"
+        pairs = [f"({r['med_filename']}, {r['detected']})" for r in group.iter_rows(named=True)]
+        ratio = f"{int(group['detected'].sum())}/{group.height}"
+        neuron_lines.append(_format_neuron_line(label, pairs, ratio))
+
+    return (
+        "\n\n" + "=" * 80 + "\n"
+        f"Region Analysis Statistics — generated {datetime.now(UTC).isoformat(timespec='seconds')}\n"
+        + "=" * 80 + "\n"
+        f"Neurons detected ACh release: {n_detected}/{n_total}\n\n"
+        f"{table}\n\n"
+        "Per-Neuron Recording List (filename, detected) [detected/total]:\n"
+        + "\n".join(neuron_lines) + "\n"
+    )
+
+
 # ── Pipeline runner ───────────────────────────────────────────────────────────
 
 
@@ -148,6 +214,12 @@ def run(
 
         if not clip.lst_img_frame_ranges:
             console.log("[yellow]No valid segments — skipping z-score step.[/yellow]")
+            with ana_list_path.open("a", encoding="utf-8") as f:
+                f.write(
+                    f"[SKIPPED] {datetime.now(UTC).isoformat(timespec='seconds')} — "
+                    f"{proc_tiff_path.name}: no valid segments "
+                    "(spikes too closely spaced for any baseline window)\n"
+                )
             continue
 
         if emitter:
@@ -174,7 +246,7 @@ def run(
             f"  ({time.time() - entry_t0:.1f}s)[/green]"
         )
 
-        region_analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj=obj, min_area_um2=400)
+        region_analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj=obj, min_area_um2=900)
         spike_frame = region_analyzer.get_results()
 
         bright_area = spike_frame["bright_largest"]
@@ -243,8 +315,23 @@ def run(
         )
         exporter.export_figure("region_sta", fig, f"{stem}.png")
 
+        full_trace_fig = plot_full_trace(region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, title_info)
+        trace_stem = ResultsExporter.build_export_stem(
+            export_data["exp_date"], export_data["img_serial"], animal_index_map[animal_id],
+            slice_val, at, detrend_mode, normalization, "TRACE",
+        )
+        exporter.export_figure("full_traces", full_trace_fig, f"{trace_stem}.png")
+
         dir_names = "/, ".join(d.name for d in dirs.values())
-        console.log(f"[green]✓ Exported {dir_names}/, region_sta/  (entry: {time.time() - entry_t0:.1f}s)[/green]")
+        console.log(
+            f"[green]✓ Exported {dir_names}/, region_sta/, full_traces/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
+        )
+
+    report = _build_stats_report(exporter.db_path)
+    if report:
+        with ana_list_path.open("a", encoding="utf-8") as f:
+            f.write(report)
+        console.log(f"[green]Appended region analysis statistics -> {ana_list_path.name}[/green]")
 
     console.log(f"\n[bold green]All done!  (total: {time.time() - run_t0:.1f}s)[/bold green]")
 

@@ -82,10 +82,10 @@ class AbfClip:
         )
         self.num_found_spikes = len(self.peak_indices)
 
-        console.print(f"Membrane Potential Sampling Rate: {self.abf_fs} Hz")
-        console.print(f"Start index: {self.abf_idx_tstart}, Start time: {self.abf_time[self.abf_idx_tstart]}")
-        console.print(f"End index: {self.abf_idx_tend}, End time: {self.abf_time[self.abf_idx_tend]}")
-        console.print(f"Found {self.num_found_spikes} peaks")
+        console.log(f"Membrane Potential Sampling Rate: {self.abf_fs} Hz")
+        console.log(f"Start index: {self.abf_idx_tstart}, Start time: {self.abf_time[self.abf_idx_tstart]}")
+        console.log(f"End index: {self.abf_idx_tend}, End time: {self.abf_time[self.abf_idx_tend]}")
+        console.log(f"Found {self.num_found_spikes} peaks")
 
         self.df_Vm = pl.DataFrame({"Time": self.rec_time, "Vm": self.Vm})
         self.peak_times = self.rec_time[self.peak_indices]
@@ -127,18 +127,18 @@ class AbfClip:
         xlsx_dir.mkdir(parents=True, exist_ok=True)
         xlsx_path = xlsx_dir / f"ABF_{self.exp_date}_{self.abf_serial}_spike_analysis.xlsx"
         wb.save(xlsx_path)
-        console.print(f"[green]Saved spike detection → {xlsx_path}[/green]")
+        console.log(f"[green]Saved spike detection → {xlsx_path}[/green]")
 
     def get_available_spiking_frames(self) -> None:
         if self.num_found_spikes == 0:
-            console.print("[bold red]No peak is found! Exiting...[/bold red]")
+            console.log("[bold red]No peak is found! Exiting...[/bold red]")
             return
 
         self.ts_imgs: float = 1 / self.fs_imgs
         self.points_per_frame: int = int(self.ts_imgs * self.abf_fs)
 
         self.total_triggered_frames = (self.abf_idx_tend - self.abf_idx_tstart) // self.points_per_frame
-        console.print(f"Total recorded frames: {self.total_triggered_frames}")
+        console.log(f"Total recorded frames: {self.total_triggered_frames}")
 
         self.abf_img_frame_num_diff = self.total_triggered_frames - self.n_frames
         if self.abf_img_frame_num_diff == 0:
@@ -155,6 +155,10 @@ class AbfClip:
         trailing_inverval_frames: int = self.n_frames - self.spike_frame_indices[-1] - 1
         inter_spike_frames = np.insert(inter_spike_frames, 0, leading_interval_frames).astype(int)
         inter_spike_frames = np.append(inter_spike_frames, trailing_inverval_frames).astype(int)
+        # Spikes closer together than 1 frame (after flooring to frame index) can make this
+        # negative, which would later flip set_interval_frames negative and invert left/right
+        # bounds into an empty frame range — clamp to 0 ("no margin available") instead.
+        inter_spike_frames = np.clip(inter_spike_frames, 0, None)
 
         # Pass 1: collect min_available_frames for all spikes → derive set_interval_frames from mode
         all_min_available: list[int] = []
@@ -165,7 +169,7 @@ class AbfClip:
 
         all_min_series = pl.Series("Min_Available_Frames", all_min_available, dtype=pl.Int64)
         self.set_interval_frames = min(int(all_min_series.mode().min()), 20)
-        console.print(
+        console.log(
             f"[bold cyan]Min_Available_Frames — max: {all_min_series.max()}, "
             f"mode: {all_min_series.mode().to_list()} → set_interval_frames = {self.set_interval_frames}[/bold cyan]"
         )
@@ -177,7 +181,10 @@ class AbfClip:
         for idx_of_spike, frame_of_spike in enumerate(self.spike_frame_indices):
             min_available_frames = all_min_available[idx_of_spike]
 
-            if min_available_frames < self.set_interval_frames:
+            # set_interval_frames == 0 means every segment would be just the spike frame itself,
+            # with no baseline frames before it — unanalyzable downstream (zscore_img_segs/
+            # SpatialCategorizer both need at least 1 baseline frame). Skip rather than crash.
+            if self.set_interval_frames < 1 or min_available_frames < self.set_interval_frames:
                 lst_skipped_spikes.append(
                     {"Spike_Frame_Index": frame_of_spike, "Min_Available_Frames": min_available_frames}
                 )
@@ -200,23 +207,23 @@ class AbfClip:
             schema={"Spike_Frame_Index": pl.Int64, "Min_Available_Frames": pl.Int64, "Set_Interval_Frames": pl.Int64},
         )
 
-        console.print("\n[bold red]" + "-" * 32 + " Skipped Spikes " + "-" * 32 + "\n[/bold red]")
-        console.print(
+        console.log("\n[bold red]" + "-" * 32 + " Skipped Spikes " + "-" * 32 + "\n[/bold red]")
+        console.log(
             f"[bold red]Total skipped spikes: {len(self.df_skipped_spikes)}/{self.num_found_spikes}[/bold red]"
         )
-        console.print(tabulate(self.df_skipped_spikes.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"))
-        console.print("[bold red]" + "=" * 80 + "\n" + "[/bold red]")
+        console.log(tabulate(self.df_skipped_spikes.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"))
+        console.log("[bold red]" + "=" * 80 + "\n" + "[/bold red]")
 
-        console.print("\n[bold green]" + "-" * 32 + " Picked Spikes " + "-" * 32 + "\n[/bold green]")
-        console.print(
+        console.log("\n[bold green]" + "-" * 32 + " Picked Spikes " + "-" * 32 + "\n[/bold green]")
+        console.log(
             f"[bold green]Total picked spikes: {len(self.df_picked_spikes)}/{self.num_found_spikes}[/bold green]"
         )
-        console.print(tabulate(self.df_picked_spikes.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"))
-        console.print("[bold green]" + "=" * 79 + "\n" + "[/bold green]")
+        console.log(tabulate(self.df_picked_spikes.to_dicts(), headers="keys", showindex=False, tablefmt="pretty"))
+        console.log("[bold green]" + "=" * 79 + "\n" + "[/bold green]")
 
     def clip_time_abf_img_segments(self) -> None:
         if self.df_picked_spikes is None:
-            console.print("[bold red]No spikes were picked! Exiting...[/bold red]")
+            console.log("[bold red]No spikes were picked! Exiting...[/bold red]")
             return
 
         for row in self.df_picked_spikes.iter_rows(named=True):
@@ -231,7 +238,7 @@ class AbfClip:
             end_sample = (abf_right_bound + 1) * self.points_per_frame
             self.lst_abf_sample_ranges.append((start_sample, end_sample))
 
-        console.print(
+        console.log(
             f"Total segments: {len(self.lst_img_frame_ranges)} image ranges, {len(self.lst_abf_sample_ranges)} ABF ranges"
         )
 

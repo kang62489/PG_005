@@ -20,8 +20,15 @@ if TYPE_CHECKING:
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
-    from .plot_results import plot_spatiotemporal_summary
-    from .query_databases import count_unique_cells, lookup_rec_from_db, populate_animal_id_values
+    from .plot_results import plot_full_trace, plot_spatiotemporal_summary
+    from .query_databases import (
+        compute_region_stats,
+        count_unique_cells,
+        get_cell_recording_status,
+        get_excluded_recordings,
+        lookup_rec_from_db,
+        populate_animal_id_values,
+    )
     from .spike_centered_processes import spike_centered_avg, spike_centered_median
     from .tau_estimate import sample_tau
     from .test_cuda import test_cuda
@@ -38,16 +45,20 @@ __all__ = [
     "build_filename_index",
     "build_proc_file_index",
     "check_cuda",
+    "compute_region_stats",
     "count_unique_cells",
     "gauss_exists",
     "gauss_ready",
     "gaussian_blur_run",
+    "get_cell_recording_status",
+    "get_excluded_recordings",
     "get_memory_usage",
     "get_picked_pairs",
     "list_parser",
     "lookup_rec_from_db",
     "zscore_img_segs",
     "mov_detrend",
+    "plot_full_trace",
     "plot_spatiotemporal_summary",
     "populate_animal_id_values",
     "raw_tiff_ready",
@@ -74,9 +85,13 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "get_memory_usage":    (".get_memory_use",                            "get_memory_usage"),
     "list_parser":         (".list_parser",                               "list_parser"),
     "plot_spatiotemporal_summary": (".plot_results",                      "plot_spatiotemporal_summary"),
+    "plot_full_trace":     (".plot_results",                              "plot_full_trace"),
     "lookup_rec_from_db":  (".query_databases",                           "lookup_rec_from_db"),
     "populate_animal_id_values": (".query_databases",                     "populate_animal_id_values"),
     "count_unique_cells":  (".query_databases",                           "count_unique_cells"),
+    "compute_region_stats": (".query_databases",                          "compute_region_stats"),
+    "get_excluded_recordings": (".query_databases",                       "get_excluded_recordings"),
+    "get_cell_recording_status": (".query_databases",                     "get_cell_recording_status"),
     "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
     "spike_centered_avg":  (".spike_centered_processes",                  "spike_centered_avg"),
     "spike_centered_median": (".spike_centered_processes",                "spike_centered_median"),

@@ -46,7 +46,7 @@ def spike_centered_median(
     """
     n_segments = len(lst_img_segments)
 
-    console.print(f"Spike-centered median: {n_segments} segments")
+    console.log(f"Spike-centered median: {n_segments} segments")
 
     # All segments are identical shape — stack then run numba parallel median
     stacked = np.stack(lst_img_segments, axis=0).astype(np.float64)  # (S, F, H, W)
@@ -56,7 +56,7 @@ def spike_centered_median(
     vmin, vmax = np.percentile(result, [1, 99])
     zscore_range = (float(vmin), float(vmax))
 
-    console.print(f"Output shape: {result.shape}, Z-score range: [{vmin:.2f}, {vmax:.2f}]")
+    console.log(f"Output shape: {result.shape}, Z-score range: [{vmin:.2f}, {vmax:.2f}]")
     return result, zscore_range
 
 
@@ -81,7 +81,7 @@ def spike_centered_avg(
     img_shape = lst_img_segments[0].shape[1:]  # (height, width)
     n_segments = len(lst_img_segments)
 
-    console.print(f"Spike-centered average: {n_segments} segments")
+    console.log(f"Spike-centered average: {n_segments} segments")
 
     # Accumulator arrays
     frame_sum = np.zeros((target_frames, *img_shape), dtype=np.float64)
@@ -103,5 +103,5 @@ def spike_centered_avg(
     vmin, vmax = np.percentile(result, [1, 99])
     zscore_range = (float(vmin), float(vmax))
 
-    console.print(f"Output shape: {result.shape}, Z-score range: [{vmin:.2f}, {vmax:.2f}]")
+    console.log(f"Output shape: {result.shape}, Z-score range: [{vmin:.2f}, {vmax:.2f}]")
     return result, zscore_range

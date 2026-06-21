@@ -135,6 +135,42 @@ def plot_spatiotemporal_summary(
     return fig
 
 
+def plot_full_trace(
+    region_analyzer: RegionAnalyzer,
+    median_segment: np.ndarray,
+    spike_frame_idx: int,
+    frame_duration_ms: float,
+    title_info: dict,
+) -> Figure:
+    """Standalone export figure: bright/dim/total temporal traces across the full segment length.
+
+    Same trace data as plot_spatiotemporal_summary()'s row-2 panel, but spans every
+    frame in median_segment instead of being cropped to a window around the spike --
+    lets you see the whole baseline-to-decay profile, not just the near-spike region.
+
+    Args:
+        region_analyzer: RegionAnalyzer built from the spike frame
+        median_segment: 3D z-scored segment (frames, height, width)
+        spike_frame_idx: index of the spike frame within the segment
+        frame_duration_ms: milliseconds per frame (e.g. AbfClip.ts_imgs * 1000)
+        title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial"
+
+    Returns:
+        Figure, ready for fig.savefig(...) or ResultsExporter.export_figure(...)
+    """
+    fig = Figure(figsize=(10, 5), dpi=100)
+    ax = fig.add_subplot(111)
+    _plot_trace_panel(ax, region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, window=None)
+
+    title = (
+        f"Full Temporal Trace: {title_info['animal_id']} {title_info['slice']} {title_info['at']} "
+        f"{title_info['obj']} TIFF_{title_info['tiff_serial']} ABF_{title_info['abf_serial']}"
+    )
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    return fig
+
+
 def _plot_frame_panel(
     ax: mpl.axes.Axes,
     categorizer: "SpatialCategorizer",
@@ -229,9 +265,10 @@ def _plot_trace_panel(
     median_segment: np.ndarray,
     spike_frame_idx: int,
     frame_duration_ms: float,
-    window: int,
+    window: int | None,
 ) -> None:
-    """Row-2 panel: bright/dim/total temporal traces, x-aligned to row 1's frame window."""
+    """Bright/dim/total temporal traces. window=None shows every frame in median_segment;
+    otherwise crops the x-axis to +/-window frames around the spike."""
     traces = region_analyzer.get_temporal_traces(median_segment)
     n_frames = median_segment.shape[0]
     x = np.arange(n_frames) - spike_frame_idx
@@ -254,7 +291,8 @@ def _plot_trace_panel(
     else:
         latency_line = "Peak Latency: N/A (region not detected)"
 
-    ax.set_xlim(-window, window)
+    if window is not None:
+        ax.set_xlim(-window, window)
     ax.set_xlabel("Frame number")
     ax.set_ylabel("Mean z-score")
     ax.set_title(f"Temporal change of bright and dim area\n{latency_line}", fontsize=10)

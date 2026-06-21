@@ -41,15 +41,6 @@ class NumpyEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def _derive_site_code(at: str) -> str:
-    """Derive a compact site code from an AT value, e.g. 'SITE_1'/'CELL_1' -> 'C1'."""
-    match = _SITE_NUMBER.search(at)
-    if match is None:
-        msg = f"Could not derive a site code from AT={at!r} (no trailing digits)"
-        raise ValueError(msg)
-    return f"C{match.group(1)}"
-
-
 def optimize_region_data(region_data: dict) -> dict:
     """Strip contours and internal fields from region data before JSON serialization.
 
@@ -119,6 +110,15 @@ class ResultsExporter:
         return {animal_id: i + 1 for i, animal_id in enumerate(sorted(set(animal_ids)))}
 
     @staticmethod
+    def derive_site_code(at: str) -> str:
+        """Derive a compact site code from an AT value, e.g. 'SITE_1'/'CELL_1' -> 'C1'."""
+        match = _SITE_NUMBER.search(at)
+        if match is None:
+            msg = f"Could not derive a site code from AT={at!r} (no trailing digits)"
+            raise ValueError(msg)
+        return f"C{match.group(1)}"
+
+    @staticmethod
     def build_export_stem(
         exp_date: str,
         img_serial: str,
@@ -135,7 +135,7 @@ class ResultsExporter:
         A{n} is a batch-local sequential animal index (not the real ANIMAL_ID), so the
         code stays short and scannable across a whole ana-list run.
         """
-        site_code = _derive_site_code(at)
+        site_code = ResultsExporter.derive_site_code(at)
         return f"{exp_date}-{img_serial}_A{animal_idx}S{slice_val}{site_code}_{detrend_mode}_{normalization}_{file_type}"
 
     def _init_db(self) -> None:
@@ -160,6 +160,7 @@ class ResultsExporter:
                 ANIMAL_ID TEXT,
                 SLICE TEXT,
                 AT TEXT,
+                med_filename TEXT,
                 centroid_y REAL,
                 centroid_x REAL,
                 x_span_pixels REAL,
@@ -251,6 +252,8 @@ class ResultsExporter:
             dirs["categorized"], categorized_frames, exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization
         )
 
+        med_stem = self.build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization, "MED")
+
         self._upsert_record(
             exp_date=exp_date,
             abf_serial=abf_serial,
@@ -267,6 +270,7 @@ class ResultsExporter:
             slice_val=slice_val,
             at=at,
             peak_latency_ms=peak_latency_ms,
+            med_filename=f"{med_stem}.tif",
         )
 
         return dirs
@@ -338,6 +342,7 @@ class ResultsExporter:
         slice_val: str,
         at: str,
         peak_latency_ms: float | None,
+        med_filename: str,
     ) -> None:
         """Insert or update experiment record in SQLite.
 
@@ -373,11 +378,11 @@ class ResultsExporter:
                 objective, um_per_pixel, threshold_method,
                 n_spikes_detected, n_spikes_analyzed,
                 has_bright_region, has_dim_region,
-                region_analysis, ANIMAL_ID, SLICE, AT,
+                region_analysis, ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, x_span_pixels, y_span_pixels, x_span_um, y_span_um,
                 bright_area_um2, dim_area_um2, dim_x_span_um, dim_y_span_um, peak_latency_ms,
                 zscore_min, zscore_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -395,6 +400,7 @@ class ResultsExporter:
                 animal_id,
                 slice_val,
                 at,
+                med_filename,
                 centroid_y,
                 centroid_x,
                 x_span_pixels,
