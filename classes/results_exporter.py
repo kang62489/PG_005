@@ -15,13 +15,13 @@ See ResultsExporter's class docstring for the full folder layout.
 import json
 import re
 import sqlite3
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 # Third-party imports
 import numpy as np
+import polars as pl
 import tifffile
 
 if TYPE_CHECKING:
@@ -101,13 +101,19 @@ class ResultsExporter:
         self._init_db()
 
     @staticmethod
-    def build_animal_index_map(animal_ids: Iterable[str]) -> dict[str, int]:
-        """Map each distinct animal ID to a 1-based sequential index, sorted for stable output.
+    def build_animal_index_map(ref_df: pl.DataFrame) -> dict[str, dict[str, int]]:
+        """Map each DOR to a 1-based sequential index per distinct ANIMAL_ID recorded that day.
 
-        A{n} is a batch-local scan index (not the real ANIMAL_ID) — call this once
-        per ana-list run with every row's ANIMAL_ID before exporting.
+        A{n} resets every DOR (date prefix of Filename, e.g. "2024_02_15-0042.tif" ->
+        "2024_02_15") since exp_date already appears in every export filename. Call
+        this once per ana-list run with ref_df's Filename + ANIMAL_ID columns.
         """
-        return {animal_id: i + 1 for i, animal_id in enumerate(sorted(set(animal_ids)))}
+        dor_df = ref_df.with_columns(ref_df["Filename"].str.split("-").list.first().alias("_dor"))
+        index_map: dict[str, dict[str, int]] = {}
+        for (dor,), group in dor_df.group_by(["_dor"], maintain_order=True):
+            animal_ids = sorted(set(group["ANIMAL_ID"].to_list()))
+            index_map[dor] = {animal_id: i + 1 for i, animal_id in enumerate(animal_ids)}
+        return index_map
 
     @staticmethod
     def derive_site_code(at: str) -> str:

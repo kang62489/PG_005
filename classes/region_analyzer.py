@@ -2,8 +2,7 @@
 Region analysis for categorized images.
 
 For the spike frame, finds the largest bright connected component, then
-collects every dim connected component spatially related to it, merging
-them into one combined dim region.
+combines every dim-category pixel in the frame into one dim region.
 """
 
 import numpy as np
@@ -21,10 +20,6 @@ PIXEL_SCALE = {
     "60X": 4.5,
 }
 
-# Dim-region search window = the bright region's own bbox, expanded by this
-# many multiples of its own span on each side (no extra pixel constant to tune).
-DIM_SEARCH_MARGIN = 0.2
-
 
 def _nanargmax_relative(trace: np.ndarray, spike_frame_idx: int) -> int | None:
     """Index (relative to the spike frame) of trace's peak, or None if trace is all-NaN."""
@@ -35,12 +30,11 @@ def _nanargmax_relative(trace: np.ndarray, spike_frame_idx: int) -> int | None:
 
 class RegionAnalyzer:
     """
-    Find the largest bright region and its related dim region in a single (spike) frame.
+    Find the largest bright region and the combined dim region in a single (spike) frame.
 
-    Finds the largest bright connected component, then collects every dim
-    connected component whose bounding box overlaps a window around the
-    bright region (the bright bbox expanded by DIM_SEARCH_MARGIN * its own
-    span on each side), merging them into one combined dim region.
+    Finds the largest bright connected component; if found, combines every
+    dim-category pixel in the frame into one dim region (no spatial relation
+    to the bright region is required).
 
     Result dict per region:
         centroid   : (row, col) in pixels
@@ -67,9 +61,9 @@ class RegionAnalyzer:
         Args:
             spike_frame: 2D array (0=background, 1=dim, 2=bright) for the spike frame only.
             obj: Objective magnification ("10X", "40X", "60X")
-            min_area_um2: Connected components smaller than this (in um^2) are ignored —
-                both when picking the largest bright component and when merging dim
-                components into the combined dim region. Default 0.0 disables filtering.
+            min_area_um2: Connected components smaller than this (in um^2) are ignored
+                when picking the largest bright component. Default 0.0 disables filtering.
+                Does not affect dim-region detection, which combines all dim pixels.
         """
         if obj not in PIXEL_SCALE:
             msg = f"Unknown objective: {obj}. Choose from {list(PIXEL_SCALE.keys())}"
@@ -86,7 +80,7 @@ class RegionAnalyzer:
         if self.bright_largest is None:
             self.dim_largest = None
         else:
-            self.dim_largest = self._find_related_dim(spike_frame, self.bright_largest["_bbox"])
+            self.dim_largest = self._find_all_dim(spike_frame)
 
     # ── Core analysis ─────────────────────────────────────────────────────────
 
@@ -117,36 +111,13 @@ class RegionAnalyzer:
             "x_span_um": self._px_to_um(x_span_px),
             "y_span_um": self._px_to_um(y_span_px),
             "contour":   contour,
-            "_bbox":     (min_row, min_col, max_row, max_col),  # internal: dim search-window construction
+            "_bbox":     (min_row, min_col, max_row, max_col),  # internal: stripped before export
             "_mask":     region_mask,  # internal: reused by get_temporal_traces
         }
 
-    def _find_related_dim(self, frame: np.ndarray, bright_bbox: tuple[int, int, int, int]) -> dict | None:
-        """Merge every dim component whose bbox overlaps the bright region's search window."""
-        bright_min_row, bright_min_col, bright_max_row, bright_max_col = bright_bbox
-        x_span_px = bright_max_col - bright_min_col
-        y_span_px = bright_max_row - bright_min_row
-
-        window_min_row = bright_min_row - DIM_SEARCH_MARGIN * y_span_px
-        window_max_row = bright_max_row + DIM_SEARCH_MARGIN * y_span_px
-        window_min_col = bright_min_col - DIM_SEARCH_MARGIN * x_span_px
-        window_max_col = bright_max_col + DIM_SEARCH_MARGIN * x_span_px
-
-        labeled = label(frame == CATEGORY_DIM)
-        dim_mask = np.zeros_like(frame, dtype=bool)
-
-        for region in regionprops(labeled):
-            if region.area < self._min_area_px:
-                continue
-            min_row, min_col, max_row, max_col = region.bbox
-            overlaps = (
-                min_row < window_max_row
-                and max_row > window_min_row
-                and min_col < window_max_col
-                and max_col > window_min_col
-            )
-            if overlaps:
-                dim_mask |= labeled == region.label
+    def _find_all_dim(self, frame: np.ndarray) -> dict | None:
+        """Combine every dim-category pixel in the frame into a single region."""
+        dim_mask = frame == CATEGORY_DIM
 
         if not np.any(dim_mask):
             return None

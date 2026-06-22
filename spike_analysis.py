@@ -187,7 +187,7 @@ def run(
     write_cell_summary_xlsx(cell_df, cell_summary_path)
     console.log(f"Saved cell summary -> {cell_summary_path.name}")
 
-    animal_index_map = ResultsExporter.build_animal_index_map(ref_df["ANIMAL_ID"].unique())
+    animal_index_map = ResultsExporter.build_animal_index_map(ref_df)
     exporter = ResultsExporter(results_root=results_dir)
 
     total = len(entries)
@@ -270,6 +270,7 @@ def run(
             emitter({"type": "step", "msg": "Exporting results..."})
         export_data = clip.get_export_data()
         animal_id = match["ANIMAL_ID"].item()
+        animal_idx = animal_index_map[export_data["exp_date"]][animal_id]
         slice_val = match["SLICE"].item()
         at = match["AT"].item()
         frame_duration_ms = clip.ts_imgs * 1000
@@ -279,7 +280,7 @@ def run(
             exp_date=export_data["exp_date"],
             abf_serial=export_data["abf_serial"],
             img_serial=export_data["img_serial"],
-            animal_idx=animal_index_map[animal_id],
+            animal_idx=animal_idx,
             animal_id=animal_id,
             slice_val=slice_val,
             at=at,
@@ -310,14 +311,14 @@ def run(
             categorizer, region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, title_info
         )
         stem = ResultsExporter.build_export_stem(
-            export_data["exp_date"], export_data["img_serial"], animal_index_map[animal_id],
+            export_data["exp_date"], export_data["img_serial"], animal_idx,
             slice_val, at, detrend_mode, normalization, "SPATIAL",
         )
         exporter.export_figure("region_sta", fig, f"{stem}.png")
 
         full_trace_fig = plot_full_trace(region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, title_info)
         trace_stem = ResultsExporter.build_export_stem(
-            export_data["exp_date"], export_data["img_serial"], animal_index_map[animal_id],
+            export_data["exp_date"], export_data["img_serial"], animal_idx,
             slice_val, at, detrend_mode, normalization, "TRACE",
         )
         exporter.export_figure("full_traces", full_trace_fig, f"{trace_stem}.png")

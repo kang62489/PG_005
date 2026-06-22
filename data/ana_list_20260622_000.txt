@@ -1,0 +1,45 @@
+Date Created: 20260622
+Analysis: debug
+Purposes:
+     debug
+
+Picked: [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
+[2025_04_03-0032.tif, YES, No, 2025_04_03_0022.abf, YES]
+[2025_04_03-0033.tif, YES, No, 2025_04_03_0023.abf, YES]
+[2025_04_03-0034.tif, YES, No, 2025_04_03_0024.abf, YES]
+[2025_04_03-0036.tif, YES, No, 2025_04_03_0026.abf, YES]
+[2025_06_11-0001.tif, YES, No, 2025_06_11_0002.abf, YES]
+[2025_06_11-0002.tif, YES, No, 2025_06_11_0003.abf, YES]
+[2025_06_11-0003.tif, YES, No, 2025_06_11_0004.abf, YES]
+[2025_06_11-0004.tif, YES, No, 2025_06_11_0005.abf, YES]
+
+Total 8 records picked
+
+dir_raw_tiffs: D:\MyDB\2_Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs
+
+dir_raw_abfs: D:\MyDB\2_Programs\PG_005\raw_abfs
+dir_results: D:\MyDB\2_Programs\PG_005\results
+
+================================================================================
+Region Analysis Statistics — generated 2026-06-22T02:14:37+00:00
+================================================================================
+Neurons detected ACh release: 2/2
+
++-----------------+----------+---------+------------+
+|     Metric      |   Mean   |   Std   | n_detected |
++-----------------+----------+---------+------------+
+| bright_area_um2 | 10916.42 | 317.69  |     2      |
+|  dim_area_um2   | 13534.82 | 6316.86 |     2      |
+| peak_latency_ms |  -12.50  |  17.68  |     2      |
++-----------------+----------+---------+------------+
+
+Per-Neuron Recording List (filename, detected) [detected/total]:
+neoChAT-584_S2RC1 [(2025_04_03-0032_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0033_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0034_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0036_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 4/4
+neoChAT-587_S4RC1 [(2025_06_11-0001_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0002_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0003_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0004_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 4/4

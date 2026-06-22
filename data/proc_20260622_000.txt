@@ -1,0 +1,19 @@
+Date Created: 20260622
+Analysis: debug
+Purposes:
+     debug
+
+Picked: [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]
+[2025_04_03-0032.tif, BIEXP, No, SKIP, NONE, 2025_04_03_0022.abf]
+[2025_04_03-0033.tif, BIEXP, No, SKIP, NONE, 2025_04_03_0023.abf]
+[2025_04_03-0034.tif, BIEXP, No, SKIP, NONE, 2025_04_03_0024.abf]
+[2025_04_03-0036.tif, BIEXP, No, SKIP, NONE, 2025_04_03_0026.abf]
+[2025_06_11-0001.tif, BIEXP, No, SKIP, NONE, 2025_06_11_0002.abf]
+[2025_06_11-0002.tif, BIEXP, No, SKIP, NONE, 2025_06_11_0003.abf]
+[2025_06_11-0003.tif, BIEXP, No, SKIP, NONE, 2025_06_11_0004.abf]
+[2025_06_11-0004.tif, BIEXP, No, SKIP, NONE, 2025_06_11_0005.abf]
+
+Total 8 records picked
+
+dir_raw_tiffs: D:\MyDB\2_Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs

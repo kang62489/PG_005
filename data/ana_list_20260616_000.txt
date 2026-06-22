@@ -16,26 +16,3 @@ dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs
 
 dir_raw_abfs: D:\MyDB\2_Programs\PG_005\raw_abfs
 dir_results: D:\MyDB\2_Programs\PG_005\results
-
-================================================================================
-Region Analysis Statistics — generated 2026-06-21T18:29:00+00:00
-================================================================================
-Neurons detected ACh release: 2/4
-
-+-----------------+-----------+----------+------------+
-|     Metric      |   Mean    |   Std    | n_detected |
-+-----------------+-----------+----------+------------+
-| bright_area_um2 | 81312.89  | 38643.86 |     2      |
-|  dim_area_um2   | 193350.22 |   N/A    |     2      |
-| peak_latency_ms |  -500.00  |  707.11  |     2      |
-+-----------------+-----------+----------+------------+
-
-Per-Neuron Recording List (filename, detected) [detected/total]:
-neoChAT-676_S3RC1 [(2025_12_15-0013_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_15-0014_A1S3RC1_BIEXP_GAUSS_MED.tif, True)] 2/2
-neoChAT-676_S4RC1 [(2025_12_15-0024_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_15-0025_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 2/2
-neoChAT-677_S2RC1 [(2026_01_08-0005_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2026_01_08-0012_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2026_01_08-0016_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
-neoChAT-677_S2RC2 [(2026_01_08-0024_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/1
