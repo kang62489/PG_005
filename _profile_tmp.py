@@ -9,14 +9,14 @@ from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
 from functions import lookup_rec_from_db, spike_centered_median, zscore_img_segs
 from spike_analysis import parse_ana_list
 
-ana_list_path = Path("data/ana_list_20260616_000.txt")
+ana_list_path = Path("data/ana_list_20260618_000.txt")
 entries, _results_dir, detrend_mode, normalization = parse_ana_list(ana_list_path, "BIEXP", use_als=False)
 ref_df = lookup_rec_from_db(entries, Path("data/rec_data.db"), Path("data/exp_info.db"))
 
 with tempfile.TemporaryDirectory() as tmp:
     tmp_results_dir = Path(tmp)
     exporter = ResultsExporter(results_root=tmp_results_dir)
-    animal_index_map = ResultsExporter.build_animal_index_map(ref_df["ANIMAL_ID"].unique())
+    animal_index_map = ResultsExporter.build_animal_index_map(ref_df)
 
     stage_totals: dict[str, float] = {}
 
@@ -76,7 +76,7 @@ with tempfile.TemporaryDirectory() as tmp:
             exp_date=export_data["exp_date"],
             abf_serial=export_data["abf_serial"],
             img_serial=export_data["img_serial"],
-            animal_idx=animal_index_map[animal_id],
+            animal_idx=animal_index_map[export_data["exp_date"]][animal_id],
             animal_id=animal_id,
             slice_val=slice_val,
             at=at,

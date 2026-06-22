@@ -22,12 +22,14 @@ Usage:
 """
 # Standard library imports
 import argparse
+import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 # Third-party imports
 import polars as pl
+from numba import config as numba_config
 from rich.console import Console
 from tabulate import tabulate
 
@@ -176,6 +178,15 @@ def run(
 ) -> None:
     """Run the full spike-aligned analysis pipeline for every entry in an ana list."""
     run_t0 = time.time()
+
+    # On a SLURM cluster (e.g. deigo), cgroups can cap this job to far fewer CPUs than the
+    # node physically has — numba's parallel=True median kernel only ever sees this count.
+    cpu_affinity = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
+    console.log(
+        f"[bold]CPUs available to this job: {cpu_affinity}  "
+        f"(numba NUMBA_NUM_THREADS={numba_config.NUMBA_NUM_THREADS})[/bold]"
+    )
+
     entries, results_dir, detrend_mode, normalization = parse_ana_list(ana_list_path, detrend_mode, use_als)
     ref_df = lookup_rec_from_db(entries, db_path, exp_db_path)
     cell_df = count_unique_cells(ref_df)

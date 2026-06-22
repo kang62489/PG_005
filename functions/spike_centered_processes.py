@@ -52,7 +52,9 @@ def spike_centered_median(
     # float32 (not float64): source GAUSS/ALS tiffs are saved as float16, so float32 already
     # has more precision than the data ever carried, at half the memory of float64. float16
     # itself isn't usable here — numba has no array data model for it.
-    stacked = np.stack(lst_img_segments, axis=0).astype(np.float32)  # (S, F, H, W)
+    # copy=False: zscore_img_segs already returns float32 segments, so this only copies
+    # when a caller passes something else — avoids doubling np.stack's own copy otherwise.
+    stacked = np.stack(lst_img_segments, axis=0).astype(np.float32, copy=False)  # (S, F, H, W)
     result = _cpu_median_axis0(stacked)
 
     # Calculate z-score range (1st and 99th percentile) for consistent color scaling

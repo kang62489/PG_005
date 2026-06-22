@@ -15,7 +15,9 @@ def zscore_img_segs(
 
     with tifffile.TiffFile(proc_tiff_path) as tif:
         for left, right in lst_img_frame_ranges:
-            segment = tif.asarray(key=slice(left, right + 1))
+            # Source TIFFs are float16 — numpy has no native float16 arithmetic and
+            # emulates it in software, making mean/std/normalize ~6x slower than float32.
+            segment = tif.asarray(key=slice(left, right + 1)).astype(np.float32)
 
             spike_frame_idx = segment.shape[0] // 2
             baseline = segment[:spike_frame_idx]
