@@ -226,3 +226,192 @@ dir_proc_tiffs: Z:\Kang\Cluster\proc_tiffs
 
 dir_raw_abfs: Z:\Kang\Cluster\raw_abfs
 dir_results: Z:/Kang/Cluster/results
+
+================================================================================
+Region Analysis Statistics — generated 2026-06-22T18:36:49+00:00
+================================================================================
+Neurons detected ACh release: 9/40
+
++-----------------+----------+----------+------------+
+|     Metric      |   Mean   |   Std    | n_detected |
++-----------------+----------+----------+------------+
+| bright_area_um2 | 17779.42 | 23239.25 |     9      |
+|  dim_area_um2   | 45689.23 | 43974.51 |     9      |
+| total_area_um2  | 71266.59 | 67021.13 |     9      |
+| peak_latency_ms |   2.08   |  25.52   |     9      |
++-----------------+----------+----------+------------+
+
+Per-Neuron Recording List (filename, detected) [detected/total]:
+202503-022-11_S1RC1 [(2025_07_19-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_19-0006_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_19-0007_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_19-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_19-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/5
+202503-022-11_S2LC1 [(2025_07_19-0015_A1S2LC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_19-0017_A1S2LC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_19-0018_A1S2LC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_19-0019_A1S2LC1_BIEXP_GAUSS_MED.tif, False)] 0/4
+202503-022-12_S2RC1 [(2025_07_17-0015_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_17-0016_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                     (2025_07_17-0017_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
+KC-nChAT-Hom-6_S2RC2 [(2024_10_11-0009_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                      (2024_10_11-0010_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                      (2024_10_11-0013_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                      (2024_10_11-0014_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/4
+KC-nChAT-Hom-6_S4RC1 [(2024_10_11-0020_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
+                      (2024_10_11-0029_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
+                      (2024_10_11-0030_A1S4RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
+neoChAT-549_S1RC1 [(2025_02_05-0006_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
+neoChAT-549_S1RC2 [(2025_02_05-0016_A1S1RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_02_05-0017_A1S1RC2_BIEXP_GAUSS_MED.tif, False)] 0/2
+neoChAT-549_S2RC1 [(2025_02_05-0026_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
+neoChAT-549_S3RC2 [(2025_02_05-0041_A1S3RC2_BIEXP_GAUSS_MED.tif, False)] 0/1
+neoChAT-550_S1RC1 [(2025_02_27-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
+neoChAT-552_S2RC1 [(2025_01_01-0012_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_01_01-0013_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_01_01-0014_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
+neoChAT-552_S2RC2 [(2025_01_01-0020_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_01_01-0021_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_01_01-0022_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/3
+neoChAT-552_S3RC2 [(2025_01_01-0057_A1S3RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_01_01-0058_A1S3RC2_BIEXP_GAUSS_MED.tif, False)] 0/2
+neoChAT-555_S2RC1 [(2024_12_19-0010_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2024_12_19-0011_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2024_12_19-0012_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2024_12_19-0013_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/4
+neoChAT-584_S1RC1 [(2025_04_03-0015_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
+neoChAT-584_S1RC2 [(2025_04_03-0022_A1S1RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_04_03-0023_A1S1RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_04_03-0024_A1S1RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_04_03-0025_A1S1RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_04_03-0026_A1S1RC2_BIEXP_GAUSS_MED.tif, False)] 0/5
+neoChAT-584_S2RC1 [(2025_04_03-0032_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0033_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0034_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0035_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0036_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0037_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0038_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0039_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_04_03-0040_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 7/9
+neoChAT-587_S4RC1 [(2025_06_11-0000_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_06_11-0001_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0002_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0003_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0004_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0005_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0006_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0008_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0009_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0010_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0011_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0012_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0013_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 12/13
+neoChAT-632_S1LC1 [(2025_10_13-0002_A1S1LC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0003_A1S1LC1_BIEXP_GAUSS_MED.tif, False)] 0/2
+neoChAT-632_S1LC2 [(2025_10_13-0006_A1S1LC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0007_A1S1LC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0010_A1S1LC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0011_A1S1LC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0013_A1S1LC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0016_A1S1LC2_BIEXP_GAUSS_MED.tif, False)] 0/6
+neoChAT-632_S2LC1 [(2025_10_13-0028_A1S2LC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0029_A1S2LC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0030_A1S2LC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0032_A1S2LC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_10_13-0035_A1S2LC1_BIEXP_GAUSS_MED.tif, False)] 0/5
+neoChAT-640_S4RC2 [(2025_09_26-0016_A1S4RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_09_26-0017_A1S4RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_09_26-0018_A1S4RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_09_26-0019_A1S4RC2_BIEXP_GAUSS_MED.tif, False)] 0/4
+neoChAT-660_S1RC1 [(2025_11_27-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0007_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0010_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0011_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/6
+neoChAT-660_S2RC1 [(2025_11_27-0021_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
+neoChAT-660_S3RC1 [(2025_11_27-0026_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0027_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0028_A1S3RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
+neoChAT-660_S3RC2 [(2025_11_27-0033_A1S3RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0034_A1S3RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0035_A1S3RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_27-0036_A1S3RC2_BIEXP_GAUSS_MED.tif, False)] 0/4
+neoChAT-661_S1RC1 [(2025_12_14-0002_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/4
+neoChAT-661_S2RC1 [(2025_12_14-0014_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0015_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0016_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0020_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_14-0021_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_14-0022_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_14-0023_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 4/7
+neoChAT-661_S2RC2 [(2025_12_14-0029_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0035_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0036_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/3
+neoChAT-662_S1RC1 [(2025_12_18-0007_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_18-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_18-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_18-0010_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_18-0011_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/5
+neoChAT-662_S2RC1 [(2025_12_18-0023_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_18-0024_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_18-0025_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_18-0026_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_18-0027_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 1/5
+neoChAT-663_S1RC1 [(2025_11_08-0018_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_08-0019_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_08-0020_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
+neoChAT-663_S2RC1 [(2025_11_08-0026_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0027_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0028_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0029_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0032_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_08-0033_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_08-0034_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0035_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 6/8
+neoChAT-664_S1RC1 [(2025_11_13-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_13-0010_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_13-0011_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_13-0012_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_13-0013_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/5
+neoChAT-664_S1RC2 [(2025_11_13-0017_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0018_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0019_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0022_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0023_A1S1RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_13-0024_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0026_A1S1RC2_BIEXP_GAUSS_MED.tif, False)] 5/7
+neoChAT-664_S2RC1 [(2025_11_13-0035_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0040_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_13-0041_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_13-0042_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_11_13-0043_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 1/5
+neoChAT-676_S4RC2 [(2025_12_15-0036_A1S4RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_15-0037_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0041_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0042_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0043_A1S4RC2_BIEXP_GAUSS_MED.tif, True)] 4/5
+neoChAT-677_S2RC1 [(2026_01_08-0004_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0005_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0006_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0010_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0011_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0012_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0013_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0014_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0015_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0016_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/10
+neoChAT-677_S2RC2 [(2026_01_08-0021_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0022_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0023_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0024_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/4
+neoChAT-677_S3RC1 [(2026_01_08-0030_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0031_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0032_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2026_01_08-0033_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0036_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2026_01_08-0037_A1S3RC1_BIEXP_GAUSS_MED.tif, False)] 1/6

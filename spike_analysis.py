@@ -122,7 +122,20 @@ def _format_neuron_line(label: str, pairs: list[str], ratio: str) -> str:
     return "\n".join(lines)
 
 
-def _build_stats_report(db_path: Path) -> str:
+_STATS_BLOCK_MARKER = "=" * 80 + "\nRegion Analysis Statistics"
+
+
+def _strip_existing_report(text: str) -> str:
+    """Drop a previously written Region Analysis Statistics block, if present.
+
+    Lets write_stats_report() overwrite the block on re-run instead of stacking
+    a duplicate copy every time the same ana list is processed again.
+    """
+    idx = text.find(_STATS_BLOCK_MARKER)
+    return text[:idx].rstrip() if idx != -1 else text.rstrip()
+
+
+def build_stats_report(db_path: Path) -> str:
     """Format the region-analysis summary block appended to the ana list after a run.
 
     Returns "" if results.db has no rows yet (nothing to report).
@@ -163,6 +176,21 @@ def _build_stats_report(db_path: Path) -> str:
         "Per-Neuron Recording List (filename, detected) [detected/total]:\n"
         + "\n".join(neuron_lines) + "\n"
     )
+
+
+def write_stats_report(ana_list_path: Path, results_db_path: Path) -> bool:
+    """Write (or overwrite, on re-run) the region-analysis stats block in an ana list.
+
+    Returns False if results_db_path has no rows yet (nothing written).
+    """
+    report = build_stats_report(results_db_path)
+    if not report:
+        return False
+
+    original = ana_list_path.read_text(encoding="utf-8")
+    kept = _strip_existing_report(original)
+    ana_list_path.write_text(kept + report, encoding="utf-8")
+    return True
 
 
 # ── Pipeline runner ───────────────────────────────────────────────────────────
@@ -339,11 +367,8 @@ def run(
             f"[green]✓ Exported {dir_names}/, region_sta/, full_traces/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
         )
 
-    report = _build_stats_report(exporter.db_path)
-    if report:
-        with ana_list_path.open("a", encoding="utf-8") as f:
-            f.write(report)
-        console.log(f"[green]Appended region analysis statistics -> {ana_list_path.name}[/green]")
+    if write_stats_report(ana_list_path, exporter.db_path):
+        console.log(f"[green]Updated region analysis statistics -> {ana_list_path.name}[/green]")
 
     console.log(f"\n[bold green]All done!  (total: {time.time() - run_t0:.1f}s)[/bold green]")
 

@@ -214,10 +214,13 @@ def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
     recorded. n_detected/n_total let you see how many cells were usable out of
     how many were attempted.
 
-    Returns one row per metric (bright_area_um2, dim_area_um2, peak_latency_ms)
-    with columns: metric, mean, std, n_detected, n_total.
+    Returns one row per metric (bright_area_um2, dim_area_um2, total_area_um2,
+    peak_latency_ms) with columns: metric, mean, std, n_detected, n_total.
+    total_area_um2 is bright_area_um2 + dim_area_um2, so it's null wherever dim
+    wasn't detected -- a cell with no dim measurement has no real total to report.
     """
-    metric_cols = ["bright_area_um2", "dim_area_um2", "peak_latency_ms"]
+    metric_cols = ["bright_area_um2", "dim_area_um2", "total_area_um2", "peak_latency_ms"]
+    agg_cols = ["bright_area_um2", "dim_area_um2", "peak_latency_ms"]
     df = _read_experiments(results_db_path)
 
     if df.is_empty():
@@ -225,7 +228,8 @@ def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
             schema={"metric": pl.Utf8, "mean": pl.Float64, "std": pl.Float64, "n_detected": pl.Int64, "n_total": pl.Int64}
         )
 
-    per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg([pl.col(c).mean().alias(c) for c in metric_cols])
+    per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg([pl.col(c).mean().alias(c) for c in agg_cols])
+    per_cell = per_cell.with_columns((pl.col("bright_area_um2") + pl.col("dim_area_um2")).alias("total_area_um2"))
     n_total = per_cell.height
 
     detected = per_cell.filter(~_bright_excluded_expr())

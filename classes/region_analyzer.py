@@ -193,17 +193,19 @@ class RegionAnalyzer:
 
         Returns:
             dict with "bright_trace"/"dim_trace"/"total_trace": 1D arrays (n_frames,).
-            bright_trace/dim_trace are 0-filled if the corresponding region was not
-            detected in the spike frame; total_trace = bright_trace + dim_trace.
+            bright_trace/dim_trace are NaN-filled if the corresponding region was not
+            detected in the spike frame (so peak-finding correctly reports "no peak"
+            instead of a fake peak at index 0); total_trace = bright_trace + dim_trace,
+            therefore NaN throughout if either region is missing.
         """
         n_frames = segment.shape[0]
 
-        bright_trace = np.zeros(n_frames)
+        bright_trace = np.full(n_frames, np.nan)
         if self.bright_largest is not None:
             mask = self.bright_largest["_mask"]
             bright_trace = np.array([frame[mask].mean() for frame in segment])
 
-        dim_trace = np.zeros(n_frames)
+        dim_trace = np.full(n_frames, np.nan)
         if self.dim_largest is not None:
             mask = self.dim_largest["_mask"]
             dim_trace = np.array([frame[mask].mean() for frame in segment])
