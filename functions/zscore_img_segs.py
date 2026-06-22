@@ -15,7 +15,7 @@ def zscore_img_segs(
 
     with tifffile.TiffFile(proc_tiff_path) as tif:
         for left, right in lst_img_frame_ranges:
-            segment = np.array([tif.pages[j].asarray() for j in range(left, right + 1)])
+            segment = tif.asarray(key=slice(left, right + 1))
 
             spike_frame_idx = segment.shape[0] // 2
             baseline = segment[:spike_frame_idx]

@@ -7,7 +7,7 @@ import numpy as np
 import polars as pl
 import pyabf
 import tifffile
-from openpyxl import Workbook
+import xlsxwriter
 from rich.console import Console
 from scipy.signal import find_peaks
 from tabulate import tabulate
@@ -94,46 +94,25 @@ class AbfClip:
         self.df_peaks = pl.DataFrame({"Time": self.peak_times, "Peaks": self.peak_values})
 
     def _export_spike_xlsx(self) -> None:
-        wb = Workbook()
-
-        ws_vm = wb.active
-        ws_vm.title = "Vm"
-        ws_vm.append(self.df_Vm.columns)
-        for row in self.df_Vm.iter_rows(named=False):
-            ws_vm.append(list(row))
-
-        ws_peaks = wb.create_sheet("Peaks")
-        ws_peaks.append(self.df_peaks.columns)
-        for row in self.df_peaks.iter_rows(named=False):
-            ws_peaks.append(list(row))
-
-        if self.df_collapsed_peaks is not None and not self.df_collapsed_peaks.is_empty():
-            ws_collapsed = wb.create_sheet("Collapsed_Peaks")
-            ws_collapsed.append(self.df_collapsed_peaks.columns)
-            for row in self.df_collapsed_peaks.iter_rows(named=False):
-                ws_collapsed.append(list(row))
-
-        if self.lst_abf_sample_ranges:
-            ws_segs = wb.create_sheet("ABF_segments")
-            headers: list = []
-            for i in range(len(self.lst_abf_sample_ranges)):
-                headers += [f"rec_time(abf_seg_{i})", f"Vm(abf_seg_{i})"]
-            ws_segs.append(headers)
-
-            segments = [
-                (self.rec_time[start:end], self.Vm[start:end])
-                for start, end in self.lst_abf_sample_ranges
-            ]
-            for r in range(len(segments[0][0])):
-                row: list = []
-                for time_seg, vm_seg in segments:
-                    row += [float(time_seg[r]), float(vm_seg[r])]
-                ws_segs.append(row)
-
         xlsx_dir = self.results_dir / "xlsx"
         xlsx_dir.mkdir(parents=True, exist_ok=True)
         xlsx_path = xlsx_dir / f"ABF_{self.exp_date}_{self.abf_serial}_spike_analysis.xlsx"
-        wb.save(xlsx_path)
+
+        wb = xlsxwriter.Workbook(str(xlsx_path))
+        self.df_Vm.write_excel(workbook=wb, worksheet="Vm")
+        self.df_peaks.write_excel(workbook=wb, worksheet="Peaks")
+
+        if self.df_collapsed_peaks is not None and not self.df_collapsed_peaks.is_empty():
+            self.df_collapsed_peaks.write_excel(workbook=wb, worksheet="Collapsed_Peaks")
+
+        if self.lst_abf_sample_ranges:
+            seg_cols: dict[str, np.ndarray] = {}
+            for i, (start, end) in enumerate(self.lst_abf_sample_ranges):
+                seg_cols[f"rec_time(abf_seg_{i})"] = self.rec_time[start:end]
+                seg_cols[f"Vm(abf_seg_{i})"] = self.Vm[start:end]
+            pl.DataFrame(seg_cols).write_excel(workbook=wb, worksheet="ABF_segments")
+
+        wb.close()
         console.log(f"[green]Saved spike detection → {xlsx_path}[/green]")
 
     def get_available_spiking_frames(self) -> None:

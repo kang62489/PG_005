@@ -1,3 +1,34 @@
+# Log of the project progress 2026-06-22 Mon (Session 35)
+Last working file: `classes/abf_clip.py`
+Last working line: 111 (`ws_collapsed = wb.create_sheet("Collapsed_Peaks")` in `_export_spike_xlsx()`)
+
+## List of modified files
+- `classes/abf_clip.py` — when `set_interval_frames < 1` (every spike's segment would collapse to the spike frame alone, no baseline), now skips those spikes instead of letting them reach `SpatialCategorizer` and crash on `np.concatenate([])`; added a pre-processing dedup step in `get_available_spiking_frames()` that collapses multiple electrophysiological spikes landing in the same image frame (burst firing faster than the 1/fs_imgs camera shutter) down to the first (onset) peak per frame, before any gap/margin math runs — keeps the true spike record in `df_peaks`/the `Peaks` xlsx sheet untouched, only affects which frame is used for windowing; collapsed duplicates are recorded in a new `df_collapsed_peaks` and exported to a new `Collapsed_Peaks` sheet in the per-recording xlsx
+- `spike_analysis.py` — when an entry has no valid segments, the skip is now also appended to `ana_list_*.txt` (not just console), so it's visible in the persisted run record
+- `functions/spike_centered_processes.py` — `_cpu_median_axis0`'s internal buffers and the `stacked` array cast changed from `float64` to `float32`; source GAUSS/ALS tiffs are saved as `float16` so `float64` was 4x more memory than the data ever carried for no precision gain (confirmed `float16` itself can't be fed to numba — raises `NotImplementedError`, tested directly). Fixes an OOM `Killed` on the cluster for a 120-segment recording
+- `docs/diagram_set_interval_frames_collapse.md` — new ASCII-diagram writeup explaining why a few colliding/tightly-clustered spikes can collapse the analysis window for an entire recording (one shared `set_interval_frames` value derived from the *mode* of all gaps)
+
+## Summary of current progress
+- Root-caused and fixed a real cluster crash: `SpatialCategorizer._calculate_global_thresholds()` crashed on `np.concatenate([])` when a recording's spikes were clustered tightly enough that the auto-derived `set_interval_frames` came out to `0` (1-frame segments, no baseline). Traced the full mechanism back to `abf_clip.py`'s mode-based window derivation before fixing it
+- Root-caused and fixed a separate `Killed` (OOM) crash in `spike_centered_median()` — verified via direct numba compile tests (not assumed) that `float16` isn't usable in the kernel and that the existing `float64` upcast was an unnecessary 4x memory blow-up over the actual `float16` source data; switched to `float32`
+- Per user's request, implemented burst-spike deduplication in `AbfClip` (first peak per frame wins, recomputes margins from the deduplicated list) instead of relying on `find_peaks(distance=...)`, preserving the true electrophysiological spike record while fixing the windowing collision — verified the dedup logic against synthetic frame-index data before committing to the approach
+- Audited the full `spike_analysis.py` call graph for other unnecessary `float64` usage — found none in the live pipeline (one unused sibling function, `spike_centered_avg()`, still has the same pattern but isn't called from this pipeline)
+- User committed all of today's work (`3dd6b06 fix collision of peaks situation (gap 0)`, plus the earlier `2133c7c basic statistics completely` for the `ana_list_*.txt` logging change) — working tree is fully clean, nothing left uncommitted
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Fixed `SpatialCategorizer` crash on zero-baseline segments (skip in `AbfClip` instead of crashing downstream)
+- ✅ Fixed OOM `Killed` crash in `spike_centered_median()` (`float64` → `float32`)
+- ✅ Implemented first-peak-per-frame deduplication for burst-firing spike collisions, with `Collapsed_Peaks` xlsx logging
+- ✅ Audited pipeline for other `float64` memory issues (none found in the live call graph)
+
+## What should we do next? (TODOs)
+- [ ] **Start Step 3**: the GUI "Results Browser" tab from `.claude/plans/kind-mapping-codd.md` — browse `results.db` + view `region_sta/`/`full_traces/` PNGs; `compute_region_stats()`/`get_cell_recording_status()` are already built and proven, ready to wire into a new `views/view_results_browser.py` + `controllers/ctrl_results_browser.py`
+
+## Last Session Recap
+※ recap: Fixed two real cluster crashes — a `SpatialCategorizer` crash on zero-baseline (too-tightly-clustered) spikes, and an OOM `Killed` in `spike_centered_median()` (unnecessary `float64` upcast over `float16` source data). Also added burst-spike deduplication in `AbfClip` (first-peak-per-frame, with new `Collapsed_Peaks` xlsx logging) instead of changing peak-detection `distance`, to preserve the true spike record. All committed (`3dd6b06`, `2133c7c`). Next: build the GUI Results Browser tab (Step 3, plan already written).
+
+---
+
 # Log of the project progress 2026-06-21 Sun (Session 34)
 Last working file: `spike_analysis.py`
 Last working line: 321 (`f"[green]✓ Exported {dir_names}/, region_sta/, full_traces/ ...` in `run()`)
