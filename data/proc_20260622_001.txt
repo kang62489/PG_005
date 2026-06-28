@@ -1,0 +1,15 @@
+Date Created: 20260622
+Analysis: RPR June aim 2
+Purposes:
+     show low potassium ACSF suppression
+
+Picked: [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]
+[2026_05_17-0010.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_05_17-0012.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_05_17-0016.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_05_17-0019.tif, BIEXP, No, SKIP, NONE, N/A]
+
+Total 4 records picked
+
+dir_raw_tiffs: D:\MyDB\2_Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\MyDB\2_Programs\PG_005\proc_tiffs

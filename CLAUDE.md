@@ -10,6 +10,8 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 2. Try using simple examples with actual data/numbers for explanation.
 3. Use `-` or `=` to create separation lines for separating different points/sessions — but keep it light: a single `---` between sections is usually enough. Reserve full-width `===` banners for long, multi-topic answers; never wrap every small subsection of a short answer in one, it reads as bloated rather than organized.
 4. Use emoji to make the text lively.
+5. Headers/separators alone aren't enough — prefer short bullets or numbered steps over dense, multi-clause paragraphs. One idea per line, blank line between distinct points, and split any sentence over ~25 words.
+6. **Before sending any response**, re-read rules 1-5 against the draft. If any sentence is over ~25 words or any paragraph has more than one idea, rewrite it before sending — do not send the first draft unchecked.
 
 
 ### Environment Setup

@@ -1,0 +1,12 @@
+Date Created: 20260622
+Analysis: RPR June aim 2
+Purposes:
+     show low potassium ACSF suppression
+
+Picked: [raw_tiff_name, paired_abf]
+[2026_05_17-0010.tif, N/A]
+[2026_05_17-0012.tif, N/A]
+[2026_05_17-0016.tif, N/A]
+[2026_05_17-0019.tif, N/A]
+
+Total 4 records picked

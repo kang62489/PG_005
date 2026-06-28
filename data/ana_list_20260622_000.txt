@@ -22,31 +22,7 @@ dir_raw_abfs: D:\MyDB\2_Programs\PG_005\raw_abfs
 dir_results: D:\MyDB\2_Programs\PG_005\results
 
 ================================================================================
-Region Analysis Statistics — generated 2026-06-22T02:14:37+00:00
-================================================================================
-Neurons detected ACh release: 2/2
-
-+-----------------+----------+---------+------------+
-|     Metric      |   Mean   |   Std   | n_detected |
-+-----------------+----------+---------+------------+
-| bright_area_um2 | 10916.42 | 317.69  |     2      |
-|  dim_area_um2   | 13534.82 | 6316.86 |     2      |
-| peak_latency_ms |  -12.50  |  17.68  |     2      |
-+-----------------+----------+---------+------------+
-
-Per-Neuron Recording List (filename, detected) [detected/total]:
-neoChAT-584_S2RC1 [(2025_04_03-0032_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_04_03-0033_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_04_03-0034_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_04_03-0036_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 4/4
-neoChAT-587_S4RC1 [(2025_06_11-0001_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_06_11-0002_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_06_11-0003_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_06_11-0004_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 4/4
-
-
-================================================================================
-Region Analysis Statistics — generated 2026-06-22T15:23:01+00:00
+Region Analysis Statistics — generated 2026-06-27T07:15:49+00:00
 ================================================================================
 Neurons detected ACh release: 2/2
 
@@ -55,6 +31,7 @@ Neurons detected ACh release: 2/2
 +-----------------+----------+---------+------------+
 | bright_area_um2 | 11035.56 | 387.34  |     2      |
 |  dim_area_um2   | 13462.39 | 6160.13 |     2      |
+| total_area_um2  | 24497.94 | 5772.79 |     2      |
 | peak_latency_ms |  -12.50  |  17.68  |     2      |
 +-----------------+----------+---------+------------+
 

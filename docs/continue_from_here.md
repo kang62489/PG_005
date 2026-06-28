@@ -1,3 +1,109 @@
+# Log of the project progress 2026-06-28 Sat (Session 38)
+Last working file: `functions/plot_results.py`
+Last working line: ~210 (end of `_plot_frame_panel`)
+
+## List of modified files
+- `functions/plot_results.py` — `_plot_frame_panel` redesigned: removed x/y span crosshair and centroid dot overlay (`show_centroid=False, show_span=False`); now shows per-frame B/D/B+D area in µm² + % (e.g. `B: 1234 µm² (2.3%)`) for all 9 panels — µm² allows cross-OBJ comparison (% alone is not comparable across 10X/40X/60X FOVs); legend simplified to bright contour only; `_plot_trace_panel` no longer calls `region_analyzer.get_peak_latency_ms()` — latency is now computed inline from already-computed `bright_peak_rel`/`dim_peak_rel`, removing the redundant 3rd call to `get_temporal_traces`
+
+## Summary of current progress
+- Simplified row-1 panel titles: removed x/y spans and centroids ("for now"), showing µm² + % of each frame directly counted from `cat_frame` pixels — not restricted to spike-frame mask, so area changes naturally reflect spreading/shrinking across frames
+- Identified and fixed a triple-`get_temporal_traces` redundancy: spike_analysis.py called it once (for DB latency), `_plot_trace_panel` called it twice more (once for trace plot, once inside `get_peak_latency_ms` for the title); fixed by inlining latency from already-computed peak indices — neither option meaningfully speeds up the pipeline (temporal traces are negligible vs TIFF I/O), but removes unnecessary duplication
+- Extensive design discussion on flow/spreading detection in `RegionAnalyzer` — identified that the current largest-CC approach fails for two real patterns seen in data:
+  - **Scenario A** (one release site, scattered small islands): no single CC survives `min_area_um2=900`, event missed entirely despite visible increased pixel density in spike frame
+  - **Scenario B** (multiple distinct varicosities releasing simultaneously): single centroid falls in empty space between sites, meaningless
+- Rejected: Gaussian smoothing on MED to find release center — MED is already Gaussian-filtered upstream; double-smoothing degrades spatial resolution
+- Viable for Scenario A only: intensity-weighted centroid of all bright pixels using MED z-scores as weights — finds center of mass of scattered islands without CC size filter; fails for Scenario B
+- User confirmed Scenario B is real (showed TIFF_0029 ABF_0026: white dots scattered across whole frame, none detected despite visible spike-frame elevation)
+- **DBSCAN identified as the right approach** for both scenarios: treats bright pixels as a 2D point pattern, finds dense clusters automatically (no assumed number of clusters), discards noise pixels (`label=-1`), gives per-cluster centroid + area; key parameters `eps` (neighbourhood radius in pixels) and `min_samples` (minimum cluster size) need tuning against real data
+- Detection criterion (user's Point 1): compare B+D% at spike frame vs baseline frames — the only metric that works for both Scenario A and B without needing cluster structure first
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Simplified row-1 panel titles (removed spans/centroids, added µm² + %)
+- ✅ Fixed redundant 3rd `get_temporal_traces` call in `_plot_trace_panel`
+
+## What should we do next? (TODOs)
+- [ ] **RegionAnalyzer redesign (broad)** — overall redesign to handle delayed signals (+1 frame tolerance), multi-cluster (Scenario B), and flow/spreading; current largest-CC approach is too brittle for real data patterns; carried from Session 37
+- [ ] **DBSCAN cluster detection** — implement DBSCAN-based high-density area detection in `RegionAnalyzer` to replace/augment largest-CC approach; `eps` and `min_samples` need tuning against real data; handles both island clusters (Scenario A) and multiple distinct varicosities (Scenario B)
+- [ ] **Detection criterion** — implement B+D% at spike frame vs baseline comparison as the ACh event detection criterion; currently the only approach that robustly detects both Scenario A and B without requiring cluster structure
+- [ ] **Per-cluster spreading analysis** — once DBSCAN gives clusters, track B+D area growth per cluster across post-spike frames to characterize spreading from each release site
+
+## Last Session Recap
+※ recap: Simplified row-1 panel titles to show B/D/B+D in µm² + % per frame; fixed a redundant triple-call to `get_temporal_traces`. Main session was design discussion for flow/spreading detection — identified two real failure modes of the current largest-CC approach (island clusters + multiple varicosities), confirmed by real data; rejected Gaussian on MED (already filtered upstream); landed on DBSCAN as the right approach for finding high-density clusters in the bright pixel point pattern. Next: implement DBSCAN in RegionAnalyzer + detection criterion (B+D% vs baseline).
+
+---
+
+# Log of the project progress 2026-06-27 Fri (Session 37)
+Last working file: `classes/region_analyzer.py`
+Last working line: 243 (end of file — read only, no edits this session)
+
+## List of modified files
+- (none — design discussion session only)
+
+## Summary of current progress
+- Discussed how spike-centered alignment in `spike_centered_median`/`spike_centered_avg` already uses the spike's biological significance (spike timing as the anchor for the ACh release event)
+- Reviewed the current `RegionAnalyzer` design: anchors bright/dim detection to the spike frame only via `_find_largest_category` (bright) and `_find_all_dim` (dim)
+- Identified key bottleneck: ACh signal can be delayed 1–2 frames from the spike frame, so spike-frame-only anchor may miss or underestimate the real core zone
+- Explored pixel-vote approach (count how many post-spike frames label each pixel as bright/dim) — captures 1-2 frame delay but user raised concern it is unreliable with only 3 frames
+- Key insight: bright and dim should NOT be treated as fully independent regions — they form one spatially connected ACh event; isolated dim pixels are only meaningful if spatially connected to a bright+dim blob
+- Edge case identified: isolated dim pixel in frame N that connects to main blob in frame N+1 → could be the leading edge of spreading signal, not noise — single-frame spatial analysis can't resolve this
+- Direction emerging: use union of bright+dim blobs across post-spike frames to define the core zone
+- User also has a new idea for temporal traces — not yet shared, to be discussed in new session
+
+## Completed TODOs/Tasks (before new wrap-up)
+- (none — design discussion only, no code changes)
+
+## What should we do next? (TODOs)
+- [ ] **RegionAnalyzer redesign** — define core zone without anchoring to spike frame only; signal can be delayed 1–2 frames (biologically plausible); delay >2 frames unlikely to be spike-driven per user's hypothesis
+- [ ] **Handle edge case** — isolated dim pixel in frame N that connects to main blob in frame N+1 is likely a leading edge, not noise; need a temporal approach that captures this
+- [ ] **New idea for temporal traces** — user has a new design in mind, to be shared and implemented in new session
+
+## Last Session Recap
+※ recap: Design-only session (no code changes) — identified that current `RegionAnalyzer` anchors bright/dim detection to spike frame only, missing 1–2 frame delayed ACh signals; key insight that bright+dim should be treated as one connected spatial event, not independently; edge case (isolated dim connecting to main blob in next frame) flagged; new temporal trace idea and core zone redesign to continue in next session.
+
+---
+
+# Log of the project progress 2026-06-23 Tue (Session 36)
+Last working file: `functions/query_databases.py`
+Last working line: 222 (`metric_cols = ["bright_area_um2", "dim_area_um2", "total_area_um2", "peak_latency_ms"]` in `compute_region_stats`)
+
+## List of modified files
+- `functions/zscore_img_segs.py` — each segment cast to `float32` right after reading from the TIFF, before any mean/std/normalize math; numpy has no native float16 arithmetic and was emulating it in software, ~6x slower than float32 (benchmarked before committing to the fix)
+- `functions/spike_centered_processes.py` — `spike_centered_median`'s `.astype(np.float32)` on the stacked array now passes `copy=False`; segments are already float32 after the fix above, so this avoids a second full-array copy on top of `np.stack`'s own copy
+- `spike_analysis.py` — added a startup diagnostic log (`CPUs available to this job: N (numba NUMBA_NUM_THREADS=N)`) via `os.sched_getaffinity`/`numba.config`, after diagnosing a "no multicore speedup on deigo" report back to a missing `--cpus-per-task` in the user's `srun` call; renamed `_build_stats_report` → public `build_stats_report`; added `write_stats_report(ana_list_path, results_db_path)` + `_strip_existing_report()`/`_STATS_BLOCK_MARKER` so re-running the stats step overwrites its own previous block instead of stacking duplicates (verified by running twice on a test file — only one block remained)
+- `classes/region_analyzer.py` — fixed a real bug in `get_temporal_traces()`: undetected bright/dim regions defaulted to an all-zero trace instead of all-NaN, so `_nanargmax_relative`'s only "not found" check (`np.all(np.isnan(...))`) never triggered — `get_peak_latency_ms()` silently returned a fake latency instead of `None` whenever either region wasn't actually detected. Now defaults to `np.full(n_frames, np.nan)`
+- `functions/query_databases.py` — `compute_region_stats()` gained a `total_area_um2` metric (`bright_area_um2 + dim_area_um2` per cell), null wherever dim wasn't detected (same "don't fabricate a measurement" principle as the latency fix)
+- `append_stats.py` — **new**, promoted from the throwaway `_append_stats_tmp.py`: derives `results.db`'s path from the ana list's own footer (no separate `--results_db` arg needed), reuses `spike_analysis.build_stats_report`/`write_stats_report` instead of duplicating logic
+- `_fix_latency_db_tmp.py` — **new** (throwaway, still present, committed): nulls out `peak_latency_ms` for rows where `has_bright_region=0 OR has_dim_region=0`. Run against the local `results/results.db` (140/173 rows fixed) — **not yet run against the real `Z:/Kang/Cluster/results/results.db`**, by user's own account
+- `_append_stats_tmp.py` — deleted (superseded by `append_stats.py`)
+- `data/ana_list_20260618_000.txt`, `data/ana_list_20260622_000.txt` — updated by running the real pipeline / `append_stats.py` against real data during testing
+
+## Summary of current progress
+- Root-caused and fixed a real performance complaint ("z score normalization still fucking slow") down to numpy's lack of native float16 arithmetic — benchmarked the fix (~6x) before committing, then found and fixed a second, smaller redundant-copy issue in `spike_centered_median` once segments were already float32
+- Diagnosed a "no multicore acceleration on deigo" report down to a missing `--cpus-per-task` in the user's `srun` call (SLURM cgroups cap visible CPUs independent of the node's physical core count) — checked `sinfo`/`scontrol`/`sacctmgr` to confirm no hard per-job CPU/mem caps existed, then added a startup diagnostic log so this is visible immediately on every future run without a manual check
+- Walked through `rsync`/Windows-copy-tool questions (verbose flag meaning, trailing-slash semantics, robocopy `/MT`) while the user moved `results/` to bucket storage — no code changes, just CLI guidance
+- Found and fixed a real correctness bug in `RegionAnalyzer.get_temporal_traces()`: undetected regions produced fake non-`None` peak-latency values instead of correctly reporting "not measured" — fixed the code (NaN instead of zero defaults) and repaired the local `results.db` (140/173 bogus rows nulled); the real cluster/bucket database still needs the same repair
+- Promoted the throwaway `_append_stats_tmp.py` into a proper `append_stats.py` per user request, fixing a duplicate-report-block bug the user caught along the way (`write_stats_report()` now overwrites instead of appending blindly) — shared between `run()` and the new script so neither duplicates
+- Added a `total_area_um2` (bright+dim) stat per user request, consistent with the same "null when not detected" semantics as the latency fix
+- When asked to confirm carry-over TODOs, user explicitly declined to flag the real-DB latency fix or throwaway-script cleanup as open items this session — only the GUI Results Browser tab was confirmed as still wanted
+- User committed all of today's work (`01e86fa "debug and speed up again"`, `0a500ce "some inprovement and fixing dim latencies"`) — working tree is fully clean, nothing left uncommitted
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Fixed float16 slowdown in `zscore_img_segs` (cast to float32 immediately after reading)
+- ✅ Fixed redundant copy in `spike_centered_median` (`astype(..., copy=False)`)
+- ✅ Diagnosed and fixed "no CPU parallelism on deigo" (missing `--cpus-per-task`; added a startup diagnostic log)
+- ✅ Fixed `RegionAnalyzer.get_temporal_traces()` zeros-vs-NaN bug causing fake peak-latency values
+- ✅ Repaired local `results/results.db` (140/173 bogus `peak_latency_ms` rows nulled)
+- ✅ Promoted `_append_stats_tmp.py` → formal `append_stats.py`, fixed a duplicate-report-block bug along the way
+- ✅ Added `total_area_um2` metric to `compute_region_stats()`
+
+## What should we do next? (TODOs)
+- [ ] **Start Step 3**: a GUI "Results Browser" tab — browse `results.db` + view `region_sta/`/`full_traces/` PNGs; `compute_region_stats()`/`get_cell_recording_status()` are already built and proven, ready to wire into a new `views/view_results_browser.py` + `controllers/ctrl_results_browser.py`. (Note: the `.claude/plans/kind-mapping-codd.md` plan doc referenced in earlier sessions' logs no longer exists on disk — `.claude/plans/` is currently empty — so this needs a fresh plan before starting, not a resume of an old one.)
+
+## Last Session Recap
+※ recap: Fixed a real float16 perf bug in `zscore_img_segs` (~6x speedup) and a redundant-copy issue in `spike_centered_median`; diagnosed missing `--cpus-per-task` on deigo SLURM jobs; fixed a `RegionAnalyzer` bug producing fake peak-latency values for undetected regions (local `results.db` repaired, real cluster DB still pending); promoted `append_stats.py` to a formal script (fixing a duplicate-block bug along the way) and added a `total_area_um2` stat. Next: GUI Results Browser tab (Step 3) — needs a fresh plan, the old one is gone.
+
+---
+
 # Log of the project progress 2026-06-22 Mon (Session 35)
 Last working file: `classes/abf_clip.py`
 Last working line: 111 (`ws_collapsed = wb.create_sheet("Collapsed_Peaks")` in `_export_spike_xlsx()`)

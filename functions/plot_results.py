@@ -182,35 +182,28 @@ def _plot_frame_panel(
     """Row-1 panel: one frame's categorized image with the spike frame's fixed bright/dim regions."""
     cat_frame = categorizer.categorized_frames[frame_idx]
     bright = region_analyzer.bright_largest
-    dim = region_analyzer.dim_largest
 
     cmap_cat = ListedColormap(["black", "gray", "white"])
     ax.imshow(cat_frame, cmap=cmap_cat, vmin=0, vmax=2, interpolation="nearest")
 
-    is_spike_frame = offset == 0
-    _overlay_region(
-        ax, bright, contour_color="magenta", span_color="yellow", centroid_color="black", show_span=is_spike_frame
-    )
-    _overlay_region(ax, dim, contour_color="cyan", span_color="lime", centroid_color="white", show_centroid=False, show_span=False)
+    _overlay_region(ax, bright, contour_color="magenta", span_color="yellow", centroid_color="black",
+                    show_centroid=False, show_span=False)
 
-    bright_area_um2 = region_analyzer.area_in_combined_region(cat_frame, CATEGORY_BRIGHT)
-    dim_area_um2 = region_analyzer.area_in_combined_region(cat_frame, CATEGORY_DIM)
+    bright_px = np.count_nonzero(cat_frame == CATEGORY_BRIGHT)
+    dim_px = np.count_nonzero(cat_frame == CATEGORY_DIM)
+    total_px = cat_frame.size
+    bright_pct = 100.0 * bright_px / total_px
+    dim_pct = 100.0 * dim_px / total_px
+    bright_um2 = bright_px * um_per_pixel ** 2
+    dim_um2 = dim_px * um_per_pixel ** 2
 
-    if bright is None:
-        bright_line = "Bright [x (µm), y (µm), area (µm²)];\nnone detected" if is_spike_frame else "Bright area (µm²): none detected"
-    elif is_spike_frame:
-        bright_line = (
-            f"Bright [x (µm), y (µm), area (µm²)];\n"
-            f"({bright['x_span_um']:.1f}, {bright['y_span_um']:.1f}, {bright_area_um2:.1f})"
-        )
-    else:
-        bright_line = f"Bright area (µm²): {bright_area_um2:.1f}"
-
-    dim_line = f"Dim area (µm²): {dim_area_um2:.1f}" if dim is not None else "Dim area (µm²): none detected"
     frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
     ax.set_title(
-        f"{frame_label}\n{bright_line}\n{dim_line}",
-        fontsize=8,
+        f"{frame_label}\n"
+        f"B: {bright_um2:.0f} µm² ({bright_pct:.1f}%)\n"
+        f"D: {dim_um2:.0f} µm² ({dim_pct:.1f}%)\n"
+        f"B+D: {bright_um2 + dim_um2:.0f} µm² ({bright_pct + dim_pct:.1f}%)",
+        fontsize=7,
         fontweight="bold" if offset == 0 else "normal",
         color="red" if offset == 0 else "black",
     )
@@ -218,10 +211,6 @@ def _plot_frame_panel(
 
     legend_elements = [
         Line2D([], [], color="magenta", linewidth=1.5, label="Bright contour (spike frame)"),
-        Line2D([], [], color="cyan", linewidth=1.5, label="Dim contour (spike frame)"),
-        Line2D(
-            [], [], marker="+", color="black", linestyle="", markersize=8, markeredgewidth=2, label="Bright centroid"
-        ),
     ]
     ax.legend(handles=legend_elements, loc="lower left", fontsize=5)
     _add_scale_bar(um_per_pixel, ax, cat_frame.shape[1], cat_frame.shape[0], font_size=6)
@@ -285,8 +274,8 @@ def _plot_trace_panel(
     if dim_peak_rel is not None:
         ax.axvline(dim_peak_rel, color="cyan", linestyle=":", alpha=0.7)
 
-    latency_ms = region_analyzer.get_peak_latency_ms(median_segment, spike_frame_idx, frame_duration_ms)
-    if latency_ms is not None:
+    if bright_peak_rel is not None and dim_peak_rel is not None:
+        latency_ms = (dim_peak_rel - bright_peak_rel) * frame_duration_ms
         latency_line = f"Peak Latency: {latency_ms:.1f} ms"
     else:
         latency_line = "Peak Latency: N/A (region not detected)"

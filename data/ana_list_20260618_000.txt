@@ -221,24 +221,44 @@ Picked: [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
 
 Total 214 records picked
 
-dir_raw_tiffs: Z:\Kang\Cluster\raw_tiffs
-dir_proc_tiffs: Z:\Kang\Cluster\proc_tiffs
+dir_raw_tiffs: /bucket/WickensU/Kang/Cluster/raw_tiffs
+dir_proc_tiffs: /bucket/WickensU/Kang/Cluster/proc_tiffs
 
-dir_raw_abfs: Z:\Kang\Cluster\raw_abfs
-dir_results: Z:/Kang/Cluster/results
+dir_raw_abfs: /bucket/WickensU/Kang/Cluster/raw_abfs
+dir_results: /flash/WickensU/kang/results
+[SKIPPED] 2026-06-22T19:58:15+00:00 — 2024_12_19-0020_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T19:58:31+00:00 — 2024_12_19-0021_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:01:57+00:00 — 2025_01_01-0029_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:02:14+00:00 — 2025_01_01-0030_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:02:30+00:00 — 2025_01_01-0031_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:06:34+00:00 — 2025_02_05-0007_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:06:49+00:00 — 2025_02_05-0008_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:10:40+00:00 — 2025_02_05-0032_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:12:35+00:00 — 2025_02_05-0046_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:12:52+00:00 — 2025_02_05-0047_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:13:10+00:00 — 2025_02_05-0048_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:13:27+00:00 — 2025_02_05-0049_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:13:42+00:00 — 2025_02_05-0050_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:14:00+00:00 — 2025_02_05-0051_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:14:18+00:00 — 2025_02_05-0052_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T20:55:55+00:00 — 2025_10_13-0017_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T21:32:09+00:00 — 2025_11_13-0037_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T21:32:26+00:00 — 2025_11_13-0038_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T22:56:00+00:00 — 2026_01_08-0034_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026-06-22T22:56:17+00:00 — 2026_01_08-0035_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
 
 ================================================================================
-Region Analysis Statistics — generated 2026-06-22T18:36:49+00:00
+Region Analysis Statistics — generated 2026-06-22T22:58:06+00:00
 ================================================================================
-Neurons detected ACh release: 9/40
+Neurons detected ACh release: 11/42
 
 +-----------------+----------+----------+------------+
 |     Metric      |   Mean   |   Std    | n_detected |
 +-----------------+----------+----------+------------+
-| bright_area_um2 | 17779.42 | 23239.25 |     9      |
-|  dim_area_um2   | 45689.23 | 43974.51 |     9      |
-| total_area_um2  | 71266.59 | 67021.13 |     9      |
-| peak_latency_ms |   2.08   |  25.52   |     9      |
+| bright_area_um2 | 23515.31 | 25461.99 |     11     |
+|  dim_area_um2   | 62417.56 | 62753.05 |     11     |
+| total_area_um2  | 93932.28 | 86395.55 |     11     |
+| peak_latency_ms |  -0.80   |  22.93   |     11     |
 +-----------------+----------+----------+------------+
 
 Per-Neuron Recording List (filename, detected) [detected/total]:
@@ -351,7 +371,11 @@ neoChAT-661_S2RC1 [(2025_12_14-0014_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_14-0023_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 4/7
 neoChAT-661_S2RC2 [(2025_12_14-0029_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_14-0035_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
-                   (2025_12_14-0036_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/3
+                   (2025_12_14-0036_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0037_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0038_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0039_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0040_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/7
 neoChAT-662_S1RC1 [(2025_12_18-0007_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_18-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_18-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
@@ -390,11 +414,28 @@ neoChAT-664_S2RC1 [(2025_11_13-0035_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
                    (2025_11_13-0041_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_11_13-0042_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_11_13-0043_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 1/5
-neoChAT-676_S4RC2 [(2025_12_15-0036_A1S4RC2_BIEXP_GAUSS_MED.tif, False),
+neoChAT-676_S3RC1 [(2025_12_15-0008_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0009_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0010_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_15-0011_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_15-0012_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0013_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0014_A1S3RC1_BIEXP_GAUSS_MED.tif, True)] 5/7
+neoChAT-676_S4RC1 [(2025_12_15-0019_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_15-0020_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0021_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_15-0022_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0023_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0024_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0025_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 5/7
+neoChAT-676_S4RC2 [(2025_12_15-0030_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0031_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0032_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0036_A1S4RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_15-0037_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0041_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0042_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_15-0043_A1S4RC2_BIEXP_GAUSS_MED.tif, True)] 4/5
+                   (2025_12_15-0043_A1S4RC2_BIEXP_GAUSS_MED.tif, True)] 7/8
 neoChAT-677_S2RC1 [(2026_01_08-0004_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0005_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0006_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
