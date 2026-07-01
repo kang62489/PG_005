@@ -1,3 +1,82 @@
+# Log of the project progress 2026-07-01 Wed (Session 40)
+Last working file: `_demo_dbscan_tmp.py`
+Last working line: 286 (`ax_bd.set_xlabel("Frame offset from spike (0 = spike)", fontsize=9)`)
+
+## List of modified files
+- `_demo_dbscan_tmp.py` — multiple changes this session:
+  - Fixed `compute_ring_traces()`: R changed from RMS distance to `dists.max()` (true enclosing-circle radius, per explicit user choice over 90th-percentile); outer ring bound at R is now automatic (no pixel can exceed the max by definition)
+  - Added `touches_boundary` detection — flags clusters whose mask touches the frame edge (R is truncated/underestimated in that case); shown as `⚠ boundary-cropped` in the rings PNG
+  - Split the single combined output PNG into two files per recording: `{stem}_ideas_demo.png` (main) and `{stem}_rings_demo.png` (new)
+  - Main PNG: row 2 (frame panels) expanded from 3 panels (spike-1/spike/spike+1) to 6 panels (spike-1 → spike+4); DBSCAN cluster shading stays on just the analysis frame (`ai`); DBSCAN settings moved out of the figure suptitle into a bold row-level title above the panel row
+  - New rings PNG: row 1 = 9 panels (spike-4 → spike+4), same fixed ring/circle overlay drawn on every panel (mask doesn't change frame-to-frame, by design); row 2 = full-segment inner/outer ring z-score trace with a shaded band annotating which x-range the 9 panels above cover
+  - Renamed the confusing `[ai]` panel tag to `[DBSCAN frame]`
+  - Converted px-only labels to µm in both PNGs (ring R/split/inner/outer boundaries, EPS setting text)
+  - Idea 1 B+D% plot x-axis changed to be relative to the spike frame (`0` = spike), instead of absolute frame index
+
+## Summary of current progress
+- Clarified with user that R was previously RMS-based (radius of gyration), not the literal enclosing-circle radius they expected — switched to `dists.max()` per their explicit choice; confirmed the R/√2 inner/outer split and outer-bound-at-R now happen automatically as a consequence
+- Confirmed the eps px↔µm conversion (`eps_and_min_samples()`) is correct and consistent per objective (10X→7px, 60X→45px for EPS_UM=10µm) — noted but left open: `int()` truncates rather than rounds
+- Confirmed the ring/circle masks are computed once from the single analysis frame and reused unchanged across all frames when building the trace (same fixed-mask pattern as `RegionAnalyzer.get_temporal_traces()`) — flagged as a known limitation for actual spreading/moving signals
+- Major PNG layout redesign per user's 3-point spec: wider frame-panel row in the main PNG, and a new dedicated rings PNG with a 9-panel context row + full-trace row with window annotation — both verified visually against real data after implementation
+- Real-data check surfaced a concern: `2025_10_13-0029` (60X) showed R=76µm — nearly the full FOV — suggesting outlier pixels may still inflate max-based R; not chosen as a follow-up TODO this session (user declined when offered)
+- New idea raised for later: the B+D% trace (already computed) could be used to estimate how long an ACh release event lasts, not just whether one occurred
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Fixed R computation in ring analysis (RMS → max distance / enclosing-circle radius)
+- ✅ Bounded the outer ring at R (automatic consequence of the R fix)
+- ✅ Added boundary-touch detection/flagging for truncated clusters
+- ✅ Confirmed eps px↔µm conversion is correct
+- ✅ Restructured export PNGs per user spec (main: 6-panel row + DBSCAN settings row-title; new rings PNG: 9-panel row + annotated full trace)
+- ✅ Converted px-only display labels to µm
+- ✅ Made Idea 1 B+D% plot x-axis relative to spike frame (0 = spike)
+- ✅ Fixed confusing `[ai]` panel label → `[DBSCAN frame]`
+
+## What should we do next? (TODOs)
+- [ ] **Integrate DBSCAN pipeline into `RegionAnalyzer`** — move the validated `lookup_obj`/`eps_and_min_samples`/`run_dbscan_filtered`/`compute_ring_traces` logic from `_demo_dbscan_tmp.py` into `classes/region_analyzer.py`, replacing the largest-CC approach. User confirmed this is the last remaining piece before the demo work is "finished."
+- [ ] **Update `docs/dbscan_notes.md`** — currently stale: still describes R as RMS-based and "buggy," doesn't mention today's max-distance fix, boundary-crop flag, two-PNG split, or µm conversion
+- [ ] **Detection criterion (B+D% vs baseline)** — implement the B+D% spike-frame vs baseline comparison as the ACh event detection gate in `RegionAnalyzer`; new idea to fold in: also estimate release *duration* from how long B+D% stays elevated above baseline, not just whether an event occurred
+- [ ] **Add a "clipped segment" row to the main PNG** (`_demo_dbscan_tmp.py`, `save_main_figure`) — new row between the full B+D% trace (row 0) and the frame-panel row: same B+D% line, but x-axis (and y-axis, auto-scaled) restricted to just the spike-1→spike+4 window shown in the panels below, with the same spike-1/spike/spike+1 dashed markers + DBSCAN-frame star. Deferred — spec confirmed via clarifying questions, not yet implemented.
+
+## Last Session Recap
+※ recap: Fixed R in ring analysis (RMS → max/enclosing-circle distance, per user's explicit choice) and confirmed the outer-ring bound is now automatic; restructured the demo's export PNGs into two files (main: 6-panel spike-1→+4 row with DBSCAN settings as a row-title; new rings PNG: 9-panel spike-4→+4 row with fixed ring overlay + annotated full trace); converted px-only labels to µm; made the B+D% plot's x-axis relative to spike (0=spike). Confirmed eps px→µm conversion is correct. Next: integrate the validated DBSCAN pipeline into `RegionAnalyzer` (last piece), update stale `docs/dbscan_notes.md`, implement the B+D%-vs-baseline detection criterion (plus estimating release duration), and add a zoomed "clipped segment" row to the main PNG (spec confirmed, not yet coded).
+
+---
+
+# Log of the project progress 2026-06-30 Mon (Session 39)
+Last working file: `_demo_dbscan_tmp.py`
+Last working line: ~175 (`main()`)
+
+## List of modified files
+- `_demo_dbscan_tmp.py` — multiple changes this session:
+  - Fixed CAT colormap: dim → gray (`#888888`), bright → white (`#ffffff`), bg → black (`#000000`); previous cyan/yellow was misleading
+  - Restored cluster fill overlay (`CLUSTER_RGBA`) in `_draw_cluster_shading` — was accidentally removed in a bad intermediate edit
+  - Replaced hardcoded `EPS=20px` / `MIN_SAMPLES=50` with physically-grounded constants: `EPS_UM=10.0µm` (inter-varicosity gap, tunable) + `MIN_DENSITY_FRAC=0.1`; added `PIXEL_SCALE` dict and `eps_and_min_samples(obj)` converter
+  - Added `lookup_obj(tif_path)` — queries `rec_data.db` for the objective of each recording (`REC_{date}` table, `Filename = {date}-{serial}.tif`); OBJ now shown in PNG title alongside `EPS_UM` and computed `eps_px`
+  - Added `import sqlite3` and `REC_DB` path constant
+  - `run_dbscan_filtered()` now takes `eps_px` / `min_samples` as arguments instead of reading module-level globals
+  - `save_figure()` now takes `obj`, `eps_px`, `min_samples` as arguments; suptitle shows `OBJ=60X  EPS=10µm=45px`
+  - Summary table updated to show OBJ and eps_px per recording
+
+## Summary of current progress
+- Clarified that EPS_UM=10µm is the right framing (inter-varicosity *gap* distance, not axon span or varicosity size) — varicosity diameter (0.6µm, Umbriaco 1994) is sub-resolution and irrelevant as a spatial anchor; Gaussian sigma=6px is the blob scale in pixel space but EPS is a physical gap so must be converted per OBJ; axon span (~300µm) is the cluster size upper bound, not EPS
+- Corrected the sigma-based EPS reasoning: the kernel half-width (3σ=18px) is the right pixel-space scale, but since EPS represents a physical gap, it must still be defined in µm and converted per OBJ (18px = 4µm at 60X, 24µm at 10X — inconsistent)
+- First per-OBJ run: EPS_UM=10µm → 45px at 60X, 7px at 10X; results look plausible but not yet visually validated by user
+- Identified bug in `compute_ring_traces`: R = RMS distance of cluster pixels from centroid — inflated by scattered outlier pixels far from the dense core; makes rings much larger than the visual cluster (e.g. 0029: visual cluster ~50px radius but R=109px); a percentile-based R (e.g. 90th percentile) would be more robust
+
+## Completed TODOs (from Session 38)
+- ✅ DBSCAN parameters made OBJ-consistent via physical-unit EPS_UM + per-recording px/µm conversion (was hardcoded EPS=20px regardless of OBJ)
+
+## What should we do next? (TODOs)
+- [ ] **Validate / tune EPS_UM=10µm** — review the per-OBJ output PNGs (just generated, not yet inspected by user); decide if 10µm gap is correct or needs adjusting
+- [ ] **Fix R computation in ring analysis** — switch from RMS to 90th-percentile distance so R reflects the actual cluster extent without outlier inflation; also consider capping outer ring at R (currently all cluster pixels beyond R/√2 go to outer regardless of distance)
+- [ ] **Integrate DBSCAN into RegionAnalyzer** — replace the current largest-CC approach with the validated DBSCAN pipeline from `_demo_dbscan_tmp.py`; `lookup_obj` / `eps_and_min_samples` logic will move into `RegionAnalyzer.__init__` (already has `self.obj` and `self.pixel_per_um`)
+- [ ] **Detection criterion (B+D% vs baseline)** — implement the B+D% spike-frame vs baseline comparison as the ACh event detection gate in `RegionAnalyzer`
+
+## Last Session Recap
+※ recap: Design + demo-tuning session — corrected CAT colormap (gray/white), restored cluster fill overlay, and made DBSCAN parameters physically consistent via `EPS_UM=10µm` with per-OBJ pixel conversion (OBJ now looked up from `rec_data.db` and shown in PNG title). Key conceptual clarification: EPS is the inter-varicosity *gap* (physical distance → needs µm→px conversion), not varicosity size (sub-resolution) or axon span (cluster size upper bound). Also identified that R in the ring analysis is inflated by outlier pixels (RMS → should be percentile-based). Next: validate EPS_UM=10µm visually, fix R, then integrate DBSCAN into RegionAnalyzer.
+
+---
+
 # Log of the project progress 2026-06-28 Sat (Session 38)
 Last working file: `functions/plot_results.py`
 Last working line: ~210 (end of `_plot_frame_panel`)
