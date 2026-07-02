@@ -6,7 +6,7 @@ combines every dim-category pixel in the frame into one dim region.
 """
 
 import numpy as np
-from skimage.measure import find_contours, label, regionprops
+from sklearn.cluster import DBSCAN
 
 # Category constants
 CATEGORY_BACKGROUND = 0
@@ -20,12 +20,11 @@ PIXEL_SCALE = {
     "60X": 4.5,
 }
 
+EPS_UM = 10.0  # inter-varicosity gap in um (tunable)
+MIN_DENSITY_FRAC = 0.1  # min_samples = this fraction of the eps-circle area
+MIN_CLUSTER_FRACTION = 0.05  # keep DBSCAN clusters covering at least this fraction of non-background pixels
 
-def _nanargmax_relative(trace: np.ndarray, spike_frame_idx: int) -> int | None:
-    """Index (relative to the spike frame) of trace's peak, or None if trace is all-NaN."""
-    if np.all(np.isnan(trace)):
-        return None
-    return int(np.nanargmax(trace)) - spike_frame_idx
+AREA_PCT_SIGMA_MULT = 5.0  # baseline_mean + this many std devs = "significant" B+D% elevation
 
 
 class RegionAnalyzer:
@@ -54,16 +53,17 @@ class RegionAnalyzer:
         >>> results = analyzer.get_results()
     """
 
-    def __init__(self, spike_frame: np.ndarray, obj: str = "10X", min_area_um2: float = 0.0) -> None:
+    def __init__(self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, obj: str = "10X") -> None:
         """
-        Analyze the spike frame immediately on construction.
+        Analyze the categorized stack immediately on construction.
 
         Args:
-            spike_frame: 2D array (0=background, 1=dim, 2=bright) for the spike frame only.
+            cat_stack: 3D array (frames, height, width) of categorized frames
+                (0=background, 1=dim, 2=bright).
+            med_stack: 3D array (frames, height, width) of z-scored median frames,
+                same shape as cat_stack.
+            spike_frame_idx: index of the spike frame within the segment.
             obj: Objective magnification ("10X", "40X", "60X")
-            min_area_um2: Connected components smaller than this (in um^2) are ignored
-                when picking the largest bright component. Default 0.0 disables filtering.
-                Does not affect dim-region detection, which combines all dim pixels.
         """
         if obj not in PIXEL_SCALE:
             msg = f"Unknown objective: {obj}. Choose from {list(PIXEL_SCALE.keys())}"
@@ -72,91 +72,41 @@ class RegionAnalyzer:
         self.obj = obj
         self.pixel_per_um = PIXEL_SCALE[obj]
         self.um_per_pixel = 1.0 / self.pixel_per_um
-        self.min_area_um2 = min_area_um2
-        self._min_area_px = min_area_um2 * (self.pixel_per_um ** 2)
+        self.spike_frame_idx = spike_frame_idx
 
-        self.bright_largest = self._find_largest_category(spike_frame, CATEGORY_BRIGHT)
+        self.area_pct = compute_area_pct(cat_stack)
+        self.analysis_frame_idx = pick_analysis_frame(self.area_pct, spike_frame_idx)
 
-        if self.bright_largest is None:
-            self.dim_largest = None
-        else:
-            self.dim_largest = self._find_all_dim(spike_frame)
+        eps_px, min_samples = eps_and_min_samples(obj)
+        self.label_frame, self.centroids, self.n_raw_clusters = _run_cluster_seeker(
+            cat_stack[self.analysis_frame_idx], eps_px, min_samples
+        )
 
-    # ── Core analysis ─────────────────────────────────────────────────────────
-
-    def _find_largest_category(self, frame: np.ndarray, category: int) -> dict | None:
-        """Find the largest connected component of the given category and measure it."""
-        labeled = label(frame == category)
-        candidates = [r for r in regionprops(labeled) if r.area >= self._min_area_px]
-
-        if not candidates:
-            return None
-
-        region = max(candidates, key=lambda r: r.area)
-        min_row, min_col, max_row, max_col = region.bbox
-
-        x_span_px = max_col - min_col
-        y_span_px = max_row - min_row
-
-        region_mask = labeled == region.label
-        raw_contours = find_contours(region_mask, level=0.5)
-        contour = max(raw_contours, key=len) if raw_contours else None
-
-        return {
-            "centroid":  region.centroid,
-            "area_px":   region.area,
-            "area_um2":  self._area_to_um2(region.area),
-            "x_span_px": x_span_px,
-            "y_span_px": y_span_px,
-            "x_span_um": self._px_to_um(x_span_px),
-            "y_span_um": self._px_to_um(y_span_px),
-            "contour":   contour,
-            "_bbox":     (min_row, min_col, max_row, max_col),  # internal: stripped before export
-            "_mask":     region_mask,  # internal: reused by get_temporal_traces
-        }
-
-    def _find_all_dim(self, frame: np.ndarray) -> dict | None:
-        """Combine every dim-category pixel in the frame into a single region."""
-        dim_mask = frame == CATEGORY_DIM
-
-        if not np.any(dim_mask):
-            return None
-
-        rows, cols = np.nonzero(dim_mask)
-        x_span_px = int(cols.max()) + 1 - int(cols.min())
-        y_span_px = int(rows.max()) + 1 - int(rows.min())
-        area_px = int(dim_mask.sum())
-
-        return {
-            "centroid":  (float(rows.mean()), float(cols.mean())),
-            "area_px":   area_px,
-            "area_um2":  self._area_to_um2(area_px),
-            "x_span_px": x_span_px,
-            "y_span_px": y_span_px,
-            "x_span_um": self._px_to_um(x_span_px),
-            "y_span_um": self._px_to_um(y_span_px),
-            "contour":   find_contours(dim_mask, level=0.5),
-            "_mask":     dim_mask,  # internal: reused by get_temporal_traces
-        }
-
-    def area_in_combined_region(self, frame: np.ndarray, category: int) -> float:
-        """Area (µm²) of `category` pixels in `frame`, restricted to the spike frame's bright+dim area.
-
-        Args:
-            frame: 2D array (0=background, 1=dim, 2=bright) for any frame.
-            category: CATEGORY_BRIGHT or CATEGORY_DIM.
-
-        Returns:
-            Area in µm² (0.0 if neither bright_largest nor dim_largest was found).
-        """
-        area_mask = np.zeros(frame.shape, dtype=bool)
-        if self.bright_largest is not None:
-            area_mask |= self.bright_largest["_mask"]
-        if self.dim_largest is not None:
-            area_mask |= self.dim_largest["_mask"]
-
-        pixel_count = int(np.count_nonzero(area_mask & (frame == category)))
-        return self._area_to_um2(pixel_count)
+        self.clusters = []
+        if len(self.centroids) == 1:
+            centroid = self.centroids[0]
+            inner_trace, outer_trace, R, inner_mask, outer_mask = compute_ring_traces(
+                self.label_frame, centroid, med_stack, 0
+            )
+            self.clusters.append({
+                "centroid":    centroid,
+                "R_px":        R,
+                "R_um":        self._px_to_um(R),
+                "inner_trace": inner_trace,
+                "outer_trace": outer_trace,
+                "inner_mask":  inner_mask,
+                "outer_mask":  outer_mask,
+            })
+        elif len(self.centroids) > 1:
+            for cluster_k, centroid in enumerate(self.centroids):
+                trace, R, mask = compute_cluster_trace(self.label_frame, centroid, med_stack, cluster_k)
+                self.clusters.append({
+                    "centroid": centroid,
+                    "R_px":     R,
+                    "R_um":     self._px_to_um(R),
+                    "trace":    trace,
+                    "mask":     mask,
+                })
 
     # ── Unit conversion helpers ────────────────────────────────────────────────
 
@@ -183,54 +133,57 @@ class RegionAnalyzer:
             "has_bright_region": self.bright_largest is not None,
         }
 
-    def get_temporal_traces(self, segment: np.ndarray) -> dict:
-        """Mean intensity per frame within the spike frame's fixed bright/dim masks.
+    def get_temporal_traces(self) -> list[dict]:
+        """Per-cluster z-score traces computed in __init__.
 
-        Args:
-            segment: 3D array (frames, height, width) sharing the spike frame's
-                (height, width) — e.g. the z-scored median segment the categorizer
-                was fit on.
+        1 cluster -> inner/outer ring split (spread within the one release site).
+        >1 clusters -> one whole-cluster trace per cluster (no ring split), so
+        cluster-to-cluster peak timing can be compared directly.
 
         Returns:
-            dict with "bright_trace"/"dim_trace"/"total_trace": 1D arrays (n_frames,).
-            bright_trace/dim_trace are NaN-filled if the corresponding region was not
-            detected in the spike frame (so peak-finding correctly reports "no peak"
-            instead of a fake peak at index 0); total_trace = bright_trace + dim_trace,
-            therefore NaN throughout if either region is missing.
+            List of dicts, one per cluster (same order as self.clusters):
+            {"inner_trace":, "outer_trace":} for 1 cluster, or {"trace":} for >1.
         """
-        n_frames = segment.shape[0]
+        if len(self.clusters) == 1:
+            c = self.clusters[0]
+            return [{"inner_trace": c["inner_trace"], "outer_trace": c["outer_trace"]}]
+        return [{"trace": c["trace"]} for c in self.clusters]
 
-        bright_trace = np.full(n_frames, np.nan)
-        if self.bright_largest is not None:
-            mask = self.bright_largest["_mask"]
-            bright_trace = np.array([frame[mask].mean() for frame in segment])
+    def get_peak_latency_ms(self, frame_duration_ms: float) -> float | None:
+        """Peak-timing latency in milliseconds; meaning depends on cluster count.
 
-        dim_trace = np.full(n_frames, np.nan)
-        if self.dim_largest is not None:
-            mask = self.dim_largest["_mask"]
-            dim_trace = np.array([frame[mask].mean() for frame in segment])
-
-        total_trace = bright_trace + dim_trace
-
-        return {"bright_trace": bright_trace, "dim_trace": dim_trace, "total_trace": total_trace}
-
-    def get_peak_latency_ms(self, segment: np.ndarray, spike_frame_idx: int, frame_duration_ms: float) -> float | None:
-        """Peak-to-peak latency (dim peak minus bright peak) in milliseconds.
+        0 clusters -> None (no event).
+        1 cluster -> outer ring peak minus inner ring peak (spread within the
+            one release site).
+        >1 clusters -> max cluster peak time minus min cluster peak time
+            (largest asynchrony between separate release sites).
 
         Args:
-            segment: 3D array (frames, height, width) — see get_temporal_traces.
-            spike_frame_idx: index of the spike frame within the segment.
             frame_duration_ms: milliseconds per frame.
 
         Returns:
-            Latency in ms, or None if either trace's peak could not be located.
+            Latency in ms, or None if it can't be computed (no clusters, or
+            fewer than the required number of located peaks).
         """
-        traces = self.get_temporal_traces(segment)
-        bright_peak_rel = _nanargmax_relative(traces["bright_trace"], spike_frame_idx)
-        dim_peak_rel = _nanargmax_relative(traces["dim_trace"], spike_frame_idx)
-        if bright_peak_rel is None or dim_peak_rel is None:
+        if not self.clusters:
             return None
-        return (dim_peak_rel - bright_peak_rel) * frame_duration_ms
+
+        if len(self.clusters) == 1:
+            c = self.clusters[0]
+            inner_peak_rel = _peak_offset_from_spike(c["inner_trace"], self.spike_frame_idx)
+            outer_peak_rel = _peak_offset_from_spike(c["outer_trace"], self.spike_frame_idx)
+            if inner_peak_rel is None or outer_peak_rel is None:
+                return None
+            return (outer_peak_rel - inner_peak_rel) * frame_duration_ms
+
+        peak_rels = [
+            p
+            for p in (_peak_offset_from_spike(c["trace"], self.spike_frame_idx) for c in self.clusters)
+            if p is not None
+        ]
+        if len(peak_rels) < 2:
+            return None
+        return (max(peak_rels) - min(peak_rels)) * frame_duration_ms
 
     def get_export_data(self) -> dict:
         """Data for export (contours and internal fields stripped by exporter)."""
@@ -240,3 +193,207 @@ class RegionAnalyzer:
             "region_summary": self.get_summary(),
             "region_data":    self.get_results(),
         }
+
+
+# ── Module-level helpers (used internally by RegionAnalyzer) ───────────────────
+
+
+def compute_area_pct(stack: np.ndarray) -> np.ndarray:
+    """Area percentage (B+D%) of non-background pixels per frame.
+
+    This is the B+D% detection-criterion signal: a real ACh event shows a
+    clear elevation at the spike frame (or spike_frame+1) vs the baseline
+    frame before it.
+
+    Args:
+        stack: 3D array (frames, height, width) of categorized frames.
+
+    Returns:
+        1D array (n_frames,) of B+D% per frame.
+    """
+    total_px = stack.shape[1] * stack.shape[2]
+    return np.count_nonzero(stack > CATEGORY_BACKGROUND, axis=(1, 2)) / total_px * 100
+
+
+def pick_analysis_frame(area_pct: np.ndarray, spike_frame_idx: int) -> int:
+    """Pick spike or spike+1 for clustering, biased toward the spike frame.
+
+    Compares each candidate frame's B+D% against a baseline-derived
+    significance threshold (mean + AREA_PCT_SIGMA_MULT * std, over every frame
+    before the spike frame) instead of simply picking whichever is higher --
+    avoids flipping to spike+1 on frame-to-frame noise. Only switches to
+    spike+1 when the spike frame itself isn't significantly elevated but
+    spike+1 is (delayed-signal case).
+
+    Args:
+        area_pct: 1D array (n_frames,), from compute_area_pct().
+        spike_frame_idx: index of the spike frame within the segment.
+
+    Returns:
+        Index of the frame to run clustering on (spike_frame_idx or spike_frame_idx + 1).
+    """
+    baseline = area_pct[:spike_frame_idx]
+    threshold = baseline.mean() + AREA_PCT_SIGMA_MULT * baseline.std()
+
+    if area_pct[spike_frame_idx] >= threshold:
+        return spike_frame_idx
+
+    next_idx = spike_frame_idx + 1
+    if next_idx < len(area_pct) and area_pct[next_idx] >= threshold:
+        return next_idx
+
+    return spike_frame_idx
+
+
+def eps_and_min_samples(obj: str) -> tuple[int, int]:
+    """Convert EPS_UM to pixels for this objective and derive min_samples.
+
+    Args:
+        obj: Objective magnification, must be a key of PIXEL_SCALE.
+
+    Returns:
+        (eps_px, min_samples) for DBSCAN.
+    """
+    px_per_um = PIXEL_SCALE[obj]
+    eps_px = int(EPS_UM * px_per_um)
+    min_samples = max(1, int(MIN_DENSITY_FRAC * np.pi * eps_px**2))
+    return eps_px, min_samples
+
+
+def _run_cluster_seeker(frame: np.ndarray, eps_px: int, min_samples: int) -> tuple[np.ndarray, list[tuple[float, float]], int]:
+    """Cluster non-background pixels with DBSCAN, then drop undersized clusters.
+
+    Args:
+        frame: 2D array (0=background, 1=dim, 2=bright) for a single frame.
+        eps_px: DBSCAN neighborhood radius in pixels, from eps_and_min_samples().
+        min_samples: DBSCAN minimum samples per cluster, from eps_and_min_samples().
+
+    Returns:
+        label_frame: (H, W) array; -2 = background, -1 = noise/undersized cluster,
+            0..N-1 = kept clusters, largest first.
+        centroids: (row, col) per kept cluster, same order as label_frame's indices.
+        n_raw_clusters: number of clusters DBSCAN found before the size filter.
+    """
+    coords = np.argwhere(frame > CATEGORY_BACKGROUND)
+    label_frame = np.full(frame.shape, -2, dtype=int)
+    if coords.shape[0] == 0:
+        return label_frame, [], 0
+
+    raw_labels = DBSCAN(eps=eps_px, min_samples=min_samples).fit_predict(coords)
+
+    total_non_bg = coords.shape[0]
+    unique, counts = np.unique(raw_labels[raw_labels >= 0], return_counts=True)
+    n_raw_clusters = len(unique)
+
+    kept = []
+    for cluster_label, pixel_count in zip(unique.tolist(), counts.tolist(), strict=True):
+        if pixel_count / total_non_bg >= MIN_CLUSTER_FRACTION:
+            kept.append((cluster_label, pixel_count))
+    kept.sort(key=lambda pair: pair[1], reverse=True)  # key= is the sort-by value here (unrelated to dict keys), pair[1] = pixel_count
+
+    remapped = np.full_like(raw_labels, -1)
+    for new_cluster_label, (old_cluster_label, _) in enumerate(kept):
+        remapped[raw_labels == old_cluster_label] = new_cluster_label
+    label_frame[coords[:, 0], coords[:, 1]] = remapped
+
+    centroids = [
+        (float(coords[remapped == new_cluster_label, 0].mean()), float(coords[remapped == new_cluster_label, 1].mean()))
+        for new_cluster_label in range(len(kept))
+    ]
+
+    return label_frame, centroids, n_raw_clusters
+
+
+def compute_ring_traces(
+    label_frame: np.ndarray,
+    centroid: tuple[float, float],
+    med_stack: np.ndarray,
+    cluster_k: int,
+) -> tuple[np.ndarray, np.ndarray, float, np.ndarray, np.ndarray]:
+    """Inner/outer ring z-score traces for one DBSCAN cluster.
+
+    R is the enclosing-circle radius (max centroid-to-pixel distance among the
+    cluster's pixels). Cluster pixels are split into two equal-area rings at
+    R/sqrt(2): inner = 0 <= r <= R/sqrt(2), outer = R/sqrt(2) < r <= R. Mean
+    z-score from med_stack is computed per ring per frame.
+
+    R only sees pixels inside the frame, so a cluster touching the image edge
+    is truncated and R underestimates its true extent.
+
+    Assumes label_frame contains at least one pixel labeled cluster_k; callers
+    must skip clusters that don't exist (e.g. when there are 0 kept clusters).
+
+    Args:
+        label_frame: (H, W) array from _run_cluster_seeker (-2=background,
+            -1=noise, 0..N-1=kept clusters).
+        centroid: (row, col) of this cluster, from _run_cluster_seeker.
+        med_stack: 3D array (frames, height, width) of z-scored median frames.
+        cluster_k: which kept cluster to analyze.
+
+    Returns:
+        inner_trace: 1D array (n_frames,), mean z-score in the inner ring per frame.
+        outer_trace: 1D array (n_frames,), mean z-score in the outer ring per frame.
+        R: enclosing-circle radius in pixels.
+        inner_mask: (H, W) boolean mask of the inner ring.
+        outer_mask: (H, W) boolean mask of the outer ring.
+    """
+    coords = np.argwhere(label_frame == cluster_k)
+    row_c, col_c = centroid
+    dists = np.sqrt((coords[:, 0] - row_c) ** 2 + (coords[:, 1] - col_c) ** 2)
+    R = float(dists.max())
+    split = R / np.sqrt(2)
+
+    height, width = label_frame.shape
+    inner_mask = np.zeros((height, width), dtype=bool)
+    outer_mask = np.zeros((height, width), dtype=bool)
+    inner_mask[coords[dists <= split, 0], coords[dists <= split, 1]] = True
+    outer_mask[coords[dists > split, 0], coords[dists > split, 1]] = True
+
+    n_frames = med_stack.shape[0]
+    inner_trace = med_stack[:, inner_mask].mean(axis=1) if inner_mask.any() else np.full(n_frames, np.nan)
+    outer_trace = med_stack[:, outer_mask].mean(axis=1) if outer_mask.any() else np.full(n_frames, np.nan)
+
+    return inner_trace, outer_trace, R, inner_mask, outer_mask
+
+
+def compute_cluster_trace(
+    label_frame: np.ndarray,
+    centroid: tuple[float, float],
+    med_stack: np.ndarray,
+    cluster_k: int,
+) -> tuple[np.ndarray, float, np.ndarray]:
+    """Whole-cluster z-score trace for one DBSCAN cluster (no inner/outer ring split).
+
+    Used when there is more than one kept cluster: each cluster is
+    represented by a single trace over its own pixels so cluster-to-cluster
+    peak timing can be compared directly, rather than splitting each cluster
+    into rings (which measures spread within one release site, not
+    synchrony between separate ones).
+
+    Args:
+        label_frame: (H, W) array from _run_cluster_seeker (-2=background,
+            -1=noise, 0..N-1=kept clusters).
+        centroid: (row, col) of this cluster, from _run_cluster_seeker.
+        med_stack: 3D array (frames, height, width) of z-scored median frames.
+        cluster_k: which kept cluster to analyze.
+
+    Returns:
+        trace: 1D array (n_frames,), mean z-score within the cluster per frame.
+        R: enclosing-circle radius in pixels (for display only).
+        mask: (H, W) boolean mask of the cluster's own pixels.
+    """
+    mask = label_frame == cluster_k
+    coords = np.argwhere(mask)
+    row_c, col_c = centroid
+    dists = np.sqrt((coords[:, 0] - row_c) ** 2 + (coords[:, 1] - col_c) ** 2)
+    R = float(dists.max())
+
+    trace = med_stack[:, mask].mean(axis=1)
+    return trace, R, mask
+
+
+def _peak_offset_from_spike(trace: np.ndarray, spike_frame_idx: int) -> int | None:
+    """Index (relative to the spike frame) of trace's peak, or None if trace is all-NaN."""
+    if np.all(np.isnan(trace)):
+        return None
+    return int(np.nanargmax(trace)) - spike_frame_idx
