@@ -26,30 +26,36 @@ MIN_CLUSTER_FRACTION = 0.05  # keep DBSCAN clusters covering at least this fract
 
 AREA_PCT_SIGMA_MULT = 5.0  # baseline_mean + this many std devs = "significant" B+D% elevation
 
+SATURATION_AREA_PCT = 15.0  # critical frame B+D% at/above this skips DBSCAN entirely (too dense, blows up memory)
+
 
 class RegionAnalyzer:
     """
-    Find the largest bright region and the combined dim region in a single (spike) frame.
+    Find DBSCAN clusters of non-background pixels on the critical frame.
 
-    Finds the largest bright connected component; if found, combines every
-    dim-category pixel in the frame into one dim region (no spatial relation
-    to the bright region is required).
+    Picks the spike frame or spike+1 as the critical frame (whichever clears
+    the B+D% significance threshold), clusters its non-background pixels with
+    DBSCAN, and drops undersized clusters. Each kept cluster gets a centroid,
+    an enclosing-circle radius (R), and a z-score trace across the segment
+    (inner/outer ring split for a single cluster, whole-cluster trace when
+    there are multiple).
 
-    Result dict per region:
-        centroid   : (row, col) in pixels
-        area_px    : area in pixels
-        area_um2   : area in µm²
-        x_span_px  : horizontal span in pixels
-        y_span_px  : vertical span in pixels
-        x_span_um  : horizontal span in µm
-        y_span_um  : vertical span in µm
-        contour    : bright -> (N, 2) array of [row, col] contour points, or None
-                     dim    -> list of such arrays (one per disjoint piece), or None
+    If the critical frame's B+D% is at/above SATURATION_AREA_PCT, DBSCAN is
+    skipped (self.saturated = True) -- a dense enough point cloud makes
+    sklearn's neighbor-graph construction blow up memory. Every non-background
+    pixel is instead treated as one big cluster (ring-split like any other
+    single-cluster case), since at that density it's one region, not discrete
+    release sites.
+
+    Result dict per cluster (from get_results()):
+        centroid : (row, col) in pixels
+        R_px     : enclosing-circle radius in pixels
+        R_um     : enclosing-circle radius in µm
 
     Example:
         >>> categorizer = SpatialCategorizer.morphological()
         >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)
-        >>> analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj="10X")
+        >>> analyzer = RegionAnalyzer(categorizer.categorized_frames, med_stack, spike_frame_idx, obj="10X")
         >>> results = analyzer.get_results()
     """
 
@@ -75,12 +81,24 @@ class RegionAnalyzer:
         self.spike_frame_idx = spike_frame_idx
 
         self.area_pct = compute_area_pct(cat_stack)
-        self.analysis_frame_idx = pick_analysis_frame(self.area_pct, spike_frame_idx)
+        self.critical_frame_idx = pick_critical_frame(self.area_pct, spike_frame_idx)
+        self.saturated = self.area_pct[self.critical_frame_idx] >= SATURATION_AREA_PCT
 
-        eps_px, min_samples = eps_and_min_samples(obj)
-        self.label_frame, self.centroids, self.n_raw_clusters = _run_cluster_seeker(
-            cat_stack[self.analysis_frame_idx], eps_px, min_samples
-        )
+        if self.saturated:
+            # Too many non-background pixels for DBSCAN's neighbor-graph construction
+            # to stay bounded -- skip DBSCAN and treat every non-background pixel as
+            # one big cluster instead (this dense, it's one region, not discrete sites).
+            frame = cat_stack[self.critical_frame_idx]
+            mask = frame > CATEGORY_BACKGROUND
+            coords = np.argwhere(mask)
+            self.label_frame = np.where(mask, 0, -2).astype(int)
+            self.centroids = [(float(coords[:, 0].mean()), float(coords[:, 1].mean()))]
+            self.n_raw_clusters = 1
+        else:
+            eps_px, min_samples = eps_and_min_samples(obj)
+            self.label_frame, self.centroids, self.n_raw_clusters = _run_cluster_seeker(
+                cat_stack[self.critical_frame_idx], eps_px, min_samples
+            )
 
         self.clusters = []
         if len(self.centroids) == 1:
@@ -119,18 +137,25 @@ class RegionAnalyzer:
     # ── Result accessors ──────────────────────────────────────────────────────
 
     def get_results(self) -> dict:
-        """Get dim and bright largest-region results for the spike frame."""
+        """Get per-cluster region results for the critical frame."""
         return {
-            "dim_largest":    self.dim_largest,
-            "bright_largest": self.bright_largest,
+            "critical_frame_idx":      self.critical_frame_idx,
+            "critical_frame_offset":   self.critical_frame_idx - self.spike_frame_idx,
+            "critical_frame_area_pct": float(self.area_pct[self.critical_frame_idx]),
+            "n_clusters":               len(self.clusters),
+            "clusters": [
+                {"centroid": c["centroid"], "R_px": c["R_px"], "R_um": c["R_um"]}
+                for c in self.clusters
+            ],
         }
 
     def get_summary(self) -> dict:
-        """Summary for the spike frame."""
+        """Summary for the critical frame."""
         return {
-            "obj":               self.obj,
-            "has_dim_region":    self.dim_largest is not None,
-            "has_bright_region": self.bright_largest is not None,
+            "obj":         self.obj,
+            "n_clusters":  len(self.clusters),
+            "has_region":  len(self.clusters) > 0,
+            "saturated":   self.saturated,
         }
 
     def get_temporal_traces(self) -> list[dict]:
@@ -215,7 +240,7 @@ def compute_area_pct(stack: np.ndarray) -> np.ndarray:
     return np.count_nonzero(stack > CATEGORY_BACKGROUND, axis=(1, 2)) / total_px * 100
 
 
-def pick_analysis_frame(area_pct: np.ndarray, spike_frame_idx: int) -> int:
+def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> int:
     """Pick spike or spike+1 for clustering, biased toward the spike frame.
 
     Compares each candidate frame's B+D% against a baseline-derived

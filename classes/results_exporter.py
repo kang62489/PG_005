@@ -2,7 +2,7 @@
 Results exporter for saving analysis outputs.
 
 Exports analysis results to:
-- SQLite database (metadata, spike-frame region measurements, region_analysis JSON)
+- SQLite database (metadata, critical-frame cluster measurements, region_sta_results JSON)
 - TIFF files (spike-centered median stack, categorized frames for ImageJ overlay)
 - PNG figures (spatiotemporal summary plot)
 
@@ -39,31 +39,6 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, (np.integer, np.floating)):
             return obj.item()
         return super().default(obj)
-
-
-def optimize_region_data(region_data: dict) -> dict:
-    """Strip contours and internal fields from region data before JSON serialization.
-
-    Keeps only scalar measurements for the spike frame's bright/dim largest
-    regions — contour arrays and the internal _bbox/_mask fields are removed to
-    keep the stored JSON small.
-
-    Args:
-        region_data: Full region analysis dict from RegionAnalyzer.get_results()
-            (single bright_largest/dim_largest dicts, or None if not found).
-
-    Returns:
-        Serialization-safe dict with both regions' scalar measurements.
-    """
-    _strip = {"contour", "_bbox", "_mask"}
-
-    def _clean(region: dict | None) -> dict | None:
-        return {k: v for k, v in region.items() if k not in _strip} if region is not None else None
-
-    return {
-        "bright_largest": _clean(region_data.get("bright_largest")),
-        "dim_largest":    _clean(region_data.get("dim_largest")),
-    }
 
 
 class ResultsExporter:
@@ -160,23 +135,20 @@ class ResultsExporter:
                 threshold_method TEXT,
                 n_spikes_detected INTEGER,
                 n_spikes_analyzed INTEGER,
-                has_bright_region INTEGER,
-                has_dim_region INTEGER,
-                region_analysis TEXT,
+                n_clusters INTEGER,
+                has_region INTEGER,
+                saturated INTEGER,
+                critical_frame_offset INTEGER,
+                critical_frame_area_pct REAL,
+                region_sta_results TEXT,
                 ANIMAL_ID TEXT,
                 SLICE TEXT,
                 AT TEXT,
                 med_filename TEXT,
                 centroid_y REAL,
                 centroid_x REAL,
-                x_span_pixels REAL,
-                y_span_pixels REAL,
-                x_span_um REAL,
-                y_span_um REAL,
-                bright_area_um2 REAL,
-                dim_area_um2 REAL,
-                dim_x_span_um REAL,
-                dim_y_span_um REAL,
+                R_px REAL,
+                R_um REAL,
                 peak_latency_ms REAL,
                 zscore_min REAL,
                 zscore_max REAL,
@@ -238,8 +210,8 @@ class ResultsExporter:
             categorized_frames: Categorized frames (0=bg, 1=dim, 2=bright)
             zscore_range: (min, max) z-score across median_stack, from spike_centered_median()
             region_summary: Summary dict from RegionAnalyzer.get_summary()
-            region_data: Spike-frame region dict from RegionAnalyzer.get_results()
-            peak_latency_ms: Dim-minus-bright peak latency, from RegionAnalyzer.get_peak_latency_ms()
+            region_data: Critical-frame cluster dict from RegionAnalyzer.get_results()
+            peak_latency_ms: Peak-timing latency, from RegionAnalyzer.get_peak_latency_ms()
 
         Returns:
             dict with keys "median", "categorized" → Path to each subfolder
@@ -352,29 +324,19 @@ class ResultsExporter:
     ) -> None:
         """Insert or update experiment record in SQLite.
 
-        Note: region_data is optimized to strip contours/masks before JSON
-        serialization (see optimize_region_data), keeping the blob small.
+        Note: region_data (RegionAnalyzer.get_results()) is already
+        serialization-safe -- no contours/masks, just scalars per cluster --
+        so it's stored directly as region_sta_results JSON.
         """
-        optimized_region_data = optimize_region_data(region_data)
-
-        bright_largest = optimized_region_data.get("bright_largest")
-        if bright_largest:
-            centroid_y, centroid_x = bright_largest["centroid"]
-            x_span_pixels = bright_largest["x_span_px"]
-            y_span_pixels = bright_largest["y_span_px"]
-            x_span_um = bright_largest["x_span_um"]
-            y_span_um = bright_largest["y_span_um"]
-            bright_area_um2 = bright_largest["area_um2"]
+        clusters = region_data["clusters"]
+        if clusters:
+            # Clusters are sorted largest-first by _run_cluster_seeker.
+            largest = clusters[0]
+            centroid_y, centroid_x = largest["centroid"]
+            r_px = largest["R_px"]
+            r_um = largest["R_um"]
         else:
-            centroid_y = centroid_x = x_span_pixels = y_span_pixels = x_span_um = y_span_um = bright_area_um2 = None
-
-        dim_largest = optimized_region_data.get("dim_largest")
-        if dim_largest:
-            dim_area_um2 = dim_largest["area_um2"]
-            dim_x_span_um = dim_largest["x_span_um"]
-            dim_y_span_um = dim_largest["y_span_um"]
-        else:
-            dim_area_um2 = dim_x_span_um = dim_y_span_um = None
+            centroid_y = centroid_x = r_px = r_um = None
 
         conn = sqlite3.connect(self.db_path)
         conn.execute(
@@ -383,12 +345,12 @@ class ResultsExporter:
                 exp_date, abf_serial, img_serial, timestamp,
                 objective, um_per_pixel, threshold_method,
                 n_spikes_detected, n_spikes_analyzed,
-                has_bright_region, has_dim_region,
-                region_analysis, ANIMAL_ID, SLICE, AT, med_filename,
-                centroid_y, centroid_x, x_span_pixels, y_span_pixels, x_span_um, y_span_um,
-                bright_area_um2, dim_area_um2, dim_x_span_um, dim_y_span_um, peak_latency_ms,
+                n_clusters, has_region, saturated,
+                critical_frame_offset, critical_frame_area_pct,
+                region_sta_results, ANIMAL_ID, SLICE, AT, med_filename,
+                centroid_y, centroid_x, R_px, R_um, peak_latency_ms,
                 zscore_min, zscore_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -400,23 +362,20 @@ class ResultsExporter:
                 threshold_method,
                 num_found_spikes,
                 n_spikes_analyzed,
-                region_summary["has_bright_region"],
-                region_summary["has_dim_region"],
-                json.dumps(optimized_region_data, cls=NumpyEncoder),
+                region_summary["n_clusters"],
+                region_summary["has_region"],
+                region_summary["saturated"],
+                region_data["critical_frame_offset"],
+                region_data["critical_frame_area_pct"],
+                json.dumps(region_data, cls=NumpyEncoder),
                 animal_id,
                 slice_val,
                 at,
                 med_filename,
                 centroid_y,
                 centroid_x,
-                x_span_pixels,
-                y_span_pixels,
-                x_span_um,
-                y_span_um,
-                bright_area_um2,
-                dim_area_um2,
-                dim_x_span_um,
-                dim_y_span_um,
+                r_px,
+                r_um,
                 peak_latency_ms,
                 zscore_range[0],
                 zscore_range[1],

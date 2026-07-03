@@ -348,7 +348,7 @@ def main() -> None:
             print(f"  [skip] {stem}: {exc}")
             continue
 
-        ai = analyzer.analysis_frame_idx
+        ai = analyzer.critical_frame_idx
         n_kept = len(analyzer.centroids)
         latency_ms = analyzer.get_peak_latency_ms(FRAME_DURATION_MS)
         _, min_samples = eps_and_min_samples(obj)

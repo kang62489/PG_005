@@ -6,6 +6,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .als import als_run
     from .check_cuda import check_cuda
+    from .database_ops import (
+        compute_region_stats,
+        count_unique_cells,
+        get_cell_recording_status,
+        get_excluded_recordings,
+        lookup_rec_from_db,
+        populate_animal_id_values,
+    )
     from .detrend import biexp_detrend, mov_detrend
     from .file_status import (
         abf_ready,
@@ -21,14 +29,6 @@ if TYPE_CHECKING:
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
     from .plot_results import plot_full_trace, plot_spatiotemporal_summary
-    from .query_databases import (
-        compute_region_stats,
-        count_unique_cells,
-        get_cell_recording_status,
-        get_excluded_recordings,
-        lookup_rec_from_db,
-        populate_animal_id_values,
-    )
     from .spike_centered_processes import spike_centered_avg, spike_centered_median
     from .tau_estimate import sample_tau
     from .test_cuda import test_cuda
@@ -86,12 +86,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "list_parser":         (".list_parser",                               "list_parser"),
     "plot_spatiotemporal_summary": (".plot_results",                      "plot_spatiotemporal_summary"),
     "plot_full_trace":     (".plot_results",                              "plot_full_trace"),
-    "lookup_rec_from_db":  (".query_databases",                           "lookup_rec_from_db"),
-    "populate_animal_id_values": (".query_databases",                     "populate_animal_id_values"),
-    "count_unique_cells":  (".query_databases",                           "count_unique_cells"),
-    "compute_region_stats": (".query_databases",                          "compute_region_stats"),
-    "get_excluded_recordings": (".query_databases",                       "get_excluded_recordings"),
-    "get_cell_recording_status": (".query_databases",                     "get_cell_recording_status"),
+    "lookup_rec_from_db":  (".database_ops",                           "lookup_rec_from_db"),
+    "populate_animal_id_values": (".database_ops",                     "populate_animal_id_values"),
+    "count_unique_cells":  (".database_ops",                           "count_unique_cells"),
+    "compute_region_stats": (".database_ops",                          "compute_region_stats"),
+    "get_excluded_recordings": (".database_ops",                       "get_excluded_recordings"),
+    "get_cell_recording_status": (".database_ops",                     "get_cell_recording_status"),
     "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
     "spike_centered_avg":  (".spike_centered_processes",                  "spike_centered_avg"),
     "spike_centered_median": (".spike_centered_processes",                "spike_centered_median"),

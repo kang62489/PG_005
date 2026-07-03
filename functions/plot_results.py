@@ -3,6 +3,12 @@
 No PySide6 dependency — these build plain Figure objects for fig.savefig()/
 ResultsExporter.export_figure(), not interactive GUI windows. See classes/mpl_canvas.py
 for the PySide6-coupled canvas widget used by the live GUI.
+
+Two export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
+- plot_spatiotemporal_summary (-> region_sta/): B+D% signal trace showing why the
+  critical frame was picked, + cluster shading on just that frame's own panel.
+- plot_full_trace (-> full_traces/): the same fixed cluster-ring overlay repeated
+  across a 9-panel window, + the full-segment z-score trace with that window annotated.
 """
 
 ## Modules
@@ -17,10 +23,25 @@ import matplotlib as mpl
 import numpy as np
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Circle, Rectangle
 
-from classes.region_analyzer import CATEGORY_BRIGHT, CATEGORY_DIM, RegionAnalyzer, _nanargmax_relative
+from classes.region_analyzer import (
+    CATEGORY_BRIGHT,
+    CATEGORY_DIM,
+    SATURATION_AREA_PCT,
+    RegionAnalyzer,
+    _peak_offset_from_spike,
+    eps_and_min_samples,
+)
+
+# Cluster fill/outline colors, cycled by cluster index (red, green, blue, orange, purple)
+CLUSTER_RGBA = [
+    (0.91, 0.30, 0.24, 0.45),
+    (0.18, 0.80, 0.44, 0.45),
+    (0.20, 0.60, 0.86, 0.45),
+    (0.95, 0.61, 0.07, 0.45),
+    (0.61, 0.35, 0.71, 0.45),
+]
 
 # ── Static export figures ───────────────────────────────────────────────────
 
@@ -87,69 +108,114 @@ def _add_scale_bar(
 def plot_spatiotemporal_summary(
     categorizer: "SpatialCategorizer",
     region_analyzer: RegionAnalyzer,
-    median_segment: np.ndarray,
     spike_frame_idx: int,
-    frame_duration_ms: float,
     title_info: dict,
-    window: int = 4,
 ) -> Figure:
-    """Static export figure: per-frame bright/dim summary (row 1) + temporal traces (row 2).
+    """Static export figure: B+D% signal trace (row 1) + critical-frame panels (row 2).
+
+    Shows why the critical frame was picked (B+D% vs the spike/spike+1 candidates)
+    and what DBSCAN found there -- cluster shading is drawn only on the critical
+    frame's own panel, not repeated across every panel (see plot_full_trace for
+    the fixed-overlay version).
 
     Args:
         categorizer: fitted SpatialCategorizer (source_frames + categorized_frames)
-        region_analyzer: RegionAnalyzer built from the spike frame
-        median_segment: 3D z-scored segment matching categorizer.source_frames in shape
+        region_analyzer: RegionAnalyzer built from the segment
         spike_frame_idx: index of the spike frame within the segment
-        frame_duration_ms: milliseconds per frame (e.g. AbfClip.ts_imgs * 1000)
         title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial"
-        window: frames shown on each side of the spike frame in row 1 (default 4 -> 9 panels)
 
     Returns:
         Figure, ready for fig.savefig(...) or ResultsExporter.export_figure(...)
     """
     n_frames = len(categorizer.source_frames)
-    offsets = list(range(-window, window + 1))
-    n_cols = len(offsets)
+    obj = region_analyzer.obj
+    area_pct = region_analyzer.area_pct
+    critical_frame_idx = region_analyzer.critical_frame_idx
     um_per_pixel = region_analyzer.um_per_pixel
 
-    fig = Figure(figsize=(2.4 * n_cols, 8.5), dpi=100)
-    gs = fig.add_gridspec(2, n_cols, height_ratios=[3, 2.2], wspace=0.0)
+    fig = Figure(figsize=(20, 8), dpi=100)
+    gs = fig.add_gridspec(2, 6, height_ratios=[1.2, 2.5], hspace=0.55, wspace=0.08)
 
-    for col, offset in enumerate(offsets):
-        ax = fig.add_subplot(gs[0, col])
-        frame_idx = spike_frame_idx + offset
+    # --- Row 0: B+D% per frame, relative to spike ---
+    ax_bd = fig.add_subplot(gs[0, :])
+    ax_bd.plot(np.arange(n_frames) - spike_frame_idx, area_pct, color="#3498db", linewidth=1.6,
+               marker="o", markersize=3.5)
+
+    for frame_idx, label, color in [
+        (spike_frame_idx - 1,
+         f"spike-1: {area_pct[spike_frame_idx - 1]:.2f}%" if spike_frame_idx > 0 else "spike-1 (OOB)", "#888888"),
+        (spike_frame_idx, f"spike: {area_pct[spike_frame_idx]:.2f}%", "#e74c3c"),
+        (spike_frame_idx + 1,
+         f"spike+1: {area_pct[spike_frame_idx + 1]:.2f}%" if spike_frame_idx + 1 < n_frames else "spike+1 (OOB)", "#f39c12"),
+    ]:
         if 0 <= frame_idx < n_frames:
-            _plot_frame_panel(ax, categorizer, region_analyzer, frame_idx, offset, um_per_pixel)
+            ax_bd.axvline(frame_idx - spike_frame_idx, color=color, linestyle="--", linewidth=1.2, alpha=0.8, label=label)
+
+    ax_bd.plot(critical_frame_idx - spike_frame_idx, area_pct[critical_frame_idx], "*", color="white", markersize=14,
+               markeredgecolor="black", markeredgewidth=1, zorder=5, label=f"critical frame {critical_frame_idx}")
+
+    ax_bd.set_xlabel("Frame offset from spike (0 = spike)", fontsize=9)
+    ax_bd.set_ylabel("B+D  %", fontsize=9)
+    ax_bd.set_title("B+D% per frame  |  star = critical frame (spike or spike+1)", fontsize=9)
+    ax_bd.legend(fontsize=8, loc="upper right")
+    ax_bd.tick_params(labelsize=8)
+
+    # --- Row 1: spike-1 .. spike+4 panels; cluster shading only on the critical-frame panel ---
+    for col, offset in enumerate(range(-1, 5)):
+        frame_idx = spike_frame_idx + offset
+        ax = fig.add_subplot(gs[1, col])
+        if 0 <= frame_idx < n_frames:
+            tag = "  ★" if frame_idx == critical_frame_idx else ""
+            _plot_frame_panel(ax, categorizer, frame_idx, offset, um_per_pixel, tag)
+            if frame_idx == critical_frame_idx:
+                _draw_cluster_shading(ax, region_analyzer.label_frame, region_analyzer.centroids)
         else:
+            frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
+            ax.set_title(f"{frame_label}\n(out of range)", fontsize=9)
             ax.axis("off")
 
-    ax_trace = fig.add_subplot(gs[1, :])
-    _plot_trace_panel(ax_trace, region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, window)
+    # Row-1 title: DBSCAN settings
+    _, tops, _, _ = gs.get_grid_positions(fig)
+    if region_analyzer.saturated:
+        settings_text = (
+            f"RegionAnalyzer — OBJ={obj}  SATURATED (B+D%={area_pct[critical_frame_idx]:.1f}% "
+            f">= {SATURATION_AREA_PCT:.0f}%) — whole frame treated as 1 cluster"
+        )
+    else:
+        _, min_samples = eps_and_min_samples(obj)
+        settings_text = (
+            f"RegionAnalyzer — OBJ={obj}  min_samples={min_samples}  "
+            f"found {region_analyzer.n_raw_clusters} → kept {len(region_analyzer.clusters)}"
+        )
+    fig.text(0.5, tops[1] + 0.015, settings_text, ha="center", va="bottom", fontsize=9, fontweight="bold")
 
     title = (
         f"Spatiotemporal Analysis: {title_info['animal_id']} {title_info['slice']} {title_info['at']} "
         f"{title_info['obj']} TIFF_{title_info['tiff_serial']} ABF_{title_info['abf_serial']}"
     )
     fig.suptitle(title, fontsize=13, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
     return fig
 
 
 def plot_full_trace(
     region_analyzer: RegionAnalyzer,
+    categorizer: "SpatialCategorizer",
     median_segment: np.ndarray,
     spike_frame_idx: int,
     frame_duration_ms: float,
     title_info: dict,
 ) -> Figure:
-    """Standalone export figure: bright/dim/total temporal traces across the full segment length.
+    """Standalone export figure: fixed cluster-ring overlay (row 1, 9 panels) +
+    full-segment per-cluster z-score traces with that window annotated (row 2).
 
-    Same trace data as plot_spatiotemporal_summary()'s row-2 panel, but spans every
-    frame in median_segment instead of being cropped to a window around the spike --
-    lets you see the whole baseline-to-decay profile, not just the near-spike region.
+    Every panel (spike-4..spike+4) shows the same fixed critical-frame cluster
+    overlay, so you can see how the underlying pixel pattern moves/changes under
+    it; the trace row spans the whole segment (never cropped), with a shaded band
+    marking which x-range the panels above cover.
 
     Args:
-        region_analyzer: RegionAnalyzer built from the spike frame
+        region_analyzer: RegionAnalyzer built from the segment
+        categorizer: fitted SpatialCategorizer (source_frames + categorized_frames)
         median_segment: 3D z-scored segment (frames, height, width)
         spike_frame_idx: index of the spike frame within the segment
         frame_duration_ms: milliseconds per frame (e.g. AbfClip.ts_imgs * 1000)
@@ -158,36 +224,81 @@ def plot_full_trace(
     Returns:
         Figure, ready for fig.savefig(...) or ResultsExporter.export_figure(...)
     """
-    fig = Figure(figsize=(10, 5), dpi=100)
-    ax = fig.add_subplot(111)
-    _plot_trace_panel(ax, region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, window=None)
-
     title = (
         f"Full Temporal Trace: {title_info['animal_id']} {title_info['slice']} {title_info['at']} "
         f"{title_info['obj']} TIFF_{title_info['tiff_serial']} ABF_{title_info['abf_serial']}"
     )
+
+    clusters = region_analyzer.clusters
+    if not clusters:
+        fig = Figure(figsize=(10, 4), dpi=100)
+        ax = fig.add_subplot(1, 1, 1)
+        ax.text(0.5, 0.5, "No cluster detected — ring analysis skipped",
+                ha="center", va="center", fontsize=12, color="#888888", transform=ax.transAxes)
+        ax.axis("off")
+        fig.suptitle(title, fontsize=12, fontweight="bold")
+        return fig
+
+    n_frames = median_segment.shape[0]
+    um_per_pixel = region_analyzer.um_per_pixel
+    highlight = _highlight_clusters(clusters, spike_frame_idx)
+
+    fig = Figure(figsize=(22, 8.5), dpi=100)
+    gs = fig.add_gridspec(2, 9, height_ratios=[2.2, 1.6], hspace=0.45, wspace=0.08)
+
+    # --- Row 0: spike-4 .. spike+4 panels, fixed cluster overlay on every panel ---
+    for col, offset in enumerate(range(-4, 5)):
+        frame_idx = spike_frame_idx + offset
+        ax = fig.add_subplot(gs[0, col])
+        if 0 <= frame_idx < n_frames:
+            tag = "  [critical frame]" if frame_idx == region_analyzer.critical_frame_idx else ""
+            _plot_frame_panel(ax, categorizer, frame_idx, offset, um_per_pixel, tag)
+            _overlay_clusters(ax, clusters, highlight)
+        else:
+            frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
+            ax.set_title(f"{frame_label}\n(out of range)", fontsize=8)
+            ax.axis("off")
+
+    # --- Row 1: full-segment z-score traces, with the 9-panel window annotated ---
+    ax_trace = fig.add_subplot(gs[1, :])
+    _plot_trace_panel(ax_trace, region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, highlight)
+
+    window_lo = max(0, spike_frame_idx - 4) - spike_frame_idx
+    window_hi = min(n_frames - 1, spike_frame_idx + 4) - spike_frame_idx
+    ax_trace.axvspan(window_lo, window_hi, color="#f1c40f", alpha=0.12, label="panels shown above")
+    for frame_offset, color in [(-1, "#888888"), (0, "#e74c3c"), (1, "#f39c12")]:
+        if 0 <= spike_frame_idx + frame_offset < n_frames:
+            ax_trace.axvline(frame_offset, color=color, linestyle=":", linewidth=1.0, alpha=0.6)
+    ax_trace.legend(loc="upper right", fontsize=7, ncol=2)
+
     fig.suptitle(title, fontsize=12, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
     return fig
 
 
 def _plot_frame_panel(
     ax: mpl.axes.Axes,
     categorizer: "SpatialCategorizer",
-    region_analyzer: RegionAnalyzer,
     frame_idx: int,
     offset: int,
     um_per_pixel: float,
+    tag: str = "",
 ) -> None:
-    """Row-1 panel: one frame's categorized image with the spike frame's fixed bright/dim regions."""
+    """One frame's categorized image with a B/D/B+D area title.
+
+    No cluster overlay is drawn here -- callers layer that on top afterward
+    (see _draw_cluster_shading / _overlay_clusters), since the two export
+    figures use different overlay styles on different subsets of panels.
+    """
     cat_frame = categorizer.categorized_frames[frame_idx]
-    bright = region_analyzer.bright_largest
 
     cmap_cat = ListedColormap(["black", "gray", "white"])
     ax.imshow(cat_frame, cmap=cmap_cat, vmin=0, vmax=2, interpolation="nearest")
-
-    _overlay_region(ax, bright, contour_color="magenta", span_color="yellow", centroid_color="black",
-                    show_centroid=False, show_span=False)
+    # Pin the view to the image bounds so cluster circles/overlays added later
+    # (which can extend past the frame edge) get clipped instead of shrinking
+    # the image by expanding the panel's autoscaled view to fit them.
+    ax.set_xlim(0, cat_frame.shape[1])
+    ax.set_ylim(cat_frame.shape[0], 0)
+    ax.set_autoscale_on(False)
 
     bright_px = np.count_nonzero(cat_frame == CATEGORY_BRIGHT)
     dim_px = np.count_nonzero(cat_frame == CATEGORY_DIM)
@@ -199,7 +310,7 @@ def _plot_frame_panel(
 
     frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
     ax.set_title(
-        f"{frame_label}\n"
+        f"{frame_label}{tag}\n"
         f"B: {bright_um2:.0f} µm² ({bright_pct:.1f}%)\n"
         f"D: {dim_um2:.0f} µm² ({dim_pct:.1f}%)\n"
         f"B+D: {bright_um2 + dim_um2:.0f} µm² ({bright_pct + dim_pct:.1f}%)",
@@ -208,44 +319,77 @@ def _plot_frame_panel(
         color="red" if offset == 0 else "black",
     )
     ax.axis("off")
-
-    legend_elements = [
-        Line2D([], [], color="magenta", linewidth=1.5, label="Bright contour (spike frame)"),
-    ]
-    ax.legend(handles=legend_elements, loc="lower left", fontsize=5)
     _add_scale_bar(um_per_pixel, ax, cat_frame.shape[1], cat_frame.shape[0], font_size=6)
 
 
-def _overlay_region(
-    ax: mpl.axes.Axes,
-    region: dict | None,
-    contour_color: str,
-    span_color: str,
-    centroid_color: str,
-    show_centroid: bool = True,
-    show_span: bool = True,
-) -> None:
-    """Draw a region's contour, and optionally its centroid and x/y-span crosshair, on ax."""
-    if region is None:
+def _draw_cluster_shading(ax: mpl.axes.Axes, label_frame: np.ndarray, centroids: list[tuple[float, float]]) -> None:
+    """Translucent per-cluster fill (DBSCAN's raw label map, no ring circles) +
+    centroid cross and index label.
+
+    Used only on the critical frame's own panel in plot_spatiotemporal_summary.
+    plot_full_trace uses _overlay_clusters (enclosing-circle approximation)
+    instead, repeated identically across every panel.
+    """
+    height, width = label_frame.shape
+    overlay = np.zeros((height, width, 4), dtype=float)
+    for cluster_idx in range(len(centroids)):
+        r, g, b, a = CLUSTER_RGBA[cluster_idx % len(CLUSTER_RGBA)]
+        overlay[label_frame == cluster_idx] = (r, g, b, a)
+    ax.imshow(overlay, interpolation="nearest")
+
+    for cluster_idx, (row_c, col_c) in enumerate(centroids):
+        ax.plot(col_c, row_c, "+", color="black", markersize=20, markeredgewidth=4)
+        ax.plot(col_c, row_c, "+", color="white", markersize=18, markeredgewidth=2.5)
+        ax.text(col_c + 5, row_c - 5, str(cluster_idx), color="white", fontsize=9, fontweight="bold")
+
+
+def _overlay_clusters(ax: mpl.axes.Axes, clusters: list[dict], highlight: set[int]) -> None:
+    """Translucent cluster fill + ring/circle outlines, colored by cluster index.
+
+    1 cluster -> inner (dashed) + outer (solid) ring pair at R/sqrt(2) and R,
+    matching compute_ring_traces' split. >1 clusters -> a single solid circle
+    at R per cluster, no ring split, matching compute_cluster_trace.
+    """
+    if not clusters:
         return
 
-    contour = region["contour"]
-    if contour is not None:
-        contours = contour if isinstance(contour, list) else [contour]
-        for c in contours:
-            ax.plot(c[:, 1], c[:, 0], color=contour_color, linewidth=1.5)
+    is_single = "inner_mask" in clusters[0]
+    mask_shape = clusters[0]["inner_mask"].shape if is_single else clusters[0]["mask"].shape
+    overlay = np.zeros((*mask_shape, 4), dtype=float)
+    for i, cluster in enumerate(clusters):
+        r, g, b, _ = CLUSTER_RGBA[i % len(CLUSTER_RGBA)]
+        if is_single:
+            overlay[cluster["inner_mask"]] = (r, g, b, 0.55)
+            overlay[cluster["outer_mask"]] = (r, g, b, 0.28)
+        else:
+            overlay[cluster["mask"]] = (r, g, b, 0.4)
+    ax.imshow(overlay, interpolation="nearest")
 
-    y, x = region["centroid"]
-    if show_centroid:
-        ax.scatter(x, y, c=centroid_color, s=60, marker="+", linewidths=2, zorder=20)
+    for i, cluster in enumerate(clusters):
+        edge_color = CLUSTER_RGBA[i % len(CLUSTER_RGBA)][:3]
+        row_c, col_c = cluster["centroid"]
+        radius_px = cluster["R_px"]
+        line_width = 1.8 if i in highlight else 1.0
+        rings = [(radius_px / np.sqrt(2), "--"), (radius_px, "-")] if is_single else [(radius_px, "-")]
+        for ring_radius, linestyle in rings:
+            circle = Circle((col_c, row_c), ring_radius, fill=False, edgecolor=edge_color,
+                             linewidth=line_width, linestyle=linestyle)
+            ax.add_patch(circle)
+        ax.plot(col_c, row_c, "+", color="black", markersize=12, markeredgewidth=2.5)
+        ax.plot(col_c, row_c, "+", color=edge_color, markersize=10, markeredgewidth=1.5)
 
-    if show_span:
-        x_span_px = region["x_span_px"]
-        y_span_px = region["y_span_px"]
-        x_west, x_east = x - x_span_px / 2, x + x_span_px / 2
-        y_north, y_south = y - y_span_px / 2, y + y_span_px / 2
-        ax.plot([x_west, x_east], [y, y], color=span_color, linewidth=1.5, zorder=15, alpha=0.8)
-        ax.plot([x, x], [y_north, y_south], color=span_color, linewidth=1.5, zorder=15, alpha=0.8)
+
+def _highlight_clusters(clusters: list[dict], spike_frame_idx: int) -> set[int]:
+    """Cluster indices to visually emphasize: the lone cluster, or the earliest/latest-peaking pair."""
+    if len(clusters) == 1:
+        return {0}
+    peak_rels = [(i, _peak_offset_from_spike(c["trace"], spike_frame_idx)) for i, c in enumerate(clusters)]
+    valid = [(i, peak) for i, peak in peak_rels if peak is not None]
+    if len(valid) < 2:
+        return set()
+    earliest_i, _ = min(valid, key=lambda pair: pair[1])
+    latest_i, _ = max(valid, key=lambda pair: pair[1])
+    return {earliest_i, latest_i}
 
 
 def _plot_trace_panel(
@@ -254,36 +398,34 @@ def _plot_trace_panel(
     median_segment: np.ndarray,
     spike_frame_idx: int,
     frame_duration_ms: float,
-    window: int | None,
+    highlight: set[int],
 ) -> None:
-    """Bright/dim/total temporal traces. window=None shows every frame in median_segment;
-    otherwise crops the x-axis to +/-window frames around the spike."""
-    traces = region_analyzer.get_temporal_traces(median_segment)
+    """Per-cluster z-score traces across the full segment (never cropped -- the
+    caller draws a shaded window annotation and calls legend() on top of this)."""
+    clusters = region_analyzer.clusters
+    latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
+    latency_label = f"{latency_ms:.1f} ms" if latency_ms is not None else "n/a"
+
     n_frames = median_segment.shape[0]
     x = np.arange(n_frames) - spike_frame_idx
 
-    ax.plot(x, traces["bright_trace"], color="magenta", label="Bright")
-    ax.plot(x, traces["dim_trace"], color="cyan", label="Dim")
-    ax.plot(x, traces["total_trace"], color="black", linestyle="--", label="Total")
-
-    bright_peak_rel = _nanargmax_relative(traces["bright_trace"], spike_frame_idx)
-    dim_peak_rel = _nanargmax_relative(traces["dim_trace"], spike_frame_idx)
-
-    if bright_peak_rel is not None:
-        ax.axvline(bright_peak_rel, color="magenta", linestyle=":", alpha=0.7)
-    if dim_peak_rel is not None:
-        ax.axvline(dim_peak_rel, color="cyan", linestyle=":", alpha=0.7)
-
-    if bright_peak_rel is not None and dim_peak_rel is not None:
-        latency_ms = (dim_peak_rel - bright_peak_rel) * frame_duration_ms
-        latency_line = f"Peak Latency: {latency_ms:.1f} ms"
+    if len(clusters) == 1:
+        cluster = clusters[0]
+        split_um = cluster["R_um"] / np.sqrt(2)
+        ax.plot(x, cluster["inner_trace"], color="#e74c3c", linewidth=1.8, label=f"inner (0-{split_um:.1f} µm)")
+        ax.plot(x, cluster["outer_trace"], color="#3498db", linewidth=1.8,
+                label=f"outer ({split_um:.1f}-{cluster['R_um']:.1f} µm)")
+        title = f"Ring z-score traces — 1 cluster (red=inner  blue=outer)\nLatency: {latency_label}"
     else:
-        latency_line = "Peak Latency: N/A (region not detected)"
+        for i, cluster in enumerate(clusters):
+            color = CLUSTER_RGBA[i % len(CLUSTER_RGBA)][:3]
+            line_width = 2.2 if i in highlight else 1.2
+            alpha = 1.0 if i in highlight else 0.55
+            ax.plot(x, cluster["trace"], color=color, linewidth=line_width, alpha=alpha,
+                    label=f"cluster {i} (R={cluster['R_um']:.1f} µm)")
+        title = f"Whole-cluster z-score traces — {len(clusters)} clusters, no ring split\nLatency: {latency_label}"
 
-    if window is not None:
-        ax.set_xlim(-window, window)
-    ax.set_xlabel("Frame number")
+    ax.set_xlabel("Frame offset from spike (0 = spike)")
     ax.set_ylabel("Mean z-score")
-    ax.set_title(f"Temporal change of bright and dim area\n{latency_line}", fontsize=10)
-    ax.legend(loc="upper right", fontsize=8)
+    ax.set_title(title, fontsize=10)
     ax.grid(True, alpha=0.3)

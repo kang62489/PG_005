@@ -144,11 +144,6 @@ def lookup_rec_from_db(table: pl.DataFrame, db_path: Path, exp_db_path: Path) ->
     return populate_animal_id_values(result, exp_db_path)
 
 
-def _bright_excluded_expr(col: str = "bright_area_um2") -> pl.Expr:
-    """True where `col` shows no real bright-region detection (null or zero)."""
-    return pl.col(col).is_null() | (pl.col(col) == 0)
-
-
 def _read_experiments(results_db_path: Path) -> pl.DataFrame:
     """Read the full experiments table from results.db into a polars DataFrame."""
     conn = sqlite3.connect(results_db_path)
@@ -159,14 +154,14 @@ def _read_experiments(results_db_path: Path) -> pl.DataFrame:
 
 
 def get_excluded_recordings(results_db_path: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Recordings/cells with no detected bright region -- the ones compute_region_stats() excludes.
+    """Recordings/cells with no detected cluster -- the ones compute_region_stats() excludes.
 
     Returns:
         (excluded_images, excluded_cells):
-            excluded_images: one row per individual recording where bright_area_um2 is
-                null/0 (columns: exp_date, abf_serial, img_serial, ANIMAL_ID, SLICE, AT).
+            excluded_images: one row per individual recording where has_region is
+                falsy (columns: exp_date, abf_serial, img_serial, ANIMAL_ID, SLICE, AT).
             excluded_cells: cells (ANIMAL_ID, SLICE, AT) where every one of that cell's
-                recordings failed to detect a bright region.
+                recordings failed to detect a cluster.
     """
     id_cols = ["exp_date", "abf_serial", "img_serial", "ANIMAL_ID", "SLICE", "AT"]
     df = _read_experiments(results_db_path)
@@ -175,20 +170,20 @@ def get_excluded_recordings(results_db_path: Path) -> tuple[pl.DataFrame, pl.Dat
         empty = pl.DataFrame(schema=dict.fromkeys(id_cols, pl.Utf8))
         return empty, empty.select("ANIMAL_ID", "SLICE", "AT")
 
-    excluded_images = df.filter(_bright_excluded_expr()).select(id_cols)
+    excluded_images = df.filter(pl.col("has_region") == 0).select(id_cols)
 
-    per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg(pl.col("bright_area_um2").mean())
-    excluded_cells = per_cell.filter(_bright_excluded_expr()).select("ANIMAL_ID", "SLICE", "AT")
+    per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg(pl.col("has_region").mean())
+    excluded_cells = per_cell.filter(pl.col("has_region") == 0).select("ANIMAL_ID", "SLICE", "AT")
 
     return excluded_images, excluded_cells
 
 
 def get_cell_recording_status(results_db_path: Path) -> pl.DataFrame:
-    """Per-recording bright-region detection status, for building per-cell file lists.
+    """Per-recording cluster detection status, for building per-cell file lists.
 
     Returns one row per recording (sorted by cell, then filename), columns:
-    ANIMAL_ID, SLICE, AT, med_filename, detected (True if a bright region was
-    found in that recording's spike frame).
+    ANIMAL_ID, SLICE, AT, med_filename, detected (True if at least one cluster
+    was found on that recording's critical frame).
     """
     df = _read_experiments(results_db_path)
 
@@ -198,29 +193,26 @@ def get_cell_recording_status(results_db_path: Path) -> pl.DataFrame:
         )
 
     return df.select(
-        "ANIMAL_ID", "SLICE", "AT", "med_filename", (~_bright_excluded_expr()).alias("detected")
+        "ANIMAL_ID", "SLICE", "AT", "med_filename", pl.col("has_region").cast(pl.Boolean).alias("detected")
     ).sort(["ANIMAL_ID", "SLICE", "AT", "med_filename"])
 
 
 def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
-    """Mean +/- std of bright/dim area and peak latency, averaged per unique cell.
+    """Mean +/- std of cluster count, largest-cluster radius, critical-frame area%,
+    and peak latency, averaged per unique cell.
 
     Multiple recordings of the same cell (ANIMAL_ID, SLICE, AT) are first
     collapsed to one row per cell (per-cell mean across its own recordings).
-    Cells with no detected bright region (bright_area_um2 null/0 across every
-    one of that cell's recordings -- i.e. spike-frame categorization never
-    found a bright blob) are excluded before computing mean/std, since there's
-    no real measurement to average for a cell that was never actually
-    recorded. n_detected/n_total let you see how many cells were usable out of
-    how many were attempted.
+    Cells with no detected cluster in any recording (has_region == 0 throughout
+    -- i.e. DBSCAN never found a kept cluster) are excluded before computing
+    mean/std, since there's no real measurement to average for a cell that was
+    never actually detected. n_detected/n_total let you see how many cells were
+    usable out of how many were attempted.
 
-    Returns one row per metric (bright_area_um2, dim_area_um2, total_area_um2,
+    Returns one row per metric (n_clusters, R_um, critical_frame_area_pct,
     peak_latency_ms) with columns: metric, mean, std, n_detected, n_total.
-    total_area_um2 is bright_area_um2 + dim_area_um2, so it's null wherever dim
-    wasn't detected -- a cell with no dim measurement has no real total to report.
     """
-    metric_cols = ["bright_area_um2", "dim_area_um2", "total_area_um2", "peak_latency_ms"]
-    agg_cols = ["bright_area_um2", "dim_area_um2", "peak_latency_ms"]
+    metric_cols = ["n_clusters", "R_um", "critical_frame_area_pct", "peak_latency_ms"]
     df = _read_experiments(results_db_path)
 
     if df.is_empty():
@@ -228,11 +220,12 @@ def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
             schema={"metric": pl.Utf8, "mean": pl.Float64, "std": pl.Float64, "n_detected": pl.Int64, "n_total": pl.Int64}
         )
 
-    per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg([pl.col(c).mean().alias(c) for c in agg_cols])
-    per_cell = per_cell.with_columns((pl.col("bright_area_um2") + pl.col("dim_area_um2")).alias("total_area_um2"))
+    per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg(
+        [pl.col(c).mean().alias(c) for c in [*metric_cols, "has_region"]]
+    )
     n_total = per_cell.height
 
-    detected = per_cell.filter(~_bright_excluded_expr())
+    detected = per_cell.filter(pl.col("has_region") > 0)
     n_detected = detected.height
 
     return pl.DataFrame({

@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 # Third-party imports
+import numpy as np
 import polars as pl
 from numba import config as numba_config
 from rich.console import Console
@@ -35,6 +36,7 @@ from tabulate import tabulate
 
 # Local application imports
 from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
+from classes.region_analyzer import SATURATION_AREA_PCT
 from functions import (
     compute_region_stats,
     count_unique_cells,
@@ -285,25 +287,25 @@ def run(
             f"  ({time.time() - entry_t0:.1f}s)[/green]"
         )
 
-        region_analyzer = RegionAnalyzer(categorizer.categorized_frames[spike_frame_idx], obj=obj, min_area_um2=900)
-        spike_frame = region_analyzer.get_results()
+        region_analyzer = RegionAnalyzer(np.array(categorizer.categorized_frames), median_segment, spike_frame_idx, obj=obj)
+        region_results = region_analyzer.get_results()
 
-        bright_area = spike_frame["bright_largest"]
-        dim_area = spike_frame["dim_largest"]
-        if bright_area:
+        if region_analyzer.saturated:
             console.log(
-                f"[magenta]Bright (spike frame): area={bright_area['area_um2']:.1f} µm²  "
-                f"x-span={bright_area['x_span_um']:.1f} µm  y-span={bright_area['y_span_um']:.1f} µm[/magenta]"
+                f"[red]Critical frame saturated (B+D%={region_results['critical_frame_area_pct']:.1f}% "
+                f">= {SATURATION_AREA_PCT:.0f}%) — treating whole frame as 1 cluster[/red]"
             )
+
+        if region_results["n_clusters"] == 0:
+            console.log("[yellow]No cluster detected[/yellow]")
         else:
-            console.log("[yellow]No bright region in spike frame[/yellow]")
-        if dim_area:
+            frame_tag = "spike" if region_results["critical_frame_offset"] == 0 else f"spike{region_results['critical_frame_offset']:+d}"
             console.log(
-                f"[cyan]Dim (spike frame):    area={dim_area['area_um2']:.1f} µm²  "
-                f"x-span={dim_area['x_span_um']:.1f} µm  y-span={dim_area['y_span_um']:.1f} µm[/cyan]"
+                f"[magenta]{region_results['n_clusters']} cluster(s) on {frame_tag} frame "
+                f"(B+D%={region_results['critical_frame_area_pct']:.2f}%)[/magenta]"
             )
-        else:
-            console.log("[yellow]No dim region in spike frame[/yellow]")
+            for i, cluster in enumerate(region_results["clusters"]):
+                console.log(f"[cyan]  cluster {i}: R={cluster['R_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
 
         if emitter:
             emitter({"type": "step", "msg": "Exporting results..."})
@@ -313,7 +315,7 @@ def run(
         slice_val = match["SLICE"].item()
         at = match["AT"].item()
         frame_duration_ms = clip.ts_imgs * 1000
-        peak_latency_ms = region_analyzer.get_peak_latency_ms(median_segment, spike_frame_idx, frame_duration_ms)
+        peak_latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
 
         dirs = exporter.export_all(
             exp_date=export_data["exp_date"],
@@ -334,7 +336,7 @@ def run(
             categorized_frames=categorizer.categorized_frames,
             zscore_range=zscore_range,
             region_summary=region_analyzer.get_summary(),
-            region_data=spike_frame,
+            region_data=region_results,
             peak_latency_ms=peak_latency_ms,
         )
 
@@ -346,16 +348,16 @@ def run(
             "tiff_serial": export_data["img_serial"],
             "abf_serial": export_data["abf_serial"],
         }
-        fig = plot_spatiotemporal_summary(
-            categorizer, region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, title_info
-        )
+        fig = plot_spatiotemporal_summary(categorizer, region_analyzer, spike_frame_idx, title_info)
         stem = ResultsExporter.build_export_stem(
             export_data["exp_date"], export_data["img_serial"], animal_idx,
             slice_val, at, detrend_mode, normalization, "SPATIAL",
         )
         exporter.export_figure("region_sta", fig, f"{stem}.png")
 
-        full_trace_fig = plot_full_trace(region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, title_info)
+        full_trace_fig = plot_full_trace(
+            region_analyzer, categorizer, median_segment, spike_frame_idx, frame_duration_ms, title_info
+        )
         trace_stem = ResultsExporter.build_export_stem(
             export_data["exp_date"], export_data["img_serial"], animal_idx,
             slice_val, at, detrend_mode, normalization, "TRACE",
