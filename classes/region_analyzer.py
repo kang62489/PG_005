@@ -333,6 +333,30 @@ def _run_cluster_seeker(frame: np.ndarray, eps_px: int, min_samples: int) -> tup
     return label_frame, centroids, n_raw_clusters
 
 
+def _resolve_R(dists: np.ndarray, centroid: tuple[float, float], frame_shape: tuple[int, int]) -> float:
+    """Enclosing-circle radius, capped so the circle never extends past the frame.
+
+    The farthest-pixel distance alone can draw a circle that overshoots the
+    frame edge whenever the centroid isn't near the image center -- it only
+    guarantees the circle contains every cluster pixel, not that it stays
+    inside the frame. Capping at the centroid's distance to the nearest frame
+    edge (the largest circle around the centroid that still fits inside the
+    frame) keeps the drawn circle within bounds.
+
+    Args:
+        dists: (N,) centroid-to-pixel distances for the cluster's pixels.
+        centroid: (row, col) of the cluster.
+        frame_shape: (height, width) of the frame.
+
+    Returns:
+        R in pixels.
+    """
+    height, width = frame_shape
+    row_c, col_c = centroid
+    edge_dist = min(row_c, height - 1 - row_c, col_c, width - 1 - col_c)
+    return float(min(dists.max(), edge_dist))
+
+
 def compute_ring_traces(
     label_frame: np.ndarray,
     centroid: tuple[float, float],
@@ -342,12 +366,11 @@ def compute_ring_traces(
     """Inner/outer ring z-score traces for one DBSCAN cluster.
 
     R is the enclosing-circle radius (max centroid-to-pixel distance among the
-    cluster's pixels). Cluster pixels are split into two equal-area rings at
-    R/sqrt(2): inner = 0 <= r <= R/sqrt(2), outer = R/sqrt(2) < r <= R. Mean
-    z-score from med_stack is computed per ring per frame.
-
-    R only sees pixels inside the frame, so a cluster touching the image edge
-    is truncated and R underestimates its true extent.
+    cluster's pixels), capped at the centroid's distance to the nearest frame
+    edge so the drawn circle never extends past the frame (see _resolve_R).
+    Cluster pixels are split into two equal-area rings at R/sqrt(2): inner =
+    0 <= r <= R/sqrt(2), outer = R/sqrt(2) < r <= R. Mean z-score from
+    med_stack is computed per ring per frame.
 
     Assumes label_frame contains at least one pixel labeled cluster_k; callers
     must skip clusters that don't exist (e.g. when there are 0 kept clusters).
@@ -369,7 +392,7 @@ def compute_ring_traces(
     coords = np.argwhere(label_frame == cluster_k)
     row_c, col_c = centroid
     dists = np.sqrt((coords[:, 0] - row_c) ** 2 + (coords[:, 1] - col_c) ** 2)
-    R = float(dists.max())
+    R = _resolve_R(dists, centroid, label_frame.shape)
     split = R / np.sqrt(2)
 
     height, width = label_frame.shape
@@ -408,14 +431,15 @@ def compute_cluster_trace(
 
     Returns:
         trace: 1D array (n_frames,), mean z-score within the cluster per frame.
-        R: enclosing-circle radius in pixels (for display only).
+        R: enclosing-circle radius in pixels (for display only), capped at the
+            centroid's distance to the nearest frame edge (see _resolve_R).
         mask: (H, W) boolean mask of the cluster's own pixels.
     """
     mask = label_frame == cluster_k
     coords = np.argwhere(mask)
     row_c, col_c = centroid
     dists = np.sqrt((coords[:, 0] - row_c) ** 2 + (coords[:, 1] - col_c) ** 2)
-    R = float(dists.max())
+    R = _resolve_R(dists, centroid, label_frame.shape)
 
     trace = med_stack[:, mask].mean(axis=1)
     return trace, R, mask
