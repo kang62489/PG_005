@@ -79,6 +79,7 @@ class RegionAnalyzer:
         self.pixel_per_um = PIXEL_SCALE[obj]
         self.um_per_pixel = 1.0 / self.pixel_per_um
         self.spike_frame_idx = spike_frame_idx
+        self._frame_total_px = cat_stack.shape[1] * cat_stack.shape[2]
 
         self.area_pct = compute_area_pct(cat_stack)
         self.critical_frame_idx = pick_critical_frame(self.area_pct, spike_frame_idx)
@@ -138,10 +139,13 @@ class RegionAnalyzer:
 
     def get_results(self) -> dict:
         """Get per-cluster region results for the critical frame."""
+        critical_frame_area_pct = float(self.area_pct[self.critical_frame_idx])
+        critical_frame_area_px = critical_frame_area_pct / 100.0 * self._frame_total_px
         return {
             "critical_frame_idx":      self.critical_frame_idx,
             "critical_frame_offset":   self.critical_frame_idx - self.spike_frame_idx,
-            "critical_frame_area_pct": float(self.area_pct[self.critical_frame_idx]),
+            "critical_frame_area_pct": critical_frame_area_pct,
+            "critical_frame_area_um2": self._area_to_um2(critical_frame_area_px),
             "n_clusters":               len(self.clusters),
             "clusters": [
                 {"centroid": c["centroid"], "R_px": c["R_px"], "R_um": c["R_um"]}

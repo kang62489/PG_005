@@ -2,7 +2,7 @@
 Results exporter for saving analysis outputs.
 
 Exports analysis results to:
-- SQLite database (metadata, critical-frame cluster measurements, region_sta_results JSON)
+- SQLite database (metadata, critical-frame cluster measurements)
 - TIFF files (spike-centered median stack, categorized frames for ImageJ overlay)
 - PNG figures (spatiotemporal summary plot)
 
@@ -12,12 +12,11 @@ See ResultsExporter's class docstring for the full folder layout.
 
 ## Modules
 # Standard library imports
-import json
 import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 # Third-party imports
 import numpy as np
@@ -28,17 +27,6 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
 _SITE_NUMBER = re.compile(r"(\d+)$")
-
-
-class NumpyEncoder(json.JSONEncoder):
-    """JSON encoder that handles numpy types."""
-
-    def default(self, obj: Any) -> Any:
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, (np.integer, np.floating)):
-            return obj.item()
-        return super().default(obj)
 
 
 class ResultsExporter:
@@ -140,7 +128,7 @@ class ResultsExporter:
                 saturated INTEGER,
                 critical_frame_offset INTEGER,
                 critical_frame_area_pct REAL,
-                region_sta_results TEXT,
+                critical_frame_area_um2 REAL,
                 ANIMAL_ID TEXT,
                 SLICE TEXT,
                 AT TEXT,
@@ -322,12 +310,7 @@ class ResultsExporter:
         peak_latency_ms: float | None,
         med_filename: str,
     ) -> None:
-        """Insert or update experiment record in SQLite.
-
-        Note: region_data (RegionAnalyzer.get_results()) is already
-        serialization-safe -- no contours/masks, just scalars per cluster --
-        so it's stored directly as region_sta_results JSON.
-        """
+        """Insert or update experiment record in SQLite."""
         clusters = region_data["clusters"]
         if clusters:
             # Clusters are sorted largest-first by _run_cluster_seeker.
@@ -346,8 +329,8 @@ class ResultsExporter:
                 objective, um_per_pixel, threshold_method,
                 n_spikes_detected, n_spikes_analyzed,
                 n_clusters, has_region, saturated,
-                critical_frame_offset, critical_frame_area_pct,
-                region_sta_results, ANIMAL_ID, SLICE, AT, med_filename,
+                critical_frame_offset, critical_frame_area_pct, critical_frame_area_um2,
+                ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_px, R_um, peak_latency_ms,
                 zscore_min, zscore_max
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -367,7 +350,7 @@ class ResultsExporter:
                 region_summary["saturated"],
                 region_data["critical_frame_offset"],
                 region_data["critical_frame_area_pct"],
-                json.dumps(region_data, cls=NumpyEncoder),
+                region_data["critical_frame_area_um2"],
                 animal_id,
                 slice_val,
                 at,
