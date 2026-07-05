@@ -76,7 +76,7 @@ PG_005/
 │   │
 │   └── [Analysis]
 │       ├── kmeans.py                            # K-means clustering
-│       ├── spike_centered_processes.py          # Spike-aligned median/mean
+│       ├── spike_alignment.py                   # Spike-aligned median/mean
 │       └── imaging_segments_zscore_normalization.py  # Z-score normalization
 │
 ├── utils/
@@ -220,7 +220,7 @@ Processed TIFF + ABF (electrophysiology)
 - Median removes outliers → cleaner ACh signal
 
 ```python
-from functions.spike_centered_processes import spike_centered_median, spike_centered_avg
+from functions.spike_alignment import spike_centered_median, spike_centered_avg
 
 # Use median for robust averaging (recommended)
 avg_segment = spike_centered_median(lst_segments)

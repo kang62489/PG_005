@@ -1,7 +1,7 @@
 """
 append_stats.py  --  Write region-analysis statistics into an ana list from an existing results.db.
 ======================================================================================================
-For when spike_analysis.py's run() was interrupted partway through but results.db
+For when ach_domain_analysis.py's run() was interrupted partway through but results.db
 already has rows from the entries that did complete -- recomputes and writes the
 same statistics block run() writes at the end of a full run, without re-running
 the pipeline. Safe to re-run: it overwrites its own previous block instead of
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from spike_analysis import parse_ana_list, write_stats_report
+from ach_domain_analysis import parse_ana_list, write_stats_report
 
 console = Console()
 

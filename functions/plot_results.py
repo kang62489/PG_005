@@ -338,8 +338,8 @@ def _draw_cluster_shading(ax: mpl.axes.Axes, label_frame: np.ndarray, centroids:
     ax.imshow(overlay, interpolation="nearest")
 
     for cluster_idx, (row_c, col_c) in enumerate(centroids):
-        ax.plot(col_c, row_c, "+", color="black", markersize=20, markeredgewidth=4)
-        ax.plot(col_c, row_c, "+", color="white", markersize=18, markeredgewidth=2.5)
+        ax.plot(col_c, row_c, "x", color="black", markersize=16, markeredgewidth=4, zorder=10)
+        ax.plot(col_c, row_c, "x", color="white", markersize=14, markeredgewidth=2.5, zorder=11)
         ax.text(col_c + 5, row_c - 5, str(cluster_idx), color="white", fontsize=9, fontweight="bold")
 
 
@@ -368,15 +368,15 @@ def _overlay_clusters(ax: mpl.axes.Axes, clusters: list[dict], highlight: set[in
     for i, cluster in enumerate(clusters):
         edge_color = CLUSTER_RGBA[i % len(CLUSTER_RGBA)][:3]
         row_c, col_c = cluster["centroid"]
-        radius_px = cluster["R_px"]
+        radius_px = cluster["R_lat_px"]
         line_width = 1.8 if i in highlight else 1.0
         rings = [(radius_px / np.sqrt(2), "--"), (radius_px, "-")] if is_single else [(radius_px, "-")]
         for ring_radius, linestyle in rings:
             circle = Circle((col_c, row_c), ring_radius, fill=False, edgecolor=edge_color,
                              linewidth=line_width, linestyle=linestyle)
             ax.add_patch(circle)
-        ax.plot(col_c, row_c, "+", color="black", markersize=12, markeredgewidth=2.5)
-        ax.plot(col_c, row_c, "+", color=edge_color, markersize=10, markeredgewidth=1.5)
+        ax.plot(col_c, row_c, "x", color="black", markersize=12, markeredgewidth=2.5, zorder=10)
+        ax.plot(col_c, row_c, "x", color=edge_color, markersize=10, markeredgewidth=1.5, zorder=11)
 
 
 def _highlight_clusters(clusters: list[dict], spike_frame_idx: int) -> set[int]:
@@ -411,10 +411,10 @@ def _plot_trace_panel(
 
     if len(clusters) == 1:
         cluster = clusters[0]
-        split_um = cluster["R_um"] / np.sqrt(2)
+        split_um = cluster["R_lat_um"] / np.sqrt(2)
         ax.plot(x, cluster["inner_trace"], color="#e74c3c", linewidth=1.8, label=f"inner (0-{split_um:.1f} µm)")
         ax.plot(x, cluster["outer_trace"], color="#3498db", linewidth=1.8,
-                label=f"outer ({split_um:.1f}-{cluster['R_um']:.1f} µm)")
+                label=f"outer ({split_um:.1f}-{cluster['R_lat_um']:.1f} µm)")
         title = f"Ring z-score traces — 1 cluster (red=inner  blue=outer)\nLatency: {latency_label}"
     else:
         for i, cluster in enumerate(clusters):
@@ -422,7 +422,7 @@ def _plot_trace_panel(
             line_width = 2.2 if i in highlight else 1.2
             alpha = 1.0 if i in highlight else 0.55
             ax.plot(x, cluster["trace"], color=color, linewidth=line_width, alpha=alpha,
-                    label=f"cluster {i} (R={cluster['R_um']:.1f} µm)")
+                    label=f"cluster {i} (R_lat={cluster['R_lat_um']:.1f} µm)")
         title = f"Whole-cluster z-score traces — {len(clusters)} clusters, no ring split\nLatency: {latency_label}"
 
     ax.set_xlabel("Frame offset from spike (0 = spike)")

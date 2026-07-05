@@ -1,6 +1,6 @@
 """
-spike_analysis.py  --  Spike-aligned image analysis pipeline.
-=============================================================
+ach_domain_analysis.py  --  Spike-aligned image analysis pipeline.
+===================================================================
 Reads an analysis list (ana_list_*.txt), loads the appropriate processed TIFF
 (*_GAUSS.tif or *_ALS.tif) together with its paired ABF file, runs spike
 detection and alignment, spatial categorization, and region analysis.
@@ -16,7 +16,7 @@ Detrend mode selects which processed TIFF prefix is loaded:
   MOV   -> *_MOV_GAUSS.tif    or  *_MOV_ALS.tif
 
 Usage:
-    python spike_analysis.py --ana_list data/ana_list_20260601_000.txt
+    python ach_domain_analysis.py --ana_list data/ana_list_20260601_000.txt
                              [--detrend BIEXP] [--use_als]
                              [--db data/rec_data.db] [--exp_db data/exp_info.db]
 """
@@ -305,7 +305,13 @@ def run(
                 f"(B+D%={region_results['critical_frame_area_pct']:.2f}%)[/magenta]"
             )
             for i, cluster in enumerate(region_results["clusters"]):
-                console.log(f"[cyan]  cluster {i}: R={cluster['R_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
+                console.log(f"[cyan]  cluster {i}: R_lat={cluster['R_lat_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
+
+        max_area_tag = "spike" if region_results["max_area_offset"] == 0 else f"spike{region_results['max_area_offset']:+d}"
+        console.log(
+            f"[green]Max-area frame {max_area_tag}: area={region_results['max_area_um2']:.0f} µm² "
+            f"(eq. radius={region_results['max_area_eq_radius_um']:.1f} µm)[/green]"
+        )
 
         if emitter:
             emitter({"type": "step", "msg": "Exporting results..."})

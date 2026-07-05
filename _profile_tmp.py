@@ -5,9 +5,9 @@ from pathlib import Path
 
 import polars as pl
 
+from ach_domain_analysis import parse_ana_list
 from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
 from functions import lookup_rec_from_db, spike_centered_median, zscore_img_segs
-from spike_analysis import parse_ana_list
 
 ana_list_path = Path("data/ana_list_20260618_000.txt")
 entries, _results_dir, detrend_mode, normalization = parse_ana_list(ana_list_path, "BIEXP", use_als=False)

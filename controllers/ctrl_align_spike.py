@@ -183,7 +183,7 @@ class CtrlAlignSpike:
     # ── Run Analysis ──────────────────────────────────────────────────────────
 
     def on_run_analysis(self) -> None:
-        from spike_analysis import run as run_spike_analysis
+        from ach_domain_analysis import run as run_spike_analysis
 
         if self._ana_list_path is None:
             console.log("[yellow]No analysis list confirmed yet. Click 'Confirm Analyzing List' first.[/yellow]")

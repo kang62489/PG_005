@@ -22,17 +22,17 @@ dir_raw_abfs: D:\MyDB\2_Programs\PG_005\raw_abfs
 dir_results: D:\MyDB\2_Programs\PG_005\results
 
 ================================================================================
-Region Analysis Statistics — generated 2026-07-04T07:28:28+00:00
+Region Analysis Statistics — generated 2026-07-04T13:26:56+00:00
 ================================================================================
 Neurons detected ACh release: 2/2
 
-+-------------------------+----------+----------+------------+
-|         Metric          |   Mean   |   Std    | n_detected |
-+-------------------------+----------+----------+------------+
-|          R_um           |  118.37  |  46.82   |     2      |
-| critical_frame_area_um2 | 33339.92 | 13597.74 |     2      |
-|     peak_latency_ms     |   0.00   |   0.00   |     2      |
-+-------------------------+----------+----------+------------+
++-----------------------+----------+----------+------------+
+|        Metric         |   Mean   |   Std    | n_detected |
++-----------------------+----------+----------+------------+
+|     max_area_um2      | 38464.83 | 20731.00 |     2      |
+| max_area_eq_radius_um |  105.08  |  29.21   |     2      |
+|    peak_latency_ms    |   0.00   |   0.00   |     2      |
++-----------------------+----------+----------+------------+
 
 Per-Neuron Recording List (filename, detected) [detected/total]:
 neoChAT-584_S2RC1 [(2025_04_03-0032_A1S2RC1_BIEXP_GAUSS_MED.tif, True),

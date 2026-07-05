@@ -1,8 +1,9 @@
 """
 Region analysis for categorized images.
 
-For the spike frame, finds the largest bright connected component, then
-combines every dim-category pixel in the frame into one dim region.
+Picks a critical frame (spike or spike+1), clusters its non-background
+pixels with DBSCAN, and computes per-cluster spatial/temporal stats. See
+RegionAnalyzer's docstring for the full picture.
 """
 
 import numpy as np
@@ -49,8 +50,21 @@ class RegionAnalyzer:
 
     Result dict per cluster (from get_results()):
         centroid : (row, col) in pixels
-        R_px     : enclosing-circle radius in pixels
-        R_um     : enclosing-circle radius in µm
+        R_lat_px : enclosing-circle radius in pixels, from the critical/latency
+                   frame above (used for ring split + latency only)
+        R_lat_um : enclosing-circle radius in µm
+
+    critical_frame_area_um2 (from get_results()) is this frame's own
+    DBSCAN-kept-cluster area (noise/undersized-cluster pixels excluded) --
+    critical_frame_area_pct stays the raw B+D% (it also drives the
+    significance/saturation threshold logic above).
+
+    Top-level max_area_* fields (from get_results()) instead describe the
+    max-area frame -- whichever of spike/spike+1 has the larger raw B+D%,
+    independent of the critical/latency frame's significance-threshold pick.
+    The reported area is likewise that frame's DBSCAN-kept-cluster area, not
+    the raw non-background count. max_area_eq_radius_um is the circle-equivalent
+    radius (sqrt(area/pi)) of that same area, for direct comparison against R_lat_um.
 
     Example:
         >>> categorizer = SpatialCategorizer.morphological()
@@ -79,38 +93,39 @@ class RegionAnalyzer:
         self.pixel_per_um = PIXEL_SCALE[obj]
         self.um_per_pixel = 1.0 / self.pixel_per_um
         self.spike_frame_idx = spike_frame_idx
-        self._frame_total_px = cat_stack.shape[1] * cat_stack.shape[2]
 
         self.area_pct = compute_area_pct(cat_stack)
         self.critical_frame_idx = pick_critical_frame(self.area_pct, spike_frame_idx)
-        self.saturated = self.area_pct[self.critical_frame_idx] >= SATURATION_AREA_PCT
 
-        if self.saturated:
-            # Too many non-background pixels for DBSCAN's neighbor-graph construction
-            # to stay bounded -- skip DBSCAN and treat every non-background pixel as
-            # one big cluster instead (this dense, it's one region, not discrete sites).
-            frame = cat_stack[self.critical_frame_idx]
-            mask = frame > CATEGORY_BACKGROUND
-            coords = np.argwhere(mask)
-            self.label_frame = np.where(mask, 0, -2).astype(int)
-            self.centroids = [(float(coords[:, 0].mean()), float(coords[:, 1].mean()))]
-            self.n_raw_clusters = 1
-        else:
-            eps_px, min_samples = eps_and_min_samples(obj)
-            self.label_frame, self.centroids, self.n_raw_clusters = _run_cluster_seeker(
-                cat_stack[self.critical_frame_idx], eps_px, min_samples
-            )
+        eps_px, min_samples = eps_and_min_samples(obj)
+        self.label_frame, self.centroids, self.n_raw_clusters, self.saturated = _detect_clusters(
+            cat_stack[self.critical_frame_idx], self.area_pct[self.critical_frame_idx], eps_px, min_samples
+        )
 
-        self.clusters = []
+        self.clusters = self._build_clusters(med_stack)
+        self.max_area_frame_idx, self.max_area_offset, self.max_area_um2, self.max_area_eq_radius_um = self._compute_max_area(
+            cat_stack, spike_frame_idx, eps_px, min_samples
+        )
+
+    def _build_clusters(self, med_stack: np.ndarray) -> list[dict]:
+        """Per-cluster result dicts for the critical frame (self.label_frame/self.centroids).
+
+        1 centroid -> inner/outer ring split (compute_ring_traces): spread
+        within the one release site.
+        >1 centroids -> one whole-cluster trace per cluster
+        (compute_cluster_trace): lets cluster-to-cluster peak timing be
+        compared directly instead of splitting each into rings.
+        """
+        clusters = []
         if len(self.centroids) == 1:
             centroid = self.centroids[0]
-            inner_trace, outer_trace, R, inner_mask, outer_mask = compute_ring_traces(
+            inner_trace, outer_trace, R_lat, inner_mask, outer_mask = compute_ring_traces(
                 self.label_frame, centroid, med_stack, 0
             )
-            self.clusters.append({
+            clusters.append({
                 "centroid":    centroid,
-                "R_px":        R,
-                "R_um":        self._px_to_um(R),
+                "R_lat_px":    R_lat,
+                "R_lat_um":    self._px_to_um(R_lat),
                 "inner_trace": inner_trace,
                 "outer_trace": outer_trace,
                 "inner_mask":  inner_mask,
@@ -118,14 +133,42 @@ class RegionAnalyzer:
             })
         elif len(self.centroids) > 1:
             for cluster_k, centroid in enumerate(self.centroids):
-                trace, R, mask = compute_cluster_trace(self.label_frame, centroid, med_stack, cluster_k)
-                self.clusters.append({
+                trace, R_lat, mask = compute_cluster_trace(self.label_frame, centroid, med_stack, cluster_k)
+                clusters.append({
                     "centroid": centroid,
-                    "R_px":     R,
-                    "R_um":     self._px_to_um(R),
+                    "R_lat_px": R_lat,
+                    "R_lat_um": self._px_to_um(R_lat),
                     "trace":    trace,
                     "mask":     mask,
                 })
+        return clusters
+
+    def _compute_max_area(
+        self, cat_stack: np.ndarray, spike_frame_idx: int, eps_px: int, min_samples: int
+    ) -> tuple[int, int, float, float]:
+        """Max-area frame stats, independent of the critical-frame pick above.
+
+        Picks whichever of frame0 (spike) / frame1 (spike+1) has the larger
+        raw area_pct -- used only for the headline area stat, not latency.
+        The reported area is that frame's DBSCAN-kept-cluster area (noise
+        excluded), not the raw non-background count.
+
+        Returns:
+            (max_area_frame_idx, max_area_offset, max_area_um2, max_area_eq_radius_um)
+        """
+        candidate_idxs = [spike_frame_idx]
+        if spike_frame_idx + 1 < len(self.area_pct):
+            candidate_idxs.append(spike_frame_idx + 1)
+        max_area_frame_idx = max(candidate_idxs, key=lambda idx: self.area_pct[idx])
+        max_area_offset = max_area_frame_idx - spike_frame_idx
+
+        label_frame, _, _, _ = _detect_clusters(
+            cat_stack[max_area_frame_idx], self.area_pct[max_area_frame_idx], eps_px, min_samples
+        )
+        max_area_kept_px = int(np.count_nonzero(label_frame >= 0))
+        max_area_um2 = self._area_to_um2(max_area_kept_px)
+        max_area_eq_radius_um = float(np.sqrt(max_area_um2 / np.pi))
+        return max_area_frame_idx, max_area_offset, max_area_um2, max_area_eq_radius_um
 
     # ── Unit conversion helpers ────────────────────────────────────────────────
 
@@ -140,15 +183,19 @@ class RegionAnalyzer:
     def get_results(self) -> dict:
         """Get per-cluster region results for the critical frame."""
         critical_frame_area_pct = float(self.area_pct[self.critical_frame_idx])
-        critical_frame_area_px = critical_frame_area_pct / 100.0 * self._frame_total_px
+        critical_frame_kept_px = int(np.count_nonzero(self.label_frame >= 0))
         return {
             "critical_frame_idx":      self.critical_frame_idx,
             "critical_frame_offset":   self.critical_frame_idx - self.spike_frame_idx,
             "critical_frame_area_pct": critical_frame_area_pct,
-            "critical_frame_area_um2": self._area_to_um2(critical_frame_area_px),
+            "critical_frame_area_um2": self._area_to_um2(critical_frame_kept_px),
+            "max_area_frame_idx":      self.max_area_frame_idx,
+            "max_area_offset":         self.max_area_offset,
+            "max_area_um2":            self.max_area_um2,
+            "max_area_eq_radius_um":   self.max_area_eq_radius_um,
             "n_clusters":               len(self.clusters),
             "clusters": [
-                {"centroid": c["centroid"], "R_px": c["R_px"], "R_um": c["R_um"]}
+                {"centroid": c["centroid"], "R_lat_px": c["R_lat_px"], "R_lat_um": c["R_lat_um"]}
                 for c in self.clusters
             ],
         }
@@ -331,6 +378,43 @@ def _run_cluster_seeker(frame: np.ndarray, eps_px: int, min_samples: int) -> tup
     ]
 
     return label_frame, centroids, n_raw_clusters
+
+
+def _detect_clusters(
+    frame: np.ndarray, area_pct_value: float, eps_px: int, min_samples: int
+) -> tuple[np.ndarray, list[tuple[float, float]], int, bool]:
+    """Cluster non-background pixels, or fall back to 1 whole-frame cluster if saturated.
+
+    Single source of truth for the saturation guard, shared by both the
+    critical frame (RegionAnalyzer.__init__) and the independent max-area
+    frame (RegionAnalyzer._compute_max_area) -- skips DBSCAN when
+    area_pct_value is at/above SATURATION_AREA_PCT (a dense enough point
+    cloud makes sklearn's neighbor-graph construction blow up memory) and
+    treats every non-background pixel as one big cluster instead, since at
+    that density it's one region, not discrete release sites.
+
+    Args:
+        frame: 2D array (0=background, 1=dim, 2=bright) for a single frame.
+        area_pct_value: this frame's B+D% (from compute_area_pct()).
+        eps_px: DBSCAN neighborhood radius in pixels, from eps_and_min_samples().
+        min_samples: DBSCAN minimum samples per cluster, from eps_and_min_samples().
+
+    Returns:
+        label_frame: (H, W) array; -2=background, -1=noise/undersized cluster,
+            0..N-1=kept clusters, largest first (or 0=the whole frame if saturated).
+        centroids: (row, col) per kept cluster, same order as label_frame's indices.
+        n_raw_clusters: number of clusters DBSCAN found before the size filter (1 if saturated).
+        saturated: True if area_pct_value was at/above SATURATION_AREA_PCT.
+    """
+    if area_pct_value >= SATURATION_AREA_PCT:
+        mask = frame > CATEGORY_BACKGROUND
+        coords = np.argwhere(mask)
+        label_frame = np.where(mask, 0, -2).astype(int)
+        centroids = [(float(coords[:, 0].mean()), float(coords[:, 1].mean()))]
+        return label_frame, centroids, 1, True
+
+    label_frame, centroids, n_raw_clusters = _run_cluster_seeker(frame, eps_px, min_samples)
+    return label_frame, centroids, n_raw_clusters, False
 
 
 def _resolve_R(dists: np.ndarray, centroid: tuple[float, float], frame_shape: tuple[int, int]) -> float:

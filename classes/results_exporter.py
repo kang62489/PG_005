@@ -129,14 +129,17 @@ class ResultsExporter:
                 critical_frame_offset INTEGER,
                 critical_frame_area_pct REAL,
                 critical_frame_area_um2 REAL,
+                max_area_offset INTEGER,
+                max_area_um2 REAL,
+                max_area_eq_radius_um REAL,
                 ANIMAL_ID TEXT,
                 SLICE TEXT,
                 AT TEXT,
                 med_filename TEXT,
                 centroid_y REAL,
                 centroid_x REAL,
-                R_px REAL,
-                R_um REAL,
+                R_lat_px REAL,
+                R_lat_um REAL,
                 peak_latency_ms REAL,
                 zscore_min REAL,
                 zscore_max REAL,
@@ -316,10 +319,10 @@ class ResultsExporter:
             # Clusters are sorted largest-first by _run_cluster_seeker.
             largest = clusters[0]
             centroid_y, centroid_x = largest["centroid"]
-            r_px = largest["R_px"]
-            r_um = largest["R_um"]
+            r_lat_px = largest["R_lat_px"]
+            r_lat_um = largest["R_lat_um"]
         else:
-            centroid_y = centroid_x = r_px = r_um = None
+            centroid_y = centroid_x = r_lat_px = r_lat_um = None
 
         conn = sqlite3.connect(self.db_path)
         conn.execute(
@@ -330,10 +333,11 @@ class ResultsExporter:
                 n_spikes_detected, n_spikes_analyzed,
                 n_clusters, has_region, saturated,
                 critical_frame_offset, critical_frame_area_pct, critical_frame_area_um2,
+                max_area_offset, max_area_um2, max_area_eq_radius_um,
                 ANIMAL_ID, SLICE, AT, med_filename,
-                centroid_y, centroid_x, R_px, R_um, peak_latency_ms,
+                centroid_y, centroid_x, R_lat_px, R_lat_um, peak_latency_ms,
                 zscore_min, zscore_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -351,14 +355,17 @@ class ResultsExporter:
                 region_data["critical_frame_offset"],
                 region_data["critical_frame_area_pct"],
                 region_data["critical_frame_area_um2"],
+                region_data["max_area_offset"],
+                region_data["max_area_um2"],
+                region_data["max_area_eq_radius_um"],
                 animal_id,
                 slice_val,
                 at,
                 med_filename,
                 centroid_y,
                 centroid_x,
-                r_px,
-                r_um,
+                r_lat_px,
+                r_lat_um,
                 peak_latency_ms,
                 zscore_range[0],
                 zscore_range[1],

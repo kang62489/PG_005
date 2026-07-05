@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
     from .plot_results import plot_full_trace, plot_spatiotemporal_summary
-    from .spike_centered_processes import spike_centered_avg, spike_centered_median
+    from .spike_alignment import spike_centered_avg, spike_centered_median
     from .tau_estimate import sample_tau
     from .test_cuda import test_cuda
     from .xlsx_reader import get_picked_pairs
@@ -93,8 +93,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "get_excluded_recordings": (".database_ops",                       "get_excluded_recordings"),
     "get_cell_recording_status": (".database_ops",                     "get_cell_recording_status"),
     "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
-    "spike_centered_avg":  (".spike_centered_processes",                  "spike_centered_avg"),
-    "spike_centered_median": (".spike_centered_processes",                "spike_centered_median"),
+    "spike_centered_avg":  (".spike_alignment",                           "spike_centered_avg"),
+    "spike_centered_median": (".spike_alignment",                         "spike_centered_median"),
     "sample_tau":          (".tau_estimate",                              "sample_tau"),
     "get_picked_pairs":    (".xlsx_reader",                               "get_picked_pairs"),
     "write_cell_summary_xlsx": (".xlsx_writer",                           "write_cell_summary_xlsx"),

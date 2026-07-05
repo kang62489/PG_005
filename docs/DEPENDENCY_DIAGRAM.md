@@ -259,7 +259,7 @@ functions/
     │    ├── concatenate_frames_horizontally()
     │    └── split_concatenated_result()
     │
-    ├── spike_centered_processes.py  → Spike-aligned processing
+    ├── spike_alignment.py  → Spike-aligned processing
     │    ├── spike_centered_median()  (robust to outliers)
     │    └── spike_centered_avg()     (mean, sensitive to outliers)
     │
@@ -401,7 +401,7 @@ im_dynamics.py
   │    ├─→ RegionAnalyzer
   │    └─→ ResultsExporter
   └─→ functions
-       ├─→ spike_centered_processes (spike_centered_median)
+       ├─→ spike_alignment (spike_centered_median)
        └─→ imaging_segments_zscore_normalization (img_seg_zscore_norm)
 
 

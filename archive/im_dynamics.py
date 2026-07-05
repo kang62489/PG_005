@@ -18,7 +18,7 @@ from classes import (
     ResultsExporter,
     SpatialCategorizer,
 )
-from functions.spike_centered_processes import spike_centered_median
+from functions.spike_alignment import spike_centered_median
 
 # Setup QApplication
 app = QApplication(sys.argv)
