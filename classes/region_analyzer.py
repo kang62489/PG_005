@@ -103,9 +103,16 @@ class RegionAnalyzer:
         )
 
         self.clusters = self._build_clusters(med_stack)
-        self.max_area_frame_idx, self.max_area_offset, self.max_area_um2, self.max_area_eq_radius_um = self._compute_max_area(
-            cat_stack, spike_frame_idx, eps_px, min_samples
-        )
+        (
+            self.max_area_frame_idx,
+            self.max_area_offset,
+            self.max_area_um2,
+            self.max_area_eq_radius_um,
+            self.max_area_x_span_px,
+            self.max_area_y_span_px,
+            self.max_area_x_span_um,
+            self.max_area_y_span_um,
+        ) = self._compute_max_area(cat_stack, spike_frame_idx, eps_px, min_samples)
 
     def _build_clusters(self, med_stack: np.ndarray) -> list[dict]:
         """Per-cluster result dicts for the critical frame (self.label_frame/self.centroids).
@@ -145,16 +152,18 @@ class RegionAnalyzer:
 
     def _compute_max_area(
         self, cat_stack: np.ndarray, spike_frame_idx: int, eps_px: int, min_samples: int
-    ) -> tuple[int, int, float, float]:
+    ) -> tuple[int, int, float, float, int | None, int | None, float | None, float | None]:
         """Max-area frame stats, independent of the critical-frame pick above.
 
         Picks whichever of frame0 (spike) / frame1 (spike+1) has the larger
         raw area_pct -- used only for the headline area stat, not latency.
         The reported area is that frame's DBSCAN-kept-cluster area (noise
-        excluded), not the raw non-background count.
+        excluded), not the raw non-background count. X/Y span is measured from
+        the combined DBSCAN-kept mask on that same frame.
 
         Returns:
-            (max_area_frame_idx, max_area_offset, max_area_um2, max_area_eq_radius_um)
+            (max_area_frame_idx, max_area_offset, max_area_um2,
+            max_area_eq_radius_um, x_span_px, y_span_px, x_span_um, y_span_um)
         """
         candidate_idxs = [spike_frame_idx]
         if spike_frame_idx + 1 < len(self.area_pct):
@@ -168,7 +177,10 @@ class RegionAnalyzer:
         max_area_kept_px = int(np.count_nonzero(label_frame >= 0))
         max_area_um2 = self._area_to_um2(max_area_kept_px)
         max_area_eq_radius_um = float(np.sqrt(max_area_um2 / np.pi))
-        return max_area_frame_idx, max_area_offset, max_area_um2, max_area_eq_radius_um
+        x_span_px, y_span_px = compute_xy_span(label_frame >= 0)
+        x_span_um = self._px_to_um(x_span_px) if x_span_px is not None else None
+        y_span_um = self._px_to_um(y_span_px) if y_span_px is not None else None
+        return max_area_frame_idx, max_area_offset, max_area_um2, max_area_eq_radius_um, x_span_px, y_span_px, x_span_um, y_span_um
 
     # ── Unit conversion helpers ────────────────────────────────────────────────
 
@@ -193,6 +205,10 @@ class RegionAnalyzer:
             "max_area_offset":         self.max_area_offset,
             "max_area_um2":            self.max_area_um2,
             "max_area_eq_radius_um":   self.max_area_eq_radius_um,
+            "max_area_x_span_px":      self.max_area_x_span_px,
+            "max_area_y_span_px":      self.max_area_y_span_px,
+            "max_area_x_span_um":      self.max_area_x_span_um,
+            "max_area_y_span_um":      self.max_area_y_span_um,
             "n_clusters":               len(self.clusters),
             "clusters": [
                 {"centroid": c["centroid"], "R_lat_px": c["R_lat_px"], "R_lat_um": c["R_lat_um"]}
@@ -334,6 +350,16 @@ def eps_and_min_samples(obj: str) -> tuple[int, int]:
     eps_px = int(EPS_UM * px_per_um)
     min_samples = max(1, int(MIN_DENSITY_FRAC * np.pi * eps_px**2))
     return eps_px, min_samples
+
+
+def compute_xy_span(mask: np.ndarray) -> tuple[int | None, int | None]:
+    """X/Y span of a combined accepted-region mask, in pixels."""
+    coords = np.argwhere(mask)
+    if coords.size == 0:
+        return None, None
+    y_span_px = int(coords[:, 0].max() - coords[:, 0].min() + 1)
+    x_span_px = int(coords[:, 1].max() - coords[:, 1].min() + 1)
+    return x_span_px, y_span_px
 
 
 def _run_cluster_seeker(frame: np.ndarray, eps_px: int, min_samples: int) -> tuple[np.ndarray, list[tuple[float, float]], int]:
@@ -482,8 +508,9 @@ def compute_ring_traces(
     height, width = label_frame.shape
     inner_mask = np.zeros((height, width), dtype=bool)
     outer_mask = np.zeros((height, width), dtype=bool)
+    is_outer = (dists > split) & (dists <= R)
     inner_mask[coords[dists <= split, 0], coords[dists <= split, 1]] = True
-    outer_mask[coords[dists > split, 0], coords[dists > split, 1]] = True
+    outer_mask[coords[is_outer, 0], coords[is_outer, 1]] = True
 
     n_frames = med_stack.shape[0]
     inner_trace = med_stack[:, inner_mask].mean(axis=1) if inner_mask.any() else np.full(n_frames, np.nan)

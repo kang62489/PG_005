@@ -308,9 +308,14 @@ def run(
                 console.log(f"[cyan]  cluster {i}: R_lat={cluster['R_lat_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
 
         max_area_tag = "spike" if region_results["max_area_offset"] == 0 else f"spike{region_results['max_area_offset']:+d}"
+        span_text = (
+            f", span x/y={region_results['max_area_x_span_um']:.1f}/{region_results['max_area_y_span_um']:.1f} µm"
+            if region_results["max_area_x_span_um"] is not None and region_results["max_area_y_span_um"] is not None
+            else ""
+        )
         console.log(
             f"[green]Max-area frame {max_area_tag}: area={region_results['max_area_um2']:.0f} µm² "
-            f"(eq. radius={region_results['max_area_eq_radius_um']:.1f} µm)[/green]"
+            f"(eq. radius={region_results['max_area_eq_radius_um']:.1f} µm){span_text}[/green]"
         )
 
         if emitter:
@@ -354,7 +359,9 @@ def run(
             "tiff_serial": export_data["img_serial"],
             "abf_serial": export_data["abf_serial"],
         }
-        fig = plot_spatiotemporal_summary(categorizer, region_analyzer, spike_frame_idx, title_info)
+        fig = plot_spatiotemporal_summary(
+            categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
+        )
         stem = ResultsExporter.build_export_stem(
             export_data["exp_date"], export_data["img_serial"], animal_idx,
             slice_val, at, detrend_mode, normalization, "SPATIAL",
@@ -372,7 +379,7 @@ def run(
 
         dir_names = "/, ".join(d.name for d in dirs.values())
         console.log(
-            f"[green]✓ Exported {dir_names}/, region_sta/, full_traces/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
+            f"[green]Exported {dir_names}/, region_sta/, full_traces/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
         )
 
     if write_stats_report(ana_list_path, exporter.db_path):

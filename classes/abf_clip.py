@@ -107,13 +107,21 @@ class AbfClip:
 
         if self.lst_abf_sample_ranges:
             seg_cols: dict[str, np.ndarray] = {}
-            for i, (start, end) in enumerate(self.lst_abf_sample_ranges):
-                seg_cols[f"rec_time(abf_seg_{i})"] = self.rec_time[start:end]
-                seg_cols[f"Vm(abf_seg_{i})"] = self.Vm[start:end]
+            for i, (time_slice, vm_slice) in enumerate(self._segment_vm_slices()):
+                seg_cols[f"rec_time(abf_seg_{i})"] = time_slice
+                seg_cols[f"Vm(abf_seg_{i})"] = vm_slice
             pl.DataFrame(seg_cols).write_excel(workbook=wb, worksheet="ABF_segments")
 
         wb.close()
-        console.log(f"[green]Saved spike detection → {xlsx_path}[/green]")
+        console.log(f"[green]Saved spike detection -> {xlsx_path}[/green]")
+
+    def _segment_vm_slices(self) -> list[tuple[np.ndarray, np.ndarray]]:
+        """Per-segment (rec_time slice, Vm slice) pairs, from lst_abf_sample_ranges.
+
+        Single source of truth for both the ABF_segments xlsx sheet and
+        get_vm_segments, so both draw from the exact same paired slicing.
+        """
+        return [(self.rec_time[start:end], self.Vm[start:end]) for start, end in self.lst_abf_sample_ranges]
 
     def get_available_spiking_frames(self) -> None:
         if self.num_found_spikes == 0:
@@ -184,7 +192,7 @@ class AbfClip:
         # bounds into an empty frame range — clamp to 0 ("no margin available") instead.
         inter_spike_frames = np.clip(inter_spike_frames, 0, None)
 
-        # Pass 1: collect min_available_frames for all spikes → derive set_interval_frames from mode
+        # Pass 1: collect min_available_frames for all spikes -> derive set_interval_frames from mode
         all_min_available: list[int] = []
         for idx_of_spike in range(len(self.spike_frame_indices)):
             left_frames: int = inter_spike_frames[idx_of_spike]
@@ -195,7 +203,7 @@ class AbfClip:
         self.set_interval_frames = min(int(all_min_series.mode().min()), 20)
         console.log(
             f"[bold cyan]Min_Available_Frames — max: {all_min_series.max()}, "
-            f"mode: {all_min_series.mode().to_list()} → set_interval_frames = {self.set_interval_frames}[/bold cyan]"
+            f"mode: {all_min_series.mode().to_list()} -> set_interval_frames = {self.set_interval_frames}[/bold cyan]"
         )
 
         # Pass 2: filter spikes using auto-derived set_interval_frames
@@ -250,17 +258,20 @@ class AbfClip:
             console.log("[bold red]No spikes were picked! Exiting...[/bold red]")
             return
 
+        self.lst_spike_frame_start_samples: list[int] = []
         for row in self.df_picked_spikes.iter_rows(named=True):
             left_bound: int = row["Spike_Frame_Index"] - row["Set_Interval_Frames"]
             right_bound: int = row["Spike_Frame_Index"] + row["Set_Interval_Frames"]
 
             abf_left_bound: int = left_bound + self.first_dropped
             abf_right_bound: int = right_bound + self.first_dropped
+            spike_frame_abf_idx: int = row["Spike_Frame_Index"] + self.first_dropped
 
             self.lst_img_frame_ranges.append((left_bound, right_bound))
             start_sample = abf_left_bound * self.points_per_frame
             end_sample = (abf_right_bound + 1) * self.points_per_frame
             self.lst_abf_sample_ranges.append((start_sample, end_sample))
+            self.lst_spike_frame_start_samples.append(spike_frame_abf_idx * self.points_per_frame)
 
         console.log(
             f"Total segments: {len(self.lst_img_frame_ranges)} image ranges, {len(self.lst_abf_sample_ranges)} ABF ranges"
@@ -278,3 +289,19 @@ class AbfClip:
             "num_found_spikes": self.num_found_spikes,
             "n_spikes_analyzed": len(self.df_picked_spikes),
         }
+
+    def get_vm_segments(self) -> list[tuple[np.ndarray, np.ndarray]]:
+        """Per-segment (time_ms_relative_to_spike_frame, Vm) pairs, for overlaying spike waveforms.
+
+        t=0 is the start of the spike's own image frame (lst_spike_frame_start_samples),
+        the same frame-offset reference used by the image panels and B+D% trace elsewhere
+        in plot_spatiotemporal_summary -- not the raw detected voltage peak, which can sit
+        anywhere within that frame's window and would misalign the frame-boundary gridlines.
+        """
+        segments = []
+        for (time_slice, vm_slice), frame_start_sample in zip(
+            self._segment_vm_slices(), self.lst_spike_frame_start_samples, strict=True
+        ):
+            time_ms = (time_slice - self.rec_time[frame_start_sample]) * 1000.0
+            segments.append((time_ms, vm_slice))
+        return segments

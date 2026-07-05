@@ -1,3 +1,43 @@
+# Log of the project progress 2026-07-05 Sun (Session 46)
+Last working file: `functions/plot_results.py`
+Last working line: ~365 (`ax.set_title(fontsize=12)` in `_plot_frame_panel`)
+
+## List of modified files
+- `functions/plot_results.py` — multiple plot layout and labeling changes:
+  - Fixed panel title alignment: switched from flat `fig.add_gridspec(3, 9)` to a nested layout — `gs_outer = fig.add_gridspec(3, 1)` + `gs_panels = gs_outer[1].subgridspec(1, 9)`. All 9 panel axes now share identical height, so `ax.set_title()` anchors consistently across all panels.
+  - Removed B+D area stat from panel titles (was one of 3–4 lines per panel, causing height variation and requiring `max_title_lines` compensation). Panels now show only the frame label + hotspot area (critical frame only) + span (max-area frame only). This allowed going back to plain `ax.set_title()` with single color.
+  - Added µm² to row 0 legend labels: format `xxxxx µm² (xx%)` for spike-1/spike/spike+1/critical entries.
+  - Changed figure `suptitle` from "Spatiotemporal Analysis" → "Spatial Analysis".
+  - Changed row 0 `ax.set_title` to "Bright+Dim area coverage per frame | star = critical frame (spike or spike+1)"; y-label to "B+D area (%)".
+  - Removed the "RegionAnalyzer — OBJ=..." settings text block (was placed between row 0 and row 1); also removed the now-dead `settings_text` variable and unused imports (`CATEGORY_BRIGHT`, `CATEGORY_DIM`, `SATURATION_AREA_PCT`).
+  - Changed panel title `fontsize` 10 → 12 (matches the other row titles); **not yet verified by a pipeline run**.
+- `classes/abf_clip.py` — replaced `→` (U+2192) with `->` in two console.log strings to avoid `UnicodeEncodeError` under `uv run` (cp1252 console encoding on Windows).
+- `ach_domain_analysis.py` — removed `✓` from one console.log f-string for the same reason.
+
+## Summary of current progress
+- Resolved the long-standing panel title misalignment in `*_SPATIAL.png` (different numbers of stat lines per panel causing frame labels to sit at different heights) by switching to a nested subgridspec. The fix is structural — no more manual y-coordinate calculation, no `max_title_lines` pre-loop.
+- Simplified the figure: RegionAnalyzer settings banner removed, B+D per-panel clutter removed; that info is now fully represented in the row 0 legend (which gained µm² values this session).
+- Fixed Unicode crash that prevented `uv run` from completing on Windows (cp1252 encoding, `→` and `✓` chars).
+- Verified end-to-end (ruff clean, pipeline exit 0, PNGs visually confirmed) for all changes except the final `fontsize=12` bump on panel titles.
+
+## Completed TODOs
+- ✅ Fixed panel title alignment (nested subgridspec)
+- ✅ Removed B+D from panel titles; back to `ax.set_title()` single color
+- ✅ Added µm² to row 0 legend in `xxxxx µm² (xx%)` format
+- ✅ Renamed figure title to "Spatial Analysis"
+- ✅ Updated row 0 axis titles ("Bright+Dim area coverage per frame", "B+D area (%)")
+- ✅ Removed RegionAnalyzer settings text + dead imports
+- ✅ Fixed Unicode crash (`→`, `✓`) in `abf_clip.py` and `ach_domain_analysis.py`
+- ✅ Updated `docs/dbscan_notes.md` (stale "demo figures" ref + `critical_frame_area_um2` note)
+
+## What should we do next? (TODOs)
+- [ ] **Complete X/Y Span + Lasting Time plan** — plan doc: `# X/Y Span And Lasting Time Plan`. X/Y span is partly in (`RegionAnalyzer`, `ResultsExporter` DB columns, console log, SPATIAL title display); needs full pipeline verification on a clean `results.db`. Lasting time is not yet implemented: `get_lasting_time_ms()` method, `extinction_threshold_pct`/`extinction_frame_idx`/`extinction_frame_offset` in `get_results()`, DB columns `extinction_frame_offset`/`lasting_time_ms`, and B+D% trace annotations (threshold line, extinction marker, shading). Unit tests for both span (empty mask) and extinction logic (normal decay, 1-frame dip ignored, no extinction, spike+1 critical frame) per the plan's test section.
+
+## Last Session Recap
+※ recap: Fixed SPATIAL.png panel title alignment using nested subgridspec (structural fix — all panels identical height → `ax.set_title()` consistent). Simplified the figure: removed B+D from panel stat lines (moved µm² info to row 0 legend instead), removed the RegionAnalyzer settings banner, renamed the figure and axis titles. Fixed a Unicode crash breaking `uv run` on Windows. Updated `docs/dbscan_notes.md`: fixed "demo figures" ref to "export figures" and added a note on `critical_frame_area_um2` and its Session 45 bug fix.
+
+---
+
 # Log of the project progress 2026-07-04 Sat (Session 45)
 Last working file: `classes/region_analyzer.py`
 Last working line: 414 (end of the new `_detect_clusters()` helper, added last)

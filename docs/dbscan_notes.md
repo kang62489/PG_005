@@ -52,6 +52,15 @@ Diagonal neighbours are slightly farther (~1.41px) than straight neighbours (1px
 
 **Definition** (`compute_area_pct`): fraction of non-background pixels in a frame
 
+**`critical_frame_area_pct`** — the raw B+D% at the critical frame (drives the
+saturation guard and is exported to the DB as a threshold-check-friendly percentage).
+
+**`critical_frame_area_um2`** — the cluster-filtered area at the critical frame:
+same DBSCAN path as `max_area_um2`, summing only kept-cluster pixels (noise excluded).
+An earlier version counted raw non-background pixels (same bug as the original
+`max_area_um2`) — fixed in Session 45 after a real-data spot-check showed both stats
+disagreeing on the same physical frame.
+
 ```
 area_pct = count(pixels > 0) / total_pixels * 100
 ```
@@ -209,9 +218,9 @@ was corrected mid-session:
 
 ## Open TODOs
 
-### Visual tweak for demo figures
+### Visual tweak — export figures
 
-Cluster shading colors/alpha could still use tuning — carried over, low priority.
+Cluster shading colors/alpha in `functions/plot_results.py` could still use tuning — low priority.
 
 ### `MIN_CLUSTER_FRACTION` / eps µm-basis
 

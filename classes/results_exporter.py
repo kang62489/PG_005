@@ -132,6 +132,8 @@ class ResultsExporter:
                 max_area_offset INTEGER,
                 max_area_um2 REAL,
                 max_area_eq_radius_um REAL,
+                max_area_x_span_um REAL,
+                max_area_y_span_um REAL,
                 ANIMAL_ID TEXT,
                 SLICE TEXT,
                 AT TEXT,
@@ -146,8 +148,23 @@ class ResultsExporter:
                 UNIQUE(exp_date, abf_serial, img_serial)
             )
         """)
+        self._ensure_columns(
+            conn,
+            {
+                "max_area_x_span_um": "REAL",
+                "max_area_y_span_um": "REAL",
+            },
+        )
         conn.commit()
         conn.close()
+
+    @staticmethod
+    def _ensure_columns(conn: sqlite3.Connection, columns: dict[str, str]) -> None:
+        """Add missing columns to an existing experiments table."""
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(experiments)").fetchall()}
+        for column_name, column_type in columns.items():
+            if column_name not in existing:
+                conn.execute(f"ALTER TABLE experiments ADD COLUMN {column_name} {column_type}")
 
     def export_all(
         self,
@@ -333,11 +350,11 @@ class ResultsExporter:
                 n_spikes_detected, n_spikes_analyzed,
                 n_clusters, has_region, saturated,
                 critical_frame_offset, critical_frame_area_pct, critical_frame_area_um2,
-                max_area_offset, max_area_um2, max_area_eq_radius_um,
+                max_area_offset, max_area_um2, max_area_eq_radius_um, max_area_x_span_um, max_area_y_span_um,
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um, peak_latency_ms,
                 zscore_min, zscore_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -358,6 +375,8 @@ class ResultsExporter:
                 region_data["max_area_offset"],
                 region_data["max_area_um2"],
                 region_data["max_area_eq_radius_um"],
+                region_data["max_area_x_span_um"],
+                region_data["max_area_y_span_um"],
                 animal_id,
                 slice_val,
                 at,

@@ -22,7 +22,7 @@ dir_raw_abfs: D:\MyDB\2_Programs\PG_005\raw_abfs
 dir_results: D:\MyDB\2_Programs\PG_005\results
 
 ================================================================================
-Region Analysis Statistics — generated 2026-07-04T13:26:56+00:00
+Region Analysis Statistics — generated 2026-07-05T13:27:51+00:00
 ================================================================================
 Neurons detected ACh release: 2/2
 
