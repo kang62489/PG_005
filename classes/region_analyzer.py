@@ -112,6 +112,8 @@ class RegionAnalyzer:
             self.max_area_y_span_px,
             self.max_area_x_span_um,
             self.max_area_y_span_um,
+            self.max_area_x_min_px,
+            self.max_area_y_min_px,
         ) = self._compute_max_area(cat_stack, spike_frame_idx, eps_px, min_samples)
 
     def _build_clusters(self, med_stack: np.ndarray) -> list[dict]:
@@ -152,7 +154,7 @@ class RegionAnalyzer:
 
     def _compute_max_area(
         self, cat_stack: np.ndarray, spike_frame_idx: int, eps_px: int, min_samples: int
-    ) -> tuple[int, int, float, float, int | None, int | None, float | None, float | None]:
+    ) -> tuple[int, int, float, float, int | None, int | None, float | None, float | None, int | None, int | None]:
         """Max-area frame stats, independent of the critical-frame pick above.
 
         Picks whichever of frame0 (spike) / frame1 (spike+1) has the larger
@@ -163,7 +165,11 @@ class RegionAnalyzer:
 
         Returns:
             (max_area_frame_idx, max_area_offset, max_area_um2,
-            max_area_eq_radius_um, x_span_px, y_span_px, x_span_um, y_span_um)
+            max_area_eq_radius_um, x_span_px, y_span_px, x_span_um, y_span_um,
+            x_min_px, y_min_px)
+            x_min_px/y_min_px are the top-left corner of the span bbox (col_min,
+            row_min), used by callers drawing a Rectangle overlay. None when no
+            accepted clusters exist.
         """
         candidate_idxs = [spike_frame_idx]
         if spike_frame_idx + 1 < len(self.area_pct):
@@ -177,10 +183,14 @@ class RegionAnalyzer:
         max_area_kept_px = int(np.count_nonzero(label_frame >= 0))
         max_area_um2 = self._area_to_um2(max_area_kept_px)
         max_area_eq_radius_um = float(np.sqrt(max_area_um2 / np.pi))
-        x_span_px, y_span_px = compute_xy_span(label_frame >= 0)
+        mask = label_frame >= 0
+        x_span_px, y_span_px = compute_xy_span(mask)
         x_span_um = self._px_to_um(x_span_px) if x_span_px is not None else None
         y_span_um = self._px_to_um(y_span_px) if y_span_px is not None else None
-        return max_area_frame_idx, max_area_offset, max_area_um2, max_area_eq_radius_um, x_span_px, y_span_px, x_span_um, y_span_um
+        coords = np.argwhere(mask)
+        x_min_px = int(coords[:, 1].min()) if coords.size > 0 else None
+        y_min_px = int(coords[:, 0].min()) if coords.size > 0 else None
+        return max_area_frame_idx, max_area_offset, max_area_um2, max_area_eq_radius_um, x_span_px, y_span_px, x_span_um, y_span_um, x_min_px, y_min_px
 
     # ── Unit conversion helpers ────────────────────────────────────────────────
 

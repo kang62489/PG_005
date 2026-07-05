@@ -207,6 +207,8 @@ def plot_spatiotemporal_summary(
             )
             if is_critical_frame:
                 _draw_cluster_shading(ax_frame, region_analyzer.label_frame, region_analyzer.centroids)
+            if frame_idx == region_analyzer.max_area_frame_idx:
+                _draw_span_bbox(ax_frame, region_analyzer)
         else:
             frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
             ax_frame.set_title(f"{frame_label}\n(out of range)", fontsize=9)
@@ -434,6 +436,22 @@ def _draw_cluster_shading(ax: mpl.axes.Axes, label_frame: np.ndarray, centroids:
         ax.plot(col_c, row_c, "x", color="black", markersize=16, markeredgewidth=4, zorder=10)
         ax.plot(col_c, row_c, "x", color="white", markersize=14, markeredgewidth=2.5, zorder=11)
         ax.text(col_c + 5, row_c - 5, str(cluster_idx), color="white", fontsize=9, fontweight="bold")
+
+
+def _draw_span_bbox(ax: mpl.axes.Axes, region_analyzer: "RegionAnalyzer") -> None:
+    """Dashed bounding-box rectangle over the accepted-mask span on the max-area panel."""
+    x_min = region_analyzer.max_area_x_min_px
+    y_min = region_analyzer.max_area_y_min_px
+    x_span = region_analyzer.max_area_x_span_px
+    y_span = region_analyzer.max_area_y_span_px
+    if x_min is None or y_min is None:
+        return
+    rect = Rectangle(
+        (x_min, y_min), x_span, y_span,
+        linewidth=2.0, edgecolor="#f1c40f", facecolor="none",
+        linestyle="--", alpha=0.85, zorder=4,
+    )
+    ax.add_patch(rect)
 
 
 def _overlay_clusters(ax: mpl.axes.Axes, clusters: list[dict], highlight: set[int]) -> None:

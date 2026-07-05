@@ -1,3 +1,32 @@
+# Log of the project progress 2026-07-06 Sun (Session 47)
+Last working file: `functions/plot_results.py`
+Last working line: `_draw_span_bbox()` — `linewidth=2.0`
+
+## List of modified files
+- `classes/region_analyzer.py` — `_compute_max_area()` now also computes and stores `max_area_x_min_px` / `max_area_y_min_px` (top-left corner of the DBSCAN-kept accepted-mask bbox, in pixels); returned as two extra values and unpacked in `__init__`. Used by callers drawing a Rectangle overlay.
+- `functions/plot_results.py` — new `_draw_span_bbox()` helper draws a yellow dashed `Rectangle` patch (`linewidth=2.0, edgecolor="#f1c40f", facecolor="none", linestyle="--", alpha=0.85, zorder=4`) on the max-area frame panel; called from `plot_spatiotemporal_summary()` in the 9-panel loop after `_draw_cluster_shading()`.
+
+## Summary of current progress
+- Completed the X/Y span verification end-to-end (clean `results.db` run, DB inspection via `_read_experiments()`, visual PNG check) — all 8 recordings populated with correct span values, no excluded recordings.
+- Added the bbox rectangle overlay (Option A) for X/Y span visualization: a yellow dashed `Rectangle` drawn over the DBSCAN-kept accepted-mask bounding box on the max-area frame panel only. Confirmed on both a 10X recording (tight cluster, small bbox) and a 60X saturated recording (bbox fills most of frame, as expected).
+- Both `region_analyzer.py` and `plot_results.py` pass ruff clean after changes.
+- Pipeline verified exit 0 twice this session (pre-bbox for DB inspection, post-bbox for visual confirmation).
+
+## Completed TODOs
+- ✅ X/Y span verified end-to-end: pipeline, DB columns, console log, panel title text
+- ✅ Bbox rectangle overlay added to SPATIAL PNG on max-area frame panel
+- ✅ `max_area_x_min_px` / `max_area_y_min_px` stored in `RegionAnalyzer` for caller use
+- ✅ Bbox linewidth tuned to 2.0 (visually confirmed)
+- ✅ Panel title `fontsize=12` change from Session 46 implicitly verified by two pipeline runs this session
+
+## What should we do next? (TODOs)
+- [ ] **Implement lasting time** — per `# X/Y Span And Lasting Time Plan`: `get_lasting_time_ms(frame_duration_ms)` method in `RegionAnalyzer`; `extinction_threshold_pct` / `extinction_frame_idx` / `extinction_frame_offset` added to `get_results()`; DB columns `extinction_frame_offset` and `lasting_time_ms` in `ResultsExporter`; B+D% trace annotations in `plot_spatiotemporal_summary()` (horizontal threshold line, extinction-frame marker, optional shading from critical frame to extinction frame).
+
+## Last Session Recap
+※ recap: Verified X/Y span end-to-end (DB + visual PNG check). Added a yellow dashed bounding-box rectangle overlay (`_draw_span_bbox()`) on the max-area frame panel in SPATIAL PNGs, backed by new `max_area_x_min_px`/`max_area_y_min_px` attributes in `RegionAnalyzer._compute_max_area()`. Tuned linewidth to 2.0. All ruff clean, pipeline exit 0. Next: implement lasting time.
+
+---
+
 # Log of the project progress 2026-07-05 Sun (Session 46)
 Last working file: `functions/plot_results.py`
 Last working line: ~365 (`ax.set_title(fontsize=12)` in `_plot_frame_panel`)
