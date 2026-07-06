@@ -1,3 +1,52 @@
+# Log of the project progress 2026-07-06 Sun (Session 48)
+Last working file: `ach_domain_analysis.py`
+Last working line: ~391 (`console.log(f"[green]Exported {dir_names}/, region_sta/  ...")` — dropped the stale `full_traces/` mention)
+
+## List of modified files
+- `classes/region_analyzer.py` — implemented Lasting Time, but the final design diverged twice from the plan doc's original spec before landing:
+  - First tried: extinction-frame detection via a baseline+5σ threshold on raw B+D% (`pick_extinction_frame`, per the original plan) — abandoned after checking real `*_SPATIAL.png` files together with the user and finding real recordings (e.g. `2025_04_03-0034`) show a non-monotonic decay with a plateau/shoulder well above baseline before finally settling, which a "2 consecutive frames below threshold" rule can misfire on.
+  - Second tried: switch the extinction signal from raw B+D% to Bright-only % (`compute_bright_pct`, excluding Dim pixels) to dodge the Dim-halo shoulder — user then reconsidered mid-implementation ("if we use fitting, we don't need specific to bright area?") once fitting was on the table, since a reported R² already makes a bad fit visible; this function was added then removed again.
+  - **Final design**: fit a single-exponential decay `A*exp(-T/tau)` to raw B+D% (`area_pct`) from its post-critical-frame peak (`decay_peak_frame_idx`) to segment end (`fit_decay_tau()`, using `scipy.optimize.curve_fit`); `lasting_time_ms = tau` (the fit's time constant itself, in ms via `get_lasting_time_ms(frame_duration_ms)`); R² reported alongside so a bad/bi-phasic fit is visible rather than silently misleading. Guards: skips the fit (all `None`) if fewer than `MIN_DECAY_FIT_FRAMES=3` post-peak frames exist, or the post-peak trace barely varies (`MIN_DECAY_FIT_RANGE`), or `curve_fit` doesn't converge.
+  - `get_results()` gained `decay_peak_frame_idx`, `decay_peak_offset`, `decay_fit_r2`.
+- `classes/results_exporter.py` — new DB columns `decay_peak_offset INTEGER`, `decay_fit_r2 REAL`, `lasting_time_ms REAL`; `lasting_time_ms` threaded through `export_all()`/`_upsert_record()` exactly like the existing `peak_latency_ms` (computed by the caller with `frame_duration_ms`, passed in as its own arg — not baked into `region_data` since `get_results()` doesn't take `frame_duration_ms`).
+- `functions/database_ops.py` — `compute_region_stats()`'s `metric_cols` gained `"lasting_time_ms"` (user's explicit ask, separate from the earlier plan) — verified it shows up correctly in the aggregated stats table (mean 122.35 ms, std 60.83, n=2 cells on the test ana list).
+- `ach_domain_analysis.py` — computes `lasting_time_ms = region_analyzer.get_lasting_time_ms(frame_duration_ms)`, logs it (or a "fit failed" note) to console, passes it to `export_all()`. Also, per a separate small request mid-session: moved `plot_full_trace`'s export from `full_traces/` to `region_sta/` and renamed its filename suffix `TRACE`→`LATENCY`; fixed a stale `full_traces/` mention in the "Exported ..." console log line.
+- `functions/plot_results.py` — new `_draw_decay_fit()` helper overlays the fitted exponential decay curve (dashed) on the row-0 B+D% trace (`ax_bd` in `plot_spatiotemporal_summary`), labeled `τ=... ms (R²=...)`, or an italic "fit failed" note when no fit is available. Docstring's `plot_full_trace` folder reference updated to `region_sta/, *_LATENCY.png`.
+- `.claude/plans/xy-span-lasting-time.md` — only lightly touched (marked as in-progress at some point during the session); **still describes the old extinction-frame+threshold design, not the final decay-fit approach** — flagged as a TODO below.
+- Deleted 4 stray debug/profiling scripts from repo root (`_fix_latency_db_tmp.py`, `_geom_test.py`, `_geom_test.png`, `_profile_io_tmp.py`, `_profile_tmp.py`) — pre-existing clutter, unrelated to this session's actual work but swept up in the same commit.
+- `results/region_sta/`, `results/full_traces/` — regenerated/removed data, not tracked by git (`results/` is gitignored); `full_traces/` folder was deleted (old `*_TRACE.png` files superseded by the new `region_sta/*_LATENCY.png`), pipeline rerun twice to regenerate clean output under the new layout.
+- Everything above is already committed as `4d1f8b6` ("complete lasting time estimation") — working tree is clean.
+
+## Summary of current progress
+- Lasting Time is fully implemented and verified end-to-end, but via a materially different design than what the plan doc describes — went through two real pivots (baseline-threshold extinction → Bright%-only extinction → exponential-decay-fit) driven by checking actual `*_SPATIAL.png` files together with the user at each step rather than assuming the original plan would hold up.
+- Visually verified the decay fit on real data: clean single-spike recording (`2025_04_03-0032`) fits tightly (τ=202ms, R²=0.98); a recording with a genuine post-peak plateau/shoulder (`2025_04_03-0034`) still fits reasonably (τ=213ms, R²=0.91) — confirming the fit-based approach is robust to the exact failure mode that broke the threshold-based design.
+- Full 8-recording pipeline reran clean twice this session (once after the lasting-time implementation, once after the `full_traces`→`region_sta`/`LATENCY` rename) — ruff clean throughout, `results.db` schema confirmed, `compute_region_stats()` confirmed reporting `lasting_time_ms` correctly.
+- Separately explored (discussion only, no code): quantifying Vm spike-peak-time distribution across trials within a recording — some recordings (e.g. `2025_04_03-0032`, 3 trials) show tightly aligned peaks safe to average; others (e.g. `2025_06_11-0002`, 46 trials) show peaks scattered across the whole ~50ms frame window (real burst firing, no single dominant time). Discussed why mean±std is misleading for bimodal/scattered cases and sketched a mode+concentration% alternative, but user explicitly deferred this pending a discussion with their boss — **not started, no code, don't assume a direction next session**.
+- User flagged wanting to work on GUI tuning next, plus three new feature ideas (small ROI, loading the red channel TIFF, a patched-soma coordinate locator) — none scoped or discussed yet.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Lasting Time fully implemented: `fit_decay_tau()`, `get_lasting_time_ms()`, `decay_peak_frame_idx`/`decay_peak_offset`/`decay_fit_r2` in `get_results()`
+- ✅ DB columns `decay_peak_offset`/`decay_fit_r2`/`lasting_time_ms` added and populated
+- ✅ `lasting_time_ms` added to `compute_region_stats()`'s aggregated metrics
+- ✅ Console logging for lasting time (tau + R², or fit-failed note)
+- ✅ Decay-fit curve overlay on the B+D% trace row in `plot_spatiotemporal_summary`
+- ✅ Verified end-to-end on real data: clean-decay case and shoulder/plateau case, both visually confirmed
+- ✅ `full_traces/` → `region_sta/` export folder consolidation, `TRACE`→`LATENCY` filename suffix rename, old folder cleaned up
+- ✅ `append_stats.py` checked — confirmed no changes needed (generic wrapper around already-updated `compute_region_stats()`)
+
+## What should we do next? (TODOs)
+- [ ] **Update `.claude/plans/xy-span-lasting-time.md`** — the Lasting Time section still describes the abandoned extinction-frame+threshold design (`pick_extinction_frame`, `extinction_threshold_pct`/`extinction_frame_idx`/`extinction_frame_offset`), not the final exponential-decay-fit approach that's actually implemented and committed (`fit_decay_tau`, `decay_peak_frame_idx`/`decay_peak_offset`/`decay_fit_r2`, `lasting_time_ms = tau`). Should be rewritten to match reality before it misleads a future session.
+- [ ] **GUI tuning** — user wants to work on this next; no specifics given yet, needs scoping discussion first.
+- [ ] **Add small ROI support** — new feature idea, not yet scoped.
+- [ ] **Load red channel TIFF** — new feature idea, not yet scoped.
+- [ ] **Patched-soma coordinate locator** — new feature idea, not yet scoped.
+- [ ] **Vm peak-time distribution (on hold)** — idea to quantify per-trial spike-time spread (mode + concentration % instead of mean±std, since some recordings are genuinely bimodal/scattered); explicitly deferred by the user pending a discussion with their boss — do not resume without checking in first.
+
+## Last Session Recap
+※ recap: Implemented Lasting Time via an exponential-decay fit on B+D% (τ + R², after two design pivots away from the plan doc's threshold-based extinction-frame approach, driven by real-data checks with the user), verified end-to-end on both a clean-decay and a shoulder/plateau recording, and renamed `full_traces/`→`region_sta/`+`LATENCY` suffix. Discussed (no code) a mode+concentration% alternative for Vm peak-time spread, deferred pending the user's boss. Next: fix the now-stale plan doc, then GUI tuning + 3 new unscoped feature ideas (small ROI, red channel TIFF, patched-soma locator).
+
+---
+
 # Log of the project progress 2026-07-06 Sun (Session 47)
 Last working file: `functions/plot_results.py`
 Last working line: `_draw_span_bbox()` — `linewidth=2.0`

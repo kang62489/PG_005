@@ -53,7 +53,9 @@ class RegionAnalyzer:
     release sites.
 
     Result dict per cluster (from get_results()):
-        centroid : (row, col) in pixels
+        centroid : (row, col) in pixels, z-score-weighted toward the cluster's
+                   brightest sub-region rather than its plain geometric mean
+                   (see _weighted_centroid)
         R_lat_px : enclosing-circle radius in pixels, from the critical/latency
                    frame above (used for ring split + latency only)
         R_lat_um : enclosing-circle radius in µm
@@ -110,7 +112,8 @@ class RegionAnalyzer:
 
         eps_px, min_samples = eps_and_min_samples(obj)
         self.label_frame, self.centroids, self.n_raw_clusters, self.saturated = _detect_clusters(
-            cat_stack[self.critical_frame_idx], self.area_pct[self.critical_frame_idx], eps_px, min_samples
+            cat_stack[self.critical_frame_idx], self.area_pct[self.critical_frame_idx], eps_px, min_samples,
+            z_frame=med_stack[self.critical_frame_idx],
         )
 
         self.clusters = self._build_clusters(med_stack)
@@ -125,7 +128,7 @@ class RegionAnalyzer:
             self.max_area_y_span_um,
             self.max_area_x_min_px,
             self.max_area_y_min_px,
-        ) = self._compute_max_area(cat_stack, spike_frame_idx, eps_px, min_samples)
+        ) = self._compute_max_area(cat_stack, med_stack, spike_frame_idx, eps_px, min_samples)
 
     def _build_clusters(self, med_stack: np.ndarray) -> list[dict]:
         """Per-cluster result dicts for the critical frame (self.label_frame/self.centroids).
@@ -164,7 +167,7 @@ class RegionAnalyzer:
         return clusters
 
     def _compute_max_area(
-        self, cat_stack: np.ndarray, spike_frame_idx: int, eps_px: int, min_samples: int
+        self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, eps_px: int, min_samples: int
     ) -> tuple[int, int, float, float, int | None, int | None, float | None, float | None, int | None, int | None]:
         """Max-area frame stats, independent of the critical-frame pick above.
 
@@ -189,7 +192,8 @@ class RegionAnalyzer:
         max_area_offset = max_area_frame_idx - spike_frame_idx
 
         label_frame, _, _, _ = _detect_clusters(
-            cat_stack[max_area_frame_idx], self.area_pct[max_area_frame_idx], eps_px, min_samples
+            cat_stack[max_area_frame_idx], self.area_pct[max_area_frame_idx], eps_px, min_samples,
+            z_frame=med_stack[max_area_frame_idx],
         )
         max_area_kept_px = int(np.count_nonzero(label_frame >= 0))
         max_area_um2 = self._area_to_um2(max_area_kept_px)
@@ -459,13 +463,44 @@ def fit_decay_tau(area_pct: np.ndarray, peak_frame_idx: int) -> tuple[float | No
     return amplitude, tau, r_squared
 
 
-def _run_cluster_seeker(frame: np.ndarray, eps_px: int, min_samples: int) -> tuple[np.ndarray, list[tuple[float, float]], int]:
+def _weighted_centroid(rows: np.ndarray, cols: np.ndarray, z_frame: np.ndarray | None) -> tuple[float, float]:
+    """Z-score-weighted centroid of a pixel set, falling back to an unweighted mean.
+
+    Weighting by z_frame's value at each pixel pulls the centroid toward the
+    brightest sub-region of a cluster instead of treating every non-background
+    pixel (dim or bright) as equally important. Falls back to a plain mean
+    when z_frame is None (caller has no z-score data, e.g. plot_results.py's
+    hotspot-area line, which never uses the returned centroid anyway) or when
+    every weight is non-positive (degenerate/empty overlap, shouldn't happen
+    in practice since these pixels are already above the dim/bright threshold).
+
+    Args:
+        rows: row coordinates of the pixel set.
+        cols: column coordinates of the pixel set (same length as rows).
+        z_frame: (H, W) z-scored frame to weight by, or None to skip weighting.
+
+    Returns:
+        (centroid_row, centroid_col).
+    """
+    if z_frame is not None:
+        weights = np.clip(z_frame[rows, cols].astype(np.float64), 0.0, None)
+        if weights.sum() > 0:
+            return float(np.average(rows, weights=weights)), float(np.average(cols, weights=weights))
+    return float(rows.mean()), float(cols.mean())
+
+
+def _run_cluster_seeker(
+    frame: np.ndarray, eps_px: int, min_samples: int, z_frame: np.ndarray | None = None
+) -> tuple[np.ndarray, list[tuple[float, float]], int]:
     """Cluster non-background pixels with DBSCAN, then drop undersized clusters.
 
     Args:
         frame: 2D array (0=background, 1=dim, 2=bright) for a single frame.
         eps_px: DBSCAN neighborhood radius in pixels, from eps_and_min_samples().
         min_samples: DBSCAN minimum samples per cluster, from eps_and_min_samples().
+        z_frame: (H, W) z-scored frame (same frame as `frame`) to weight
+            centroids by pixel intensity; None for an unweighted mean (see
+            _weighted_centroid).
 
     Returns:
         label_frame: (H, W) array; -2 = background, -1 = noise/undersized cluster,
@@ -496,7 +531,7 @@ def _run_cluster_seeker(frame: np.ndarray, eps_px: int, min_samples: int) -> tup
     label_frame[coords[:, 0], coords[:, 1]] = remapped
 
     centroids = [
-        (float(coords[remapped == new_cluster_label, 0].mean()), float(coords[remapped == new_cluster_label, 1].mean()))
+        _weighted_centroid(coords[remapped == new_cluster_label, 0], coords[remapped == new_cluster_label, 1], z_frame)
         for new_cluster_label in range(len(kept))
     ]
 
@@ -504,7 +539,7 @@ def _run_cluster_seeker(frame: np.ndarray, eps_px: int, min_samples: int) -> tup
 
 
 def _detect_clusters(
-    frame: np.ndarray, area_pct_value: float, eps_px: int, min_samples: int
+    frame: np.ndarray, area_pct_value: float, eps_px: int, min_samples: int, z_frame: np.ndarray | None = None
 ) -> tuple[np.ndarray, list[tuple[float, float]], int, bool]:
     """Cluster non-background pixels, or fall back to 1 whole-frame cluster if saturated.
 
@@ -521,6 +556,8 @@ def _detect_clusters(
         area_pct_value: this frame's B+D% (from compute_area_pct()).
         eps_px: DBSCAN neighborhood radius in pixels, from eps_and_min_samples().
         min_samples: DBSCAN minimum samples per cluster, from eps_and_min_samples().
+        z_frame: (H, W) z-scored frame (same frame as `frame`) to weight
+            centroids by pixel intensity; None for an unweighted mean.
 
     Returns:
         label_frame: (H, W) array; -2=background, -1=noise/undersized cluster,
@@ -533,10 +570,10 @@ def _detect_clusters(
         mask = frame > CATEGORY_BACKGROUND
         coords = np.argwhere(mask)
         label_frame = np.where(mask, 0, -2).astype(int)
-        centroids = [(float(coords[:, 0].mean()), float(coords[:, 1].mean()))]
+        centroids = [_weighted_centroid(coords[:, 0], coords[:, 1], z_frame)]
         return label_frame, centroids, 1, True
 
-    label_frame, centroids, n_raw_clusters = _run_cluster_seeker(frame, eps_px, min_samples)
+    label_frame, centroids, n_raw_clusters = _run_cluster_seeker(frame, eps_px, min_samples, z_frame)
     return label_frame, centroids, n_raw_clusters, False
 
 
