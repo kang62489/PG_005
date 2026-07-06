@@ -118,10 +118,10 @@ def plot_spatiotemporal_summary(
     vm_segments: list[tuple[np.ndarray, np.ndarray]],
     frame_duration_ms: float,
 ) -> Figure:
-    """Static export figure: B+D% signal trace (row 1) + critical-frame panels (row 2)
+    """Static export figure: B% signal trace (row 1) + critical-frame panels (row 2)
     + overlapped electrophysiology traces per segment (row 3).
 
-    Shows why the critical frame was picked (B+D% vs the spike/spike+1 candidates)
+    Shows why the critical frame was picked (B% vs the spike/spike+1 candidates)
     and what DBSCAN found there -- cluster shading is drawn only on the critical
     frame's own panel, not repeated across every panel (see plot_full_trace for
     the fixed-overlay version). Row 3 shows the actual detected Vm spike waveform
@@ -150,7 +150,7 @@ def plot_spatiotemporal_summary(
     gs_outer = fig.add_gridspec(3, 1, height_ratios=[2.0, 2.5, 2.0], hspace=0.7)
     gs_panels = gs_outer[1].subgridspec(1, 9, wspace=0.08)
 
-    # --- Row 0: B+D% per frame trace ---
+    # --- Row 0: B% per frame trace ---
     ax_bd = fig.add_subplot(gs_outer[0])
     ax_bd.plot(np.arange(n_frames) - spike_frame_idx, area_pct, color="#3498db", linewidth=1.6,
                marker="o", markersize=3.5)
@@ -179,15 +179,18 @@ def plot_spatiotemporal_summary(
     _draw_decay_fit(ax_bd, region_analyzer, spike_frame_idx, n_frames, frame_duration_ms)
 
     ax_bd.set_xlabel("Frame offset from spike (0 = spike)", fontsize=12)
-    ax_bd.set_ylabel("B+D area (%)", fontsize=12)
-    ax_bd.set_title("Bright+Dim area coverage per frame  |  star = critical frame (spike or spike+1)", fontsize=12)
+    ax_bd.set_ylabel("B area (%)", fontsize=12)
+    ax_bd.set_title("Bright area coverage per frame  |  star = critical frame (spike or spike+1)", fontsize=12)
     ax_bd.legend(fontsize=10, loc="upper right")
     ax_bd.tick_params(labelsize=10)
 
     # --- Row 1: spike-4 .. spike+4 frame panels ---
     eps_px, min_samples = eps_and_min_samples(obj)
     hotspot_area_lines = {
-        idx: _format_hotspot_area_line(categorizer.categorized_frames[idx], area_pct[idx], eps_px, min_samples, um_per_pixel)
+        idx: _format_hotspot_area_line(
+            area_pct[idx], total_px, um_per_pixel,
+            label_frame=region_analyzer.label_frame if idx == critical_frame_idx else None,
+        )
         for idx in range(spike_frame_idx - 4, spike_frame_idx + 5)
         if 0 <= idx < n_frames
     }
@@ -336,8 +339,8 @@ def _plot_frame_panel(
 ) -> None:
     """One frame's categorized image with a stats title.
 
-    Defaults to a B/D/B+D area breakdown (used by plot_spatiotemporal_summary,
-    where row 0 above is the B+D% trace). Callers whose companion trace row
+    Defaults to a B area line (used by plot_spatiotemporal_summary,
+    where row 0 above is the B% trace). Callers whose companion trace row
     plots something else (e.g. plot_full_trace's z-score ring trace) should
     pass stats_lines to show a title relevant to that instead.
 
@@ -378,14 +381,30 @@ def _plot_frame_panel(
 
 
 def _format_hotspot_area_line(
-    cat_frame: np.ndarray, area_pct_value: float, eps_px: int, min_samples: int, um_per_pixel: float
+    area_pct_value: float, total_px: int, um_per_pixel: float,
+    label_frame: np.ndarray | None = None,
+    cat_frame: np.ndarray | None = None,
+    eps_px: int | None = None,
+    min_samples: int | None = None,
 ) -> str:
-    """DBSCAN-kept area line for spike/spike+1 panel titles."""
-    label_frame, _, _, _ = _detect_clusters(cat_frame, area_pct_value, eps_px, min_samples)
-    hotspot_px = np.count_nonzero(label_frame >= 0)
-    hotspot_um2 = hotspot_px * um_per_pixel ** 2
-    hotspot_pct = 100.0 * hotspot_px / label_frame.size
-    return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
+    """Area line for panel titles.
+
+    Critical frame: pass label_frame (already computed by RegionAnalyzer) — no DBSCAN.
+    Other frames: pass only area_pct_value/total_px/um_per_pixel — shows raw B% area.
+    """
+    if label_frame is not None:
+        hotspot_px = np.count_nonzero(label_frame >= 0)
+        hotspot_um2 = hotspot_px * um_per_pixel ** 2
+        hotspot_pct = 100.0 * hotspot_px / label_frame.size
+        return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
+    if cat_frame is not None and eps_px is not None and min_samples is not None:
+        lf, _, _, _ = _detect_clusters(cat_frame, area_pct_value, eps_px, min_samples)
+        hotspot_px = np.count_nonzero(lf >= 0)
+        hotspot_um2 = hotspot_px * um_per_pixel ** 2
+        hotspot_pct = 100.0 * hotspot_px / lf.size
+        return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
+    raw_um2 = area_pct_value / 100.0 * total_px * um_per_pixel ** 2
+    return f"B%: {raw_um2:.0f} µm² ({area_pct_value:.1f}%)"
 
 
 def _format_span_line(region_analyzer: RegionAnalyzer) -> str | None:

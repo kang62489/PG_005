@@ -178,14 +178,28 @@ def get_excluded_recordings(results_db_path: Path) -> tuple[pl.DataFrame, pl.Dat
     return excluded_images, excluded_cells
 
 
-def get_cell_recording_status(results_db_path: Path) -> pl.DataFrame:
+def _filter_by_run_keys(df: pl.DataFrame, run_keys: set[tuple[str, str]] | None) -> pl.DataFrame:
+    """Keep only rows whose (exp_date, img_serial) pair is in run_keys."""
+    if run_keys is None or df.is_empty():
+        return df
+    exp_dates, img_serials = zip(*run_keys, strict=True)
+    keys_df = pl.DataFrame({"exp_date": list(exp_dates), "img_serial": list(img_serials)})
+    return df.join(keys_df, on=["exp_date", "img_serial"], how="inner")
+
+
+def get_cell_recording_status(
+    results_db_path: Path, run_keys: set[tuple[str, str]] | None = None
+) -> pl.DataFrame:
     """Per-recording cluster detection status, for building per-cell file lists.
 
     Returns one row per recording (sorted by cell, then filename), columns:
     ANIMAL_ID, SLICE, AT, med_filename, detected (True if at least one cluster
     was found on that recording's critical frame).
+
+    run_keys: optional set of (exp_date, img_serial) pairs to restrict results
+    to the current ana-list run rather than the full accumulated DB.
     """
-    df = _read_experiments(results_db_path)
+    df = _filter_by_run_keys(_read_experiments(results_db_path), run_keys)
 
     if df.is_empty():
         return pl.DataFrame(
@@ -197,7 +211,9 @@ def get_cell_recording_status(results_db_path: Path) -> pl.DataFrame:
     ).sort(["ANIMAL_ID", "SLICE", "AT", "med_filename"])
 
 
-def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
+def compute_region_stats(
+    results_db_path: Path, run_keys: set[tuple[str, str]] | None = None
+) -> pl.DataFrame:
     """Mean +/- std of max-area-frame area (um^2), peak latency, and lasting
     time (decay tau), averaged per unique cell.
 
@@ -209,12 +225,15 @@ def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
     never actually detected. n_detected/n_total let you see how many cells were
     usable out of how many were attempted.
 
+    run_keys: optional set of (exp_date, img_serial) pairs to restrict results
+    to the current ana-list run rather than the full accumulated DB.
+
     Returns one row per metric (max_area_um2, max_area_eq_radius_um,
     peak_latency_ms, lasting_time_ms) with columns: metric, mean, std,
     n_detected, n_total.
     """
     metric_cols = ["max_area_um2", "max_area_eq_radius_um", "peak_latency_ms", "lasting_time_ms"]
-    df = _read_experiments(results_db_path)
+    df = _filter_by_run_keys(_read_experiments(results_db_path), run_keys)
 
     if df.is_empty():
         return pl.DataFrame(

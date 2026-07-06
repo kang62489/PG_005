@@ -25,10 +25,14 @@ console = Console()
 
 
 def append_stats(ana_list_path: Path) -> None:
-    _entries, results_dir, _detrend_mode, _normalization = parse_ana_list(ana_list_path)
+    entries, results_dir, _detrend_mode, _normalization = parse_ana_list(ana_list_path)
     results_db_path = results_dir / "results.db"
+    run_keys: set[tuple[str, str]] = {
+        tuple(Path(name).stem.split("-", 1))  # type: ignore[misc]
+        for name in entries["raw_tiff_name"].to_list()
+    }
 
-    if write_stats_report(ana_list_path, results_db_path):
+    if write_stats_report(ana_list_path, results_db_path, run_keys):
         console.log(f"[green]Updated region analysis statistics -> {ana_list_path.name}[/green]")
     else:
         console.log(f"[yellow]No rows in {results_db_path} -- nothing to write[/yellow]")

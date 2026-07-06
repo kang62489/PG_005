@@ -7,7 +7,6 @@ import numpy as np
 import polars as pl
 import pyabf
 import tifffile
-import xlsxwriter
 from rich.console import Console
 from scipy.signal import find_peaks
 from tabulate import tabulate
@@ -58,7 +57,7 @@ class AbfClip:
         self.spike_detection()
         self.get_available_spiking_frames()
         self.clip_time_abf_img_segments()
-        self._export_spike_xlsx()
+        self._export_spike_csv()
 
     def load_abf(self) -> None:
         self.loaded_abf = pyabf.ABF(self.raw_abf_path)
@@ -93,27 +92,25 @@ class AbfClip:
         self.peak_values = self.Vm[self.peak_indices]
         self.df_peaks = pl.DataFrame({"Time": self.peak_times, "Peaks": self.peak_values})
 
-    def _export_spike_xlsx(self) -> None:
-        xlsx_dir = self.results_dir / "xlsx"
-        xlsx_dir.mkdir(parents=True, exist_ok=True)
-        xlsx_path = xlsx_dir / f"ABF_{self.exp_date}_{self.abf_serial}_spike_analysis.xlsx"
+    def _export_spike_csv(self) -> None:
+        csv_dir = self.results_dir / "spikes"
+        csv_dir.mkdir(parents=True, exist_ok=True)
+        stem = f"ABF_{self.exp_date}_{self.abf_serial}_spike_analysis"
 
-        wb = xlsxwriter.Workbook(str(xlsx_path))
-        self.df_Vm.write_excel(workbook=wb, worksheet="Vm")
-        self.df_peaks.write_excel(workbook=wb, worksheet="Peaks")
+        self.df_Vm.write_csv(csv_dir / f"{stem}_Vm.csv")
+        self.df_peaks.write_csv(csv_dir / f"{stem}_peaks.csv")
 
         if self.df_collapsed_peaks is not None and not self.df_collapsed_peaks.is_empty():
-            self.df_collapsed_peaks.write_excel(workbook=wb, worksheet="Collapsed_Peaks")
+            self.df_collapsed_peaks.write_csv(csv_dir / f"{stem}_collapsed_peaks.csv")
 
         if self.lst_abf_sample_ranges:
             seg_cols: dict[str, np.ndarray] = {}
             for i, (time_slice, vm_slice) in enumerate(self._segment_vm_slices()):
                 seg_cols[f"rec_time(abf_seg_{i})"] = time_slice
                 seg_cols[f"Vm(abf_seg_{i})"] = vm_slice
-            pl.DataFrame(seg_cols).write_excel(workbook=wb, worksheet="ABF_segments")
+            pl.DataFrame(seg_cols).write_csv(csv_dir / f"{stem}_segments.csv")
 
-        wb.close()
-        console.log(f"[green]Saved spike detection -> {xlsx_path}[/green]")
+        console.log(f"[green]Saved spike detection -> {stem}_*.csv[/green]")
 
     def _segment_vm_slices(self) -> list[tuple[np.ndarray, np.ndarray]]:
         """Per-segment (rec_time slice, Vm slice) pairs, from lst_abf_sample_ranges.

@@ -26,9 +26,9 @@ EPS_UM = 10.0  # inter-varicosity gap in um (tunable)
 MIN_DENSITY_FRAC = 0.1  # min_samples = this fraction of the eps-circle area
 MIN_CLUSTER_FRACTION = 0.05  # keep DBSCAN clusters covering at least this fraction of non-background pixels
 
-AREA_PCT_SIGMA_MULT = 5.0  # baseline_mean + this many std devs = "significant" B+D% elevation
+AREA_PCT_SIGMA_MULT = 10.0  # baseline_mean + this many std devs = "significant" B% elevation
 
-SATURATION_AREA_PCT = 15.0  # critical frame B+D% at/above this skips DBSCAN entirely (too dense, blows up memory)
+SATURATION_AREA_PCT = 10.0  # critical frame B% at/above this skips DBSCAN entirely (too dense, blows up memory)
 
 MIN_DECAY_FIT_FRAMES = 3  # fewer post-peak frames than this and the exponential fit is skipped
 MIN_DECAY_FIT_RANGE = 1e-6  # post-peak Bright% must vary by at least this much or the fit is skipped (degenerate/flat trace)
@@ -37,16 +37,16 @@ MIN_DECAY_FIT_R2 = 0.8  # lasting time is suppressed (None) when the decay fit's
 
 class RegionAnalyzer:
     """
-    Find DBSCAN clusters of non-background pixels on the critical frame.
+    Find DBSCAN clusters of bright pixels on the critical frame.
 
     Picks the spike frame or spike+1 as the critical frame (whichever clears
-    the B+D% significance threshold), clusters its non-background pixels with
+    the B% significance threshold), clusters its non-background pixels with
     DBSCAN, and drops undersized clusters. Each kept cluster gets a centroid,
     an enclosing-circle radius (R), and a z-score trace across the segment
     (inner/outer ring split for a single cluster, whole-cluster trace when
     there are multiple).
 
-    If the critical frame's B+D% is at/above SATURATION_AREA_PCT, DBSCAN is
+    If the critical frame's B% is at/above SATURATION_AREA_PCT, DBSCAN is
     skipped (self.saturated = True) -- a dense enough point cloud makes
     sklearn's neighbor-graph construction blow up memory. Every non-background
     pixel is instead treated as one big cluster (ring-split like any other
@@ -63,11 +63,11 @@ class RegionAnalyzer:
 
     critical_frame_area_um2 (from get_results()) is this frame's own
     DBSCAN-kept-cluster area (noise/undersized-cluster pixels excluded) --
-    critical_frame_area_pct stays the raw B+D% (it also drives the
+    critical_frame_area_pct stays the raw B% (it also drives the
     significance/saturation threshold logic above).
 
     Top-level max_area_* fields (from get_results()) instead describe the
-    max-area frame -- whichever of spike/spike+1 has the larger raw B+D%,
+    max-area frame -- whichever of spike/spike+1 has the larger raw B%,
     independent of the critical/latency frame's significance-threshold pick.
     The reported area is likewise that frame's DBSCAN-kept-cluster area, not
     the raw non-background count. max_area_eq_radius_um is the circle-equivalent
@@ -347,9 +347,9 @@ class RegionAnalyzer:
 
 
 def compute_area_pct(stack: np.ndarray) -> np.ndarray:
-    """Area percentage (B+D%) of non-background pixels per frame.
+    """Area percentage (B%) of bright pixels per frame.
 
-    This is the B+D% detection-criterion signal: a real ACh event shows a
+    This is the B% detection-criterion signal: a real ACh event shows a
     clear elevation at the spike frame (or spike_frame+1) vs the baseline
     frame before it.
 
@@ -357,16 +357,16 @@ def compute_area_pct(stack: np.ndarray) -> np.ndarray:
         stack: 3D array (frames, height, width) of categorized frames.
 
     Returns:
-        1D array (n_frames,) of B+D% per frame.
+        1D array (n_frames,) of B% per frame.
     """
     total_px = stack.shape[1] * stack.shape[2]
-    return np.count_nonzero(stack > CATEGORY_BACKGROUND, axis=(1, 2)) / total_px * 100
+    return np.count_nonzero(stack == CATEGORY_BRIGHT, axis=(1, 2)) / total_px * 100
 
 
 def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> tuple[int, bool]:
     """Pick spike or spike+1 for clustering, biased toward the spike frame.
 
-    Compares each candidate frame's B+D% against a baseline-derived
+    Compares each candidate frame's B% against a baseline-derived
     significance threshold (mean + AREA_PCT_SIGMA_MULT * std, over every frame
     before the spike frame) instead of simply picking whichever is higher --
     avoids flipping to spike+1 on frame-to-frame noise. Only switches to
@@ -433,13 +433,11 @@ def _decay_model(t: np.ndarray, amplitude: float, tau: float) -> np.ndarray:
 
 
 def fit_decay_tau(area_pct: np.ndarray, peak_frame_idx: int) -> tuple[float | None, float | None, float | None]:
-    """Fit a single-exponential decay to B+D% from its post-critical-frame peak onward.
+    """Fit a single-exponential decay to B% from its post-critical-frame peak onward.
 
     t=0 is pinned to peak_frame_idx (not the spike frame) so the fit only
-    sees the falling side of the curve, never the rising side. A single
-    exponential won't fit a genuine bi-phasic decay (e.g. a lingering Dim
-    halo after the Bright core has faded) particularly well -- r_squared is
-    returned precisely so that's visible in the exported data rather than
+    sees the falling side of the curve, never the rising side. r_squared is
+    returned so a poor fit is visible in the exported data rather than
     silently producing a misleading tau.
 
     Skipped (all None) when there are fewer than MIN_DECAY_FIT_FRAMES frames
@@ -449,7 +447,7 @@ def fit_decay_tau(area_pct: np.ndarray, peak_frame_idx: int) -> tuple[float | No
 
     Args:
         area_pct: 1D array (n_frames,), from compute_area_pct().
-        peak_frame_idx: index of the B+D% peak (from RegionAnalyzer.__init__).
+        peak_frame_idx: index of the B% peak (from RegionAnalyzer.__init__).
 
     Returns:
         (amplitude, tau_frames, r_squared), each None together if the fit was
@@ -528,7 +526,7 @@ def _run_cluster_seeker(
         centroids: (row, col) per kept cluster, same order as label_frame's indices.
         n_raw_clusters: number of clusters DBSCAN found before the size filter.
     """
-    coords = np.argwhere(frame > CATEGORY_BACKGROUND)
+    coords = np.argwhere(frame == CATEGORY_BRIGHT)
     label_frame = np.full(frame.shape, -2, dtype=int)
     if coords.shape[0] == 0:
         return label_frame, [], 0
@@ -573,7 +571,7 @@ def _detect_clusters(
 
     Args:
         frame: 2D array (0=background, 1=dim, 2=bright) for a single frame.
-        area_pct_value: this frame's B+D% (from compute_area_pct()).
+        area_pct_value: this frame's B% (from compute_area_pct()).
         eps_px: DBSCAN neighborhood radius in pixels, from eps_and_min_samples().
         min_samples: DBSCAN minimum samples per cluster, from eps_and_min_samples().
         z_frame: (H, W) z-scored frame (same frame as `frame`) to weight
@@ -587,7 +585,7 @@ def _detect_clusters(
         saturated: True if area_pct_value was at/above SATURATION_AREA_PCT.
     """
     if area_pct_value >= SATURATION_AREA_PCT:
-        mask = frame > CATEGORY_BACKGROUND
+        mask = frame == CATEGORY_BRIGHT
         coords = np.argwhere(mask)
         label_frame = np.where(mask, 0, -2).astype(int)
         centroids = [_weighted_centroid(coords[:, 0], coords[:, 1], z_frame)]

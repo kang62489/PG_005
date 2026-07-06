@@ -23,6 +23,7 @@ Usage:
 # Standard library imports
 import argparse
 import os
+import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -137,12 +138,15 @@ def _strip_existing_report(text: str) -> str:
     return text[:idx].rstrip() if idx != -1 else text.rstrip()
 
 
-def build_stats_report(db_path: Path) -> str:
+def build_stats_report(db_path: Path, run_keys: set[tuple[str, str]] | None = None) -> str:
     """Format the region-analysis summary block appended to the ana list after a run.
+
+    run_keys: optional set of (exp_date, img_serial) pairs to restrict stats to
+    the current ana-list run rather than the full accumulated DB.
 
     Returns "" if results.db has no rows yet (nothing to report).
     """
-    stats = compute_region_stats(db_path)
+    stats = compute_region_stats(db_path, run_keys)
     if stats.is_empty():
         return ""
 
@@ -160,7 +164,7 @@ def build_stats_report(db_path: Path) -> str:
     ]
     table = tabulate(table_rows, headers="keys", tablefmt="pretty")
 
-    recordings = get_cell_recording_status(db_path)
+    recordings = get_cell_recording_status(db_path, run_keys)
     neuron_lines = []
     for (animal_id, slice_val, at), group in recordings.group_by(["ANIMAL_ID", "SLICE", "AT"], maintain_order=True):
         site_code = ResultsExporter.derive_site_code(at)
@@ -180,12 +184,17 @@ def build_stats_report(db_path: Path) -> str:
     )
 
 
-def write_stats_report(ana_list_path: Path, results_db_path: Path) -> bool:
+def write_stats_report(
+    ana_list_path: Path, results_db_path: Path, run_keys: set[tuple[str, str]] | None = None
+) -> bool:
     """Write (or overwrite, on re-run) the region-analysis stats block in an ana list.
+
+    run_keys: optional set of (exp_date, img_serial) pairs to restrict stats to
+    the current ana-list run rather than the full accumulated DB.
 
     Returns False if results_db_path has no rows yet (nothing written).
     """
-    report = build_stats_report(results_db_path)
+    report = build_stats_report(results_db_path, run_keys)
     if not report:
         return False
 
@@ -196,6 +205,17 @@ def write_stats_report(ana_list_path: Path, results_db_path: Path) -> bool:
 
 
 # ── Pipeline runner ───────────────────────────────────────────────────────────
+
+
+def _save_entry_figures(
+    exporter: ResultsExporter,
+    fig: object,
+    stem_path: str,
+    full_fig: object,
+    trace_path: str,
+) -> None:
+    exporter.export_figure("region_sta", fig, stem_path)
+    exporter.export_figure("region_sta", full_fig, trace_path)
 
 
 def run(
@@ -220,9 +240,13 @@ def run(
     entries, results_dir, detrend_mode, normalization = parse_ana_list(ana_list_path, detrend_mode, use_als)
     ref_df = lookup_rec_from_db(entries, db_path, exp_db_path)
     cell_df = count_unique_cells(ref_df)
+    run_keys: set[tuple[str, str]] = {
+        tuple(Path(name).stem.split("-", 1))  # type: ignore[misc]
+        for name in entries["raw_tiff_name"].to_list()
+    }
     console.log(f"Found {len(entries)} entries in {ana_list_path.name} -> {len(cell_df)} unique cells")
 
-    xlsx_dir = results_dir / "xlsx"
+    xlsx_dir = results_dir / "spikes"
     xlsx_dir.mkdir(parents=True, exist_ok=True)
     cell_summary_path = xlsx_dir / f"{ana_list_path.stem}_cells.xlsx"
     write_cell_summary_xlsx(cell_df, cell_summary_path)
@@ -232,7 +256,11 @@ def run(
     exporter = ResultsExporter(results_root=results_dir)
 
     total = len(entries)
+    save_thread: threading.Thread | None = None
     for i, row in enumerate(entries.iter_rows(named=True), 1):
+        if save_thread is not None:
+            save_thread.join()
+            save_thread = None
         entry_t0 = time.time()
         match = ref_df.filter(pl.col("Filename") == row["raw_tiff_name"])
         if match.is_empty():
@@ -292,7 +320,7 @@ def run(
 
         if region_analyzer.saturated:
             console.log(
-                f"[red]Critical frame saturated (B+D%={region_results['critical_frame_area_pct']:.1f}% "
+                f"[red]Critical frame saturated (B%={region_results['critical_frame_area_pct']:.1f}% "
                 f">= {SATURATION_AREA_PCT:.0f}%) — treating whole frame as 1 cluster[/red]"
             )
 
@@ -302,7 +330,7 @@ def run(
             frame_tag = "spike" if region_results["critical_frame_offset"] == 0 else f"spike{region_results['critical_frame_offset']:+d}"
             console.log(
                 f"[magenta]{region_results['n_clusters']} cluster(s) on {frame_tag} frame "
-                f"(B+D%={region_results['critical_frame_area_pct']:.2f}%)[/magenta]"
+                f"(B%={region_results['critical_frame_area_pct']:.2f}%)[/magenta]"
             )
             for i, cluster in enumerate(region_results["clusters"]):
                 console.log(f"[cyan]  cluster {i}: R_lat={cluster['R_lat_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
@@ -344,7 +372,7 @@ def run(
                 f.write(
                     f"[SKIPPED] {datetime.now(UTC).isoformat(timespec='seconds')} — "
                     f"{proc_tiff_path.name}: no significant ACh detection "
-                    "(neither spike nor spike+1 frame cleared the B+D% significance threshold)\n"
+                    "(neither spike nor spike+1 frame cleared the B% significance threshold)\n"
                 )
 
         dirs = exporter.export_all(
@@ -371,7 +399,6 @@ def run(
             lasting_time_ms=lasting_time_ms,
             significant=region_analyzer.significant,
         )
-
         if region_analyzer.significant:
             title_info = {
                 "animal_id": animal_id,
@@ -388,8 +415,6 @@ def run(
                 export_data["exp_date"], export_data["img_serial"], animal_idx,
                 slice_val, at, detrend_mode, normalization, "SPATIAL",
             )
-            exporter.export_figure("region_sta", fig, f"{stem}.png")
-
             full_trace_fig = plot_full_trace(
                 region_analyzer, categorizer, median_segment, spike_frame_idx, frame_duration_ms, title_info
             )
@@ -397,14 +422,20 @@ def run(
                 export_data["exp_date"], export_data["img_serial"], animal_idx,
                 slice_val, at, detrend_mode, normalization, "LATENCY",
             )
-            exporter.export_figure("region_sta", full_trace_fig, f"{trace_stem}.png")
-
+            save_thread = threading.Thread(
+                target=_save_entry_figures,
+                args=(exporter, fig, f"{stem}.png", full_trace_fig, f"{trace_stem}.png"),
+            )
+            save_thread.start()
         dir_names = "/, ".join(d.name for d in dirs.values())
         console.log(
             f"[green]Exported {dir_names}/, region_sta/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
         )
 
-    if write_stats_report(ana_list_path, exporter.db_path):
+    if save_thread is not None:
+        save_thread.join()
+
+    if write_stats_report(ana_list_path, exporter.db_path, run_keys):
         console.log(f"[green]Updated region analysis statistics -> {ana_list_path.name}[/green]")
 
     console.log(f"\n[bold green]All done!  (total: {time.time() - run_t0:.1f}s)[/bold green]")
