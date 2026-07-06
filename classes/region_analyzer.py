@@ -7,6 +7,7 @@ RegionAnalyzer's docstring for the full picture.
 """
 
 import numpy as np
+from scipy.optimize import curve_fit
 from sklearn.cluster import DBSCAN
 
 # Category constants
@@ -28,6 +29,9 @@ MIN_CLUSTER_FRACTION = 0.05  # keep DBSCAN clusters covering at least this fract
 AREA_PCT_SIGMA_MULT = 5.0  # baseline_mean + this many std devs = "significant" B+D% elevation
 
 SATURATION_AREA_PCT = 15.0  # critical frame B+D% at/above this skips DBSCAN entirely (too dense, blows up memory)
+
+MIN_DECAY_FIT_FRAMES = 3  # fewer post-peak frames than this and the exponential fit is skipped
+MIN_DECAY_FIT_RANGE = 1e-6  # post-peak Bright% must vary by at least this much or the fit is skipped (degenerate/flat trace)
 
 
 class RegionAnalyzer:
@@ -96,6 +100,13 @@ class RegionAnalyzer:
 
         self.area_pct = compute_area_pct(cat_stack)
         self.critical_frame_idx = pick_critical_frame(self.area_pct, spike_frame_idx)
+
+        self.decay_peak_frame_idx = self.critical_frame_idx + int(
+            np.argmax(self.area_pct[self.critical_frame_idx:])
+        )
+        self.decay_fit_A, self.decay_tau_frames, self.decay_fit_r2 = fit_decay_tau(
+            self.area_pct, self.decay_peak_frame_idx
+        )
 
         eps_px, min_samples = eps_and_min_samples(obj)
         self.label_frame, self.centroids, self.n_raw_clusters, self.saturated = _detect_clusters(
@@ -219,6 +230,9 @@ class RegionAnalyzer:
             "max_area_y_span_px":      self.max_area_y_span_px,
             "max_area_x_span_um":      self.max_area_x_span_um,
             "max_area_y_span_um":      self.max_area_y_span_um,
+            "decay_peak_frame_idx":    self.decay_peak_frame_idx,
+            "decay_peak_offset":       self.decay_peak_frame_idx - self.spike_frame_idx,
+            "decay_fit_r2":            self.decay_fit_r2,
             "n_clusters":               len(self.clusters),
             "clusters": [
                 {"centroid": c["centroid"], "R_lat_px": c["R_lat_px"], "R_lat_um": c["R_lat_um"]}
@@ -286,6 +300,23 @@ class RegionAnalyzer:
         if len(peak_rels) < 2:
             return None
         return (max(peak_rels) - min(peak_rels)) * frame_duration_ms
+
+    def get_lasting_time_ms(self, frame_duration_ms: float) -> float | None:
+        """Decay time constant (tau) of the post-peak Bright% falloff, in milliseconds.
+
+        tau comes from fit_decay_tau(), fit in frame units (independent of
+        frame_duration_ms), so this method just converts it. None if the fit
+        was skipped or failed to converge (see fit_decay_tau's docstring).
+
+        Args:
+            frame_duration_ms: milliseconds per frame.
+
+        Returns:
+            tau in ms, or None if no decay fit is available.
+        """
+        if self.decay_tau_frames is None:
+            return None
+        return self.decay_tau_frames * frame_duration_ms
 
     def get_export_data(self) -> dict:
         """Data for export (contours and internal fields stripped by exporter)."""
@@ -370,6 +401,62 @@ def compute_xy_span(mask: np.ndarray) -> tuple[int | None, int | None]:
     y_span_px = int(coords[:, 0].max() - coords[:, 0].min() + 1)
     x_span_px = int(coords[:, 1].max() - coords[:, 1].min() + 1)
     return x_span_px, y_span_px
+
+
+def _decay_model(t: np.ndarray, amplitude: float, tau: float) -> np.ndarray:
+    """Single-exponential decay: amplitude * exp(-t/tau)."""
+    return amplitude * np.exp(-t / tau)
+
+
+def fit_decay_tau(area_pct: np.ndarray, peak_frame_idx: int) -> tuple[float | None, float | None, float | None]:
+    """Fit a single-exponential decay to B+D% from its post-critical-frame peak onward.
+
+    t=0 is pinned to peak_frame_idx (not the spike frame) so the fit only
+    sees the falling side of the curve, never the rising side. A single
+    exponential won't fit a genuine bi-phasic decay (e.g. a lingering Dim
+    halo after the Bright core has faded) particularly well -- r_squared is
+    returned precisely so that's visible in the exported data rather than
+    silently producing a misleading tau.
+
+    Skipped (all None) when there are fewer than MIN_DECAY_FIT_FRAMES frames
+    after the peak, or when the post-peak trace barely varies (a flat/near-zero
+    tail has no decay to fit -- curve_fit would either fail or return a
+    meaningless tau). Also all None if curve_fit doesn't converge.
+
+    Args:
+        area_pct: 1D array (n_frames,), from compute_area_pct().
+        peak_frame_idx: index of the B+D% peak (from RegionAnalyzer.__init__).
+
+    Returns:
+        (amplitude, tau_frames, r_squared), each None together if the fit was
+        skipped or failed. tau_frames is in frame units -- multiply by
+        frame_duration_ms to get milliseconds (see get_lasting_time_ms).
+    """
+    y = area_pct[peak_frame_idx:]
+    if len(y) < MIN_DECAY_FIT_FRAMES or float(np.ptp(y)) < MIN_DECAY_FIT_RANGE:
+        return None, None, None
+
+    t = np.arange(len(y), dtype=np.float64)
+    amplitude_guess = max(float(y[0]), 1e-3)
+    tau_guess = len(y) / 2.0
+
+    try:
+        popt, _ = curve_fit(
+            _decay_model, t, y, p0=[amplitude_guess, tau_guess], bounds=([0.0, 1e-3], [np.inf, np.inf]), maxfev=2000
+        )
+    except RuntimeError:
+        return None, None, None
+
+    amplitude, tau = float(popt[0]), float(popt[1])
+    if not np.isfinite(tau) or tau <= 0:
+        return None, None, None
+
+    residuals = y - _decay_model(t, amplitude, tau)
+    ss_res = float(np.sum(residuals ** 2))
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else None
+
+    return amplitude, tau, r_squared
 
 
 def _run_cluster_seeker(frame: np.ndarray, eps_px: int, min_samples: int) -> tuple[np.ndarray, list[tuple[float, float]], int]:

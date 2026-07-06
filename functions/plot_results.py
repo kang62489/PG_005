@@ -7,7 +7,7 @@ for the PySide6-coupled canvas widget used by the live GUI.
 Two export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
 - plot_spatiotemporal_summary (-> region_sta/): B+D% signal trace showing why the
   critical frame was picked, + cluster shading on just that frame's own panel.
-- plot_full_trace (-> full_traces/): the same fixed cluster-ring overlay repeated
+- plot_full_trace (-> region_sta/, *_LATENCY.png): the same fixed cluster-ring overlay repeated
   across a 9-panel window, + the full-segment z-score trace with that window annotated.
 """
 
@@ -27,6 +27,7 @@ from matplotlib.patches import Circle, Rectangle
 
 from classes.region_analyzer import (
     RegionAnalyzer,
+    _decay_model,
     _detect_clusters,
     _peak_offset_from_spike,
     eps_and_min_samples,
@@ -174,6 +175,8 @@ def plot_spatiotemporal_summary(
                markeredgecolor="black", markeredgewidth=1, zorder=5,
                label=f"critical: frame {critical_frame_idx}  {frame_um2[critical_frame_idx]:.0f} µm² ({area_pct[critical_frame_idx]:.1f}%)")
 
+    _draw_decay_fit(ax_bd, region_analyzer, spike_frame_idx, n_frames, frame_duration_ms)
+
     ax_bd.set_xlabel("Frame offset from spike (0 = spike)", fontsize=12)
     ax_bd.set_ylabel("B+D area (%)", fontsize=12)
     ax_bd.set_title("Bright+Dim area coverage per frame  |  star = critical frame (spike or spike+1)", fontsize=12)
@@ -184,7 +187,7 @@ def plot_spatiotemporal_summary(
     eps_px, min_samples = eps_and_min_samples(obj)
     hotspot_area_lines = {
         idx: _format_hotspot_area_line(categorizer.categorized_frames[idx], area_pct[idx], eps_px, min_samples, um_per_pixel)
-        for idx in (spike_frame_idx, spike_frame_idx + 1)
+        for idx in range(spike_frame_idx - 4, spike_frame_idx + 5)
         if 0 <= idx < n_frames
     }
     span_line = _format_span_line(region_analyzer)
@@ -452,6 +455,41 @@ def _draw_span_bbox(ax: mpl.axes.Axes, region_analyzer: "RegionAnalyzer") -> Non
         linestyle="--", alpha=0.85, zorder=4,
     )
     ax.add_patch(rect)
+
+
+def _draw_decay_fit(
+    ax: mpl.axes.Axes,
+    region_analyzer: "RegionAnalyzer",
+    spike_frame_idx: int,
+    n_frames: int,
+    frame_duration_ms: float,
+) -> None:
+    """Dashed exponential decay curve over the post-peak B+D% trace, with tau/R² in the label.
+
+    Draws nothing but a "fit failed" note if fit_decay_tau() couldn't fit the
+    post-peak trace (too few post-peak frames, a flat/degenerate tail, or
+    curve_fit not converging -- see RegionAnalyzer.__init__).
+    """
+    peak_frame_idx = region_analyzer.decay_peak_frame_idx
+    tau = region_analyzer.decay_tau_frames
+    amplitude = region_analyzer.decay_fit_A
+    r_squared = region_analyzer.decay_fit_r2
+
+    if tau is None or amplitude is None:
+        ax.text(
+            0.99, 0.5, "decay fit: failed / insufficient post-peak data",
+            transform=ax.transAxes, ha="right", va="center", fontsize=9, color="#888888", style="italic",
+        )
+        return
+
+    t = np.arange(0, n_frames - peak_frame_idx, dtype=np.float64)
+    fitted = _decay_model(t, amplitude, tau)
+    tau_ms = tau * frame_duration_ms
+    r2_text = f"{r_squared:.2f}" if r_squared is not None else "n/a"
+    ax.plot(
+        t + (peak_frame_idx - spike_frame_idx), fitted, "--", color="#2ecc71", linewidth=1.8, zorder=4,
+        label=f"decay fit: τ={tau_ms:.0f} ms (R²={r2_text})",
+    )
 
 
 def _overlay_clusters(ax: mpl.axes.Axes, clusters: list[dict], highlight: set[int]) -> None:

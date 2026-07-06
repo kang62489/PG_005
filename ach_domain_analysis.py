@@ -327,6 +327,14 @@ def run(
         at = match["AT"].item()
         frame_duration_ms = clip.ts_imgs * 1000
         peak_latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
+        lasting_time_ms = region_analyzer.get_lasting_time_ms(frame_duration_ms)
+        if lasting_time_ms is not None:
+            console.log(
+                f"[green]Lasting time (decay tau): {lasting_time_ms:.0f} ms "
+                f"(R²={region_results['decay_fit_r2']:.2f})[/green]"
+            )
+        else:
+            console.log("[yellow]Lasting time: decay fit failed / insufficient post-peak data[/yellow]")
 
         dirs = exporter.export_all(
             exp_date=export_data["exp_date"],
@@ -349,6 +357,7 @@ def run(
             region_summary=region_analyzer.get_summary(),
             region_data=region_results,
             peak_latency_ms=peak_latency_ms,
+            lasting_time_ms=lasting_time_ms,
         )
 
         title_info = {
@@ -373,13 +382,13 @@ def run(
         )
         trace_stem = ResultsExporter.build_export_stem(
             export_data["exp_date"], export_data["img_serial"], animal_idx,
-            slice_val, at, detrend_mode, normalization, "TRACE",
+            slice_val, at, detrend_mode, normalization, "LATENCY",
         )
-        exporter.export_figure("full_traces", full_trace_fig, f"{trace_stem}.png")
+        exporter.export_figure("region_sta", full_trace_fig, f"{trace_stem}.png")
 
         dir_names = "/, ".join(d.name for d in dirs.values())
         console.log(
-            f"[green]Exported {dir_names}/, region_sta/, full_traces/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
+            f"[green]Exported {dir_names}/, region_sta/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
         )
 
     if write_stats_report(ana_list_path, exporter.db_path):

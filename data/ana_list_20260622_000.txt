@@ -22,7 +22,7 @@ dir_raw_abfs: D:\MyDB\2_Programs\PG_005\raw_abfs
 dir_results: D:\MyDB\2_Programs\PG_005\results
 
 ================================================================================
-Region Analysis Statistics — generated 2026-07-05T15:03:53+00:00
+Region Analysis Statistics — generated 2026-07-06T01:48:32+00:00
 ================================================================================
 Neurons detected ACh release: 2/2
 
@@ -32,6 +32,7 @@ Neurons detected ACh release: 2/2
 |     max_area_um2      | 38464.83 | 20731.00 |     2      |
 | max_area_eq_radius_um |  105.08  |  29.21   |     2      |
 |    peak_latency_ms    |   0.00   |   0.00   |     2      |
+|    lasting_time_ms    |  122.35  |  60.83   |     2      |
 +-----------------------+----------+----------+------------+
 
 Per-Neuron Recording List (filename, detected) [detected/total]:

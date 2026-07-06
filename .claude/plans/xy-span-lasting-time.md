@@ -7,7 +7,7 @@ Add two per-recording measurements:
 - X/Y span: spatial spread of the accepted event region on the max-area frame.
 - Lasting time: temporal duration from critical frame until raw B+D% returns to baseline.
 
-X/Y span is partly implemented already in the current worktree. Lasting time is not implemented yet.
+X/Y span is fully complete (Session 47). Lasting time is not implemented yet.
 
 ## X/Y Span
 
@@ -31,13 +31,14 @@ X/Y span is partly implemented already in the current worktree. Lasting time is 
 
 - Do not add span metrics to compute_region_stats().
 
-Current status:
+Current status: ✅ COMPLETE (Session 47)
 
-- RegionAnalyzer span calculation exists.
-- ResultsExporter DB columns and migration exist.
-- Console logging exists.
-- region_sta title-only span display exists, with no image bbox overlay.
-- Still needs full pipeline verification after a clean results.db run.
+- RegionAnalyzer span calculation done: `compute_xy_span()`, `_compute_max_area()` stores span + bbox corner (`max_area_x_min_px`, `max_area_y_min_px`).
+- ResultsExporter DB columns `max_area_x_span_um` / `max_area_y_span_um` populated and verified.
+- Console logging done.
+- Panel title text done (`span x/y: X.X / Y.Y µm` on max-area frame only).
+- Bbox rectangle overlay done: `_draw_span_bbox()` in `plot_results.py` — yellow dashed Rectangle, linewidth=2.0, max-area panel only.
+- Verified end-to-end: clean results.db run, DB inspection, visual PNG check (10X + 60X).
 
 ## Lasting Time
 
@@ -77,10 +78,9 @@ Add DB columns:
 
 ## Figure Display
 
-- For x/y span:
-    - Keep it text-only in second-row multirow titles.
-    - No bbox or span overlay on image panels.
-    - Show span only on the max-area frame panel.
+- For x/y span: ✅ COMPLETE
+    - Panel title text: `span x/y: X.X / Y.Y µm` on max-area frame panel only.
+    - Bbox rectangle overlay: yellow dashed Rectangle drawn on max-area frame panel.
 
 - For lasting time:
     - Add top-row B+D% trace annotations:

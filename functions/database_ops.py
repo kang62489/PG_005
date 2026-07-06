@@ -198,8 +198,8 @@ def get_cell_recording_status(results_db_path: Path) -> pl.DataFrame:
 
 
 def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
-    """Mean +/- std of max-area-frame area (um^2) and peak latency,
-    averaged per unique cell.
+    """Mean +/- std of max-area-frame area (um^2), peak latency, and lasting
+    time (decay tau), averaged per unique cell.
 
     Multiple recordings of the same cell (ANIMAL_ID, SLICE, AT) are first
     collapsed to one row per cell (per-cell mean across its own recordings).
@@ -210,9 +210,10 @@ def compute_region_stats(results_db_path: Path) -> pl.DataFrame:
     usable out of how many were attempted.
 
     Returns one row per metric (max_area_um2, max_area_eq_radius_um,
-    peak_latency_ms) with columns: metric, mean, std, n_detected, n_total.
+    peak_latency_ms, lasting_time_ms) with columns: metric, mean, std,
+    n_detected, n_total.
     """
-    metric_cols = ["max_area_um2", "max_area_eq_radius_um", "peak_latency_ms"]
+    metric_cols = ["max_area_um2", "max_area_eq_radius_um", "peak_latency_ms", "lasting_time_ms"]
     df = _read_experiments(results_db_path)
 
     if df.is_empty():

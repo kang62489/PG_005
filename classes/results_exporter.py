@@ -134,6 +134,9 @@ class ResultsExporter:
                 max_area_eq_radius_um REAL,
                 max_area_x_span_um REAL,
                 max_area_y_span_um REAL,
+                decay_peak_offset INTEGER,
+                decay_fit_r2 REAL,
+                lasting_time_ms REAL,
                 ANIMAL_ID TEXT,
                 SLICE TEXT,
                 AT TEXT,
@@ -153,6 +156,9 @@ class ResultsExporter:
             {
                 "max_area_x_span_um": "REAL",
                 "max_area_y_span_um": "REAL",
+                "decay_peak_offset": "INTEGER",
+                "decay_fit_r2": "REAL",
+                "lasting_time_ms": "REAL",
             },
         )
         conn.commit()
@@ -195,6 +201,7 @@ class ResultsExporter:
         region_summary: dict,
         region_data: dict,
         peak_latency_ms: float | None,
+        lasting_time_ms: float | None,
     ) -> dict[str, Path]:
         """
         Export all results and update database.
@@ -220,6 +227,7 @@ class ResultsExporter:
             region_summary: Summary dict from RegionAnalyzer.get_summary()
             region_data: Critical-frame cluster dict from RegionAnalyzer.get_results()
             peak_latency_ms: Peak-timing latency, from RegionAnalyzer.get_peak_latency_ms()
+            lasting_time_ms: Decay time constant, from RegionAnalyzer.get_lasting_time_ms()
 
         Returns:
             dict with keys "median", "categorized" → Path to each subfolder
@@ -256,6 +264,7 @@ class ResultsExporter:
             slice_val=slice_val,
             at=at,
             peak_latency_ms=peak_latency_ms,
+            lasting_time_ms=lasting_time_ms,
             med_filename=f"{med_stem}.tif",
         )
 
@@ -328,6 +337,7 @@ class ResultsExporter:
         slice_val: str,
         at: str,
         peak_latency_ms: float | None,
+        lasting_time_ms: float | None,
         med_filename: str,
     ) -> None:
         """Insert or update experiment record in SQLite."""
@@ -351,10 +361,11 @@ class ResultsExporter:
                 n_clusters, has_region, saturated,
                 critical_frame_offset, critical_frame_area_pct, critical_frame_area_um2,
                 max_area_offset, max_area_um2, max_area_eq_radius_um, max_area_x_span_um, max_area_y_span_um,
+                decay_peak_offset, decay_fit_r2, lasting_time_ms,
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um, peak_latency_ms,
                 zscore_min, zscore_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -377,6 +388,9 @@ class ResultsExporter:
                 region_data["max_area_eq_radius_um"],
                 region_data["max_area_x_span_um"],
                 region_data["max_area_y_span_um"],
+                region_data["decay_peak_offset"],
+                region_data["decay_fit_r2"],
+                lasting_time_ms,
                 animal_id,
                 slice_val,
                 at,
