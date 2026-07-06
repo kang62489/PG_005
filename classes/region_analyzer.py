@@ -32,6 +32,7 @@ SATURATION_AREA_PCT = 15.0  # critical frame B+D% at/above this skips DBSCAN ent
 
 MIN_DECAY_FIT_FRAMES = 3  # fewer post-peak frames than this and the exponential fit is skipped
 MIN_DECAY_FIT_RANGE = 1e-6  # post-peak Bright% must vary by at least this much or the fit is skipped (degenerate/flat trace)
+MIN_DECAY_FIT_R2 = 0.8  # lasting time is suppressed (None) when the decay fit's R^2 is below this
 
 
 class RegionAnalyzer:
@@ -101,20 +102,25 @@ class RegionAnalyzer:
         self.spike_frame_idx = spike_frame_idx
 
         self.area_pct = compute_area_pct(cat_stack)
-        self.critical_frame_idx = pick_critical_frame(self.area_pct, spike_frame_idx)
+        self.critical_frame_idx, self.significant = pick_critical_frame(self.area_pct, spike_frame_idx)
 
-        self.decay_peak_frame_idx = self.critical_frame_idx + int(
-            np.argmax(self.area_pct[self.critical_frame_idx:])
+        peak_search_end = min(self.spike_frame_idx + 2, len(self.area_pct))
+        self.decay_peak_frame_idx = self.spike_frame_idx + int(
+            np.argmax(self.area_pct[self.spike_frame_idx:peak_search_end])
         )
         self.decay_fit_A, self.decay_tau_frames, self.decay_fit_r2 = fit_decay_tau(
             self.area_pct, self.decay_peak_frame_idx
         )
 
         eps_px, min_samples = eps_and_min_samples(obj)
-        self.label_frame, self.centroids, self.n_raw_clusters, self.saturated = _detect_clusters(
-            cat_stack[self.critical_frame_idx], self.area_pct[self.critical_frame_idx], eps_px, min_samples,
-            z_frame=med_stack[self.critical_frame_idx],
-        )
+        if self.significant:
+            self.label_frame, self.centroids, self.n_raw_clusters, self.saturated = _detect_clusters(
+                cat_stack[self.critical_frame_idx], self.area_pct[self.critical_frame_idx], eps_px, min_samples,
+                z_frame=med_stack[self.critical_frame_idx],
+            )
+        else:
+            self.label_frame = np.full(cat_stack.shape[1:], -2, dtype=int)
+            self.centroids, self.n_raw_clusters, self.saturated = [], 0, False
 
         self.clusters = self._build_clusters(med_stack)
         (
@@ -226,17 +232,17 @@ class RegionAnalyzer:
             "critical_frame_offset":   self.critical_frame_idx - self.spike_frame_idx,
             "critical_frame_area_pct": critical_frame_area_pct,
             "critical_frame_area_um2": self._area_to_um2(critical_frame_kept_px),
-            "max_area_frame_idx":      self.max_area_frame_idx,
-            "max_area_offset":         self.max_area_offset,
-            "max_area_um2":            self.max_area_um2,
-            "max_area_eq_radius_um":   self.max_area_eq_radius_um,
-            "max_area_x_span_px":      self.max_area_x_span_px,
-            "max_area_y_span_px":      self.max_area_y_span_px,
-            "max_area_x_span_um":      self.max_area_x_span_um,
-            "max_area_y_span_um":      self.max_area_y_span_um,
-            "decay_peak_frame_idx":    self.decay_peak_frame_idx,
-            "decay_peak_offset":       self.decay_peak_frame_idx - self.spike_frame_idx,
-            "decay_fit_r2":            self.decay_fit_r2,
+            "max_area_frame_idx":      self.max_area_frame_idx if self.significant else None,
+            "max_area_offset":         self.max_area_offset if self.significant else None,
+            "max_area_um2":            self.max_area_um2 if self.significant else None,
+            "max_area_eq_radius_um":   self.max_area_eq_radius_um if self.significant else None,
+            "max_area_x_span_px":      self.max_area_x_span_px if self.significant else None,
+            "max_area_y_span_px":      self.max_area_y_span_px if self.significant else None,
+            "max_area_x_span_um":      self.max_area_x_span_um if self.significant else None,
+            "max_area_y_span_um":      self.max_area_y_span_um if self.significant else None,
+            "decay_peak_frame_idx":    self.decay_peak_frame_idx if self.significant else None,
+            "decay_peak_offset":       (self.decay_peak_frame_idx - self.spike_frame_idx) if self.significant else None,
+            "decay_fit_r2":            self.decay_fit_r2 if self.significant else None,
             "n_clusters":               len(self.clusters),
             "clusters": [
                 {"centroid": c["centroid"], "R_lat_px": c["R_lat_px"], "R_lat_um": c["R_lat_um"]}
@@ -251,6 +257,7 @@ class RegionAnalyzer:
             "n_clusters":  len(self.clusters),
             "has_region":  len(self.clusters) > 0,
             "saturated":   self.saturated,
+            "significant": self.significant,
         }
 
     def get_temporal_traces(self) -> list[dict]:
@@ -310,15 +317,19 @@ class RegionAnalyzer:
 
         tau comes from fit_decay_tau(), fit in frame units (independent of
         frame_duration_ms), so this method just converts it. None if the fit
-        was skipped or failed to converge (see fit_decay_tau's docstring).
+        was skipped, failed to converge (see fit_decay_tau's docstring), or
+        the fit's R^2 is below MIN_DECAY_FIT_R2 (unreliable tau despite
+        curve_fit converging).
 
         Args:
             frame_duration_ms: milliseconds per frame.
 
         Returns:
-            tau in ms, or None if no decay fit is available.
+            tau in ms, or None if no reliable decay fit is available.
         """
         if self.decay_tau_frames is None:
+            return None
+        if self.decay_fit_r2 is None or self.decay_fit_r2 < MIN_DECAY_FIT_R2:
             return None
         return self.decay_tau_frames * frame_duration_ms
 
@@ -352,7 +363,7 @@ def compute_area_pct(stack: np.ndarray) -> np.ndarray:
     return np.count_nonzero(stack > CATEGORY_BACKGROUND, axis=(1, 2)) / total_px * 100
 
 
-def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> int:
+def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> tuple[int, bool]:
     """Pick spike or spike+1 for clustering, biased toward the spike frame.
 
     Compares each candidate frame's B+D% against a baseline-derived
@@ -362,24 +373,33 @@ def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> int:
     spike+1 when the spike frame itself isn't significantly elevated but
     spike+1 is (delayed-signal case).
 
+    Falls back to spike_frame_idx with significant=False when neither
+    candidate clears the threshold, so the caller can skip clustering
+    entirely instead of running DBSCAN on a frame that's indistinguishable
+    from baseline noise (a small stray cluster there would otherwise still
+    pass MIN_CLUSTER_FRACTION's purely relative size check and register as a
+    false-positive detection).
+
     Args:
         area_pct: 1D array (n_frames,), from compute_area_pct().
         spike_frame_idx: index of the spike frame within the segment.
 
     Returns:
-        Index of the frame to run clustering on (spike_frame_idx or spike_frame_idx + 1).
+        (index of the frame to run clustering on -- spike_frame_idx or
+        spike_frame_idx + 1, whether that frame actually cleared the
+        significance threshold).
     """
     baseline = area_pct[:spike_frame_idx]
     threshold = baseline.mean() + AREA_PCT_SIGMA_MULT * baseline.std()
 
     if area_pct[spike_frame_idx] >= threshold:
-        return spike_frame_idx
+        return spike_frame_idx, True
 
     next_idx = spike_frame_idx + 1
     if next_idx < len(area_pct) and area_pct[next_idx] >= threshold:
-        return next_idx
+        return next_idx, True
 
-    return spike_frame_idx
+    return spike_frame_idx, False
 
 
 def eps_and_min_samples(obj: str) -> tuple[int, int]:

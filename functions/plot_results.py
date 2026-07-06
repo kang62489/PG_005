@@ -26,6 +26,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Circle, Rectangle
 
 from classes.region_analyzer import (
+    MIN_DECAY_FIT_R2,
     RegionAnalyzer,
     _decay_model,
     _detect_clusters,
@@ -486,9 +487,14 @@ def _draw_decay_fit(
     fitted = _decay_model(t, amplitude, tau)
     tau_ms = tau * frame_duration_ms
     r2_text = f"{r_squared:.2f}" if r_squared is not None else "n/a"
+    rejected = r_squared is None or r_squared < MIN_DECAY_FIT_R2
+    color = "#e67e22" if rejected else "#2ecc71"
+    label = f"decay fit: τ={tau_ms:.0f} ms (R²={r2_text})"
+    if rejected:
+        label += " [rejected, lasting time=None]"
     ax.plot(
-        t + (peak_frame_idx - spike_frame_idx), fitted, "--", color="#2ecc71", linewidth=1.8, zorder=4,
-        label=f"decay fit: τ={tau_ms:.0f} ms (R²={r2_text})",
+        t + (peak_frame_idx - spike_frame_idx), fitted, "--", color=color, linewidth=1.8, zorder=4,
+        label=label,
     )
 
 

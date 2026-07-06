@@ -307,16 +307,17 @@ def run(
             for i, cluster in enumerate(region_results["clusters"]):
                 console.log(f"[cyan]  cluster {i}: R_lat={cluster['R_lat_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
 
-        max_area_tag = "spike" if region_results["max_area_offset"] == 0 else f"spike{region_results['max_area_offset']:+d}"
-        span_text = (
-            f", span x/y={region_results['max_area_x_span_um']:.1f}/{region_results['max_area_y_span_um']:.1f} µm"
-            if region_results["max_area_x_span_um"] is not None and region_results["max_area_y_span_um"] is not None
-            else ""
-        )
-        console.log(
-            f"[green]Max-area frame {max_area_tag}: area={region_results['max_area_um2']:.0f} µm² "
-            f"(eq. radius={region_results['max_area_eq_radius_um']:.1f} µm){span_text}[/green]"
-        )
+        if region_analyzer.significant:
+            max_area_tag = "spike" if region_results["max_area_offset"] == 0 else f"spike{region_results['max_area_offset']:+d}"
+            span_text = (
+                f", span x/y={region_results['max_area_x_span_um']:.1f}/{region_results['max_area_y_span_um']:.1f} µm"
+                if region_results["max_area_x_span_um"] is not None and region_results["max_area_y_span_um"] is not None
+                else ""
+            )
+            console.log(
+                f"[green]Max-area frame {max_area_tag}: area={region_results['max_area_um2']:.0f} µm² "
+                f"(eq. radius={region_results['max_area_eq_radius_um']:.1f} µm){span_text}[/green]"
+            )
 
         if emitter:
             emitter({"type": "step", "msg": "Exporting results..."})
@@ -326,15 +327,25 @@ def run(
         slice_val = match["SLICE"].item()
         at = match["AT"].item()
         frame_duration_ms = clip.ts_imgs * 1000
-        peak_latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
-        lasting_time_ms = region_analyzer.get_lasting_time_ms(frame_duration_ms)
-        if lasting_time_ms is not None:
-            console.log(
-                f"[green]Lasting time (decay tau): {lasting_time_ms:.0f} ms "
-                f"(R²={region_results['decay_fit_r2']:.2f})[/green]"
-            )
+        if region_analyzer.significant:
+            peak_latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
+            lasting_time_ms = region_analyzer.get_lasting_time_ms(frame_duration_ms)
+            if lasting_time_ms is not None:
+                console.log(
+                    f"[green]Lasting time (decay tau): {lasting_time_ms:.0f} ms "
+                    f"(R²={region_results['decay_fit_r2']:.2f})[/green]"
+                )
+            else:
+                console.log("[yellow]Lasting time: decay fit failed / insufficient post-peak data[/yellow]")
         else:
-            console.log("[yellow]Lasting time: decay fit failed / insufficient post-peak data[/yellow]")
+            peak_latency_ms, lasting_time_ms = None, None
+            console.log("[yellow]No ACh detection — skipping MED/CAT TIFFs, latency/lasting time/span export[/yellow]")
+            with ana_list_path.open("a", encoding="utf-8") as f:
+                f.write(
+                    f"[SKIPPED] {datetime.now(UTC).isoformat(timespec='seconds')} — "
+                    f"{proc_tiff_path.name}: no significant ACh detection "
+                    "(neither spike nor spike+1 frame cleared the B+D% significance threshold)\n"
+                )
 
         dirs = exporter.export_all(
             exp_date=export_data["exp_date"],
@@ -358,33 +369,35 @@ def run(
             region_data=region_results,
             peak_latency_ms=peak_latency_ms,
             lasting_time_ms=lasting_time_ms,
+            significant=region_analyzer.significant,
         )
 
-        title_info = {
-            "animal_id": animal_id,
-            "slice": slice_val,
-            "at": at,
-            "obj": obj,
-            "tiff_serial": export_data["img_serial"],
-            "abf_serial": export_data["abf_serial"],
-        }
-        fig = plot_spatiotemporal_summary(
-            categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
-        )
-        stem = ResultsExporter.build_export_stem(
-            export_data["exp_date"], export_data["img_serial"], animal_idx,
-            slice_val, at, detrend_mode, normalization, "SPATIAL",
-        )
-        exporter.export_figure("region_sta", fig, f"{stem}.png")
+        if region_analyzer.significant:
+            title_info = {
+                "animal_id": animal_id,
+                "slice": slice_val,
+                "at": at,
+                "obj": obj,
+                "tiff_serial": export_data["img_serial"],
+                "abf_serial": export_data["abf_serial"],
+            }
+            fig = plot_spatiotemporal_summary(
+                categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
+            )
+            stem = ResultsExporter.build_export_stem(
+                export_data["exp_date"], export_data["img_serial"], animal_idx,
+                slice_val, at, detrend_mode, normalization, "SPATIAL",
+            )
+            exporter.export_figure("region_sta", fig, f"{stem}.png")
 
-        full_trace_fig = plot_full_trace(
-            region_analyzer, categorizer, median_segment, spike_frame_idx, frame_duration_ms, title_info
-        )
-        trace_stem = ResultsExporter.build_export_stem(
-            export_data["exp_date"], export_data["img_serial"], animal_idx,
-            slice_val, at, detrend_mode, normalization, "LATENCY",
-        )
-        exporter.export_figure("region_sta", full_trace_fig, f"{trace_stem}.png")
+            full_trace_fig = plot_full_trace(
+                region_analyzer, categorizer, median_segment, spike_frame_idx, frame_duration_ms, title_info
+            )
+            trace_stem = ResultsExporter.build_export_stem(
+                export_data["exp_date"], export_data["img_serial"], animal_idx,
+                slice_val, at, detrend_mode, normalization, "LATENCY",
+            )
+            exporter.export_figure("region_sta", full_trace_fig, f"{trace_stem}.png")
 
         dir_names = "/, ".join(d.name for d in dirs.values())
         console.log(

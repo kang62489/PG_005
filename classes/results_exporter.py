@@ -202,6 +202,7 @@ class ResultsExporter:
         region_data: dict,
         peak_latency_ms: float | None,
         lasting_time_ms: float | None,
+        significant: bool = True,
     ) -> dict[str, Path]:
         """
         Export all results and update database.
@@ -228,6 +229,7 @@ class ResultsExporter:
             region_data: Critical-frame cluster dict from RegionAnalyzer.get_results()
             peak_latency_ms: Peak-timing latency, from RegionAnalyzer.get_peak_latency_ms()
             lasting_time_ms: Decay time constant, from RegionAnalyzer.get_lasting_time_ms()
+            significant: When False, skips MED/CAT TIFF writes (no ACh detected).
 
         Returns:
             dict with keys "median", "categorized" → Path to each subfolder
@@ -239,12 +241,13 @@ class ResultsExporter:
         for d in dirs.values():
             d.mkdir(parents=True, exist_ok=True)
 
-        self._export_median_stack(
-            dirs["median"], median_stack, exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization
-        )
-        self._export_categorized_stack(
-            dirs["categorized"], categorized_frames, exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization
-        )
+        if significant:
+            self._export_median_stack(
+                dirs["median"], median_stack, exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization
+            )
+            self._export_categorized_stack(
+                dirs["categorized"], categorized_frames, exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization
+            )
 
         med_stem = self.build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization, "MED")
 

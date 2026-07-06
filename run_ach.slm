@@ -1,0 +1,20 @@
+#!/bin/bash
+#SBATCH --job-name=ach_analysis
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=kang.chu@oist.jp
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=64
+#SBATCH --mem=64G
+#SBATCH --time=12:00:00
+#SBATCH --output=logs/ach_%j.out
+#SBATCH --error=logs/ach_%j.err
+
+mkdir -p logs
+
+/home/k/kang-chu/PG_005/.venv/bin/python /home/k/kang-chu/PG_005/ach_domain_analysis.py \
+    --ana_list /home/k/kang-chu/PG_005/data/ana_list_20260618_000.txt \
+    --db /home/k/kang-chu/PG_005/data/rec_data.db \
+    --exp_db /home/k/kang-chu/PG_005/data/exp_info.db
+
+cp -r /home/k/kang-chu/PG_005/results/ /bucket/WickensU/Kang/Temp
