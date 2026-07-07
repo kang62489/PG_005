@@ -1,9 +1,9 @@
 """
 Region analysis for categorized images.
 
-Picks a critical frame (spike or spike+1), clusters its non-background
-pixels with DBSCAN, and computes per-cluster spatial/temporal stats. See
-RegionAnalyzer's docstring for the full picture.
+Picks a critical frame (spike or spike+1), clusters its bright pixels with
+morphological dilation + connected components, and computes per-cluster
+spatial/temporal stats. See RegionAnalyzer's docstring for the full picture.
 """
 
 import numpy as np
@@ -24,7 +24,7 @@ PIXEL_SCALE = {
 }
 
 EPS_UM = 30.0  # inter-varicosity gap in um; sets dilation disk radius (tunable)
-MIN_CLUSTER_FRACTION = 0.05  # keep clusters covering at least this fraction of non-background pixels
+MIN_CLUSTER_FRACTION = 0.05  # keep clusters covering at least this fraction of bright pixels
 
 AREA_PCT_SIGMA_MULT = 10.0      # baseline_mean + this many std devs = "significant" B% elevation
 AREA_PCT_MIN_ELEVATION = 1    # floor on the sigma term — prevents near-zero baseline std from trivially passing noise
@@ -36,10 +36,10 @@ MIN_DECAY_FIT_R2 = 0.8  # lasting time is suppressed (None) when the decay fit's
 
 class RegionAnalyzer:
     """
-    Find DBSCAN clusters of bright pixels on the critical frame.
+    Find clusters of bright pixels on the critical frame.
 
     Picks the spike frame or spike+1 as the critical frame (whichever clears
-    the B% significance threshold), clusters its non-background pixels with
+    the B% significance threshold), clusters its bright pixels with
     morphological dilation + connected components, and drops undersized clusters.
     Each kept cluster gets a centroid, an enclosing-circle radius (R), and a
     z-score trace across the segment (inner/outer ring split for a single
@@ -380,9 +380,9 @@ def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> tuple[int
 
     Falls back to spike_frame_idx with significant=False when neither
     candidate clears the threshold, so the caller can skip clustering
-    entirely instead of running DBSCAN on a frame that's indistinguishable
-    from baseline noise (a small stray cluster there would otherwise still
-    pass MIN_CLUSTER_FRACTION's purely relative size check and register as a
+    entirely instead of running it on a frame that's indistinguishable from
+    baseline noise (a small stray cluster there would otherwise still pass
+    MIN_CLUSTER_FRACTION's purely relative size check and register as a
     false-positive detection).
 
     Args:
@@ -531,36 +531,47 @@ def _run_cluster_seeker(
         label_frame: (H, W) array; -2=background, -1=noise/undersized cluster,
             0..N-1=kept clusters, largest first.
         centroids: (row, col) per kept cluster, same order as label_frame indices.
-        n_components: number of connected components before the size filter.
+        n_raw_components: number of connected components before the size filter.
     """
     bright_mask = frame == CATEGORY_BRIGHT
     label_frame = np.full(frame.shape, -2, dtype=int)
     if not bright_mask.any():
         return label_frame, [], 0
 
-    dilated = distance_transform_edt(~bright_mask) <= eps_px
-    cc_map = skimage_label(dilated, connectivity=2)
-    n_components = int(cc_map.max())
+    # distance_transform_edt measures distance to the nearest False pixel.
+    # Flipping bright_mask (~) makes bright pixels False so every other pixel's
+    # distance = "how far am I from the nearest bright pixel?". Thresholding at
+    # eps_px gives every pixel that falls within eps_px of any bright pixel.
+    within_eps_of_bright = distance_transform_edt(~bright_mask) <= eps_px
 
-    total_bright = int(bright_mask.sum())
+    # Connected components on within_eps_of_bright: two bright pixels whose
+    # eps_px zones overlap end up in the same component, bridging dark gaps up
+    # to eps_px wide without needing them to physically touch.
+    component_map = skimage_label(within_eps_of_bright, connectivity=2)
+    n_raw_components = int(component_map.max())
+
+    total_bright_px = int(bright_mask.sum())
     label_frame[bright_mask] = -1  # noise until promoted to a kept cluster
 
-    kept = []
-    for comp_label in range(1, n_components + 1):
-        comp_mask = (cc_map == comp_label) & bright_mask
-        pixel_count = int(comp_mask.sum())
-        if total_bright > 0 and pixel_count / total_bright >= MIN_CLUSTER_FRACTION:
-            kept.append((pixel_count, comp_mask))
-    kept.sort(key=lambda item: item[0], reverse=True)
+    # For each component, intersect back with bright_mask to recover only the
+    # original bright pixels — the dilation expansion is discarded here.
+    # Components too small relative to total bright pixels are rejected.
+    accepted_components = []
+    for component_id in range(1, n_raw_components + 1):
+        bright_px_in_component = (component_map == component_id) & bright_mask
+        bright_px_count = int(bright_px_in_component.sum())
+        if total_bright_px > 0 and bright_px_count / total_bright_px >= MIN_CLUSTER_FRACTION:
+            accepted_components.append((bright_px_count, bright_px_in_component))
+    # Sort largest first so cluster index 0 always refers to the biggest cluster.
+    accepted_components.sort(key=lambda component: component[0], reverse=True)
 
     centroids = []
-    for new_label, (_, comp_mask) in enumerate(kept):
-        label_frame[comp_mask] = new_label
-        comp_coords = np.argwhere(comp_mask)
-        centroids.append(_weighted_centroid(comp_coords[:, 0], comp_coords[:, 1], z_frame))
+    for cluster_idx, (_, bright_px_in_component) in enumerate(accepted_components):
+        label_frame[bright_px_in_component] = cluster_idx
+        bright_px_coords = np.argwhere(bright_px_in_component)
+        centroids.append(_weighted_centroid(bright_px_coords[:, 0], bright_px_coords[:, 1], z_frame))
 
-    return label_frame, centroids, n_components
-
+    return label_frame, centroids, n_raw_components
 
 
 def _resolve_R(dists: np.ndarray, centroid: tuple[float, float], frame_shape: tuple[int, int]) -> float:
@@ -593,7 +604,7 @@ def compute_ring_traces(
     med_stack: np.ndarray,
     cluster_k: int,
 ) -> tuple[np.ndarray, np.ndarray, float, np.ndarray, np.ndarray]:
-    """Inner/outer ring z-score traces for one DBSCAN cluster.
+    """Inner/outer ring z-score traces for one kept cluster.
 
     R is the enclosing-circle radius (max centroid-to-pixel distance among the
     cluster's pixels), capped at the centroid's distance to the nearest frame
@@ -645,7 +656,7 @@ def compute_cluster_trace(
     med_stack: np.ndarray,
     cluster_k: int,
 ) -> tuple[np.ndarray, float, np.ndarray]:
-    """Whole-cluster z-score trace for one DBSCAN cluster (no inner/outer ring split).
+    """Whole-cluster z-score trace for one kept cluster (no inner/outer ring split).
 
     Used when there is more than one kept cluster: each cluster is
     represented by a single trace over its own pixels so cluster-to-cluster
