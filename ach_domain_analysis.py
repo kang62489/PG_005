@@ -37,7 +37,6 @@ from tabulate import tabulate
 
 # Local application imports
 from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
-from classes.region_analyzer import SATURATION_AREA_PCT
 from functions import (
     compute_region_stats,
     count_unique_cells,
@@ -344,12 +343,6 @@ def run(
 
         region_analyzer = RegionAnalyzer(np.array(categorizer.categorized_frames), median_segment, spike_frame_idx, obj=obj)
         region_results = region_analyzer.get_results()
-
-        if region_analyzer.saturated:
-            console.log(
-                f"[red]Critical frame saturated (B%={region_results['critical_frame_area_pct']:.1f}% "
-                f">= {SATURATION_AREA_PCT:.0f}%) — treating whole frame as 1 cluster[/red]"
-            )
 
         if region_results["n_clusters"] == 0:
             console.log("[yellow]No cluster detected[/yellow]")

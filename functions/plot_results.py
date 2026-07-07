@@ -29,9 +29,7 @@ from classes.region_analyzer import (
     MIN_DECAY_FIT_R2,
     RegionAnalyzer,
     _decay_model,
-    _detect_clusters,
     _peak_offset_from_spike,
-    eps_and_min_samples,
 )
 
 # Cluster fill/outline colors, cycled by cluster index (red, green, blue, orange, purple)
@@ -140,7 +138,6 @@ def plot_spatiotemporal_summary(
         Figure, ready for fig.savefig(...) or ResultsExporter.export_figure(...)
     """
     n_frames = len(categorizer.source_frames)
-    obj = region_analyzer.obj
     area_pct = region_analyzer.area_pct
     critical_frame_idx = region_analyzer.critical_frame_idx
     um_per_pixel = region_analyzer.um_per_pixel
@@ -185,7 +182,6 @@ def plot_spatiotemporal_summary(
     ax_bd.tick_params(labelsize=10)
 
     # --- Row 1: spike-4 .. spike+4 frame panels ---
-    eps_px, min_samples = eps_and_min_samples(obj)
     hotspot_area_lines = {
         idx: _format_hotspot_area_line(
             area_pct[idx], total_px, um_per_pixel,
@@ -383,25 +379,16 @@ def _plot_frame_panel(
 def _format_hotspot_area_line(
     area_pct_value: float, total_px: int, um_per_pixel: float,
     label_frame: np.ndarray | None = None,
-    cat_frame: np.ndarray | None = None,
-    eps_px: int | None = None,
-    min_samples: int | None = None,
 ) -> str:
     """Area line for panel titles.
 
-    Critical frame: pass label_frame (already computed by RegionAnalyzer) — no DBSCAN.
-    Other frames: pass only area_pct_value/total_px/um_per_pixel — shows raw B% area.
+    Critical frame: pass label_frame (already computed by RegionAnalyzer).
+    Other frames: shows raw B% area.
     """
     if label_frame is not None:
         hotspot_px = np.count_nonzero(label_frame >= 0)
         hotspot_um2 = hotspot_px * um_per_pixel ** 2
         hotspot_pct = 100.0 * hotspot_px / label_frame.size
-        return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
-    if cat_frame is not None and eps_px is not None and min_samples is not None:
-        lf, _, _, _ = _detect_clusters(cat_frame, area_pct_value, eps_px, min_samples)
-        hotspot_px = np.count_nonzero(lf >= 0)
-        hotspot_um2 = hotspot_px * um_per_pixel ** 2
-        hotspot_pct = 100.0 * hotspot_px / lf.size
         return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
     raw_um2 = area_pct_value / 100.0 * total_px * um_per_pixel ** 2
     return f"B%: {raw_um2:.0f} µm² ({area_pct_value:.1f}%)"

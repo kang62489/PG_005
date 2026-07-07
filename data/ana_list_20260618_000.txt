@@ -226,148 +226,182 @@ dir_proc_tiffs: /flash/WickensU/kang/proc_tiffs
 
 dir_raw_abfs: /flash/WickensU/kang/raw_abfs
 dir_results: /flash/WickensU/kang/results
-[SKIPPED] 2026-07-06T14:22:46+00:00 — 2024_10_11-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:23:19+00:00 — 2024_10_11-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:24:26+00:00 — 2024_10_11-0030_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:24:59+00:00 — 2024_12_19-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:25:27+00:00 — 2024_12_19-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:25:27+00:00 — 2024_12_19-0020_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:25:27+00:00 — 2024_12_19-0021_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:26:56+00:00 — 2025_01_01-0029_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:26:57+00:00 — 2025_01_01-0030_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:26:57+00:00 — 2025_01_01-0031_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:27:29+00:00 — 2025_01_01-0057_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:28:06+00:00 — 2025_01_01-0058_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:28:37+00:00 — 2025_02_05-0007_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:28:37+00:00 — 2025_02_05-0008_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:29:28+00:00 — 2025_02_05-0017_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:30:06+00:00 — 2025_02_05-0032_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:30:42+00:00 — 2025_02_05-0041_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:30:42+00:00 — 2025_02_05-0046_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:30:42+00:00 — 2025_02_05-0047_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:30:43+00:00 — 2025_02_05-0048_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:30:43+00:00 — 2025_02_05-0049_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:30:43+00:00 — 2025_02_05-0050_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:30:43+00:00 — 2025_02_05-0051_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:30:43+00:00 — 2025_02_05-0052_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:31:02+00:00 — 2025_02_27-0005_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:31:17+00:00 — 2025_04_03-0015_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:31:32+00:00 — 2025_04_03-0022_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:31:47+00:00 — 2025_04_03-0023_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:32:02+00:00 — 2025_04_03-0024_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:32:11+00:00 — 2025_04_03-0025_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:32:16+00:00 — 2025_04_03-0026_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:41:28+00:00 — 2025_07_17-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:41:41+00:00 — 2025_07_17-0017_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:41:55+00:00 — 2025_07_19-0005_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:42:05+00:00 — 2025_07_19-0006_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:42:20+00:00 — 2025_07_19-0007_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:42:49+00:00 — 2025_07_19-0015_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:43:00+00:00 — 2025_07_19-0017_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:43:14+00:00 — 2025_07_19-0018_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:43:24+00:00 — 2025_07_19-0019_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:43:31+00:00 — 2025_09_26-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:44:14+00:00 — 2025_09_26-0019_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:44:50+00:00 — 2025_10_13-0002_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:45:26+00:00 — 2025_10_13-0003_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:45:43+00:00 — 2025_10_13-0006_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:46:18+00:00 — 2025_10_13-0007_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:46:53+00:00 — 2025_10_13-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:47:27+00:00 — 2025_10_13-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:48:02+00:00 — 2025_10_13-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:48:15+00:00 — 2025_10_13-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:48:15+00:00 — 2025_10_13-0017_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T14:48:26+00:00 — 2025_10_13-0028_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:49:02+00:00 — 2025_10_13-0030_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:49:18+00:00 — 2025_10_13-0032_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:49:51+00:00 — 2025_10_13-0035_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:50:24+00:00 — 2025_11_08-0018_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:50:56+00:00 — 2025_11_08-0019_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:51:29+00:00 — 2025_11_08-0020_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:54:28+00:00 — 2025_11_08-0032_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:55:01+00:00 — 2025_11_08-0033_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:56:34+00:00 — 2025_11_13-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:57:10+00:00 — 2025_11_13-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:57:49+00:00 — 2025_11_13-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:58:28+00:00 — 2025_11_13-0012_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T14:59:06+00:00 — 2025_11_13-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:00:56+00:00 — 2025_11_13-0022_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:01:50+00:00 — 2025_11_13-0024_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:02:27+00:00 — 2025_11_13-0026_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:02:31+00:00 — 2025_11_13-0037_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T15:02:31+00:00 — 2025_11_13-0038_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T15:03:07+00:00 — 2025_11_13-0040_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:03:46+00:00 — 2025_11_13-0041_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:04:24+00:00 — 2025_11_13-0042_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:05:01+00:00 — 2025_11_13-0043_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:05:29+00:00 — 2025_11_27-0005_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:05:45+00:00 — 2025_11_27-0007_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:06:24+00:00 — 2025_11_27-0008_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:07:04+00:00 — 2025_11_27-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:07:41+00:00 — 2025_11_27-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:08:17+00:00 — 2025_11_27-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:08:55+00:00 — 2025_11_27-0021_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:09:44+00:00 — 2025_11_27-0027_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:10:09+00:00 — 2025_11_27-0028_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:10:20+00:00 — 2025_11_27-0033_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:10:44+00:00 — 2025_11_27-0034_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:11:06+00:00 — 2025_11_27-0035_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:11:31+00:00 — 2025_11_27-0036_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:12:53+00:00 — 2025_12_14-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:13:28+00:00 — 2025_12_14-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:15:23+00:00 — 2025_12_14-0029_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:15:45+00:00 — 2025_12_14-0035_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:16:09+00:00 — 2025_12_14-0036_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:16:33+00:00 — 2025_12_14-0037_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:16:58+00:00 — 2025_12_14-0038_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:17:22+00:00 — 2025_12_14-0039_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:17:47+00:00 — 2025_12_14-0040_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:18:44+00:00 — 2025_12_15-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:19:11+00:00 — 2025_12_15-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:21:10+00:00 — 2025_12_15-0020_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:26:00+00:00 — 2025_12_18-0007_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:26:47+00:00 — 2025_12_18-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:27:10+00:00 — 2025_12_18-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:27:46+00:00 — 2025_12_18-0023_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:28:24+00:00 — 2025_12_18-0024_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:28:59+00:00 — 2025_12_18-0025_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:29:38+00:00 — 2025_12_18-0026_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:30:07+00:00 — 2025_12_18-0027_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:30:18+00:00 — 2026_01_08-0004_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:30:49+00:00 — 2026_01_08-0006_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:31:22+00:00 — 2026_01_08-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:32:01+00:00 — 2026_01_08-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:32:39+00:00 — 2026_01_08-0012_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:33:14+00:00 — 2026_01_08-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:33:50+00:00 — 2026_01_08-0014_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:34:25+00:00 — 2026_01_08-0015_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:35:02+00:00 — 2026_01_08-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:35:27+00:00 — 2026_01_08-0021_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:35:55+00:00 — 2026_01_08-0022_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:36:26+00:00 — 2026_01_08-0023_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:36:52+00:00 — 2026_01_08-0024_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:37:03+00:00 — 2026_01_08-0030_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:37:13+00:00 — 2026_01_08-0031_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:37:38+00:00 — 2026_01_08-0032_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:38:00+00:00 — 2026_01_08-0033_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:38:01+00:00 — 2026_01_08-0034_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T15:38:01+00:00 — 2026_01_08-0035_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
-[SKIPPED] 2026-07-06T15:38:23+00:00 — 2026_01_08-0036_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
-[SKIPPED] 2026-07-06T15:38:47+00:00 — 2026_01_08-0037_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_10_11-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_10_11-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_10_11-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_10_11-0014_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_10_11-0020_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_10_11-0029_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_10_11-0030_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_12_19-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_12_19-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2024_12_19-0020_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2024_12_19-0021_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_01_01-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_01_01-0020_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_01_01-0029_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_01_01-0030_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_01_01-0031_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_01_01-0057_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_01_01-0058_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_02_05-0006_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_02_05-0007_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0008_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_02_05-0017_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_02_05-0026_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_02_05-0032_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0041_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_02_05-0046_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0047_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0048_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0049_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0050_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0051_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_05-0052_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_02_27-0005_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_04_03-0015_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_04_03-0022_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_04_03-0023_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_04_03-0024_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_04_03-0025_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_04_03-0026_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_17-0015_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_17-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_17-0017_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0005_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0006_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0007_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0008_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0015_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0017_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0018_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_07_19-0019_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_09_26-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_09_26-0017_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_09_26-0018_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_09_26-0019_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0002_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0003_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0006_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0007_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0017_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_10_13-0028_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0030_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0032_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_10_13-0035_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_08-0018_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_08-0019_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_08-0020_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_08-0032_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_08-0033_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0012_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0022_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0024_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0026_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0037_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_11_13-0038_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2025_11_13-0040_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0041_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0042_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_13-0043_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0005_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0007_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0008_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0021_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0026_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0027_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0028_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0033_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0034_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0035_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_11_27-0036_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0008_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0014_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0015_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0020_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0021_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0022_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0023_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0029_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0035_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0036_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0037_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0038_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0039_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_14-0040_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_15-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_15-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_15-0019_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_15-0020_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_15-0021_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0007_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0008_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0009_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0023_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0024_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0025_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0026_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2025_12_18-0027_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0004_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0005_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0006_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0010_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0011_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0012_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0013_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0014_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0015_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0016_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0021_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0022_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0023_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0024_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0030_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0031_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0032_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0033_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0034_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026_01_08-0035_BIEXP_GAUSS.tif: no valid segments (spikes too closely spaced for any baseline window)
+[SKIPPED] 2026_01_08-0036_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
+[SKIPPED] 2026_01_08-0037_BIEXP_GAUSS.tif: no significant ACh detection (neither spike nor spike+1 frame cleared the B% significance threshold)
 
 ================================================================================
-Region Analysis Statistics — generated 2026-07-06T15:38:47+00:00
+Region Analysis Statistics — generated 2026-07-07T05:26:35+00:00
 ================================================================================
-Neurons detected ACh release: 21/42
+Neurons detected ACh release: 13/42
 
-+-----------------------+----------+----------+------------+
-|        Metric         |   Mean   |   Std    | n_detected |
-+-----------------------+----------+----------+------------+
-|     max_area_um2      | 18129.41 | 27660.96 |     21     |
-| max_area_eq_radius_um |  52.19   |  52.76   |     21     |
-|    peak_latency_ms    |   4.15   |  16.82   |     21     |
-|    lasting_time_ms    |  88.70   |  70.10   |     21     |
-+-----------------------+----------+----------+------------+
+Spatial (skewed — Median/IQR/GeoMean shown):
++-----------------------+----------+----------+-------+----------+----------------+---------+---------+----+
+|        Metric         |   Mean   |   Std    |  CV%  |  Median  |   IQR(Q1-Q3)   | GeoMean | GeoStd* | n  |
++-----------------------+----------+----------+-------+----------+----------------+---------+---------+----+
+|     max_area_um2      | 28078.96 | 31436.33 | 112.0 | 15113.71 | 2307.1-48943.6 | 9261.33 |  7.28   | 13 |
+| max_area_eq_radius_um |  75.23   |  55.63   | 73.9  |  65.21   |   26.3-122.3   |  52.68  |  2.69   | 13 |
++-----------------------+----------+----------+-------+----------+----------------+---------+---------+----+
+
+Temporal:
++-----------------+-------+-------+----+
+|     Metric      | Mean  |  Std  | n  |
++-----------------+-------+-------+----+
+| peak_latency_ms | -1.63 | 16.88 | 13 |
+| lasting_time_ms | 96.57 | 73.97 | 13 |
++-----------------+-------+-------+----+
 
 Per-Neuron Recording List (filename, detected) [detected/total]:
 202503-022-11_S1RC1 [(2025_07_19-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
@@ -383,15 +417,15 @@ Per-Neuron Recording List (filename, detected) [detected/total]:
                      (2025_07_17-0016_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                      (2025_07_17-0017_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
 KC-nChAT-Hom-6_S2RC2 [(2024_10_11-0009_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
-                      (2024_10_11-0010_A1S2RC2_BIEXP_GAUSS_MED.tif, True),
+                      (2024_10_11-0010_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
                       (2024_10_11-0013_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
-                      (2024_10_11-0014_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 1/4
+                      (2024_10_11-0014_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/4
 KC-nChAT-Hom-6_S4RC1 [(2024_10_11-0020_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
-                      (2024_10_11-0029_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
-                      (2024_10_11-0030_A1S4RC1_BIEXP_GAUSS_MED.tif, False)] 1/3
-neoChAT-549_S1RC1 [(2025_02_05-0006_A1S1RC1_BIEXP_GAUSS_MED.tif, True)] 1/1
-neoChAT-549_S1RC2 [(2025_02_05-0016_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
-                   (2025_02_05-0017_A1S1RC2_BIEXP_GAUSS_MED.tif, False)] 1/2
+                      (2024_10_11-0029_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
+                      (2024_10_11-0030_A1S4RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
+neoChAT-549_S1RC1 [(2025_02_05-0006_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
+neoChAT-549_S1RC2 [(2025_02_05-0016_A1S1RC2_BIEXP_GAUSS_MED.tif, False),
+                   (2025_02_05-0017_A1S1RC2_BIEXP_GAUSS_MED.tif, False)] 0/2
 neoChAT-549_S2RC1 [(2025_02_05-0026_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
 neoChAT-549_S3RC2 [(2025_02_05-0041_A1S3RC2_BIEXP_GAUSS_MED.tif, False)] 0/1
 neoChAT-550_S1RC1 [(2025_02_27-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
@@ -459,24 +493,24 @@ neoChAT-660_S1RC1 [(2025_11_27-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_11_27-0010_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_11_27-0011_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/6
 neoChAT-660_S2RC1 [(2025_11_27-0021_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/1
-neoChAT-660_S3RC1 [(2025_11_27-0026_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+neoChAT-660_S3RC1 [(2025_11_27-0026_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_11_27-0027_A1S3RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2025_11_27-0028_A1S3RC1_BIEXP_GAUSS_MED.tif, False)] 1/3
+                   (2025_11_27-0028_A1S3RC1_BIEXP_GAUSS_MED.tif, False)] 0/3
 neoChAT-660_S3RC2 [(2025_11_27-0033_A1S3RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_11_27-0034_A1S3RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_11_27-0035_A1S3RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_11_27-0036_A1S3RC2_BIEXP_GAUSS_MED.tif, False)] 0/4
 neoChAT-661_S1RC1 [(2025_12_14-0002_A1S1RC1_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_14-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_14-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_14-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 3/4
-neoChAT-661_S2RC1 [(2025_12_14-0014_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_14-0015_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_14-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 2/4
+neoChAT-661_S2RC1 [(2025_12_14-0014_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0015_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_14-0016_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2025_12_14-0020_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_14-0021_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_14-0022_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_14-0023_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 6/7
+                   (2025_12_14-0020_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0021_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0022_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_14-0023_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/7
 neoChAT-661_S2RC2 [(2025_12_14-0029_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_14-0035_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_14-0036_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
@@ -485,10 +519,10 @@ neoChAT-661_S2RC2 [(2025_12_14-0029_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_14-0039_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_14-0040_A1S2RC2_BIEXP_GAUSS_MED.tif, False)] 0/7
 neoChAT-662_S1RC1 [(2025_12_18-0007_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2025_12_18-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_18-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_18-0008_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
+                   (2025_12_18-0009_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_18-0010_A1S1RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2025_12_18-0011_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 2/5
+                   (2025_12_18-0011_A1S1RC1_BIEXP_GAUSS_MED.tif, False)] 0/5
 neoChAT-662_S2RC1 [(2025_12_18-0023_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_18-0024_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_18-0025_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
@@ -529,13 +563,13 @@ neoChAT-676_S3RC1 [(2025_12_15-0008_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0012_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0013_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0014_A1S3RC1_BIEXP_GAUSS_MED.tif, True)] 5/7
-neoChAT-676_S4RC1 [(2025_12_15-0019_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+neoChAT-676_S4RC1 [(2025_12_15-0019_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_15-0020_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2025_12_15-0021_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0021_A1S4RC1_BIEXP_GAUSS_MED.tif, False),
                    (2025_12_15-0022_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0023_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0024_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_15-0025_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 6/7
+                   (2025_12_15-0025_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 4/7
 neoChAT-676_S4RC2 [(2025_12_15-0030_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0031_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0032_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
@@ -545,7 +579,7 @@ neoChAT-676_S4RC2 [(2025_12_15-0030_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0042_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
                    (2025_12_15-0043_A1S4RC2_BIEXP_GAUSS_MED.tif, True)] 8/8
 neoChAT-677_S2RC1 [(2026_01_08-0004_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2026_01_08-0005_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2026_01_08-0005_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0006_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0010_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0011_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
@@ -553,7 +587,7 @@ neoChAT-677_S2RC1 [(2026_01_08-0004_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0013_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0014_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0015_A1S2RC1_BIEXP_GAUSS_MED.tif, False),
-                   (2026_01_08-0016_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 1/10
+                   (2026_01_08-0016_A1S2RC1_BIEXP_GAUSS_MED.tif, False)] 0/10
 neoChAT-677_S2RC2 [(2026_01_08-0021_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0022_A1S2RC2_BIEXP_GAUSS_MED.tif, False),
                    (2026_01_08-0023_A1S2RC2_BIEXP_GAUSS_MED.tif, False),

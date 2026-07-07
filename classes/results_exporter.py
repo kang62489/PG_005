@@ -127,7 +127,6 @@ class ResultsExporter:
                 n_spikes_analyzed INTEGER,
                 n_clusters INTEGER,
                 has_region INTEGER,
-                saturated INTEGER,
                 critical_frame_offset INTEGER,
                 critical_frame_area_pct REAL,
                 critical_frame_area_um2 REAL,
@@ -363,14 +362,14 @@ class ResultsExporter:
                 exp_date, abf_serial, img_serial, timestamp,
                 objective, um_per_pixel, threshold_method,
                 n_spikes_detected, n_spikes_analyzed,
-                n_clusters, has_region, saturated,
+                n_clusters, has_region,
                 critical_frame_offset, critical_frame_area_pct, critical_frame_area_um2,
                 max_area_offset, max_area_um2, max_area_eq_radius_um, max_area_x_span_um, max_area_y_span_um,
                 decay_peak_offset, decay_fit_r2, lasting_time_ms,
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um, peak_latency_ms,
                 zscore_min, zscore_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -384,7 +383,6 @@ class ResultsExporter:
                 n_spikes_analyzed,
                 region_summary["n_clusters"],
                 region_summary["has_region"],
-                region_summary["saturated"],
                 region_data["critical_frame_offset"],
                 region_data["critical_frame_area_pct"],
                 region_data["critical_frame_area_um2"],

@@ -7,9 +7,9 @@ RegionAnalyzer's docstring for the full picture.
 """
 
 import numpy as np
+from scipy.ndimage import distance_transform_edt
 from scipy.optimize import curve_fit
 from skimage.measure import label as skimage_label
-from sklearn.cluster import DBSCAN
 
 # Category constants
 CATEGORY_BACKGROUND = 0
@@ -23,14 +23,11 @@ PIXEL_SCALE = {
     "60X": 4.5,
 }
 
-EPS_UM = 10.0  # inter-varicosity gap in um (tunable)
-DBSCAN_MIN_SAMPLES = 50  # fixed min_samples for DBSCAN — decoupled from eps so high-magnification images aren't over-penalized
-MIN_CLUSTER_FRACTION = 0.05  # keep DBSCAN clusters covering at least this fraction of non-background pixels
+EPS_UM = 30.0  # inter-varicosity gap in um; sets dilation disk radius (tunable)
+MIN_CLUSTER_FRACTION = 0.05  # keep clusters covering at least this fraction of non-background pixels
 
 AREA_PCT_SIGMA_MULT = 10.0      # baseline_mean + this many std devs = "significant" B% elevation
 AREA_PCT_MIN_ELEVATION = 1    # floor on the sigma term — prevents near-zero baseline std from trivially passing noise
-
-SATURATION_AREA_PCT = 10.0  # critical frame B% at/above this skips DBSCAN entirely (too dense, blows up memory)
 
 MIN_DECAY_FIT_FRAMES = 3  # fewer post-peak frames than this and the exponential fit is skipped
 MIN_DECAY_FIT_RANGE = 1e-6  # post-peak Bright% must vary by at least this much or the fit is skipped (degenerate/flat trace)
@@ -43,17 +40,10 @@ class RegionAnalyzer:
 
     Picks the spike frame or spike+1 as the critical frame (whichever clears
     the B% significance threshold), clusters its non-background pixels with
-    DBSCAN, and drops undersized clusters. Each kept cluster gets a centroid,
-    an enclosing-circle radius (R), and a z-score trace across the segment
-    (inner/outer ring split for a single cluster, whole-cluster trace when
-    there are multiple).
-
-    If the critical frame's B% is at/above SATURATION_AREA_PCT, DBSCAN is
-    skipped (self.saturated = True) -- a dense enough point cloud makes
-    sklearn's neighbor-graph construction blow up memory. Every non-background
-    pixel is instead treated as one big cluster (ring-split like any other
-    single-cluster case), since at that density it's one region, not discrete
-    release sites.
+    morphological dilation + connected components, and drops undersized clusters.
+    Each kept cluster gets a centroid, an enclosing-circle radius (R), and a
+    z-score trace across the segment (inner/outer ring split for a single
+    cluster, whole-cluster trace when there are multiple).
 
     Result dict per cluster (from get_results()):
         centroid : (row, col) in pixels, z-score-weighted toward the cluster's
@@ -64,14 +54,14 @@ class RegionAnalyzer:
         R_lat_um : enclosing-circle radius in µm
 
     critical_frame_area_um2 (from get_results()) is this frame's own
-    DBSCAN-kept-cluster area (noise/undersized-cluster pixels excluded) --
+    kept-cluster area (undersized-cluster pixels excluded) --
     critical_frame_area_pct stays the raw B% (it also drives the
-    significance/saturation threshold logic above).
+    significance threshold logic above).
 
     Top-level max_area_* fields (from get_results()) instead describe the
     max-area frame -- whichever of spike/spike+1 has the larger raw B%,
     independent of the critical/latency frame's significance-threshold pick.
-    The reported area is likewise that frame's DBSCAN-kept-cluster area, not
+    The reported area is likewise that frame's kept-cluster area, not
     the raw non-background count. max_area_eq_radius_um is the circle-equivalent
     radius (sqrt(area/pi)) of that same area, for direct comparison against R_lat_um.
 
@@ -114,15 +104,15 @@ class RegionAnalyzer:
             self.area_pct, self.decay_peak_frame_idx
         )
 
-        eps_px, min_samples = eps_and_min_samples(obj)
+        eps_px = compute_eps_px(obj)
         if self.significant:
-            self.label_frame, self.centroids, self.n_raw_clusters, self.saturated = _detect_clusters(
-                cat_stack[self.critical_frame_idx], self.area_pct[self.critical_frame_idx], eps_px, min_samples,
+            self.label_frame, self.centroids, self.n_raw_clusters = _run_cluster_seeker(
+                cat_stack[self.critical_frame_idx], eps_px,
                 z_frame=med_stack[self.critical_frame_idx],
             )
         else:
             self.label_frame = np.full(cat_stack.shape[1:], -2, dtype=int)
-            self.centroids, self.n_raw_clusters, self.saturated = [], 0, False
+            self.centroids, self.n_raw_clusters = [], 0
 
         self.clusters = self._build_clusters(med_stack)
         if self.significant and len(self.clusters) > 0:
@@ -137,7 +127,7 @@ class RegionAnalyzer:
                 self.max_area_y_span_um,
                 self.max_area_x_min_px,
                 self.max_area_y_min_px,
-            ) = self._compute_max_area(cat_stack, med_stack, spike_frame_idx, eps_px, min_samples)
+            ) = self._compute_max_area(cat_stack, med_stack, spike_frame_idx, eps_px)
         else:
             (
                 self.max_area_frame_idx,
@@ -189,15 +179,15 @@ class RegionAnalyzer:
         return clusters
 
     def _compute_max_area(
-        self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, eps_px: int, min_samples: int
+        self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, eps_px: int
     ) -> tuple[int, int, float, float, int | None, int | None, float | None, float | None, int | None, int | None]:
         """Max-area frame stats, independent of the critical-frame pick above.
 
         Picks whichever of frame0 (spike) / frame1 (spike+1) has the larger
         raw area_pct -- used only for the headline area stat, not latency.
-        The reported area is that frame's DBSCAN-kept-cluster area (noise
+        The reported area is that frame's kept-cluster area (undersized clusters
         excluded), not the raw non-background count. X/Y span is measured from
-        the combined DBSCAN-kept mask on that same frame.
+        the combined kept mask on that same frame.
 
         Returns:
             (max_area_frame_idx, max_area_offset, max_area_um2,
@@ -213,8 +203,8 @@ class RegionAnalyzer:
         max_area_frame_idx = max(candidate_idxs, key=lambda idx: self.area_pct[idx])
         max_area_offset = max_area_frame_idx - spike_frame_idx
 
-        label_frame, _, _, _ = _detect_clusters(
-            cat_stack[max_area_frame_idx], self.area_pct[max_area_frame_idx], eps_px, min_samples,
+        label_frame, _, _ = _run_cluster_seeker(
+            cat_stack[max_area_frame_idx], eps_px,
             z_frame=med_stack[max_area_frame_idx],
         )
         max_area_kept_px = int(np.count_nonzero(label_frame >= 0))
@@ -272,7 +262,6 @@ class RegionAnalyzer:
             "obj":         self.obj,
             "n_clusters":  len(self.clusters),
             "has_region":  len(self.clusters) > 0,
-            "saturated":   self.saturated,
             "significant": self.significant,
         }
 
@@ -419,18 +408,16 @@ def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> tuple[int
     return spike_frame_idx, False
 
 
-def eps_and_min_samples(obj: str) -> tuple[int, int]:
-    """Convert EPS_UM to pixels for this objective and derive min_samples.
+def compute_eps_px(obj: str) -> int:
+    """Convert EPS_UM to pixels for this objective.
 
     Args:
         obj: Objective magnification, must be a key of PIXEL_SCALE.
 
     Returns:
-        (eps_px, min_samples) for DBSCAN.
+        Dilation disk radius in pixels.
     """
-    px_per_um = PIXEL_SCALE[obj]
-    eps_px = int(EPS_UM * px_per_um)
-    return eps_px, DBSCAN_MIN_SAMPLES
+    return int(EPS_UM * PIXEL_SCALE[obj])
 
 
 def compute_xy_span(mask: np.ndarray) -> tuple[int | None, int | None]:
@@ -524,103 +511,56 @@ def _weighted_centroid(rows: np.ndarray, cols: np.ndarray, z_frame: np.ndarray |
 
 
 def _run_cluster_seeker(
-    frame: np.ndarray, eps_px: int, min_samples: int, z_frame: np.ndarray | None = None
+    frame: np.ndarray, eps_px: int, z_frame: np.ndarray | None = None
 ) -> tuple[np.ndarray, list[tuple[float, float]], int]:
-    """Cluster non-background pixels with DBSCAN, then drop undersized clusters.
+    """Cluster bright pixels with morphological dilation + connected components.
+
+    Uses a distance transform to find all pixels within eps_px of any bright pixel
+    (equivalent to dilating by a disk of radius eps_px but O(H×W) regardless of
+    eps size — no large kernel convolution). Runs connected components on that
+    expanded mask, intersects each component back with the original bright pixels,
+    then drops components below MIN_CLUSTER_FRACTION.
 
     Args:
         frame: 2D array (0=background, 1=dim, 2=bright) for a single frame.
-        eps_px: DBSCAN neighborhood radius in pixels, from eps_and_min_samples().
-        min_samples: DBSCAN minimum samples per cluster, from eps_and_min_samples().
-        z_frame: (H, W) z-scored frame (same frame as `frame`) to weight
-            centroids by pixel intensity; None for an unweighted mean (see
-            _weighted_centroid).
-
-    Returns:
-        label_frame: (H, W) array; -2 = background, -1 = noise/undersized cluster,
-            0..N-1 = kept clusters, largest first.
-        centroids: (row, col) per kept cluster, same order as label_frame's indices.
-        n_raw_clusters: number of clusters DBSCAN found before the size filter.
-    """
-    coords = np.argwhere(frame == CATEGORY_BRIGHT)
-    label_frame = np.full(frame.shape, -2, dtype=int)
-    if coords.shape[0] == 0:
-        return label_frame, [], 0
-
-    raw_labels = DBSCAN(eps=eps_px, min_samples=min_samples).fit_predict(coords)
-
-    total_non_bg = coords.shape[0]
-    unique, counts = np.unique(raw_labels[raw_labels >= 0], return_counts=True)
-    n_raw_clusters = len(unique)
-
-    kept = []
-    for cluster_label, pixel_count in zip(unique.tolist(), counts.tolist(), strict=True):
-        if pixel_count / total_non_bg >= MIN_CLUSTER_FRACTION:
-            kept.append((cluster_label, pixel_count))
-    kept.sort(key=lambda pair: pair[1], reverse=True)  # key= is the sort-by value here (unrelated to dict keys), pair[1] = pixel_count
-
-    remapped = np.full_like(raw_labels, -1)
-    for new_cluster_label, (old_cluster_label, _) in enumerate(kept):
-        remapped[raw_labels == old_cluster_label] = new_cluster_label
-    label_frame[coords[:, 0], coords[:, 1]] = remapped
-
-    centroids = [
-        _weighted_centroid(coords[remapped == new_cluster_label, 0], coords[remapped == new_cluster_label, 1], z_frame)
-        for new_cluster_label in range(len(kept))
-    ]
-
-    return label_frame, centroids, n_raw_clusters
-
-
-def _detect_clusters(
-    frame: np.ndarray, area_pct_value: float, eps_px: int, min_samples: int, z_frame: np.ndarray | None = None
-) -> tuple[np.ndarray, list[tuple[float, float]], int, bool]:
-    """Cluster non-background pixels, or fall back to 1 whole-frame cluster if saturated.
-
-    Single source of truth for the saturation guard, shared by both the
-    critical frame (RegionAnalyzer.__init__) and the independent max-area
-    frame (RegionAnalyzer._compute_max_area) -- skips DBSCAN when
-    area_pct_value is at/above SATURATION_AREA_PCT (a dense enough point
-    cloud makes sklearn's neighbor-graph construction blow up memory) and
-    treats every non-background pixel as one big cluster instead, since at
-    that density it's one region, not discrete release sites.
-
-    Args:
-        frame: 2D array (0=background, 1=dim, 2=bright) for a single frame.
-        area_pct_value: this frame's B% (from compute_area_pct()).
-        eps_px: DBSCAN neighborhood radius in pixels, from eps_and_min_samples().
-        min_samples: DBSCAN minimum samples per cluster, from eps_and_min_samples().
-        z_frame: (H, W) z-scored frame (same frame as `frame`) to weight
-            centroids by pixel intensity; None for an unweighted mean.
+        eps_px: dilation disk radius in pixels, from compute_eps_px().
+        z_frame: (H, W) z-scored frame to weight centroids by pixel intensity;
+            None for an unweighted mean (see _weighted_centroid).
 
     Returns:
         label_frame: (H, W) array; -2=background, -1=noise/undersized cluster,
-            0..N-1=kept clusters, largest first (or 0=the whole frame if saturated).
-        centroids: (row, col) per kept cluster, same order as label_frame's indices.
-        n_raw_clusters: number of clusters DBSCAN found before the size filter (1 if saturated).
-        saturated: True if area_pct_value was at/above SATURATION_AREA_PCT.
+            0..N-1=kept clusters, largest first.
+        centroids: (row, col) per kept cluster, same order as label_frame indices.
+        n_components: number of connected components before the size filter.
     """
-    if area_pct_value >= SATURATION_AREA_PCT:
-        mask = frame == CATEGORY_BRIGHT
-        cc_map = skimage_label(mask, connectivity=2)  # connected components, 8-connectivity
-        n_components = cc_map.max()
-        total_bright = int(mask.sum())
-        label_frame = np.full(frame.shape, -2, dtype=int)
-        centroids = []
-        kept_new_label = 0
-        for comp_label in range(1, n_components + 1):
-            comp_mask = cc_map == comp_label
-            pixel_count = int(comp_mask.sum())
-            if total_bright == 0 or pixel_count / total_bright < MIN_CLUSTER_FRACTION:
-                continue
-            label_frame[comp_mask] = kept_new_label
-            comp_coords = np.argwhere(comp_mask)
-            centroids.append(_weighted_centroid(comp_coords[:, 0], comp_coords[:, 1], z_frame))
-            kept_new_label += 1
-        return label_frame, centroids, n_components, True
+    bright_mask = frame == CATEGORY_BRIGHT
+    label_frame = np.full(frame.shape, -2, dtype=int)
+    if not bright_mask.any():
+        return label_frame, [], 0
 
-    label_frame, centroids, n_raw_clusters = _run_cluster_seeker(frame, eps_px, min_samples, z_frame)
-    return label_frame, centroids, n_raw_clusters, False
+    dilated = distance_transform_edt(~bright_mask) <= eps_px
+    cc_map = skimage_label(dilated, connectivity=2)
+    n_components = int(cc_map.max())
+
+    total_bright = int(bright_mask.sum())
+    label_frame[bright_mask] = -1  # noise until promoted to a kept cluster
+
+    kept = []
+    for comp_label in range(1, n_components + 1):
+        comp_mask = (cc_map == comp_label) & bright_mask
+        pixel_count = int(comp_mask.sum())
+        if total_bright > 0 and pixel_count / total_bright >= MIN_CLUSTER_FRACTION:
+            kept.append((pixel_count, comp_mask))
+    kept.sort(key=lambda item: item[0], reverse=True)
+
+    centroids = []
+    for new_label, (_, comp_mask) in enumerate(kept):
+        label_frame[comp_mask] = new_label
+        comp_coords = np.argwhere(comp_mask)
+        centroids.append(_weighted_centroid(comp_coords[:, 0], comp_coords[:, 1], z_frame))
+
+    return label_frame, centroids, n_components
+
 
 
 def _resolve_R(dists: np.ndarray, centroid: tuple[float, float], frame_shape: tuple[int, int]) -> float:
