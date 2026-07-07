@@ -153,16 +153,44 @@ def build_stats_report(db_path: Path, run_keys: set[tuple[str, str]] | None = No
     n_detected = stats["n_detected"][0]
     n_total = stats["n_total"][0]
 
-    table_rows = [
+    def _fmt(val: float | None, decimals: int = 2) -> str:
+        return f"{val:.{decimals}f}" if val is not None else "N/A"
+
+    rows_by_metric = {r["metric"]: r for r in stats.to_dicts()}
+    area_metrics = ["max_area_um2", "max_area_eq_radius_um"]
+    temporal_metrics = ["peak_latency_ms", "lasting_time_ms"]
+
+    area_rows = [
         {
             "Metric": r["metric"],
-            "Mean": f"{r['mean']:.2f}" if r["mean"] is not None else "N/A",
-            "Std": f"{r['std']:.2f}" if r["std"] is not None else "N/A",
-            "n_detected": r["n_detected"],
+            "Mean": _fmt(r["mean"]),
+            "Std": _fmt(r["std"]),
+            "CV%": _fmt(r["cv_pct"], 1),
+            "Median": _fmt(r["median"]),
+            "IQR(Q1-Q3)": f"{_fmt(r['iqr_q1'], 1)}-{_fmt(r['iqr_q3'], 1)}" if r["iqr_q1"] is not None else "N/A",
+            "GeoMean": _fmt(r["geomean"]),
+            "GeoStd*": _fmt(r["geostd_factor"]),
+            "n": r["n_detected"],
         }
-        for r in stats.to_dicts()
+        for metric in area_metrics
+        if (r := rows_by_metric.get(metric)) is not None
     ]
-    table = tabulate(table_rows, headers="keys", tablefmt="pretty")
+    temporal_rows = [
+        {
+            "Metric": r["metric"],
+            "Mean": _fmt(r["mean"]),
+            "Std": _fmt(r["std"]),
+            "n": r["n_detected"],
+        }
+        for metric in temporal_metrics
+        if (r := rows_by_metric.get(metric)) is not None
+    ]
+    area_table = tabulate(area_rows, headers="keys", tablefmt="pretty") if area_rows else ""
+    temporal_table = tabulate(temporal_rows, headers="keys", tablefmt="pretty") if temporal_rows else ""
+    table = (
+        "Spatial (skewed — Median/IQR/GeoMean shown):\n" + area_table
+        + "\n\nTemporal:\n" + temporal_table
+    )
 
     recordings = get_cell_recording_status(db_path, run_keys)
     neuron_lines = []
@@ -214,8 +242,8 @@ def _save_entry_figures(
     full_fig: object,
     trace_path: str,
 ) -> None:
-    exporter.export_figure("region_sta", fig, stem_path)
-    exporter.export_figure("region_sta", full_fig, trace_path)
+    exporter.export_figure("spatial", fig, stem_path)
+    exporter.export_figure("latency", full_fig, trace_path)
 
 
 def run(
@@ -285,8 +313,7 @@ def run(
             console.log("[yellow]No valid segments — skipping z-score step.[/yellow]")
             with ana_list_path.open("a", encoding="utf-8") as f:
                 f.write(
-                    f"[SKIPPED] {datetime.now(UTC).isoformat(timespec='seconds')} — "
-                    f"{proc_tiff_path.name}: no valid segments "
+                    f"[SKIPPED] {proc_tiff_path.name}: no valid segments "
                     "(spikes too closely spaced for any baseline window)\n"
                 )
             continue
@@ -355,7 +382,7 @@ def run(
         slice_val = match["SLICE"].item()
         at = match["AT"].item()
         frame_duration_ms = clip.ts_imgs * 1000
-        if region_analyzer.significant:
+        if region_analyzer.significant and region_results["n_clusters"] > 0:
             peak_latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
             lasting_time_ms = region_analyzer.get_lasting_time_ms(frame_duration_ms)
             if lasting_time_ms is not None:
@@ -367,11 +394,11 @@ def run(
                 console.log("[yellow]Lasting time: decay fit failed / insufficient post-peak data[/yellow]")
         else:
             peak_latency_ms, lasting_time_ms = None, None
-            console.log("[yellow]No ACh detection — skipping MED/CAT TIFFs, latency/lasting time/span export[/yellow]")
+            if not region_analyzer.significant:
+                console.log("[yellow]No ACh detection — skipping MED/CAT TIFFs, latency/lasting time/span export[/yellow]")
             with ana_list_path.open("a", encoding="utf-8") as f:
                 f.write(
-                    f"[SKIPPED] {datetime.now(UTC).isoformat(timespec='seconds')} — "
-                    f"{proc_tiff_path.name}: no significant ACh detection "
+                    f"[SKIPPED] {proc_tiff_path.name}: no significant ACh detection "
                     "(neither spike nor spike+1 frame cleared the B% significance threshold)\n"
                 )
 
@@ -429,7 +456,7 @@ def run(
             save_thread.start()
         dir_names = "/, ".join(d.name for d in dirs.values())
         console.log(
-            f"[green]Exported {dir_names}/, region_sta/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
+            f"[green]Exported {dir_names}/, spatial/, latency/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
         )
 
     if save_thread is not None:

@@ -5,9 +5,9 @@ ResultsExporter.export_figure(), not interactive GUI windows. See classes/mpl_ca
 for the PySide6-coupled canvas widget used by the live GUI.
 
 Two export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
-- plot_spatiotemporal_summary (-> region_sta/): B+D% signal trace showing why the
+- plot_spatiotemporal_summary (-> spatial/): B+D% signal trace showing why the
   critical frame was picked, + cluster shading on just that frame's own panel.
-- plot_full_trace (-> region_sta/, *_LATENCY.png): the same fixed cluster-ring overlay repeated
+- plot_full_trace (-> latency/, *_LATENCY.png): the same fixed cluster-ring overlay repeated
   across a 9-panel window, + the full-segment z-score trace with that window annotated.
 """
 

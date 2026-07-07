@@ -1,3 +1,39 @@
+# Log of the project progress 2026-07-07 Mon (Session 49)
+Last working file: `docs/knowledgebase/rolling_background_thread_pattern.md`
+Last working line: 46
+
+## List of modified files
+- `ach_domain_analysis.py` — removed ISO timestamps from `[SKIPPED]` lines; gated `peak_latency_ms` + `lasting_time_ms` on `n_clusters > 0`; split `_save_entry_figures` to use `"spatial"` and `"latency"` subfolders; updated console log; split `build_stats_report()` into two tables (Spatial / Temporal)
+- `classes/region_analyzer.py` — 4 bug fixes: threshold floor (`AREA_PCT_MIN_ELEVATION = 0.5`), `skimage_label` connected components for saturated path, `DBSCAN_MIN_SAMPLES = 100` fixed constant, `_compute_max_area()` + `get_results()` gated on `len(clusters) > 0`
+- `classes/results_exporter.py` — docstring updated: `region_sta/` → `spatial/` + `latency/`
+- `functions/database_ops.py` — `compute_region_stats()` expanded with `median`, `iqr_q1`, `iqr_q3`, `cv_pct`, `geomean`, `geostd_factor`; new `_geomean_geostd()` helper; `import math` added
+- `functions/plot_results.py` — module docstring updated: `region_sta/` → `spatial/` / `latency/`
+- `docs/knowledgebase/rolling_background_thread_pattern.md` — code example updated to `"spatial"` / `"latency"`
+- `run_ach.slm` — removed stale `cp -r results/ /bucket/...` line
+
+## Summary of current progress
+- **6 bug fixes**: threshold floor for near-zero baseline, connected-component labeling for saturated frames, `DBSCAN_MIN_SAMPLES = 100` constant across all objectives, `_compute_max_area()` / latency / lasting time all properly null-gated when no clusters detected
+- **Stats report split into two tables**: Spatial (area + radius — shows Mean, Std, CV%, Median, IQR, GeoMean, GeoStd*) and Temporal (latency + lasting time — Mean, Std only); `GeoStd*` is a dimensionless multiplier (typical range = GeoMean ÷ GeoStd to GeoMean × GeoStd)
+- **Output folder split**: `*_SPATIAL.png` → `results/spatial/`, `*_LATENCY.png` → `results/latency/` (was both in `region_sta/`); all `region_sta` references cleaned up across code and docs
+
+## Completed TODOs
+- ✅ Removed timestamps from `[SKIPPED]` log lines
+- ✅ Threshold floor for near-zero baseline std (`AREA_PCT_MIN_ELEVATION = 0.5`)
+- ✅ Saturated path: `skimage_label` connected components
+- ✅ `DBSCAN_MIN_SAMPLES = 100` fixed constant across all objectives
+- ✅ `_compute_max_area()` / latency / lasting time gated on `n_clusters > 0`
+- ✅ Stats report expanded with Median/IQR/CV%/GeoMean/GeoStd for area metrics
+- ✅ Stats report split into Spatial and Temporal tables
+- ✅ Output folders split: `spatial/` and `latency/` (was `region_sta/`)
+
+## What should we do next? (TODOs)
+- (none)
+
+## Last Session Recap
+※ recap: Fixed 6 bugs in `region_analyzer.py`/`ach_domain_analysis.py` (threshold floor, connected-component saturated path, DBSCAN min_samples, null-gating of area/latency); expanded stats report with Median/IQR/CV%/GeoMean split into Spatial vs Temporal tables; split output from `region_sta/` into `spatial/` and `latency/`. Pipeline not yet re-run to verify the new layout.
+
+---
+
 # Log of the project progress 2026-07-06 Sun (Session 48)
 Last working file: `ach_domain_analysis.py`
 Last working line: ~391 (`console.log(f"[green]Exported {dir_names}/, region_sta/  ...")` — dropped the stale `full_traces/` mention)

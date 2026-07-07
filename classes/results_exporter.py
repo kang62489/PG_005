@@ -41,10 +41,12 @@ class ResultsExporter:
         │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_MED.tif
         ├── categorized/
         │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_CAT.tif
-        └── region_sta/
-            └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_SPATIAL.png
+        ├── spatial/
+        │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_SPATIAL.png
+        └── latency/
+            └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_LATENCY.png
 
-    region_sta/ is created on demand by export_figure() — export_all() only creates
+    spatial/ and latency/ are created on demand by export_figure() — export_all() only creates
     median/ and categorized/.
 
     A{n} is a batch-local sequential animal index (see build_animal_index_map),
@@ -278,7 +280,7 @@ class ResultsExporter:
         Save a figure under results_root/{category}/, creating the folder on demand.
 
         Args:
-            category: Subfolder name (e.g. "region_sta")
+            category: Subfolder name (e.g. "spatial")
             figure: Matplotlib figure to save
             filename: Name of the output file
 

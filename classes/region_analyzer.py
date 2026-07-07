@@ -8,6 +8,7 @@ RegionAnalyzer's docstring for the full picture.
 
 import numpy as np
 from scipy.optimize import curve_fit
+from skimage.measure import label as skimage_label
 from sklearn.cluster import DBSCAN
 
 # Category constants
@@ -23,10 +24,11 @@ PIXEL_SCALE = {
 }
 
 EPS_UM = 10.0  # inter-varicosity gap in um (tunable)
-MIN_DENSITY_FRAC = 0.1  # min_samples = this fraction of the eps-circle area
+DBSCAN_MIN_SAMPLES = 50  # fixed min_samples for DBSCAN — decoupled from eps so high-magnification images aren't over-penalized
 MIN_CLUSTER_FRACTION = 0.05  # keep DBSCAN clusters covering at least this fraction of non-background pixels
 
-AREA_PCT_SIGMA_MULT = 10.0  # baseline_mean + this many std devs = "significant" B% elevation
+AREA_PCT_SIGMA_MULT = 10.0      # baseline_mean + this many std devs = "significant" B% elevation
+AREA_PCT_MIN_ELEVATION = 1    # floor on the sigma term — prevents near-zero baseline std from trivially passing noise
 
 SATURATION_AREA_PCT = 10.0  # critical frame B% at/above this skips DBSCAN entirely (too dense, blows up memory)
 
@@ -123,18 +125,32 @@ class RegionAnalyzer:
             self.centroids, self.n_raw_clusters, self.saturated = [], 0, False
 
         self.clusters = self._build_clusters(med_stack)
-        (
-            self.max_area_frame_idx,
-            self.max_area_offset,
-            self.max_area_um2,
-            self.max_area_eq_radius_um,
-            self.max_area_x_span_px,
-            self.max_area_y_span_px,
-            self.max_area_x_span_um,
-            self.max_area_y_span_um,
-            self.max_area_x_min_px,
-            self.max_area_y_min_px,
-        ) = self._compute_max_area(cat_stack, med_stack, spike_frame_idx, eps_px, min_samples)
+        if self.significant and len(self.clusters) > 0:
+            (
+                self.max_area_frame_idx,
+                self.max_area_offset,
+                self.max_area_um2,
+                self.max_area_eq_radius_um,
+                self.max_area_x_span_px,
+                self.max_area_y_span_px,
+                self.max_area_x_span_um,
+                self.max_area_y_span_um,
+                self.max_area_x_min_px,
+                self.max_area_y_min_px,
+            ) = self._compute_max_area(cat_stack, med_stack, spike_frame_idx, eps_px, min_samples)
+        else:
+            (
+                self.max_area_frame_idx,
+                self.max_area_offset,
+                self.max_area_um2,
+                self.max_area_eq_radius_um,
+                self.max_area_x_span_px,
+                self.max_area_y_span_px,
+                self.max_area_x_span_um,
+                self.max_area_y_span_um,
+                self.max_area_x_min_px,
+                self.max_area_y_min_px,
+            ) = spike_frame_idx, 0, None, None, None, None, None, None, None, None
 
     def _build_clusters(self, med_stack: np.ndarray) -> list[dict]:
         """Per-cluster result dicts for the critical frame (self.label_frame/self.centroids).
@@ -232,14 +248,14 @@ class RegionAnalyzer:
             "critical_frame_offset":   self.critical_frame_idx - self.spike_frame_idx,
             "critical_frame_area_pct": critical_frame_area_pct,
             "critical_frame_area_um2": self._area_to_um2(critical_frame_kept_px),
-            "max_area_frame_idx":      self.max_area_frame_idx if self.significant else None,
-            "max_area_offset":         self.max_area_offset if self.significant else None,
-            "max_area_um2":            self.max_area_um2 if self.significant else None,
-            "max_area_eq_radius_um":   self.max_area_eq_radius_um if self.significant else None,
-            "max_area_x_span_px":      self.max_area_x_span_px if self.significant else None,
-            "max_area_y_span_px":      self.max_area_y_span_px if self.significant else None,
-            "max_area_x_span_um":      self.max_area_x_span_um if self.significant else None,
-            "max_area_y_span_um":      self.max_area_y_span_um if self.significant else None,
+            "max_area_frame_idx":      self.max_area_frame_idx if self.clusters else None,
+            "max_area_offset":         self.max_area_offset if self.clusters else None,
+            "max_area_um2":            self.max_area_um2 if self.clusters else None,
+            "max_area_eq_radius_um":   self.max_area_eq_radius_um if self.clusters else None,
+            "max_area_x_span_px":      self.max_area_x_span_px if self.clusters else None,
+            "max_area_y_span_px":      self.max_area_y_span_px if self.clusters else None,
+            "max_area_x_span_um":      self.max_area_x_span_um if self.clusters else None,
+            "max_area_y_span_um":      self.max_area_y_span_um if self.clusters else None,
             "decay_peak_frame_idx":    self.decay_peak_frame_idx if self.significant else None,
             "decay_peak_offset":       (self.decay_peak_frame_idx - self.spike_frame_idx) if self.significant else None,
             "decay_fit_r2":            self.decay_fit_r2 if self.significant else None,
@@ -390,7 +406,8 @@ def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> tuple[int
         significance threshold).
     """
     baseline = area_pct[:spike_frame_idx]
-    threshold = baseline.mean() + AREA_PCT_SIGMA_MULT * baseline.std()
+    elevation = max(float(AREA_PCT_SIGMA_MULT * baseline.std()), AREA_PCT_MIN_ELEVATION)
+    threshold = float(baseline.mean()) + elevation
 
     if area_pct[spike_frame_idx] >= threshold:
         return spike_frame_idx, True
@@ -413,8 +430,7 @@ def eps_and_min_samples(obj: str) -> tuple[int, int]:
     """
     px_per_um = PIXEL_SCALE[obj]
     eps_px = int(EPS_UM * px_per_um)
-    min_samples = max(1, int(MIN_DENSITY_FRAC * np.pi * eps_px**2))
-    return eps_px, min_samples
+    return eps_px, DBSCAN_MIN_SAMPLES
 
 
 def compute_xy_span(mask: np.ndarray) -> tuple[int | None, int | None]:
@@ -586,10 +602,22 @@ def _detect_clusters(
     """
     if area_pct_value >= SATURATION_AREA_PCT:
         mask = frame == CATEGORY_BRIGHT
-        coords = np.argwhere(mask)
-        label_frame = np.where(mask, 0, -2).astype(int)
-        centroids = [_weighted_centroid(coords[:, 0], coords[:, 1], z_frame)]
-        return label_frame, centroids, 1, True
+        cc_map = skimage_label(mask, connectivity=2)  # connected components, 8-connectivity
+        n_components = cc_map.max()
+        total_bright = int(mask.sum())
+        label_frame = np.full(frame.shape, -2, dtype=int)
+        centroids = []
+        kept_new_label = 0
+        for comp_label in range(1, n_components + 1):
+            comp_mask = cc_map == comp_label
+            pixel_count = int(comp_mask.sum())
+            if total_bright == 0 or pixel_count / total_bright < MIN_CLUSTER_FRACTION:
+                continue
+            label_frame[comp_mask] = kept_new_label
+            comp_coords = np.argwhere(comp_mask)
+            centroids.append(_weighted_centroid(comp_coords[:, 0], comp_coords[:, 1], z_frame))
+            kept_new_label += 1
+        return label_frame, centroids, n_components, True
 
     label_frame, centroids, n_raw_clusters = _run_cluster_seeker(frame, eps_px, min_samples, z_frame)
     return label_frame, centroids, n_raw_clusters, False

@@ -43,8 +43,8 @@ by the time we reach it, the previous save has been running during the current e
 
 ```python
 def _save_entry_figures(exporter, fig, stem_path, full_fig, trace_path):
-    exporter.export_figure("region_sta", fig, stem_path)
-    exporter.export_figure("region_sta", full_fig, trace_path)
+    exporter.export_figure("spatial", fig, stem_path)
+    exporter.export_figure("latency", full_fig, trace_path)
 ```
 
 Named function (not a lambda) so `threading.Thread(target=..., args=...)` can pass arguments cleanly.

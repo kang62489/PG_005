@@ -1,5 +1,6 @@
 ## Modules
 # Standard library imports
+import math
 import sqlite3
 from pathlib import Path
 
@@ -144,6 +145,24 @@ def lookup_rec_from_db(table: pl.DataFrame, db_path: Path, exp_db_path: Path) ->
     return populate_animal_id_values(result, exp_db_path)
 
 
+def _geomean_geostd(series: pl.Series) -> tuple[float | None, float | None]:
+    """Geometric mean and geometric std factor (multiplicative) for a polars Series.
+
+    Nulls and non-positive values are dropped before computing.
+    geo_std is exp(std(log(x))) — a dimensionless multiplier; the typical range
+    is [geomean / geo_std, geomean * geo_std].
+    Returns (None, None) if fewer than 1 (or 2 for geo_std) positive values exist.
+    """
+    vals = series.drop_nulls()
+    vals = vals.filter(vals > 0)
+    if vals.len() == 0:
+        return None, None
+    log_vals = vals.log(base=math.e)
+    gm = math.exp(float(log_vals.mean()))
+    gs = math.exp(float(log_vals.std(ddof=1))) if vals.len() > 1 else None
+    return gm, gs
+
+
 def _read_experiments(results_db_path: Path) -> pl.DataFrame:
     """Read the full experiments table from results.db into a polars DataFrame."""
     conn = sqlite3.connect(results_db_path)
@@ -214,44 +233,57 @@ def get_cell_recording_status(
 def compute_region_stats(
     results_db_path: Path, run_keys: set[tuple[str, str]] | None = None
 ) -> pl.DataFrame:
-    """Mean +/- std of max-area-frame area (um^2), peak latency, and lasting
-    time (decay tau), averaged per unique cell.
+    """Summary statistics per metric, averaged per unique cell.
 
     Multiple recordings of the same cell (ANIMAL_ID, SLICE, AT) are first
     collapsed to one row per cell (per-cell mean across its own recordings).
-    Cells with no detected cluster in any recording (has_region == 0 throughout
-    -- i.e. DBSCAN never found a kept cluster) are excluded before computing
-    mean/std, since there's no real measurement to average for a cell that was
-    never actually detected. n_detected/n_total let you see how many cells were
-    usable out of how many were attempted.
+    Cells with no detected cluster in any recording are excluded.
 
     run_keys: optional set of (exp_date, img_serial) pairs to restrict results
     to the current ana-list run rather than the full accumulated DB.
 
-    Returns one row per metric (max_area_um2, max_area_eq_radius_um,
-    peak_latency_ms, lasting_time_ms) with columns: metric, mean, std,
-    n_detected, n_total.
+    Returns one row per metric with columns: metric, mean, std, cv_pct,
+    median, iqr_q1, iqr_q3, geomean, geostd_factor, n_detected, n_total.
     """
     metric_cols = ["max_area_um2", "max_area_eq_radius_um", "peak_latency_ms", "lasting_time_ms"]
     df = _filter_by_run_keys(_read_experiments(results_db_path), run_keys)
 
     if df.is_empty():
-        return pl.DataFrame(
-            schema={"metric": pl.Utf8, "mean": pl.Float64, "std": pl.Float64, "n_detected": pl.Int64, "n_total": pl.Int64}
-        )
+        return pl.DataFrame(schema={
+            "metric": pl.Utf8,
+            "mean": pl.Float64, "std": pl.Float64, "cv_pct": pl.Float64,
+            "median": pl.Float64, "iqr_q1": pl.Float64, "iqr_q3": pl.Float64,
+            "geomean": pl.Float64, "geostd_factor": pl.Float64,
+            "n_detected": pl.Int64, "n_total": pl.Int64,
+        })
 
     per_cell = df.group_by(["ANIMAL_ID", "SLICE", "AT"]).agg(
         [pl.col(c).mean().alias(c) for c in [*metric_cols, "has_region"]]
     )
     n_total = per_cell.height
-
     detected = per_cell.filter(pl.col("has_region") > 0)
     n_detected = detected.height
 
+    means, stds, cvs, medians, q1s, q3s, geomeans, geostds = [], [], [], [], [], [], [], []
+    for col in metric_cols:
+        series = detected[col]
+        mean_val = series.mean()
+        std_val = series.std()
+        means.append(mean_val)
+        stds.append(std_val)
+        cvs.append(std_val / mean_val * 100 if mean_val else None)
+        medians.append(series.median())
+        q1s.append(series.quantile(0.25, interpolation="linear"))
+        q3s.append(series.quantile(0.75, interpolation="linear"))
+        gm, gs = _geomean_geostd(series)
+        geomeans.append(gm)
+        geostds.append(gs)
+
     return pl.DataFrame({
         "metric": metric_cols,
-        "mean": [detected[c].mean() for c in metric_cols],
-        "std": [detected[c].std() for c in metric_cols],
+        "mean": means, "std": stds, "cv_pct": cvs,
+        "median": medians, "iqr_q1": q1s, "iqr_q3": q3s,
+        "geomean": geomeans, "geostd_factor": geostds,
         "n_detected": [n_detected] * len(metric_cols),
         "n_total": [n_total] * len(metric_cols),
     })
