@@ -271,7 +271,7 @@ def compute_region_stats(
         std_val = series.std()
         means.append(mean_val)
         stds.append(std_val)
-        cvs.append(std_val / mean_val * 100 if mean_val else None)
+        cvs.append(std_val / mean_val * 100 if std_val is not None and mean_val else None)
         medians.append(series.median())
         q1s.append(series.quantile(0.25, interpolation="linear"))
         q3s.append(series.quantile(0.75, interpolation="linear"))

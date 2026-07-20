@@ -1,0 +1,43 @@
+Date Created: 20260710
+Analysis: Add 3 more
+Purposes:
+     3 from 20260310
+
+Picked: [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
+[2026_03_10-0006.tif, YES, YES, 2026_03_10_0006.abf, YES]
+[2026_03_10-0007.tif, YES, YES, 2026_03_10_0007.abf, YES]
+[2026_03_10-0009.tif, YES, YES, 2026_03_10_0009.abf, YES]
+
+Total 3 records picked
+
+dir_raw_tiffs: D:\Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\Programs\PG_005\proc_tiffs
+
+dir_raw_abfs: d:\Programs\PG_005\raw_abfs
+dir_results: d:\Programs\PG_005\results
+
+================================================================================
+Region Analysis Statistics — generated 2026-07-20T06:58:09+00:00
+================================================================================
+Neurons detected ACh release: 1/1
+
+Spatial (skewed — Median/IQR/GeoMean shown):
++-----------------------+----------+-----+-----+----------+-----------------+----------+---------+---+
+|        Metric         |   Mean   | Std | CV% |  Median  |   IQR(Q1-Q3)    | GeoMean  | GeoStd* | n |
++-----------------------+----------+-----+-----+----------+-----------------+----------+---------+---+
+|     max_area_um2      | 10045.60 | N/A | N/A | 10045.60 | 10045.6-10045.6 | 10045.60 |   N/A   | 1 |
+| max_area_eq_radius_um |  54.31   | N/A | N/A |  54.31   |    54.3-54.3    |  54.31   |   N/A   | 1 |
++-----------------------+----------+-----+-----+----------+-----------------+----------+---------+---+
+
+Temporal:
++-----------------+--------+-----+---+
+|     Metric      |  Mean  | Std | n |
++-----------------+--------+-----+---+
+| peak_latency_ms | -16.67 | N/A | 1 |
+| lasting_time_ms | 105.27 | N/A | 1 |
++-----------------+--------+-----+---+
+
+Per-Neuron Recording List (filename, detected) [detected/total]:
+neoChAT-678_S1RC2 [(2026_03_10-0006_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2026_03_10-0007_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2026_03_10-0009_A1S1RC2_BIEXP_GAUSS_MED.tif, True)] 3/3

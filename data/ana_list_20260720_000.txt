@@ -1,0 +1,161 @@
+Date Created: 20260720
+Analysis: For RPR
+Purposes:
+     to prepare analyzed data for reporting on RPR June 2026
+
+Picked: [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
+[2024_12_19-0010.tif, YES, YES, 2024_12_19_0001.abf, YES]
+[2024_12_19-0012.tif, YES, YES, 2024_12_19_0003.abf, YES]
+[2025_01_01-0012.tif, YES, YES, 2025_01_01_0007.abf, YES]
+[2025_01_01-0014.tif, YES, YES, 2025_01_01_0009.abf, YES]
+[2025_01_01-0021.tif, YES, YES, 2025_01_01_0014.abf, YES]
+[2025_01_01-0022.tif, YES, YES, 2025_01_01_0015.abf, YES]
+[2025_04_03-0032.tif, YES, YES, 2025_04_03_0022.abf, YES]
+[2025_04_03-0033.tif, YES, YES, 2025_04_03_0023.abf, YES]
+[2025_04_03-0034.tif, YES, YES, 2025_04_03_0024.abf, YES]
+[2025_04_03-0035.tif, YES, YES, 2025_04_03_0025.abf, YES]
+[2025_04_03-0036.tif, YES, YES, 2025_04_03_0026.abf, YES]
+[2025_04_03-0037.tif, YES, YES, 2025_04_03_0027.abf, YES]
+[2025_04_03-0038.tif, YES, YES, 2025_04_03_0028.abf, YES]
+[2025_04_03-0039.tif, YES, YES, 2025_04_03_0029.abf, YES]
+[2025_04_03-0040.tif, YES, YES, 2025_04_03_0030.abf, YES]
+[2025_06_11-0000.tif, YES, YES, 2025_06_11_0001.abf, YES]
+[2025_06_11-0001.tif, YES, YES, 2025_06_11_0002.abf, YES]
+[2025_06_11-0002.tif, YES, YES, 2025_06_11_0003.abf, YES]
+[2025_06_11-0003.tif, YES, YES, 2025_06_11_0004.abf, YES]
+[2025_06_11-0004.tif, YES, YES, 2025_06_11_0005.abf, YES]
+[2025_06_11-0005.tif, YES, YES, 2025_06_11_0006.abf, YES]
+[2025_06_11-0006.tif, YES, YES, 2025_06_11_0007.abf, YES]
+[2025_06_11-0008.tif, YES, YES, 2025_06_11_0008.abf, YES]
+[2025_06_11-0009.tif, YES, YES, 2025_06_11_0009.abf, YES]
+[2025_06_11-0010.tif, YES, YES, 2025_06_11_0010.abf, YES]
+[2025_06_11-0011.tif, YES, YES, 2025_06_11_0012.abf, YES]
+[2025_06_11-0012.tif, YES, YES, 2025_06_11_0013.abf, YES]
+[2025_06_11-0013.tif, YES, YES, 2025_06_11_0014.abf, YES]
+[2025_10_13-0029.tif, YES, YES, 2025_10_13_0026.abf, YES]
+[2025_11_08-0026.tif, YES, YES, 2025_11_08_0012.abf, YES]
+[2025_11_08-0027.tif, YES, YES, 2025_11_08_0013.abf, YES]
+[2025_11_08-0028.tif, YES, YES, 2025_11_08_0014.abf, YES]
+[2025_11_08-0029.tif, YES, YES, 2025_11_08_0015.abf, YES]
+[2025_11_08-0034.tif, YES, YES, 2025_11_08_0018.abf, YES]
+[2025_11_08-0035.tif, YES, YES, 2025_11_08_0019.abf, YES]
+[2025_11_13-0017.tif, YES, YES, 2025_11_13_0011.abf, YES]
+[2025_11_13-0018.tif, YES, YES, 2025_11_13_0012.abf, YES]
+[2025_11_13-0019.tif, YES, YES, 2025_11_13_0013.abf, YES]
+[2025_11_13-0023.tif, YES, YES, 2025_11_13_0017.abf, YES]
+[2025_11_13-0035.tif, YES, YES, 2025_11_13_0023.abf, YES]
+[2025_12_14-0002.tif, YES, YES, 2025_12_14_0002.abf, YES]
+[2025_12_14-0005.tif, YES, YES, 2025_12_14_0005.abf, YES]
+[2025_12_15-0008.tif, YES, YES, 2025_12_15_0004.abf, YES]
+[2025_12_15-0009.tif, YES, YES, 2025_12_15_0005.abf, YES]
+[2025_12_15-0012.tif, YES, YES, 2025_12_15_0008.abf, YES]
+[2025_12_15-0013.tif, YES, YES, 2025_12_15_0009.abf, YES]
+[2025_12_15-0014.tif, YES, YES, 2025_12_15_0010.abf, YES]
+[2025_12_15-0022.tif, YES, YES, 2025_12_15_0016.abf, YES]
+[2025_12_15-0023.tif, YES, YES, 2025_12_15_0017.abf, YES]
+[2025_12_15-0024.tif, YES, YES, 2025_12_15_0018.abf, YES]
+[2025_12_15-0025.tif, YES, YES, 2025_12_15_0019.abf, YES]
+[2025_12_15-0030.tif, YES, YES, 2025_12_15_0022.abf, YES]
+[2025_12_15-0031.tif, YES, YES, 2025_12_15_0023.abf, YES]
+[2025_12_15-0032.tif, YES, YES, 2025_12_15_0024.abf, YES]
+[2025_12_15-0036.tif, YES, YES, 2025_12_15_0028.abf, YES]
+[2025_12_15-0037.tif, YES, YES, 2025_12_15_0029.abf, YES]
+[2025_12_15-0041.tif, YES, YES, 2025_12_15_0033.abf, YES]
+[2025_12_15-0042.tif, YES, YES, 2025_12_15_0034.abf, YES]
+[2025_12_15-0043.tif, YES, YES, 2025_12_15_0035.abf, YES]
+[2026_03_10-0006.tif, YES, YES, 2026_03_10_0006.abf, YES]
+[2026_03_10-0007.tif, YES, YES, 2026_03_10_0007.abf, YES]
+[2026_03_10-0009.tif, YES, YES, 2026_03_10_0009.abf, YES]
+
+Total 62 records picked
+
+dir_raw_tiffs: D:\Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\Programs\PG_005\proc_tiffs
+
+dir_raw_abfs: d:\Programs\PG_005\raw_abfs
+dir_results: d:\Programs\PG_005\results
+
+================================================================================
+Region Analysis Statistics — generated 2026-07-20T07:01:11+00:00
+================================================================================
+Neurons detected ACh release: 14/14
+
+Spatial (skewed — Median/IQR/GeoMean shown):
++-----------------------+----------+----------+-------+----------+----------------+----------+---------+----+
+|        Metric         |   Mean   |   Std    |  CV%  |  Median  |   IQR(Q1-Q3)   | GeoMean  | GeoStd* | n  |
++-----------------------+----------+----------+-------+----------+----------------+----------+---------+----+
+|     max_area_um2      | 29703.29 | 31822.33 | 107.1 | 14626.40 | 3011.4-49700.7 | 12300.42 |  5.10   | 14 |
+| max_area_eq_radius_um |  79.71   |  54.16   | 68.0  |  64.53   |   30.4-123.8   |  60.95   |  2.25   | 14 |
++-----------------------+----------+----------+-------+----------+----------------+----------+---------+----+
+
+Temporal:
++-----------------+-------+-------+----+
+|     Metric      | Mean  |  Std  | n  |
++-----------------+-------+-------+----+
+| peak_latency_ms | -9.50 | 26.58 | 14 |
+| lasting_time_ms | 97.36 | 70.22 | 14 |
++-----------------+-------+-------+----+
+
+Per-Neuron Recording List (filename, detected) [detected/total]:
+neoChAT-552_S2RC1 [(2025_01_01-0012_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_01_01-0014_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 2/2
+neoChAT-552_S2RC2 [(2025_01_01-0021_A1S2RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_01_01-0022_A1S2RC2_BIEXP_GAUSS_MED.tif, True)] 2/2
+neoChAT-555_S2RC1 [(2024_12_19-0010_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2024_12_19-0012_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 2/2
+neoChAT-584_S2RC1 [(2025_04_03-0032_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0033_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0034_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0035_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0036_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0037_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0038_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0039_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_04_03-0040_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 9/9
+neoChAT-587_S4RC1 [(2025_06_11-0000_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0001_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0002_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0003_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0004_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0005_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0006_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0008_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0009_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0010_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0011_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0012_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0013_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 13/13
+neoChAT-632_S2LC1 [(2025_10_13-0029_A1S2LC1_BIEXP_GAUSS_MED.tif, True)] 1/1
+neoChAT-661_S1RC1 [(2025_12_14-0002_A1S1RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_14-0005_A1S1RC1_BIEXP_GAUSS_MED.tif, True)] 2/2
+neoChAT-663_S2RC1 [(2025_11_08-0026_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0027_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0028_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0029_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0034_A1S2RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_08-0035_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 6/6
+neoChAT-664_S1RC2 [(2025_11_13-0017_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0018_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0019_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_11_13-0023_A1S1RC2_BIEXP_GAUSS_MED.tif, True)] 4/4
+neoChAT-664_S2RC1 [(2025_11_13-0035_A1S2RC1_BIEXP_GAUSS_MED.tif, True)] 1/1
+neoChAT-676_S3RC1 [(2025_12_15-0008_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0009_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0012_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0013_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0014_A1S3RC1_BIEXP_GAUSS_MED.tif, True)] 5/5
+neoChAT-676_S4RC1 [(2025_12_15-0022_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0023_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0024_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0025_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 4/4
+neoChAT-676_S4RC2 [(2025_12_15-0030_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0031_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0032_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0036_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0037_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0041_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0042_A1S4RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2025_12_15-0043_A1S4RC2_BIEXP_GAUSS_MED.tif, True)] 8/8
+neoChAT-678_S1RC2 [(2026_03_10-0006_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2026_03_10-0007_A1S1RC2_BIEXP_GAUSS_MED.tif, True),
+                   (2026_03_10-0009_A1S1RC2_BIEXP_GAUSS_MED.tif, True)] 3/3

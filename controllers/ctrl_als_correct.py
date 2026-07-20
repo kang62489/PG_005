@@ -8,7 +8,6 @@ from rich.console import Console
 
 # Local application imports
 from classes import BackgroundWorker, DialogGetFile
-from functions import als_run, check_cuda
 from utils.params import MODELS_DIR
 
 # Constants
@@ -120,6 +119,8 @@ class CtrlAlsCorrect:
         if tiff_path != self._cached_tiff_path:
             self._cached_stack = tifffile.imread(tiff_path).astype(np.float16)
             self._cached_tiff_path = tiff_path
+        from functions import als_run
+
         stack = self._cached_stack
         t_frames, height, width = stack.shape
         roi = min(ROI_SIZE, height, width)
@@ -164,6 +165,7 @@ class CtrlAlsCorrect:
         p = float(self.view.le_als_p.text())
         n_iter = int(self.view.le_als_num_iters.text())
 
+        from functions import check_cuda
         cuda_available, cuda_msg = check_cuda()
         console.log(cuda_msg)
 
