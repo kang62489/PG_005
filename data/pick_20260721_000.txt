@@ -1,0 +1,16 @@
+Date Created: 20260721
+Analysis: RCaMP 2nd
+Purposes:
+     try pre-process rcamp signals
+
+Picked: [raw_tiff_name, paired_abf]
+[2026_06_29-0003.tif, 2026_06_29_0000.abf]
+[2026_06_29-0004.tif, 2026_06_29_0001.abf]
+[2026_06_29-0008.tif, 2026_06_29_0004.abf]
+[2026_06_29-0009.tif, 2026_06_29_0005.abf]
+[2026_06_29-0015.tif, 2026_06_29_0015.abf]
+[2026_06_29-0016.tif, 2026_06_29_0008.abf]
+[2026_06_29-0018.tif, 2026_06_29_0009.abf]
+[2026_06_29-0019.tif, 2026_06_29_0010.abf]
+
+Total 8 records picked
