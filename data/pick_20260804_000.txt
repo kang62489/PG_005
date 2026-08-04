@@ -1,0 +1,9 @@
+Date Created: 20260804
+Analysis: test no gaussian
+
+Picked: [raw_tiff_name, paired_abf]
+[2026_03_10-0006.tif, 2026_03_10_0006.abf]
+[2026_03_10-0007.tif, 2026_03_10_0007.abf]
+[2026_03_10-0009.tif, 2026_03_10_0009.abf]
+
+Total 3 records picked

@@ -17,7 +17,7 @@ from classes import DialogConfirm, DialogGetPath
 from utils import EXP_DB_PATH, LOG_DIR, REC_DB_PATH
 
 ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Project_Code", "Genotype", "Sex"}
-INJECTIONS_KEEP = {"DOI", "Inj_Mode", "Side", "Incubated", "Virus_Full"}
+INJECTIONS_KEEP = {"DOI", "Inj_Mode", "Side", "Volume_Per_Shot", "Incubated", "Virus_Full"}
 
 # Set up rich console
 console = Console()
