@@ -14,7 +14,7 @@ if TYPE_CHECKING:
         lookup_rec_from_db,
         populate_animal_id_values,
     )
-    from .detrend import biexp_detrend, mov_detrend
+    from .detrend import biexp_detrend
     from .file_status import (
         abf_ready,
         als_exists,
@@ -57,7 +57,6 @@ __all__ = [
     "list_parser",
     "lookup_rec_from_db",
     "zscore_img_segs",
-    "mov_detrend",
     "plot_full_trace",
     "plot_spatiotemporal_summary",
     "populate_animal_id_values",
@@ -72,7 +71,6 @@ __all__ = [
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "als_run":        (".als",                                      "als_run"),
     "biexp_detrend":       (".detrend",                                   "biexp_detrend"),
-    "mov_detrend":         (".detrend",                                   "mov_detrend"),
     "abf_ready":           (".file_status",                               "abf_ready"),
     "als_exists":          (".file_status",                               "als_exists"),
     "als_ready":           (".file_status",                               "als_ready"),

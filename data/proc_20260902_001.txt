@@ -1,0 +1,13 @@
+Date Created: 20260902
+Analysis: test current pipeline
+Purposes:
+     - the test after reforming gui and remove mov related
+
+Picked: [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]
+[2025_06_11-0002.tif, BIEXP, BIEXP, SKIP, NONE, 2025_06_11_0003.abf]
+[2025_06_11-0003.tif, BIEXP, BIEXP, SKIP, NONE, 2025_06_11_0004.abf]
+
+Total 2 records picked
+
+dir_raw_tiffs: D:\Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\Programs\PG_005\proc_tiffs

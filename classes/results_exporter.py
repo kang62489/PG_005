@@ -216,7 +216,7 @@ class ResultsExporter:
             animal_id: Real ANIMAL_ID (e.g. "neoChAT-677"), stored in the DB record
             slice_val: SLICE value verbatim (e.g. "2R")
             at: AT location (e.g. "SITE_1"/"CELL_1")
-            detrend_mode: Detrend mode used ("BIEXP"/"MOV")
+            detrend_mode: Detrend mode used ("BIEXP")
             normalization: Normalization used ("GAUSS"/"ALS")
             num_found_spikes: Total number of spikes detected
             n_spikes_analyzed: Number of spikes analyzed

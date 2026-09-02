@@ -1,0 +1,10 @@
+Date Created: 20260902
+Analysis: test current pipeline
+Purposes:
+     - the test after reforming gui and remove mov related
+
+Picked: [raw_tiff_name, paired_abf]
+[2025_06_11-0002.tif, 2025_06_11_0003.abf]
+[2025_06_11-0003.tif, 2025_06_11_0004.abf]
+
+Total 2 records picked

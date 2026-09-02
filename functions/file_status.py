@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-PROC_FILE_PATTERN = re.compile(r"^(?P<stem>.+)_(?P<mode>BIEXP|MOV)_(?P<kind>GAUSS|ALS)\.tif$")
+PROC_FILE_PATTERN = re.compile(r"^(?P<stem>.+)_(?P<mode>BIEXP)_(?P<kind>GAUSS|ALS)\.tif$")
 
 
 def build_filename_index(dir_path: Path, pattern: str) -> set[str]:
@@ -35,21 +35,13 @@ def build_proc_file_index(dir_path: Path) -> dict[str, dict[str, list[str]]]:
 def gauss_exists(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str) -> str:
     """Return which detrend mode(s) have a GAUSS file, or 'No' if none."""
     gauss_list = index.get(f"{dor}-{tiff_serial}", {}).get("GAUSS", [])
-    if not gauss_list:
-        return "No"
-    if "BIEXP" in gauss_list and "MOV" in gauss_list:
-        return "BIEXP & MOV"
-    return gauss_list[0]
+    return gauss_list[0] if gauss_list else "No"
 
 
 def als_exists(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str) -> str:
     """Return which detrend mode(s) have an ALS file, or 'No' if none."""
     als_list = index.get(f"{dor}-{tiff_serial}", {}).get("ALS", [])
-    if not als_list:
-        return "No"
-    if "BIEXP" in als_list and "MOV" in als_list:
-        return "BIEXP & MOV"
-    return als_list[0]
+    return als_list[0] if als_list else "No"
 
 
 def gauss_ready(index: dict[str, dict[str, list[str]]], dor: str, tiff_serial: str, detrend: str) -> str:

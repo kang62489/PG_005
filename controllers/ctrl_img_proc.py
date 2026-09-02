@@ -40,7 +40,7 @@ class CtrlImgProc:
 
     def _set_mode_delegate(self) -> None:
         self._mode_delegate = CellDropdownDelegate(
-            lambda index: ["BIEXP", "MOV", "BOTH"] if index.siblingAtColumn(5).data() == "YES" else ["NONE"]
+            lambda index: ["BIEXP"] if index.siblingAtColumn(5).data() == "YES" else ["NONE"]
         )
         mode_col_idx = 6  # DOR=0, TIFF_SERIAL=1, IMG_READY=2, GAUSS_EXISTS?=3, ALS_EXISTS?=4, PROC=5, MODE=6
         self.view.tv_pick_list.setItemDelegateForColumn(mode_col_idx, self._mode_delegate)

@@ -1,9 +1,8 @@
 """
-detrend.py  --  Moving-average and bi-exponential detrend (CPU Numba JIT + CUDA GPU).
+detrend.py  --  Bi-exponential detrend (CPU Numba JIT + CUDA GPU).
 
 Public API
 ----------
-mov_detrend(stack, cuda_available, window_size=101)  ->  np.ndarray
 biexp_detrend(img, tau1, tau2, cuda_available)        ->  np.ndarray
 """
 
@@ -18,122 +17,6 @@ from numba.core.errors import NumbaPerformanceWarning
 # Suppress numba performance warnings and noisy CUDA log messages
 warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "40")
-
-
-# ── Moving-average detrend ─────────────────────────────────────────────────────
-
-
-@jit(nopython=True, parallel=True, cache=True)
-def _cpu_mov(pixel_data: np.ndarray, window_size: int) -> np.ndarray:
-    """
-    Numba JIT moving-average detrend on CPU (parallel over pixels).
-
-    Args:
-        pixel_data: shape (n_pixels, n_frames), float32
-        window_size: width of the centred moving-average window (frames)
-
-    Returns:
-        Detrended array, same shape as input.
-    """
-    n_pixels, n_frames = pixel_data.shape
-    output = np.zeros_like(pixel_data, dtype=np.float32)
-    half_window = window_size // 2
-
-    for pixel_idx in prange(n_pixels):
-        # Initialise sliding window at frame 0
-        first_window_right_bound = min(n_frames, half_window)
-        first_window_sum = np.float32(0.0)
-        for k in range(first_window_right_bound):
-            first_window_sum += pixel_data[pixel_idx, k]
-
-        # Sliding-window pass: compute moving avg and write output in one loop
-        window_left_bound = 0
-        window_right_bound = first_window_right_bound
-        running_sum = first_window_sum
-        for frame_idx in range(n_frames):
-            moving_avg_at_frame = running_sum / np.float32(window_right_bound - window_left_bound)
-            output[pixel_idx, frame_idx] = (pixel_data[pixel_idx, frame_idx] - moving_avg_at_frame) / moving_avg_at_frame
-            next_window_left_bound = max(0, frame_idx + 1 - half_window)
-            next_window_right_bound = min(n_frames, frame_idx + 1 + half_window)
-            if next_window_right_bound > window_right_bound:
-                running_sum += pixel_data[pixel_idx, next_window_right_bound - 1]
-            if next_window_left_bound > window_left_bound:
-                running_sum -= pixel_data[pixel_idx, window_left_bound]
-            window_left_bound = next_window_left_bound
-            window_right_bound = next_window_right_bound
-
-    return output
-
-
-@cuda.jit
-def _gpu_mov(pixel_data: np.ndarray, output: np.ndarray, window_size: int) -> None:
-    """
-    CUDA kernel: one thread per pixel for moving-average detrend.
-
-    Uses a fixed-size local array (2048 frames) for moving averages.
-    """
-    pixel_idx = cuda.grid(1)
-    if pixel_idx >= pixel_data.shape[0]:
-        return
-
-    n_frames = pixel_data.shape[1]
-    half_window = window_size // 2
-
-    # -- Initialise sliding window at frame 0 ------------------------------------
-    first_window_right_bound = min(n_frames, half_window)
-    first_window_sum = np.float32(0.0)
-    for k in range(first_window_right_bound):
-        first_window_sum += pixel_data[pixel_idx, k]
-
-    # -- Sliding-window pass: compute moving avg and write output in one loop -----
-    window_left_bound = 0
-    window_right_bound = first_window_right_bound
-    running_sum = first_window_sum
-    for frame_idx in range(n_frames):
-        moving_avg_at_frame = running_sum / np.float32(window_right_bound - window_left_bound)
-        output[pixel_idx, frame_idx] = (pixel_data[pixel_idx, frame_idx] - moving_avg_at_frame) / moving_avg_at_frame
-        next_window_left_bound = max(0, frame_idx + 1 - half_window)
-        next_window_right_bound = min(n_frames, frame_idx + 1 + half_window)
-        if next_window_right_bound > window_right_bound:
-            running_sum += pixel_data[pixel_idx, next_window_right_bound - 1]
-        if next_window_left_bound > window_left_bound:
-            running_sum -= pixel_data[pixel_idx, window_left_bound]
-        window_left_bound = next_window_left_bound
-        window_right_bound = next_window_right_bound
-
-
-def mov_detrend(stack: np.ndarray, cuda_available: bool, window_size: int = 101) -> np.ndarray:
-    """
-    Moving-average detrend of an image stack (GPU if available, else CPU Numba JIT).
-
-    Flattens the stack to (n_pixels, n_frames), detrends each pixel in parallel,
-    then reshapes back.
-
-    Args:
-        stack: Input array of shape (n_frames, H, W).
-        cuda_available: Route to GPU kernel if True.
-        window_size: Width of the centred moving-average window (frames).
-
-    Returns:
-        Detrended stack, shape (n_frames, H, W), float32.
-    """
-    n_frames, height, width = stack.shape
-    pixel_data = stack.reshape(n_frames, -1).T.astype(np.float32)  # (n_pixels, n_frames)
-
-    if cuda_available:
-        gpu_input = cuda.to_device(pixel_data)
-        gpu_output = cuda.to_device(np.zeros_like(pixel_data))
-        threads = 256
-        blocks = math.ceil(pixel_data.shape[0] / threads)
-        _gpu_mov[blocks, threads](gpu_input, gpu_output, window_size)
-        cuda.synchronize()
-        detrended_pixels = gpu_output.copy_to_host()
-    else:
-        detrended_pixels = _cpu_mov(pixel_data, window_size)
-
-    detrended_stack = detrended_pixels.T.reshape(n_frames, height, width)
-
-    return detrended_stack
 
 
 # ── Bi-exponential detrend ─────────────────────────────────────────────────────

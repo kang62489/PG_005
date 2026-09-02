@@ -53,12 +53,8 @@ class CtrlAlsCorrect:
         stem = Path(parts[0]).stem
         gauss_exists = parts[1]
         paths: list[Path] = []
-        if gauss_exists in ("BIEXP", "BIEXP & MOV"):
+        if gauss_exists == "BIEXP":
             candidate = proc_dir / f"{stem}_BIEXP_GAUSS.tif"
-            if candidate.exists():
-                paths.append(candidate)
-        if gauss_exists in ("MOV", "BIEXP & MOV"):
-            candidate = proc_dir / f"{stem}_MOV_GAUSS.tif"
             if candidate.exists():
                 paths.append(candidate)
         return paths

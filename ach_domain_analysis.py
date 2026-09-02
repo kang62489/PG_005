@@ -13,7 +13,6 @@ Ana list format (column names declared on the 'Picked:' line):
 
 Detrend mode selects which processed TIFF prefix is loaded:
   BIEXP -> *_BIEXP_GAUSS.tif  or  *_BIEXP_ALS.tif
-  MOV   -> *_MOV_GAUSS.tif    or  *_MOV_ALS.tif
 
 Usage:
     python ach_domain_analysis.py --ana_list data/ana_list_20260601_000.txt
@@ -65,7 +64,7 @@ def parse_ana_list(
 
     Args:
         ana_list_path: Path to the ana list file (ana_*.txt).
-        detrend_mode:  Which detrend variant to load — "BIEXP" or "MOV".
+        detrend_mode:  Which detrend variant to load — "BIEXP".
         use_als:       If True, load *_ALS.tif; otherwise load *_GAUSS.tif.
 
     Returns:
@@ -466,7 +465,7 @@ def run(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Spike-aligned image analysis pipeline")
     parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_*.txt)")
-    parser.add_argument("--detrend", choices=["BIEXP", "MOV"], default="BIEXP", help="Detrend mode (default: BIEXP)")
+    parser.add_argument("--detrend", choices=["BIEXP"], default="BIEXP", help="Detrend mode (default: BIEXP)")
     parser.add_argument("--use_als", action="store_true", help="Load *_ALS.tif instead of *_GAUSS.tif")
     parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db (default: data/rec_data.db)")
     parser.add_argument("--exp_db", type=Path, default=Path("data/exp_info.db"), help="Path to exp_info.db (default: data/exp_info.db)")

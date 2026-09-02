@@ -2,9 +2,7 @@
 img_proc.py  --  Unified image preprocessing pipeline entry point.
 ==================================================================
 Reads a proc list, routes each file by mode:
-  MOV   -> moving-average detrend + Gaussian blur
   BIEXP -> bi-exponential detrend + Gaussian blur
-  BOTH  -> BIEXP then MOV
   NONE  -> skip
 
 Proc list format (column names declared on the 'Picked:' line):
@@ -31,7 +29,6 @@ from functions import (
     gaussian_blur_run,
     get_memory_usage,
     list_parser,
-    mov_detrend,
     sample_tau,
 )
 
@@ -80,13 +77,7 @@ def _refresh_gauss_row(row: dict[str, str], proc_dir: Path) -> dict[str, str]:
     """Recompute gauss_exists, do_processing, and detrend_mode for one row from actual files in proc_dir."""
     stem = Path(row["raw_tiff_name"]).stem
     has_biexp = (proc_dir / f"{stem}_BIEXP_GAUSS.tif").exists()
-    has_mov = (proc_dir / f"{stem}_MOV_GAUSS.tif").exists()
-    gauss_exists = (
-        "BIEXP & MOV" if has_biexp and has_mov
-        else "BIEXP" if has_biexp
-        else "MOV" if has_mov
-        else "No"
-    )
+    gauss_exists = "BIEXP" if has_biexp else "No"
     do_processing = "YES" if gauss_exists == "No" else "SKIP"
     detrend_mode = "BIEXP" if do_processing == "YES" else "NONE"
     return {**row, "gauss_exists": gauss_exists, "do_processing": do_processing, "detrend_mode": detrend_mode}
@@ -108,32 +99,6 @@ def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
 
 
 # ── Processing functions ───────────────────────────────────────────────────────
-
-
-def process_mov(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool, emitter=None) -> None:
-    """Moving-average detrend + Gaussian blur. Saves *_MOV_GAUSS.tif."""
-    stem = Path(file).stem
-    t0 = time.time()
-
-    console.log(f"[cyan]Loading {file}...")
-    img = tifffile.imread(raw_dir / file)
-    console.log(f"  Shape {img.shape}  dtype={img.dtype}  memory={get_memory_usage():.2f} GB  ({time.time() - t0:.1f}s)")
-
-    if emitter:
-        emitter({"type": "step", "msg": "Detrending (MOV)..."})
-    console.log("  Detrending (MOV)...")
-    detrended = mov_detrend(img, cuda_available)
-
-    if emitter:
-        emitter({"type": "step", "msg": "Gaussian blur..."})
-    console.log("  Gaussian blur...")
-    blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
-    tifffile.imwrite(proc_dir / f"{stem}_MOV_GAUSS.tif", blurred.astype(np.float16))
-    if emitter:
-        emitter({"type": "step", "msg": f"✓ Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)"})
-    console.log(f"  Saved {stem}_MOV_GAUSS.tif  ({time.time() - t0:.1f}s)")
-
-    del img, detrended, blurred
 
 
 def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool, emitter=None) -> None:
@@ -197,13 +162,8 @@ def run(proc_list_path: Path, cuda_available: bool, emitter=None) -> None:
         console.log(f"\n{'=' * 60}")
         console.log(f"{file}  MODE={mode} [{i}/{total}]")
 
-        if mode == "MOV":
-            process_mov(file, raw_dir, proc_dir, cuda_available, emitter=emitter)
-        elif mode == "BIEXP":
+        if mode == "BIEXP":
             process_biexp(file, raw_dir, proc_dir, cuda_available, emitter=emitter)
-        elif mode == "BOTH":
-            process_biexp(file, raw_dir, proc_dir, cuda_available, emitter=emitter)
-            process_mov(file, raw_dir, proc_dir, cuda_available, emitter=emitter)
         else:
             console.log(f"  Unknown mode '{mode}', skipping")
 

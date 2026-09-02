@@ -98,3 +98,4 @@ class UISizes:
     TE_EXPORT_PATH_HEIGHT: int = 60
     BTN_RUN_ANALYSIS_HEIGHT: int = 45
     BTN_BROWSE_WIDTH: int = 60
+    LE_PROCESSING_INFO_HEIGHT: int = 32

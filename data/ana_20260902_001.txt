@@ -1,0 +1,41 @@
+Date Created: 20260902
+Analysis: test current pipeline
+Purposes:
+     - the test after reforming gui and remove mov related
+
+Picked: [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
+[2025_06_11-0002.tif, YES, YES, 2025_06_11_0003.abf, YES]
+[2025_06_11-0003.tif, YES, YES, 2025_06_11_0004.abf, YES]
+
+Total 2 records picked
+
+dir_raw_tiffs: D:\Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\Programs\PG_005\proc_tiffs
+
+dir_raw_abfs: D:\Programs\PG_005\raw_abfs
+dir_results: C:/Users/Kang/Desktop
+
+================================================================================
+Region Analysis Statistics — generated 2026-09-02T09:12:02+00:00
+================================================================================
+Neurons detected ACh release: 1/1
+
+Spatial (skewed — Median/IQR/GeoMean shown):
++-----------------------+----------+-----+-----+----------+-----------------+----------+---------+---+
+|        Metric         |   Mean   | Std | CV% |  Median  |   IQR(Q1-Q3)    | GeoMean  | GeoStd* | n |
++-----------------------+----------+-----+-----+----------+-----------------+----------+---------+---+
+|     max_area_um2      | 34660.91 | N/A | N/A | 34660.91 | 34660.9-34660.9 | 34660.91 |   N/A   | 1 |
+| max_area_eq_radius_um |  100.66  | N/A | N/A |  100.66  |   100.7-100.7   |  100.66  |   N/A   | 1 |
++-----------------------+----------+-----+-----+----------+-----------------+----------+---------+---+
+
+Temporal:
++-----------------+-------+-----+---+
+|     Metric      | Mean  | Std | n |
++-----------------+-------+-----+---+
+| peak_latency_ms | 0.00  | N/A | 1 |
+| lasting_time_ms | 30.99 | N/A | 1 |
++-----------------+-------+-----+---+
+
+Per-Neuron Recording List (filename, detected) [detected/total]:
+neoChAT-587_S4RC1 [(2025_06_11-0002_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
+                   (2025_06_11-0003_A1S4RC1_BIEXP_GAUSS_MED.tif, True)] 2/2

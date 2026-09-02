@@ -24,13 +24,13 @@ class CtrlAlignSpike:
         self.view.te_dir_raw_abfs.setPlainText(str(RAW_ABFS_DIR))
         self.view.te_export_path.setPlainText(str(RESULTS_DIR))
         self.view.btn_confirm_analyzing_list.setEnabled(False)
+        self.view.btn_run_analysis.setEnabled(False)
         self.connect_signals()
 
     def connect_signals(self) -> None:
         self.view.btn_browse_raw_abfs.clicked.connect(self.on_browse_raw_abfs)
         self.view.btn_load_proc_list.clicked.connect(self.on_load_proc_list)
         self.view.btn_export_browse.clicked.connect(self.on_browse_export_path)
-        self.view.gb_detrend.buttonClicked.connect(lambda _: self._load_entries())
         self.view.gb_norm.buttonClicked.connect(lambda _: self._load_entries())
         self.view.btn_refresh_status.clicked.connect(self.check_file_status)
         self.view.btn_confirm_analyzing_list.clicked.connect(self.export_ana_list)
@@ -40,9 +40,6 @@ class CtrlAlignSpike:
 
     def _raw_abfs_dir(self) -> Path:
         return Path(self.view.te_dir_raw_abfs.toPlainText().strip())
-
-    def _detrend_mode(self) -> str:
-        return "BIEXP" if self.view.rb_detrend_1.isChecked() else "MOV"
 
     def _use_als(self) -> bool:
         return self.view.rb_norm_2.isChecked()
@@ -71,7 +68,7 @@ class CtrlAlignSpike:
             console.log("[yellow]Missing dir_proc_tiffs in proc list.[/yellow]")
             return
 
-        detrend = self._detrend_mode()
+        detrend = "BIEXP"
         # Scan each directory once and reuse the index for every row, instead of
         # one .exists() stat per row (was N x 3 individual round-trips, slow on network mounts)
         proc_file_index = build_proc_file_index(proc_dir)
@@ -113,6 +110,9 @@ class CtrlAlignSpike:
 
         all_abf_ready = bool(rows) and (df["ABF_READY?"] == "YES").all()
         self.view.btn_confirm_analyzing_list.setEnabled(all_abf_ready)
+        # Any reload invalidates the previously exported ana list, if any
+        self._ana_list_path = None
+        self.view.btn_run_analysis.setEnabled(False)
 
         console.log(f"[green]{len(rows)} entries loaded from '{self._proc_list_path.name}'.[/green]")
 
@@ -178,6 +178,7 @@ class CtrlAlignSpike:
         ana_list_path = self._proc_list_path.parent / f"ana_{stem}.txt"
         ana_list_path.write_text("\n".join(out_lines), encoding="utf-8")
         self._ana_list_path = ana_list_path
+        self.view.btn_run_analysis.setEnabled(True)
         console.log(f"[bold green]Analysis list saved → {ana_list_path}[/bold green]")
 
     # ── Run Analysis ──────────────────────────────────────────────────────────
@@ -186,12 +187,12 @@ class CtrlAlignSpike:
         from ach_domain_analysis import run as run_spike_analysis
 
         if self._ana_list_path is None:
-            console.log("[yellow]No analysis list confirmed yet. Click 'Confirm Analyzing List' first.[/yellow]")
+            console.log("[yellow]No analysis list confirmed yet. Click 'Export Analyzing List' first.[/yellow]")
             return
 
         self.view.btn_run_analysis.setEnabled(False)
         self._bk_worker = BackgroundWorker(
-            run_spike_analysis, self._ana_list_path, self._detrend_mode(), self._use_als(), use_emitter=True
+            run_spike_analysis, self._ana_list_path, "BIEXP", self._use_als(), use_emitter=True
         )
         self._bk_worker.proc_msgs.connect(self._on_progress)
         self._bk_worker.work_done.connect(self._on_analysis_done)

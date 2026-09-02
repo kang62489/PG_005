@@ -39,16 +39,17 @@ class ViewAlignSpike:
         self.te_dir_raw_abfs = QTextEdit()
         self.te_dir_raw_abfs.setFixedHeight(UISizes.TE_DIRS_HEIGHT)
         self.btn_browse_raw_abfs = QPushButton("Browse...")
+        self.btn_browse_raw_abfs.setFixedHeight(UISizes.BTN_RUN_ANALYSIS_HEIGHT)
         self.lo_dir_raw_abfs.addWidget(self.te_dir_raw_abfs)
         self.lo_dir_raw_abfs.addWidget(self.btn_browse_raw_abfs)
         self.lo_block_1.addLayout(self.lo_dir_raw_abfs)
 
         self.lo_proc_list_btns = QHBoxLayout()
         self.btn_load_proc_list = QPushButton("Load Processed List")
-        self.btn_confirm_analyzing_list = QPushButton("Confirm Analyzing List")
+        self.btn_load_proc_list.setFixedHeight(UISizes.BTN_RUN_ANALYSIS_HEIGHT)
         self.btn_refresh_status = QPushButton("Refresh Status")
+        self.btn_refresh_status.setFixedHeight(UISizes.BTN_RUN_ANALYSIS_HEIGHT)
         self.lo_proc_list_btns.addWidget(self.btn_load_proc_list)
-        self.lo_proc_list_btns.addWidget(self.btn_confirm_analyzing_list)
         self.lo_proc_list_btns.addWidget(self.btn_refresh_status)
         self.lo_block_1.addLayout(self.lo_proc_list_btns)
 
@@ -62,21 +63,7 @@ class ViewAlignSpike:
         self.lo_conditions = QFormLayout()
         self.lo_block_2.addLayout(self.lo_conditions)
 
-        self.lbl_cond_1 = QLabel("Detrending Method:")
-        # QButtonGroup is a QObject not a QWidget or QLayout, so it can't be added to the layout directly.
-        self.gb_detrend = QButtonGroup()
-        self.rb_detrend_1 = QRadioButton("BIEXP")
-        self.rb_detrend_2 = QRadioButton("MOV")
-        self.gb_detrend.addButton(self.rb_detrend_1)
-        self.gb_detrend.addButton(self.rb_detrend_2)
-
-        self.rb_detrend_1.setChecked(True)  # Default to BIEXP detrending
-
-        self.lo_detrend = QHBoxLayout()
-        self.lo_detrend.addWidget(self.rb_detrend_1)
-        self.lo_detrend.addWidget(self.rb_detrend_2)
-
-        self.lbl_cond_2 = QLabel("Normalization:")
+        self.lbl_cond_2 = QLabel("Z-score Normalization:")
         self.gb_norm = QButtonGroup()
         self.rb_norm_1 = QRadioButton("dF/F0 (Gauss)")
         self.rb_norm_2 = QRadioButton("dF/F0 (Gauss + ALS)")
@@ -89,22 +76,28 @@ class ViewAlignSpike:
         self.lo_norm.addWidget(self.rb_norm_1)
         self.lo_norm.addWidget(self.rb_norm_2)
 
-        self.lo_conditions.addRow(self.lbl_cond_1, self.lo_detrend)
         self.lo_conditions.addRow(self.lbl_cond_2, self.lo_norm)
 
         self.te_export_path = QTextEdit()
         self.te_export_path.setFixedHeight(UISizes.TE_EXPORT_PATH_HEIGHT)
         self.btn_export_browse = QPushButton("Browse...")
         self.btn_export_browse.setFixedWidth(UISizes.BTN_BROWSE_WIDTH)
+        self.btn_export_browse.setFixedHeight(UISizes.BTN_RUN_ANALYSIS_HEIGHT)
         self.lo_export_path = QHBoxLayout()
         self.lo_export_path.addWidget(self.te_export_path)
         self.lo_export_path.addWidget(self.btn_export_browse)
         self.lo_conditions.addRow(self.lo_export_path)
 
+        self.btn_confirm_analyzing_list = QPushButton("Export Analyzing List")
+        self.btn_confirm_analyzing_list.setFixedHeight(UISizes.BTN_RUN_ANALYSIS_HEIGHT)
+        self.lo_conditions.addRow(self.btn_confirm_analyzing_list)
 
         self.btn_run_analysis = QPushButton("Run Analysis")
         self.btn_run_analysis.setFixedHeight(UISizes.BTN_RUN_ANALYSIS_HEIGHT)
-        self.btn_run_analysis.setStyleSheet("color: darkgreen; font-weight: bold;")
+        self.btn_run_analysis.setStyleSheet(
+            "QPushButton { color: darkgreen; font-weight: bold; } "
+            "QPushButton:disabled { color: gray; font-weight: normal; }"
+        )
         self.lo_conditions.addRow(self.btn_run_analysis)
 
         self.lo_processing_info = QFormLayout()
@@ -114,10 +107,14 @@ class ViewAlignSpike:
         self.lo_processing_info.addRow(self.lbl_processing_info)
 
         self.lbl_current_total = QLabel("Current/Total: ")
+        self.lbl_current_total.setFixedHeight(UISizes.LE_PROCESSING_INFO_HEIGHT)
         self.le_current_total = QLineEdit()
+        self.le_current_total.setFixedHeight(UISizes.LE_PROCESSING_INFO_HEIGHT)
 
         self.lbl_status = QLabel("Status: ")
+        self.lbl_status.setFixedHeight(UISizes.LE_PROCESSING_INFO_HEIGHT)
         self.le_status = QLineEdit()
+        self.le_status.setFixedHeight(UISizes.LE_PROCESSING_INFO_HEIGHT)
 
         self.lo_processing_info.addRow(self.lbl_current_total, self.le_current_total)
         self.lo_processing_info.addRow(self.lbl_status, self.le_status)

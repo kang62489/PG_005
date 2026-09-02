@@ -48,10 +48,8 @@ def parse_proc_list(proc_list_path: Path) -> tuple[list[Path], Path]:
         stem = Path(row["raw_tiff_name"]).stem
         gauss_exists = row["gauss_exists"]
         candidates = []
-        if gauss_exists in ("BIEXP", "BIEXP & MOV"):
+        if gauss_exists == "BIEXP":
             candidates.append(proc_dir / f"{stem}_BIEXP_GAUSS.tif")
-        if gauss_exists in ("MOV", "BIEXP & MOV"):
-            candidates.append(proc_dir / f"{stem}_MOV_GAUSS.tif")
         for path in candidates:
             if not path.exists():
                 continue
