@@ -4,10 +4,10 @@ Purposes:
      new
 
 Picked: [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]
-[2025_12_15-0013.tif, BIEXP, No, YES, BIEXP, 2025_12_15_0009.abf]
-[2025_12_15-0014.tif, BIEXP, No, YES, BIEXP, 2025_12_15_0010.abf]
-[2025_12_15-0024.tif, BIEXP, No, YES, BIEXP, 2025_12_15_0018.abf]
-[2025_12_15-0025.tif, BIEXP, No, YES, BIEXP, 2025_12_15_0019.abf]
+[2025_12_15-0013.tif, No, No, YES, BIEXP, 2025_12_15_0009.abf]
+[2025_12_15-0014.tif, No, No, YES, BIEXP, 2025_12_15_0010.abf]
+[2025_12_15-0024.tif, No, No, YES, BIEXP, 2025_12_15_0018.abf]
+[2025_12_15-0025.tif, No, No, YES, BIEXP, 2025_12_15_0019.abf]
 
 Total 4 records picked
 

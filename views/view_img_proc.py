@@ -19,7 +19,7 @@ from utils.params import UISizes
 class ViewImgProc:
     def __init__(self, parent=None) -> None:
         self.popwin_container = parent
-        self.lo_popwin_container = QHBoxLayout()
+        self.lo_popwin_container = QVBoxLayout()
         self.popwin_container.setLayout(self.lo_popwin_container)
         self.setup_blocks()
 
@@ -71,6 +71,7 @@ class ViewImgProc:
         self.lo_block_1.addWidget(self.lbl_pick_list)
 
         self.tv_pick_list = QTableView()
+        self.tv_pick_list.setFixedHeight(UISizes.TV_PICK_LIST_HEIGHT)
         self.lo_block_1.addWidget(self.tv_pick_list)
 
 
@@ -79,6 +80,8 @@ class ViewImgProc:
         self.lo_popwin_container.addLayout(self.lo_block_2)
 
         self.btn_start_processing = QPushButton("Start Processing")
+        self.btn_start_processing.setFixedHeight(UISizes.BTN_START_PROCESSING_HEIGHT)
+        self.btn_start_processing.setStyleSheet("color: darkgreen; font-weight: bold;")
         self.lo_block_2.addWidget(self.btn_start_processing)
 
         self.gb_proc_info = QGroupBox("Processing Info")

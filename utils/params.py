@@ -4,9 +4,6 @@ import datetime
 from dataclasses import dataclass
 from pathlib import Path
 
-# Third-party imports
-from PySide6.QtCore import QSize
-
 # Application Info
 APP_NAME = "ACID"
 APP_VERSION = "beta-0.1.0"
@@ -65,7 +62,7 @@ class UISizes:
     POPWIN_DOR_DETAIL_SIZE: tuple[int, int] = (950, 350)
     POPWIN_LOG_VIEW_SIZE: tuple[int, int] = (1300, 700)
     POPWIN_DATA_SELECTOR_SIZE: tuple[int, int] = (1400, 700)
-    POPWIN_IMG_PROC_SIZE: tuple[int, int] = (1300, 800)
+    POPWIN_IMG_PROC_SIZE: tuple[int, int] = (950, 800)
     POPWIN_ALS_CORRECT_SIZE: tuple[int, int] = (1300, 800)
     POPWIN_ALIGN_SPIKE_SIZE: tuple[int, int] = (1300, 800)
 
@@ -87,11 +84,17 @@ class UISizes:
     TE_DIRS_HEIGHT: int = 60
     GB_PICK_LIST_WIDTH: int = 400
 
+    # Tab: Image Processing
+    TV_PICK_LIST_HEIGHT: int = 300
+    BTN_START_PROCESSING_HEIGHT: int = 45
+
     # Tab: ALS Correction
     LW_GAUSS_TIFFS_WIDTH: int = 250
     GB_PROC_INFO_WIDTH: int = 400
+    BTN_RUN_CORRECT_HEIGHT: int = 45
 
 
     # Tab: Spike-aligned Analysis
-    TE_EXPORT_PATH = QSize(600, 60)
+    TE_EXPORT_PATH_HEIGHT: int = 60
+    BTN_RUN_ANALYSIS_HEIGHT: int = 45
     BTN_BROWSE_WIDTH: int = 60

@@ -57,7 +57,7 @@ class Main(QMainWindow):
         # Image Processing popout window
         self.popwin_img_proc = QWidget()
         self.popwin_img_proc.setWindowTitle("Image Processing")
-        self.popwin_img_proc.resize(*UISizes.POPWIN_IMG_PROC_SIZE)
+        self.popwin_img_proc.setFixedSize(*UISizes.POPWIN_IMG_PROC_SIZE)
 
         self.view_img_proc = ViewImgProc(self.popwin_img_proc)
         self.ctrl_img_proc = CtrlImgProc(self.view_img_proc)
@@ -65,7 +65,7 @@ class Main(QMainWindow):
         # ALS Correction popout window
         self.popwin_als_correct = QWidget()
         self.popwin_als_correct.setWindowTitle("ALS Correction")
-        self.popwin_als_correct.resize(*UISizes.POPWIN_ALS_CORRECT_SIZE)
+        self.popwin_als_correct.setFixedSize(*UISizes.POPWIN_ALS_CORRECT_SIZE)
 
         self.view_als_correct = ViewAlsCorrect(self.popwin_als_correct)
         self.ctrl_als_correct = CtrlAlsCorrect(self.view_als_correct)
@@ -73,7 +73,7 @@ class Main(QMainWindow):
         # Spike-aligned Analysis popout window
         self.popwin_align_spike = QWidget()
         self.popwin_align_spike.setWindowTitle("Spike-aligned Analysis")
-        self.popwin_align_spike.resize(*UISizes.POPWIN_ALIGN_SPIKE_SIZE)
+        self.popwin_align_spike.setFixedSize(*UISizes.POPWIN_ALIGN_SPIKE_SIZE)
 
         self.view_align_spike = ViewAlignSpike(self.popwin_align_spike)
         self.ctrl_align_spike = CtrlAlignSpike(self.view_align_spike)

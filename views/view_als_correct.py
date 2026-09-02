@@ -28,7 +28,6 @@ class ViewAlsCorrect:
     def setup_blocks(self) -> None:
         self.setup_block_1()
         self.setup_block_2()
-        self.setup_block_3()
 
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
@@ -81,18 +80,15 @@ class ViewAlsCorrect:
             canvas.axes.set_axis_off()
             self.lo_als_plot.addWidget(canvas)
 
-    def setup_block_3(self) -> None:
-        self.lo_block_3 = QVBoxLayout()
-        self.lo_popwin_container.addLayout(self.lo_block_3)
-
         self.btn_run_correct = QPushButton("Calibrate dF/f0 slow fluctuation")
-        self.lo_block_3.addWidget(self.btn_run_correct)
+        self.btn_run_correct.setFixedHeight(UISizes.BTN_RUN_CORRECT_HEIGHT)
+        self.btn_run_correct.setStyleSheet("color: darkgreen; font-weight: bold;")
+        self.lo_block_2.addWidget(self.btn_run_correct)
 
         self.gb_proc_info = QGroupBox("Processing Info")
         self.lo_proc_info = QFormLayout()
         self.gb_proc_info.setLayout(self.lo_proc_info)
-        self.lo_block_3.addWidget(self.gb_proc_info)
-        self.gb_proc_info.setFixedWidth(UISizes.GB_PROC_INFO_WIDTH)
+        self.lo_block_2.addWidget(self.gb_proc_info)
 
         self.lbl_run_on = QLabel("Run on:")
         self.le_run_on = QLineEdit()

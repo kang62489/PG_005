@@ -29,6 +29,8 @@ class CtrlDataSelector(QObject):
         self.view = view
         self.current_dor: str | None = None
         self.df_pick_list = pl.DataFrame()
+        self._pick_list_shown_once = False
+        self._first_pick_checked = False
 
         self.rec_data_db = QSqlDatabase.addDatabase("QSQLITE", "data_selector_rec_data")
         self.rec_data_db.setDatabaseName(str(REC_DB_PATH))
@@ -240,7 +242,17 @@ class CtrlDataSelector(QObject):
 
         df_selected = pl.DataFrame(selected_row_data).with_columns(pl.all().cast(pl.Utf8))
         console.print(f"[bold green]Selected {len(df_selected)} row(s) from {self.current_dor}.[/bold green]")
+
+        if not self._first_pick_checked:
+            self._first_pick_checked = True
+            if not self._load_df_pick_list_from_json().is_empty():
+                console.print("[yellow]Clearing leftover pick list from a previous session.[/yellow]")
+                self.clear_pick_list()
+
         self.check_pick_list(df_selected)
+
+        if not self._pick_list_shown_once:
+            self.open_pick_list()
 
     def clear_pick_list(self) -> None:
         self.df_pick_list = pl.DataFrame()
@@ -248,6 +260,7 @@ class CtrlDataSelector(QObject):
         self._write_exported_flag(True)
 
     def open_pick_list(self) -> None:
+        self._pick_list_shown_once = True
         self.dlg_pick_list.show()
         self.dlg_pick_list.raise_()
         self.dlg_pick_list.activateWindow()

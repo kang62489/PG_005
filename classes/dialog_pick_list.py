@@ -91,6 +91,8 @@ class DialogPickList(QDialog):
         self.btn_remove_selected = QPushButton("Remove Selected")
         self.btn_clear_all = QPushButton("Clear All")
         self.btn_pick_list_export = QPushButton("Export Pick List and Check File Status")
+        self.btn_clear_all.setStyleSheet("color: red; font-weight: bold;")
+        self.btn_pick_list_export.setStyleSheet("color: darkgreen; font-weight: bold;")
         self.lo_edit_btns.addWidget(self.btn_remove_selected)
         self.lo_edit_btns.addWidget(self.btn_clear_all)
         self.lo_edit_btns.addWidget(self.btn_pick_list_export)
@@ -111,6 +113,7 @@ class DialogPickList(QDialog):
             self.model_tv_pick_list = ModelFromDataFrame(None)
             self.tv_pick_list.setModel(self.model_tv_pick_list)
             self.refresh_preview()
+            self.btn_pick_list_export.setEnabled(False)
             return
 
         raw = pl.read_json(PICK_LIST_JSON_PATH)
@@ -119,6 +122,7 @@ class DialogPickList(QDialog):
         self.tv_pick_list.setModel(self.model_tv_pick_list)
         self.resize_to_table_content()
         self.refresh_preview()
+        self.btn_pick_list_export.setEnabled(not self.df.is_empty())
 
     def refresh_preview(self) -> None:
         self.le_date_created.setText(datetime.datetime.now(tz=datetime.UTC).strftime("%Y%m%d"))

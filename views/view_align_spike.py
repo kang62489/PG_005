@@ -20,7 +20,7 @@ from utils import UISizes
 class ViewAlignSpike:
     def __init__(self, parent=None) -> None:
         self.popwin_container = parent
-        self.lo_popwin_container = QHBoxLayout()
+        self.lo_popwin_container = QVBoxLayout()
         self.popwin_container.setLayout(self.lo_popwin_container)
         self.setup_blocks()
 
@@ -93,13 +93,18 @@ class ViewAlignSpike:
         self.lo_conditions.addRow(self.lbl_cond_2, self.lo_norm)
 
         self.te_export_path = QTextEdit()
-        self.te_export_path.setFixedSize(UISizes.TE_EXPORT_PATH)
+        self.te_export_path.setFixedHeight(UISizes.TE_EXPORT_PATH_HEIGHT)
         self.btn_export_browse = QPushButton("Browse...")
         self.btn_export_browse.setFixedWidth(UISizes.BTN_BROWSE_WIDTH)
-        self.lo_conditions.addRow(self.te_export_path, self.btn_export_browse)
+        self.lo_export_path = QHBoxLayout()
+        self.lo_export_path.addWidget(self.te_export_path)
+        self.lo_export_path.addWidget(self.btn_export_browse)
+        self.lo_conditions.addRow(self.lo_export_path)
 
 
         self.btn_run_analysis = QPushButton("Run Analysis")
+        self.btn_run_analysis.setFixedHeight(UISizes.BTN_RUN_ANALYSIS_HEIGHT)
+        self.btn_run_analysis.setStyleSheet("color: darkgreen; font-weight: bold;")
         self.lo_conditions.addRow(self.btn_run_analysis)
 
         self.lo_processing_info = QFormLayout()
