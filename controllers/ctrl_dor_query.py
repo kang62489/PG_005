@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QAbstractItemView
 from rich.console import Console
 
 # Local application imports
-from classes import DialogConfirm, DialogGetPath
+from classes import DialogGetPath
 from utils import EXP_DB_PATH, LOG_DIR, REC_DB_PATH
 
 ANIMALS_KEEP = {"Animal_ID", "DOB", "Ages", "Project_Code", "Genotype", "Sex"}
@@ -51,6 +51,7 @@ class CtrlDorQuery(QObject):
         self.view.btn_update_descriptions.setEnabled(False)
         self.view.btn_update_findings.setEnabled(False)
         self.view.btn_scan_files.setEnabled(False)
+        self.view.btn_add_log.setEnabled(False)
 
         self.view.tv_animals.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.view.tv_injections.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -81,6 +82,7 @@ class CtrlDorQuery(QObject):
         self.view.btn_update_descriptions.clicked.connect(self.update_descriptions)
         self.view.btn_update_findings.clicked.connect(self.update_findings)
         self.view.btn_scan_files.clicked.connect(self.scan_files)
+        self.view.btn_add_log.clicked.connect(self.add_log_file)
 
     def load_animals(self, dor: str) -> None:
         # Emit signal and dor text to notify DOR change, so that other controllers can react accordingly
@@ -121,6 +123,19 @@ class CtrlDorQuery(QObject):
         log_path.write_text("---\nSystem:\nKeywords:\nProject:\n---\n# Descriptions\n\n# Findings\n\n# Logs\n\n# Folder Structure\n\n# Extra Info\n", encoding="utf-8")
         self.load_data_md(dor)
 
+    def add_log_file(self) -> None:
+        dor = self.get_selected_dor()
+        if dor is None:
+            console.print("[red]No DOR selected.[/red]")
+            return
+
+        log_path = LOG_DIR / f"Data_{dor}.md"
+        if log_path.exists():
+            console.print(f"[yellow]Log file already exists for DOR {dor}.[/yellow]")
+            return
+
+        self.creation_confirmed(dor, log_path)
+
     def load_data_md(self, dor: str) -> None:
         # Clear previous log-related UI elements
         self.view.te_insert_log.clear()
@@ -155,17 +170,14 @@ class CtrlDorQuery(QObject):
             self.view.te_insert_log.setEnabled(False)
             self.view.btn_insert_log.setEnabled(False)
             self.view.btn_scan_files.setEnabled(False)
+            self.view.btn_add_log.setEnabled(True)
             self.view.te_folder_structure.clear()
             self._populate_log_date_combo(dor)
 
-
-            dlg_create_log_file = DialogConfirm(title="Create Log File?", msg=f"No log file found for DOR {dor}. Do you want to create one?", parent=self.view.tab_container)
-            dlg_create_log_file.accepted.connect(lambda: self.creation_confirmed(dor, log_path))
-            dlg_create_log_file.rejected.connect(lambda: console.print("[yellow]Creation denied.[/yellow]"))
-            dlg_create_log_file.setAttribute(Qt.WA_DeleteOnClose)  # Ensure dialog is deleted after closing
-            dlg_create_log_file.open()
-
+            console.print(f"[yellow]No log file found for DOR {dor}. Use 'Add Log' to create one.[/yellow]")
             return
+
+        self.view.btn_add_log.setEnabled(False)
 
         last_modified = datetime.datetime.fromtimestamp(log_path.stat().st_mtime).strftime(
             "%Y-%b-%d %a (%H:%M:%S)"

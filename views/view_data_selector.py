@@ -2,15 +2,12 @@
 # Third-party imports
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QPushButton,
     QTableView,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -25,23 +22,24 @@ FILTER_COLUMNS = ["OBJ", "EXC", "EMI"]
 
 class ViewDataSelector:
     def __init__(self, parent: QWidget | None = None) -> None:
-        self.tab_container = parent
-        self.lo_tab_container = QHBoxLayout()
-        self.tab_container.setLayout(self.lo_tab_container)
+        self.popwin_container = parent
+        self.lo_popwin_container = QHBoxLayout()
+        self.popwin_container.setLayout(self.lo_popwin_container)
         self.filter_columns = FILTER_COLUMNS
         self.setup_blocks()
 
     def setup_blocks(self) -> None:
         self.setup_block_1()
-        self.setup_block_2()
 
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_1)
+        self.lo_popwin_container.addLayout(self.lo_block_1)
 
         # Filter Panel
         self.lo_panels = QHBoxLayout()
         self.lo_block_1.addLayout(self.lo_panels)
+
+        self.lo_panels.addStretch()
 
         self.gb_filter_panel = QGroupBox("Filter Panel")
         self.lo_panels.addWidget(self.gb_filter_panel)
@@ -58,56 +56,27 @@ class ViewDataSelector:
 
         self.btn_reset_all_filters = QPushButton("Reset All Filters")
         self.gb_filter_panel.layout().addWidget(self.btn_reset_all_filters)
+        self.gb_filter_panel.layout().addStretch()
         self.lo_db_view = QVBoxLayout()
         self.lo_block_1.addLayout(self.lo_db_view)
 
         # Pick List Control
         self.gb_pick_list = QGroupBox("Pick List Control")
         self.gb_pick_list.setLayout(QHBoxLayout())
+        self.gb_pick_list.setFixedWidth(UISizes.GB_PICK_LIST_WIDTH)
         self.btn_pick_selected = QPushButton("Pick Selected")
         self.btn_open_pick_list = QPushButton("Open Pick List")
-        self.gb_pick_list.layout().addWidget(self.btn_pick_selected)
-        self.gb_pick_list.layout().addWidget(self.btn_open_pick_list)
+        self.gb_pick_list.layout().addWidget(self.btn_pick_selected, 1)
+        self.gb_pick_list.layout().addWidget(self.btn_open_pick_list, 1)
         self.lo_panels.addWidget(self.gb_pick_list)
+        self.lo_panels.addStretch()
 
         # REC Summary
         self.lbl_rec_summary = QLabel("REC Summary: ")
         self.lo_db_view.addWidget(self.lbl_rec_summary)
 
         self.tv_rec_summary = QTableView()
-        self.tv_rec_summary.setFixedWidth(UISizes.TV_REC_SUMMARY_WIDTH)
 
         self.lo_db_view.addWidget(self.tv_rec_summary)
         self.tv_rec_summary.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.tv_rec_summary.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-
-    def setup_block_2(self) -> None:
-        self.lo_block_2 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_2)
-
-        self.gb_pick_list_panel = QGroupBox("Pick List")
-        self.gb_pick_list_panel.setLayout(QVBoxLayout())
-        self.lo_block_2.addWidget(self.gb_pick_list_panel)
-
-        # Form fields
-        self.lo_pick_list_form = QFormLayout()
-        self.le_title = QLineEdit()
-        self.te_purposes = QTextEdit()
-        self.le_date_created = QLineEdit()
-        self.lo_pick_list_form.addRow(QLabel("Date Created:"), self.le_date_created)
-        self.lo_pick_list_form.addRow(QLabel("Title:"), self.le_title)
-        self.lo_pick_list_form.addRow(QLabel("Purpose:"), self.te_purposes)
-        self.gb_pick_list_panel.layout().addLayout(self.lo_pick_list_form)
-
-        # Preview
-        self.lbl_pick_list_preview = QLabel("Preview")
-        self.gb_pick_list_panel.layout().addWidget(self.lbl_pick_list_preview)
-        self.te_pick_list_preview = QTextEdit()
-        self.te_pick_list_preview.setReadOnly(True)
-        self.gb_pick_list_panel.layout().addWidget(self.te_pick_list_preview)
-
-        # Buttons
-        self.lo_pick_list_btns = QHBoxLayout()
-        self.btn_pick_list_export = QPushButton("Export Pick List and Check File Status")
-        self.lo_pick_list_btns.addWidget(self.btn_pick_list_export)
-        self.gb_pick_list_panel.layout().addLayout(self.lo_pick_list_btns)

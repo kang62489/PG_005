@@ -55,7 +55,22 @@ class ColumnSorter:
 class UISizes:
     """Class to store UI sizes."""
 
-    MAIN_WINDOW_SIZE: tuple[int, int] = (1600, 850)
+    MAIN_WINDOW_SIZE: tuple[int, int] = (420, 700)
+
+    # Shell: Main Window
+    LW_DOR_SHELL_WIDTH: int = 280
+    BTN_SHELL_SIZE: tuple[int, int] = (90, 90)
+
+    # Popout: Query by DOR / Log View
+    POPWIN_DOR_DETAIL_SIZE: tuple[int, int] = (950, 350)
+    POPWIN_LOG_VIEW_SIZE: tuple[int, int] = (1300, 700)
+    POPWIN_DATA_SELECTOR_SIZE: tuple[int, int] = (1400, 700)
+    POPWIN_IMG_PROC_SIZE: tuple[int, int] = (1300, 800)
+    POPWIN_ALS_CORRECT_SIZE: tuple[int, int] = (1300, 800)
+    POPWIN_ALIGN_SPIKE_SIZE: tuple[int, int] = (1300, 800)
+
+    # Dialog: Pick List
+    TE_PICK_LIST_PREVIEW_HEIGHT: int = 350
 
     # Tab: DOR Query
     LW_DOR_WIDTH: int = 300
@@ -69,8 +84,8 @@ class UISizes:
     TE_FOLDER_STRUCTURE_HEIGHT: int = 40
 
     # Tab: Data Selector
-    TV_REC_SUMMARY_WIDTH: int = 1200
     TE_DIRS_HEIGHT: int = 60
+    GB_PICK_LIST_WIDTH: int = 400
 
     # Tab: ALS Correction
     LW_GAUSS_TIFFS_WIDTH: int = 250

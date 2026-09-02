@@ -16,7 +16,7 @@ mkdir -p logs
 export COLUMNS=200
 
 /home/k/kang-chu/PG_005/.venv/bin/python /home/k/kang-chu/PG_005/ach_domain_analysis.py \
-    --ana_list /home/k/kang-chu/PG_005/data/ana_list_20260618_000.txt \
+    --ana_list /home/k/kang-chu/PG_005/data/ana_20260618_000.txt \
     --db /home/k/kang-chu/PG_005/data/rec_data.db \
     --exp_db /home/k/kang-chu/PG_005/data/exp_info.db
 

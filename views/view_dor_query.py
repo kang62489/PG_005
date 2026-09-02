@@ -21,31 +21,24 @@ from utils import UISizes
 
 
 class ViewDorQuery:
-    def __init__(self, parent: QWidget | None = None) -> None:
-        self.tab_container = parent
-        self.lo_tab_container = QHBoxLayout()
-        self.tab_container.setLayout(self.lo_tab_container)
+    def __init__(self, parent: QWidget | None, lw_dor: QListWidget, log_view_parent: QWidget | None) -> None:
+        self.popwin_container = parent
+        self.lo_popwin_container = QHBoxLayout()
+        self.popwin_container.setLayout(self.lo_popwin_container)
+        # lw_dor lives on the main shell window (ViewMain); reused here so
+        # CtrlDorQuery can keep addressing it as self.view.lw_dor
+        self.lw_dor = lw_dor
+        self.popwin_log_view = log_view_parent
         self.setup_blocks()
 
     def setup_blocks(self) -> None:
-        self.setup_block_1()
         self.setup_block_2()
-
-    def setup_block_1(self) -> None:
-        self.lo_block_1 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_1)
-
-        self.lbl_dor = QLabel("Date of Recording: ")
-        self.lo_block_1.addWidget(self.lbl_dor)
-
-        self.lw_dor = QListWidget()
-        self.lo_block_1.addWidget(self.lw_dor)
-        self.lw_dor.setFixedWidth(UISizes.LW_DOR_WIDTH)
+        self.setup_log_view()
 
     def setup_block_2(self) -> None:
         # Animal Records
         self.lo_block_2 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_2)
+        self.lo_popwin_container.addLayout(self.lo_block_2)
 
         self.lbl_animals = QLabel("Animals: ")
         self.lo_block_2.addWidget(self.lbl_animals)
@@ -68,9 +61,23 @@ class ViewDorQuery:
         self.tv_injections.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.tv_injections.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
+        # Log Actions
+        self.lo_block_2.addStretch()
+        self.lo_log_actions = QHBoxLayout()
+        self.lo_block_2.addLayout(self.lo_log_actions)
+
+        self.btn_log_view = QPushButton("Log View")
+        self.btn_add_log = QPushButton("Add Log")
+        self.lo_log_actions.addWidget(self.btn_log_view)
+        self.lo_log_actions.addWidget(self.btn_add_log)
+
+    def setup_log_view(self) -> None:
+        self.lo_log_view_container = QHBoxLayout()
+        self.popwin_log_view.setLayout(self.lo_log_view_container)
+
         # Data Folder Properties
         self.lo_data_folder_props = QHBoxLayout()
-        self.lo_block_2.addLayout(self.lo_data_folder_props)
+        self.lo_log_view_container.addLayout(self.lo_data_folder_props)
 
         self.lo_data_folder_props_left = QVBoxLayout()
         self.lo_data_folder_props_right = QVBoxLayout()

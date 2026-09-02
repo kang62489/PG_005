@@ -18,9 +18,9 @@ from utils.params import UISizes
 
 class ViewImgProc:
     def __init__(self, parent=None) -> None:
-        self.tab_container = parent
-        self.lo_tab_container = QHBoxLayout()
-        self.tab_container.setLayout(self.lo_tab_container)
+        self.popwin_container = parent
+        self.lo_popwin_container = QHBoxLayout()
+        self.popwin_container.setLayout(self.lo_popwin_container)
         self.setup_blocks()
 
     def setup_blocks(self) -> None:
@@ -29,7 +29,7 @@ class ViewImgProc:
 
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_1)
+        self.lo_popwin_container.addLayout(self.lo_block_1)
 
         # Directory of raw TIFFs
         self.lbl_dir_raw_tiffs = QLabel("Directory of Raw TIFFs: ")
@@ -76,7 +76,7 @@ class ViewImgProc:
 
     def setup_block_2(self) -> None:
         self.lo_block_2 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_2)
+        self.lo_popwin_container.addLayout(self.lo_block_2)
 
         self.btn_start_processing = QPushButton("Start Processing")
         self.lo_block_2.addWidget(self.btn_start_processing)

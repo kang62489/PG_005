@@ -40,7 +40,7 @@ def append_stats(ana_list_path: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Write region-analysis stats from an existing results.db into an ana list.")
-    parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_list_*.txt)")
+    parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_*.txt)")
     args = parser.parse_args()
 
     append_stats(args.ana_list)

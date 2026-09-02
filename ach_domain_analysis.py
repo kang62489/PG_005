@@ -1,7 +1,7 @@
 """
 ach_domain_analysis.py  --  Spike-aligned image analysis pipeline.
 ===================================================================
-Reads an analysis list (ana_list_*.txt), loads the appropriate processed TIFF
+Reads an analysis list (ana_*.txt), loads the appropriate processed TIFF
 (*_GAUSS.tif or *_ALS.tif) together with its paired ABF file, runs spike
 detection and alignment, spatial categorization, and region analysis.
 
@@ -64,7 +64,7 @@ def parse_ana_list(
     """Parse an ana list file and filter rows by existence flags.
 
     Args:
-        ana_list_path: Path to the ana list file (ana_list_*.txt).
+        ana_list_path: Path to the ana list file (ana_*.txt).
         detrend_mode:  Which detrend variant to load — "BIEXP" or "MOV".
         use_als:       If True, load *_ALS.tif; otherwise load *_GAUSS.tif.
 
@@ -465,7 +465,7 @@ def run(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Spike-aligned image analysis pipeline")
-    parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_list_*.txt)")
+    parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_*.txt)")
     parser.add_argument("--detrend", choices=["BIEXP", "MOV"], default="BIEXP", help="Detrend mode (default: BIEXP)")
     parser.add_argument("--use_als", action="store_true", help="Load *_ALS.tif instead of *_GAUSS.tif")
     parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db (default: data/rec_data.db)")

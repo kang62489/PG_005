@@ -1,0 +1,14 @@
+Date Created: 20260902
+Analysis: t53
+Purposes:
+     qwrqwre
+
+Picked: [raw_tiff_name, paired_abf]
+[2023_09_28-0004.tif, N/A]
+[2023_09_28-0005.tif, N/A]
+[2023_09_28-0006.tif, N/A]
+[2023_09_28-0007.tif, N/A]
+[2024_10_03-0008.tif, 2024_10_03_0026.abf]
+[2024_10_03-0009.tif, 2024_10_03_0027.abf]
+
+Total 6 records picked

@@ -17,11 +17,12 @@ from PySide6.QtWidgets import (
 # Local application imports
 from utils import UISizes
 
+
 class ViewAlsCorrect:
     def __init__(self, parent=None) -> None:
-        self.tab_container = parent
-        self.lo_tab_container = QHBoxLayout()
-        self.tab_container.setLayout(self.lo_tab_container)
+        self.popwin_container = parent
+        self.lo_popwin_container = QHBoxLayout()
+        self.popwin_container.setLayout(self.lo_popwin_container)
         self.setup_blocks()
 
     def setup_blocks(self) -> None:
@@ -31,7 +32,7 @@ class ViewAlsCorrect:
 
     def setup_block_1(self) -> None:
         self.lo_block_1 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_1)
+        self.lo_popwin_container.addLayout(self.lo_block_1)
 
         self.btn_load_proc_list = QPushButton("Load Processing List")
         self.lo_block_1.addWidget(self.btn_load_proc_list)
@@ -42,7 +43,7 @@ class ViewAlsCorrect:
 
     def setup_block_2(self) -> None:
         self.lo_block_2 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_2)
+        self.lo_popwin_container.addLayout(self.lo_block_2)
 
         self.lo_als_config = QGridLayout()
         self.lo_block_2.addLayout(self.lo_als_config)
@@ -82,7 +83,7 @@ class ViewAlsCorrect:
 
     def setup_block_3(self) -> None:
         self.lo_block_3 = QVBoxLayout()
-        self.lo_tab_container.addLayout(self.lo_block_3)
+        self.lo_popwin_container.addLayout(self.lo_block_3)
 
         self.btn_run_correct = QPushButton("Calibrate dF/f0 slow fluctuation")
         self.lo_block_3.addWidget(self.btn_run_correct)

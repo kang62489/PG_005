@@ -175,7 +175,7 @@ class CtrlAlignSpike:
             out_lines[i] = f"[{tiff_name}, {gauss_exist}, {als_exist}, {abf_name}, {abf_exist}]"
 
         stem = self._proc_list_path.stem.removeprefix("proc_")
-        ana_list_path = self._proc_list_path.parent / f"ana_list_{stem}.txt"
+        ana_list_path = self._proc_list_path.parent / f"ana_{stem}.txt"
         ana_list_path.write_text("\n".join(out_lines), encoding="utf-8")
         self._ana_list_path = ana_list_path
         console.log(f"[bold green]Analysis list saved → {ana_list_path}[/bold green]")

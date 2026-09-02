@@ -1,0 +1,12 @@
+Date Created: 20260901
+Analysis: No
+Purposes:
+     Review the workflow
+
+Picked: [raw_tiff_name, paired_abf]
+[2026_03_20-0022.tif, 2026_03_20_0011.abf]
+[2026_03_20-0023.tif, 2026_03_20_0012.abf]
+[2026_03_20-0024.tif, 2026_03_20_0013.abf]
+[2026_03_20-0025.tif, 2026_03_20_0014.abf]
+
+Total 4 records picked

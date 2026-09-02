@@ -1,8 +1,6 @@
 ## Modules
 # Standard library imports
-import datetime
 import json
-from pathlib import Path
 
 # Third-party imports
 import polars as pl
@@ -20,6 +18,7 @@ console = Console()
 
 # Constants
 PICK_LIST_JSON_PATH = MODELS_DIR / "pick_list.json"
+PICK_LIST_STATE_PATH = MODELS_DIR / "pick_list_state.json"
 
 
 class CtrlDataSelector(QObject):
@@ -37,17 +36,27 @@ class CtrlDataSelector(QObject):
 
         self.view.tv_rec_summary.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
+        self.dlg_pick_list = DialogPickList()
+
         self.connect_signals()
-        self.clear_pick_list()  # Clear pick list on startup to avoid confusion with old entries
+
+        # Only clear stale picks if last session's picks were already exported;
+        # otherwise recover them so unexported work isn't silently lost
+        self.df_pick_list = self._load_df_pick_list_from_json()
+        if not self.df_pick_list.is_empty():
+            if self._read_exported_flag():
+                self.clear_pick_list()
+            else:
+                console.print(f"[yellow]Recovered {len(self.df_pick_list)} unexported pick(s) from a previous session.[/yellow]")
 
     def connect_signals(self) -> None:
         self.view.btn_reset_all_filters.clicked.connect(self.reset_all_filters)
 
         self.view.btn_pick_selected.clicked.connect(self.pick_selected)
         self.view.btn_open_pick_list.clicked.connect(self.open_pick_list)
-        self.view.btn_pick_list_export.clicked.connect(self.pick_list_export)
-        self.view.le_title.textChanged.connect(lambda _: self.pick_list_gen())
-        self.view.te_purposes.textChanged.connect(self.pick_list_gen)
+
+        self.dlg_pick_list.pick_list_changed.connect(self._on_dialog_pick_list_changed)
+        self.dlg_pick_list.pick_confirmed.connect(self._on_pick_confirmed)
 
         # Connect filter dropdowns
         for col in self.view.filter_columns:
@@ -151,110 +160,35 @@ class CtrlDataSelector(QObject):
 
     # ── Pick list persistence ──────────────────────────────────────────────
 
+    def _load_df_pick_list_from_json(self) -> pl.DataFrame:
+        if not PICK_LIST_JSON_PATH.exists():
+            return pl.DataFrame()
+        raw = pl.read_json(PICK_LIST_JSON_PATH)
+        if raw.is_empty():
+            return pl.DataFrame()
+        return raw.with_columns(pl.all().cast(pl.Utf8)).fill_null("")
+
+    def _read_exported_flag(self) -> bool:
+        if not PICK_LIST_STATE_PATH.exists():
+            return True  # no state recorded => nothing known to be pending, safe to clear
+        try:
+            state = json.loads(PICK_LIST_STATE_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return True
+        return bool(state.get("exported", True))
+
+    def _write_exported_flag(self, exported: bool) -> None:
+        PICK_LIST_STATE_PATH.write_text(json.dumps({"exported": exported}), encoding="utf-8")
+
     def save_pick_list(self, df: pl.DataFrame) -> None:
-        """Persist pick list to JSON, then refresh pick list preview."""
+        """Persist pick list to JSON."""
         self.df_pick_list = df
         PICK_LIST_JSON_PATH.write_text(json.dumps(df.to_dicts(), indent=4))
-        self.pick_list_gen()
+        self._write_exported_flag(df.is_empty())
 
-    def pick_list_gen(self) -> None:
-        """Format and display the pick list preview in the GUI text area."""
-        # Auto-fill creation date and generate pick list content based on current pick list and user inputs
-        self.view.le_date_created.setText(datetime.datetime.now(tz=datetime.UTC).strftime("%Y%m%d"))
-        title = self.view.le_title.text().strip() or "Untitled"
-        purposes_raw = self.view.te_purposes.toPlainText().strip()
-
-        date_created = self.view.le_date_created.text().strip()
-
-        lines = [f"Date Created: {date_created}"]
-        lines.append(f"Analysis: {title}")
-
-        if purposes_raw:
-            purpose_lines = [line.strip() for line in purposes_raw.splitlines() if line.strip()]
-            indent = " " * 4  # align under first bullet
-            lines.append("Purposes:")
-            for purpose_line in purpose_lines:
-                lines.append(f"{indent} {purpose_line}")
-
-        lines.append("\nPicked: [raw_tiff_name, paired_abf]")
-
-        if self.df_pick_list.is_empty() or "Filename" not in self.df_pick_list.columns:
-            lines.append("  (No records picked yet)")
-        else:
-            cols = self.df_pick_list.columns
-            rows = sorted(self.df_pick_list.to_dicts(), key=lambda r: r["Filename"])
-            for row in rows:
-                abf = row.get("PAIRED_ABF") or "" if "PAIRED_ABF" in cols else ""
-                if abf:
-                    dor = row["Filename"].split("-")[0]
-                    abf_str = f"{dor}_{abf}.abf"
-                else:
-                    abf_str = "N/A"
-                lines.append(f"[{row['Filename']}, {abf_str}]")
-            lines.append(f"\nTotal {len(rows)} records picked")
-
-        self.view.te_pick_list_preview.setPlainText("\n".join(lines))
-
-    def _parse_pick_list_header(self, path: Path) -> tuple[str, str]:
-        """Extract normalized title and purposes from a pick list .txt for duplicate detection."""
-        title = ""
-        purposes_lines: list[str] = []
-        in_purposes = False
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("Analysis:"):
-                title = line.split(":", 1)[1].strip()
-                in_purposes = False
-            elif line.strip() == "Purposes:":
-                in_purposes = True
-            elif in_purposes:
-                stripped = line.strip()
-                if not stripped:
-                    in_purposes = False
-                else:
-                    purposes_lines.append(stripped)
-        return title, "\n".join(purposes_lines)
-
-    def pick_list_export(self) -> None:
-        """Export pick list as .txt, with auto serial suffix."""
-        pick_list_context = self.view.te_pick_list_preview.toPlainText().strip()
-        if not pick_list_context:
-            console.print("[bold red]Preview is empty — nothing to export.[/bold red]")
-            return
-
-        date_created = self.view.le_date_created.text().strip()
-        if not date_created:
-            console.print("[bold red]Date Created is empty — please enter a date before exporting.[/bold red]")
-            return
-
-        MODELS_DIR.mkdir(exist_ok=True)
-
-        current_title = self.view.le_title.text().strip() or "Untitled"
-        current_purposes = "\n".join(
-            line.strip() for line in self.view.te_purposes.toPlainText().splitlines() if line.strip()
-        )
-
-        # Check if any existing pick list from the same date has identical title + purposes
-        existing = sorted(
-            p for p in MODELS_DIR.glob(f"pick_{date_created}_*.txt")
-            if not p.stem.endswith("_checked")
-        )
-        match_path = next(
-            (p for p in existing if self._parse_pick_list_header(p) == (current_title, current_purposes)),
-            None,
-        )
-
-        if match_path:
-            pick_list_path = match_path
-            console.print(f"[yellow]Same title+purpose found — overwriting {match_path.name}[/yellow]")
-        else:
-            last_serial = int(existing[-1].stem.rsplit("_", 1)[-1]) if existing else -1
-            pick_list_path = MODELS_DIR / f"pick_{date_created}_{last_serial + 1:03d}.txt"
-
-        pick_list_path.write_text(pick_list_context, encoding="utf-8")
-        console.print(f"[bold green]Pick list saved → {pick_list_path}[/bold green]")
-
-        # Emit signal with pick_list_path to automatically load the pick list to self.view.tv_pick_list in view_img_proc
-        self.pick_confirmed.emit(str(pick_list_path))
+    def _on_pick_confirmed(self, path: str) -> None:
+        self._write_exported_flag(True)
+        self.pick_confirmed.emit(path)
 
     # ── Pick actions ───────────────────────────────────────────────────────
 
@@ -311,18 +245,14 @@ class CtrlDataSelector(QObject):
     def clear_pick_list(self) -> None:
         self.df_pick_list = pl.DataFrame()
         PICK_LIST_JSON_PATH.write_text(json.dumps([], indent=4))
+        self._write_exported_flag(True)
 
     def open_pick_list(self) -> None:
-        self.dlg_pick_list = DialogPickList()
-        self.dlg_pick_list.pick_list_changed.connect(self._on_dialog_pick_list_changed)
         self.dlg_pick_list.show()
+        self.dlg_pick_list.raise_()
+        self.dlg_pick_list.activateWindow()
 
     def _on_dialog_pick_list_changed(self) -> None:
-        """Sync GUI log after the pick list dialog modifies the JSON."""
-        if PICK_LIST_JSON_PATH.exists():
-            raw = pl.read_json(PICK_LIST_JSON_PATH)
-            df = raw.with_columns(pl.all().cast(pl.Utf8)).fill_null("") if not raw.is_empty() else pl.DataFrame()
-        else:
-            df = pl.DataFrame()
-        self.df_pick_list = df
-        self.pick_list_gen()
+        """Sync internal state after the pick list dialog modifies the JSON."""
+        self.df_pick_list = self._load_df_pick_list_from_json()
+        self._write_exported_flag(self.df_pick_list.is_empty())
