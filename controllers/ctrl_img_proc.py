@@ -239,19 +239,18 @@ class CtrlImgProc:
         proc_list_path = self.pick_list_path.parent / f"proc_{self.pick_list_path.stem.removeprefix('pick_')}.txt"
         self.export_proc_list()
 
-        _cuda_available, _cuda_msg = check_cuda()
-        if _cuda_available:
-            self.view.le_run_on.setText("GPU (CUDA)")
-        else:
-            self.view.le_run_on.setText("CPU (NUMBA-JIT)")
-
-        console.log(_cuda_msg)
-
         self.view.btn_start_processing.setEnabled(False)
-        self._bk_worker = BackgroundWorker(run_img_proc, proc_list_path, _cuda_available, use_emitter=True)
+        self._bk_worker = BackgroundWorker(self._run_processing, run_img_proc, proc_list_path, use_emitter=True)
         self._bk_worker.proc_msgs.connect(self._on_progress)
         self._bk_worker.work_done.connect(self._on_processing_done)
         self._bk_worker.start()
+
+    @staticmethod
+    def _run_processing(run_img_proc, proc_list_path: Path, emitter) -> None:
+        cuda_available, cuda_msg = check_cuda()
+        console.log(cuda_msg)
+        emitter({"type": "cuda_status", "on": "GPU (CUDA)" if cuda_available else "CPU (NUMBA-JIT)"})
+        run_img_proc(proc_list_path, cuda_available, emitter=emitter)
 
     def _on_progress(self, msg: object) -> None:
         if msg.get("type") == "progress":
@@ -261,6 +260,8 @@ class CtrlImgProc:
             self.view.le_processing_step.setText("")
         elif msg.get("type") == "step":
             self.view.le_processing_step.setText(msg["msg"])
+        elif msg.get("type") == "cuda_status":
+            self.view.le_run_on.setText(msg["on"])
 
     def _on_processing_done(self) -> None:
         self.view.btn_start_processing.setEnabled(True)

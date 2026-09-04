@@ -161,18 +161,24 @@ class CtrlAlsCorrect:
         p = float(self.view.le_als_p.text())
         n_iter = int(self.view.le_als_num_iters.text())
 
-        from functions import check_cuda
-        cuda_available, cuda_msg = check_cuda()
-        console.log(cuda_msg)
-
-        self.view.le_run_on.setText("GPU (CUDA)" if cuda_available else "CPU (NUMBA-JIT)")
         self.view.le_als_params.setText(f"lam={lam:g}, p={p:g}, n_iter={n_iter}")
 
         self.view.btn_run_correct.setEnabled(False)
-        self._worker = BackgroundWorker(run_als_correct, self._proc_list_path, cuda_available, lam, p, n_iter, use_emitter=True)
+        self._worker = BackgroundWorker(
+            self._run_correct, run_als_correct, self._proc_list_path, lam, p, n_iter, use_emitter=True
+        )
         self._worker.proc_msgs.connect(self._on_correct_progress)
         self._worker.work_done.connect(self._on_correct_done)
         self._worker.start()
+
+    @staticmethod
+    def _run_correct(run_als_correct, proc_list_path: Path, lam: float, p: float, n_iter: int, emitter) -> None:
+        from functions import check_cuda
+
+        cuda_available, cuda_msg = check_cuda()
+        console.log(cuda_msg)
+        emitter({"type": "cuda_status", "on": "GPU (CUDA)" if cuda_available else "CPU (NUMBA-JIT)"})
+        run_als_correct(proc_list_path, cuda_available, lam, p, n_iter, emitter=emitter)
 
     def _on_correct_progress(self, msg: object) -> None:
         if msg.get("type") == "progress":
@@ -181,6 +187,8 @@ class CtrlAlsCorrect:
             self.view.le_processing_step.setText("")
         elif msg.get("type") == "step":
             self.view.le_processing_step.setText(msg["msg"])
+        elif msg.get("type") == "cuda_status":
+            self.view.le_run_on.setText(msg["on"])
 
     def _on_correct_done(self) -> None:
         self.view.btn_run_correct.setEnabled(True)

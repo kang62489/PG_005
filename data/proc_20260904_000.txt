@@ -1,0 +1,18 @@
+Date Created: 20260904
+Analysis: Red GACh rACh1h hotspots
+Purposes:
+     - Check if there is any hotspot recorded
+
+Picked: [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]
+[2026_09_03-0016.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_09_03-0017.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_09_03-0018.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_09_03-0034.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_09_03-0035.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_09_03-0036.tif, BIEXP, No, SKIP, NONE, N/A]
+[2026_09_03-0037.tif, BIEXP, No, SKIP, NONE, N/A]
+
+Total 7 records picked
+
+dir_raw_tiffs: D:\Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\Programs\PG_005\proc_tiffs

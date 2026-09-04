@@ -1,0 +1,15 @@
+Date Created: 20260904
+Analysis: Red GACh rACh1h hotspots
+Purposes:
+     - Check if there is any hotspot recorded
+
+Picked: [raw_tiff_name, paired_abf]
+[2026_09_03-0016.tif, N/A]
+[2026_09_03-0017.tif, N/A]
+[2026_09_03-0018.tif, N/A]
+[2026_09_03-0034.tif, N/A]
+[2026_09_03-0035.tif, N/A]
+[2026_09_03-0036.tif, N/A]
+[2026_09_03-0037.tif, N/A]
+
+Total 7 records picked
