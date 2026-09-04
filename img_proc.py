@@ -2,7 +2,7 @@
 img_proc.py  --  Unified image preprocessing pipeline entry point.
 ==================================================================
 Reads a proc list, routes each file by mode:
-  BIEXP -> bi-exponential detrend + Gaussian blur
+  BIEXP -> bi-exponential detrend + stack-wide z-score normalization + Gaussian blur
   NONE  -> skip
 
 Proc list format (column names declared on the 'Picked:' line):
@@ -26,15 +26,17 @@ from rich.console import Console
 from functions import (
     biexp_detrend,
     check_cuda,
+    fit_background_sigma,
     gaussian_blur_run,
     get_memory_usage,
     list_parser,
     sample_tau,
+    zscore_normalize,
 )
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 # Gaussian blur
-SIGMA = 6.0
+SIGMA = 4.0
 
 # Setup rich console for logging
 console = Console()
@@ -102,7 +104,7 @@ def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
 
 
 def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool, emitter=None) -> None:
-    """Bi-exp detrend + Gaussian blur. Saves *_BIEXP_CAL.tif and *_BIEXP_GAUSS.tif."""
+    """Bi-exp detrend + stack-wide z-score normalization + Gaussian blur. Saves *_BIEXP_GAUSS.tif."""
     stem = Path(file).stem
     t0 = time.time()
 
@@ -119,19 +121,28 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
     if emitter:
         emitter({"type": "step", "msg": "Detrending (BIEXP)..."})
     console.log("  Detrending (BIEXP)...")
-    detrended = biexp_detrend(img, tau1, tau2, cuda_available)
+    residual = biexp_detrend(img, tau1, tau2, cuda_available)
+    del img
+
+    if emitter:
+        emitter({"type": "step", "msg": "Fitting background noise..."})
+    console.log("  Fitting background noise (stack-wide histogram)...")
+    bg_mean, bg_sigma = fit_background_sigma(residual)
+    console.log(f"  Background: mean={bg_mean:.4f}  sigma={bg_sigma:.4f}  ({time.time() - t0:.1f}s)")
+    zscore = zscore_normalize(residual, bg_mean, bg_sigma)
+    del residual
 
     if emitter:
         emitter({"type": "step", "msg": "Gaussian blur..."})
     console.log("  Gaussian blur...")
-    blurred = gaussian_blur_run(detrended, SIGMA, cuda_available)
-    del detrended
+    blurred = gaussian_blur_run(zscore, SIGMA, cuda_available)
+    del zscore
     tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", blurred.astype(np.float16))
     if emitter:
         emitter({"type": "step", "msg": f"✓ Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)"})
     console.log(f"  Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)")
 
-    del img, blurred
+    del blurred
 
 
 # ── Pipeline runner ───────────────────────────────────────────────────────────

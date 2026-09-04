@@ -1,3 +1,74 @@
+# Log of the project progress 2026-09-05 Sat (Session 52)
+Last working file: `functions/zscore_img_segs.py` (viewing, not editing — user was re-reading this while wrapping up)
+Last working line: n/a (whole-file review)
+
+## List of modified files
+- `img_proc.py` — `process_biexp()` pipeline changed from bi-exp detrend + Gaussian blur (saving ΔF/F0 ratio values) to bi-exp detrend + stack-wide z-score normalization + Gaussian blur. Output filename unchanged (`*_BIEXP_GAUSS.tif`), per explicit user request to keep the original naming. `SIGMA` constant changed `6.0` → `4.0` (see rationale below).
+- `functions/detrend.py` — `biexp_detrend()` (both `_cpu_biexp` and `_gpu_biexp`) now returns the residual `y - trend` instead of the ratio `(y - trend) / trend`. Docstrings updated to match. The `/trend` division was the root cause of the original speckle bug (division blows up wherever the fitted trend is near zero, e.g. background/out-of-tissue pixels), so it was removed rather than patched.
+- `functions/background_zscore.py` (new) — `fit_background_sigma(residual)`: pools the whole stack's residual values into one histogram, finds the peak, fits a Gaussian to the peak + left side only (right side is contaminated by real signal transients), returns `(mean, sigma)`. `zscore_normalize(residual, mean, sigma)`: applies that single global mean/sigma to the whole stack.
+- `functions/__init__.py` — registered `fit_background_sigma`/`zscore_normalize` in the lazy-import system (`TYPE_CHECKING` block, `__all__`, `_LAZY_IMPORTS`).
+- `data/pick_list.json` — changed as a side effect of a GUI launch smoke-test (`main.py` started then killed after 6s to verify nothing broke) — not an intentional content change; flagged here in case it's unwanted and needs reverting.
+
+## Summary of current progress
+- **Root-caused and fixed the speckle problem** the user reported after Gaussian blur on `*_BIEXP_GAUSS.tif`: the old pipeline computed ΔF/F0 as `(y-trend)/trend` *before* blurring — near-zero `trend` values (background/dim regions) turned small noise into huge outliers, which blur then smeared into visible speckle blobs instead of averaging away.
+- **New pipeline**: bi-exp detrend → residual (`y-trend`, no division) → stack-wide z-score (global background-noise mean/sigma from a histogram peak fit) → Gaussian blur → save as `*_BIEXP_GAUSS.tif` (same name, new meaning: values are now z-scores, not ΔF/F0 fractions).
+- **Confirmed float16 storage is still safe** for z-score magnitudes (verified empirically: max z-scores stayed under 93, well within float16's representable range; float16 precision is relative/exponent-based, not tied to small values specifically — this was a real misconception the user had going in, corrected using `docs/knowledgebase/float_precision_and_dtypes.md`).
+- **Chose `SIGMA=4.0` over the old `6.0`** based on real-data visual comparison (not just theory): on `2025_06_11-0003` frame 242, a real hotspot resolved into two distinguishable lobes at sigma=4 but merged into one blob at sigma=6 — direct evidence that sigma=6 (~8µm at 10X, close to the existing `EPS_UM=10µm` inter-varicosity spacing used elsewhere) was destroying real spatial structure, not just noise.
+- **Found and fixed a real bug during implementation**: the new module was first named `zscore_normalize.py`, colliding with its own exported `zscore_normalize` function name. Python's import system auto-attaches a submodule to its parent package under the submodule's filename, which silently shadowed the lazy-loaded function and caused `TypeError: 'module' object is not callable`. Fixed by renaming the module to `background_zscore.py`.
+- **Verified ALS correction and spike-aligned analysis need no changes** — checked (not assumed) that ALS (`functions/als.py`) is exactly scale- and shift-equivariant (its per-frame weight depends only on the sign of `data - baseline`, never magnitude), and that `zscore_img_segs()` re-normalizes per-pixel-per-segment using each pixel's own local pre-spike baseline, which exactly cancels any uniform global affine transform applied upstream. Proved algebraically (not just hand-waved) that Gaussian blur (weight-normalized convolution) and ALS both commute exactly with a globally-uniform affine transform, so the new z-score step is mathematically inert for final spike-aligned analysis numbers — it only affects the standalone appearance/usability of the exported GAUSS/ALS TIFFs.
+- Verified end-to-end: ruff clean on all touched files, `process_biexp()` run directly on 2 real files (`2025_06_11-0003.tif`, `2025_12_15-0012.tif`) via a since-deleted prototype script — numbers matched the earlier prototype exactly, and a full GUI launch smoke-test came back clean.
+- Also exported ALS-corrected versions of both test files (lam=70, p=0.05, n_iter=100) to `output/` per user request, confirming ALS peak values barely shift relative to pre-ALS GAUSS values (consistent with the equivariance proof above) — these were prototype outputs, not part of the reviewed code changes.
+- 4 one-off `prototype_*.py` scripts used during this session's exploration (histogram-fit visualization, sigma comparison, real-pipeline check, ALS check) were all deleted at the end per user request — nothing left in repo root.
+- User pushed back on the resulting design ("z-score over z-score" — calculating a global z-score in `img_proc.py` when `zscore_img_segs()` already re-z-scores locally downstream) — confirmed their instinct was correct: the global step is provably redundant for final analysis numbers, kept only for the exported intermediate file's standalone visual quality. This is flagged as an open TODO below (user has a new idea: maybe scaling instead of full re-z-scoring is what's actually needed).
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Diagnosed the post-blur speckle bug in `*_BIEXP_GAUSS.tif` (root cause: `/trend` division exploding near-zero-trend background pixels)
+- ✅ Prototyped and validated a stack-wide z-score normalization approach (bi-exp residual → global background histogram/Gaussian fit → z-score) on 2 real recordings
+- ✅ Confirmed float16 export is safe for z-score magnitudes (corrected a precision misconception)
+- ✅ Empirically chose `SIGMA=4.0` over `6.0` using real hotspot structure (two-lobe merge test on `2025_06_11-0003`)
+- ✅ Landed the z-score pipeline in `img_proc.py` + new `functions/background_zscore.py`, keeping `*_BIEXP_GAUSS.tif` naming
+- ✅ Found and fixed a lazy-import module/function name collision bug (`zscore_normalize.py` → `background_zscore.py`)
+- ✅ Verified ALS correction (`als_correct.py`/`functions/als.py`) needs no changes — proved scale/shift equivariance
+- ✅ Verified spike-aligned analysis (`zscore_img_segs()`, `SpatialCategorizer`) needs no changes — proved the new global z-score step is downstream-canceled
+- ✅ Ran real pipeline end-to-end on 2 test files + full GUI smoke test — both clean
+- ✅ Exported ALS-corrected prototype outputs (lam=70, p=0.05, n_iter=100) for user review
+- ✅ Cleaned up all 4 prototype scripts
+
+## What should we do next? (TODOs)
+- [ ] **Spike reliability analysis (parked)** — not started, carried from a prior session. Target: last popup (`view_align_spike.py`/`ctrl_align_spike.py`/`ach_domain_analysis.py`), reusing per-spike segments from `AbfClip` before median-merging. Open questions: reliability scope (trial-to-trial vs. cross-recording), auto-run vs. toggle, report destination.
+- [ ] **Run the full proc-list-driven pipeline** (via the GUI / `ctrl_img_proc.py`, not just direct-call prototype scripts) with the new z-score logic before trusting it in production — only the 2 direct-call test files have been verified so far, not the real proc-list → GUI → `img_proc.run()` path.
+- [ ] **Reconsider the purpose of `zscore_img_segs()`** — user's own note: since the new global z-score step in `img_proc.py` is downstream-canceled by `zscore_img_segs()`'s local per-pixel-per-segment re-normalization anyway, maybe `zscore_img_segs()` doesn't need to do a full re-z-score at all — perhaps just a scaling step would suffice. Needs a fresh design discussion (not yet scoped) on what `zscore_img_segs()` should actually be responsible for now that upstream units have changed from ΔF/F0 to z-score.
+- [ ] Check whether `data/pick_list.json`'s change (from this session's GUI smoke test) is wanted or should be reverted — flagged, not yet decided.
+
+## Last Session Recap
+※ recap: Fixed the post-blur speckle bug in `*_BIEXP_GAUSS.tif` by replacing the ΔF/F0 ratio detrend with a stack-wide z-score normalization (bi-exp residual → global background histogram/Gaussian fit → z-score → blur at sigma=4, chosen via real hotspot evidence over the old sigma=6). Verified ALS and spike-aligned analysis need no changes (proved the new step is downstream-canceled). Fixed a lazy-import name-collision bug along the way. Open: full GUI-pipeline verification still pending, spike reliability analysis still parked, and a new idea to simplify `zscore_img_segs()` now that it's redundant with the upstream z-score.
+
+---
+
+# Log of the project progress 2026-09-05 Sat (Session 51)
+Last working file: (discussion only — no files modified this session)
+Last working line: n/a
+
+## List of modified files
+- (none — `git status` clean; this was a planning/discussion session, no code touched)
+
+## Summary of current progress
+- Discussed where to add spike reliability analysis: agreed it belongs in the last popup (`views/view_align_spike.py` / `controllers/ctrl_align_spike.py` / `ach_domain_analysis.py`), since `AbfClip` already produces per-spike segments (`clip.lst_img_frame_ranges`) there before they get merged into `median_segment` — reusing that data avoids re-clipping the ABF in a separate popup.
+- Scoping questions raised but not yet answered: (1) reliability of what — trial-to-trial consistency within one recording vs. consistency across recordings/animals; (2) how it should run — folded into the existing `run()` loop automatically vs. an optional toggle in the popwin; (3) where results should land — appended to the existing per-entry xlsx report vs. a separate report.
+- User then redirected focus to a current issue in `img_proc.py` — not yet described, to be picked up next.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- (none — discussion only)
+
+## What should we do next? (TODOs)
+- [ ] **Spike reliability analysis (parked)** — not started. Target: last popup (`view_align_spike.py`/`ctrl_align_spike.py`/`ach_domain_analysis.py`). Needs the 3 open scoping questions above answered before a plan can be drafted.
+- [ ] **Current `img_proc.py` issue** — user flagged wanting to focus on this next; symptom/details not yet shared.
+
+## Last Session Recap
+※ recap: Scoped (discussion only, no code) where spike reliability analysis should live — the last popup, reusing per-spike segments already produced by `AbfClip` before median-merging. Three open questions remain (reliability scope, auto-run vs toggle, report destination). Session then pivoted to a not-yet-described `img_proc.py` issue.
+
+---
+
 # Log of the project progress 2026-07-07 Mon (Session 50)
 Last working file: `classes/region_analyzer.py`
 Last working line: end of file

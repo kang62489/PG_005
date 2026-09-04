@@ -4,6 +4,9 @@ detrend.py  --  Bi-exponential detrend (CPU Numba JIT + CUDA GPU).
 Public API
 ----------
 biexp_detrend(img, tau1, tau2, cuda_available)        ->  np.ndarray
+
+Returns the residual (y - trend), not a ratio. Downstream normalization to a
+stack-wide z-score happens separately in functions/zscore_normalize.py.
 """
 
 import math
@@ -31,9 +34,9 @@ def _cpu_biexp(img_flat: np.ndarray, basis_pinv: np.ndarray, basis_matrix: np.nd
       basis_matrix  (T, 3): columns are [exp(-t/tau1), exp(-t/tau2), ones]
       basis_pinv    (3, T): Moore-Penrose pseudo-inverse of basis_matrix
       For each pixel trace y (T,):
-        coeffs = basis_pinv @ y         # least-squares fit → (3,)
-        trend  = basis_matrix @ coeffs  # reconstructed bi-exp baseline F0 → (T,)
-        dff0   = (y - trend) / trend    # ΔF/F0
+        coeffs   = basis_pinv @ y         # least-squares fit → (3,)
+        trend    = basis_matrix @ coeffs  # reconstructed bi-exp baseline F0 → (T,)
+        residual = y - trend              # detrended residual (not yet normalized)
     """
     n_pixels, T = img_flat.shape
     output = np.zeros_like(img_flat)
@@ -41,7 +44,7 @@ def _cpu_biexp(img_flat: np.ndarray, basis_pinv: np.ndarray, basis_matrix: np.nd
         y = img_flat[i]
         coeffs = np.dot(basis_pinv, y)        # least-squares coefficients (3,)
         trend = np.dot(basis_matrix, coeffs)   # reconstructed baseline (T,)
-        output[i] = (y - trend) / trend
+        output[i] = y - trend
     return output
 
 
@@ -58,7 +61,7 @@ def _gpu_biexp(
     basis_pinv   (3, T): projects pixel trace onto 3-component basis.
     basis_matrix (T, 3): reconstructs trend from the 3 coefficients.
     Trend computed on-the-fly per frame to avoid large local arrays.
-    Edge normalization: shift so the lower endpoint value = 0.
+    Output is the residual (y - trend), not a ratio.
     """
     pixel_idx = cuda.grid(1)
     if pixel_idx >= img_flat.shape[1]:  # img_flat shape: (n_frames, n_pixels)
@@ -77,7 +80,7 @@ def _gpu_biexp(
         trend_t = np.float32(0.0)
         for k in range(3):
             trend_t += basis_matrix[frame_idx, k] * coeffs[k]
-        output[frame_idx, pixel_idx] = (img_flat[frame_idx, pixel_idx] - trend_t) / trend_t
+        output[frame_idx, pixel_idx] = img_flat[frame_idx, pixel_idx] - trend_t
 
 
 def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: bool) -> np.ndarray:
@@ -94,7 +97,8 @@ def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: boo
         cuda_available: Route to GPU kernel if True.
 
     Returns:
-        Detrended stack, shape (n_frames, H, W), float32.
+        Residual stack (y - trend), shape (n_frames, H, W), float32. Not yet
+        normalized — pass through functions.zscore_normalize for that.
     """
     n_frames, H, W = img.shape
     t = np.arange(n_frames, dtype=np.float32)

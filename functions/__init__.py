@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .als import als_run
+    from .background_zscore import fit_background_sigma, zscore_normalize
     from .check_cuda import check_cuda
     from .database_ops import (
         compute_region_stats,
@@ -47,6 +48,7 @@ __all__ = [
     "check_cuda",
     "compute_region_stats",
     "count_unique_cells",
+    "fit_background_sigma",
     "gauss_exists",
     "gauss_ready",
     "gaussian_blur_run",
@@ -66,6 +68,7 @@ __all__ = [
     "spike_centered_median",
     "test_cuda",
     "write_cell_summary_xlsx",
+    "zscore_normalize",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -91,6 +94,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "get_excluded_recordings": (".database_ops",                       "get_excluded_recordings"),
     "get_cell_recording_status": (".database_ops",                     "get_cell_recording_status"),
     "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
+    "fit_background_sigma": (".background_zscore",                        "fit_background_sigma"),
+    "zscore_normalize":    (".background_zscore",                         "zscore_normalize"),
     "spike_centered_avg":  (".spike_alignment",                           "spike_centered_avg"),
     "spike_centered_median": (".spike_alignment",                         "spike_centered_median"),
     "sample_tau":          (".tau_estimate",                              "sample_tau"),
