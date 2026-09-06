@@ -26,12 +26,12 @@ from rich.console import Console
 from functions import (
     biexp_detrend,
     check_cuda,
-    fit_background_sigma,
+    fit_hist_sigma,
     gaussian_blur_run,
     get_memory_usage,
+    img_zscore_convert,
     list_parser,
     sample_tau,
-    zscore_normalize,
 )
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -121,22 +121,22 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
     if emitter:
         emitter({"type": "step", "msg": "Detrending (BIEXP)..."})
     console.log("  Detrending (BIEXP)...")
-    residual = biexp_detrend(img, tau1, tau2, cuda_available)
+    detrended = biexp_detrend(img, tau1, tau2, cuda_available)
     del img
 
     if emitter:
         emitter({"type": "step", "msg": "Fitting background noise..."})
     console.log("  Fitting background noise (stack-wide histogram)...")
-    bg_mean, bg_sigma = fit_background_sigma(residual)
+    bg_mean, bg_sigma = fit_hist_sigma(detrended)
     console.log(f"  Background: mean={bg_mean:.4f}  sigma={bg_sigma:.4f}  ({time.time() - t0:.1f}s)")
-    zscore = zscore_normalize(residual, bg_mean, bg_sigma)
-    del residual
+    zscored = img_zscore_convert(detrended, bg_mean, bg_sigma)
+    del detrended
 
     if emitter:
         emitter({"type": "step", "msg": "Gaussian blur..."})
     console.log("  Gaussian blur...")
-    blurred = gaussian_blur_run(zscore, SIGMA, cuda_available)
-    del zscore
+    blurred = gaussian_blur_run(zscored, SIGMA, cuda_available)
+    del zscored
     tifffile.imwrite(proc_dir / f"{stem}_BIEXP_GAUSS.tif", blurred.astype(np.float16))
     if emitter:
         emitter({"type": "step", "msg": f"✓ Saved {stem}_BIEXP_GAUSS.tif  ({time.time() - t0:.1f}s)"})

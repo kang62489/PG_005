@@ -5,8 +5,8 @@ Public API
 ----------
 biexp_detrend(img, tau1, tau2, cuda_available)        ->  np.ndarray
 
-Returns the residual (y - trend), not a ratio. Downstream normalization to a
-stack-wide z-score happens separately in functions/zscore_normalize.py.
+Returns the detrended stack (y - trend), not a ratio. Downstream normalization to a
+stack-wide z-score happens separately in functions/fit_bg_hist.py.
 """
 
 import math
@@ -36,7 +36,7 @@ def _cpu_biexp(img_flat: np.ndarray, basis_pinv: np.ndarray, basis_matrix: np.nd
       For each pixel trace y (T,):
         coeffs   = basis_pinv @ y         # least-squares fit → (3,)
         trend    = basis_matrix @ coeffs  # reconstructed bi-exp baseline F0 → (T,)
-        residual = y - trend              # detrended residual (not yet normalized)
+        detrended = y - trend             # detrended output (not yet normalized)
     """
     n_pixels, T = img_flat.shape
     output = np.zeros_like(img_flat)
@@ -61,7 +61,7 @@ def _gpu_biexp(
     basis_pinv   (3, T): projects pixel trace onto 3-component basis.
     basis_matrix (T, 3): reconstructs trend from the 3 coefficients.
     Trend computed on-the-fly per frame to avoid large local arrays.
-    Output is the residual (y - trend), not a ratio.
+    Output is the detrended stack (y - trend), not a ratio.
     """
     pixel_idx = cuda.grid(1)
     if pixel_idx >= img_flat.shape[1]:  # img_flat shape: (n_frames, n_pixels)
@@ -97,8 +97,8 @@ def biexp_detrend(img: np.ndarray, tau1: float, tau2: float, cuda_available: boo
         cuda_available: Route to GPU kernel if True.
 
     Returns:
-        Residual stack (y - trend), shape (n_frames, H, W), float32. Not yet
-        normalized — pass through functions.zscore_normalize for that.
+        Detrended stack (y - trend), shape (n_frames, H, W), float32. Not yet
+        normalized — pass through functions.img_zscore_convert for that.
     """
     n_frames, H, W = img.shape
     t = np.arange(n_frames, dtype=np.float32)

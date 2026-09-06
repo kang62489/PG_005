@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .als import als_run
-    from .background_zscore import fit_background_sigma, zscore_normalize
     from .check_cuda import check_cuda
     from .database_ops import (
         compute_region_stats,
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
         gauss_ready,
         raw_tiff_ready,
     )
+    from .fit_bg_hist import fit_hist_sigma, img_zscore_convert
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
@@ -48,7 +48,7 @@ __all__ = [
     "check_cuda",
     "compute_region_stats",
     "count_unique_cells",
-    "fit_background_sigma",
+    "fit_hist_sigma",
     "gauss_exists",
     "gauss_ready",
     "gaussian_blur_run",
@@ -56,6 +56,7 @@ __all__ = [
     "get_excluded_recordings",
     "get_memory_usage",
     "get_picked_pairs",
+    "img_zscore_convert",
     "list_parser",
     "lookup_rec_from_db",
     "zscore_img_segs",
@@ -68,7 +69,6 @@ __all__ = [
     "spike_centered_median",
     "test_cuda",
     "write_cell_summary_xlsx",
-    "zscore_normalize",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -94,8 +94,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "get_excluded_recordings": (".database_ops",                       "get_excluded_recordings"),
     "get_cell_recording_status": (".database_ops",                     "get_cell_recording_status"),
     "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
-    "fit_background_sigma": (".background_zscore",                        "fit_background_sigma"),
-    "zscore_normalize":    (".background_zscore",                         "zscore_normalize"),
+    "fit_hist_sigma":      (".fit_bg_hist",                                "fit_hist_sigma"),
+    "img_zscore_convert":  (".fit_bg_hist",                                "img_zscore_convert"),
     "spike_centered_avg":  (".spike_alignment",                           "spike_centered_avg"),
     "spike_centered_median": (".spike_alignment",                         "spike_centered_median"),
     "sample_tau":          (".tau_estimate",                              "sample_tau"),
