@@ -1,3 +1,74 @@
+# Log of the project progress 2026-09-08 Tue (Session 54)
+Last working file: (discussion only — no files modified this session besides this log)
+Last working line: n/a
+
+## List of modified files
+- `docs/continue_from_here.md` — this log entry only; no production code touched.
+
+## Summary of current progress
+- Continued the spike-reliability discussion from Session 53 with the user's original biological framing, stated explicitly for the first time: a patched cholinergic interneuron's action potential (spike) should trigger ACh release, which should show up as a hotspot at a consistent spatial position in the spike frame; segments are clipped per-spike from the ABF-derived spike times, and the median across segments was meant to reveal that consistent-position "trend."
+- Worked through why "median shows the trend" and "per-trial reliability isn't 100%" aren't necessarily contradictory: a per-pixel median only needs a **majority** (>50%) of trials to show elevation, not all of them — so median-based detection is compatible with imperfect release probability, as long as reliability is above ~50%.
+- The open puzzle from Session 53 (14.6% per-trial detection vs. median "DETECTED" for `2025_06_11-0003`) was reframed: the low 14.6% number is from a strict per-trial significance test calibrated for single-trial noise (10σ), not a direct measurement of "what fraction of trials show any elevation at the hotspot pixel." It's plausible far more than 24/48 trials show a real, if statistically-weak, elevation there — meaning the median may be working correctly while the per-trial threshold undercounts.
+- Proposed (not yet run, user wants to think first) a direct empirical check: pull the raw z-score value at the detected hotspot pixel across all 48 individual segments at the spike frame, and look at what fraction show any positive elevation (not pass/fail against a threshold) — would distinguish "median is legitimately tracking a majority trend, per-trial threshold is just too strict" from "something else is going on spatially."
+- User raised a further, deeper open question during TODO confirmation: **whether a given cholinergic interneuron's hotspot positions are even spatially consistent trial-to-trial** — i.e. before fixing the threshold, it may be worth first asking whether "the same pixel lights up across trials" is actually true, or whether release sites vary in position from trial to trial (which would undermine the whole per-pixel-median approach regardless of threshold tuning).
+- User explicitly asked me to stay calm/unhurried about this — these are open, exploratory statistical questions to sit with, not bugs to rush to fix (see [[feedback_pace_and_tone]]).
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Restated and grounded the biological rationale behind spike-segment clipping and median-based hotspot detection
+- ✅ Reasoned through the majority-vs-100%-reliability requirement for per-pixel median to shift
+- ✅ Reframed the Session 53 per-trial-vs-median mismatch as likely a threshold-calibration issue rather than a median-correctness issue
+- ✅ Proposed (but did not yet run) a raw-distribution check to test this reframing empirically
+
+## What should we do next? (TODOs)
+- [ ] **Reconsider the per-trial significance threshold.** The flat `10σ` bar (`AREA_PCT_SIGMA_MULT` in `classes/region_analyzer.py`) is calibrated for single-trial noise and likely undercounts true per-trial reliability relative to what the median-based detection can pick up. No fix designed yet — needs more thought before touching code.
+- [ ] **Open question to return to: are a given cholinergic interneuron's hotspot positions spatially consistent across trials?** Raised by the user as a prior question to the threshold issue — worth checking (e.g. per-trial peak/cluster centroid positions, do they cluster spatially or drift?) before assuming the per-pixel-median approach is the right tool at all.
+- [ ] (Optional, offered not yet run) Empirical check: raw z-score distribution at the detected hotspot pixel across all 48 segments of `2025_06_11-0003`, to test whether >50% of trials show any elevation there.
+- [ ] (Carried over, still open) Commit the uncommitted z-score pipeline rename changes from `functions/fit_bg_hist.py` (Session 52 and earlier).
+- [ ] (Carried over, still open) Run the full proc-list/GUI-driven pipeline (`ctrl_img_proc.py`) with all cumulative z-score pipeline changes before trusting it in production.
+- [ ] (Carried over, still open) Check whether `data/pick_list.json`'s change from an earlier GUI smoke-test is wanted or should be reverted.
+
+## Last Session Recap
+※ recap: Discussed the biological rationale behind spike-segment clipping and median-based hotspot detection, and reframed the per-trial-vs-median reliability mismatch as likely a too-strict per-trial threshold rather than a flaw in the median approach. User raised a deeper open question — whether hotspot positions are even spatially consistent trial-to-trial — to think about before any fix. No code changed; purely conceptual discussion, paused for lunch.
+
+---
+
+# Log of the project progress 2026-09-07 Mon (Session 53)
+Last working file: `classes/region_analyzer.py` (reading only — investigating detection logic, no edits)
+Last working line: n/a (whole-file / cross-file investigation)
+
+## List of modified files
+- (none — `git status` clean; this was a pure investigation/diagnostic session, no production code touched, per standing "never touch the codes without confirmation" rule)
+- One scratch prototype script (`median_vs_trials_check.py`) and diagnostic PNGs were written to the session scratchpad / `output/reliability_prototype/` (gitignored, outside version control) — not part of the reviewed codebase.
+
+## Summary of current progress
+- Continued the parked **spike reliability analysis** work from Session 51/52: built a prototype (previous session segment) that runs the existing hotspot-detection pipeline (`SpatialCategorizer` + `RegionAnalyzer`) on each individual per-spike segment (`lst_zscore`) instead of only the median-merged segment, computing `reliability% = 100 × detected_segments / total_segments` on 2 real recordings (`2025_06_11-0003`: 48 segments, `2025_12_15-0012`: 20 segments).
+- **User flagged an inconsistency**: for `2025_06_11-0003`, per-trial reliability came out to only 7/48 = 14.6% detected, yet the production median-based pipeline reports the same recording as "hotspot detected" (per `data/ana_20260902_001.txt`'s prior run). Investigated and confirmed this numerically by running the same detection on the median segment directly (`significant=True, n_clusters=1, B%=1.56%` → DETECTED), reproducing the mismatch live.
+- **Root-caused the mismatch**: the significance bar (`baseline_mean + 10×baseline_std`) is computed from each segment's *own* baseline noise. A single trial's baseline noise is much larger than the median-of-48 segment's baseline noise (median-of-N noise scales down by roughly 1/√N ≈ 1/7 for N=48), so the same fixed 10σ multiplier is effectively ~7× stricter for individual trials than for the median. This means per-trial reliability% and the median "detected" flag are not measuring comparable things — a real but small/inconsistent signal can clear the median's low-noise bar while failing almost every individual trial's high-noise bar.
+- Verified the z-score normalization order: confirmed (`functions/zscore_img_segs.py`) that each segment is independently z-scored per-pixel using *only that segment's own pre-spike baseline frames* **before** `spike_centered_median()` ever merges segments — median operates on 48 already-normalized segments, not raw data.
+- Verified the median derivation itself is correct: confirmed (`classes/abf_clip.py:260-267`) that every segment is guaranteed identical length and spike-frame-aligned at the same index by construction (single shared `set_interval_frames` value), so the per-pixel-per-frame median (`functions/spike_alignment.py::_cpu_median_axis0`) is comparing true same-time-offset-from-spike data across trials — no alignment bug found.
+- At the user's prompting, confirmed the 3-way pixel categorization (background/dim/bright) is only meaningfully 2-way for detection: `compute_area_pct()` and `_run_cluster_seeker()` (`classes/region_analyzer.py`) both check only `CATEGORY_BRIGHT`; the `dim` category is used nowhere in the B%/clustering/significance math — it only affects the categorized-frame plot's "gray" coloring in `functions/plot_results.py:350`. Collapsing dim into background would not change any detection number.
+- These findings surfaced mid-investigation; user has not yet decided how (or whether) to address the 10σ/noise-scaling mismatch, redefine the reliability metric, or simplify the dim/bright categorization — explicitly deferred, no action items confirmed yet (see TODOs below).
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Re-derived and explained the full existing hotspot-detection chain (categorize → B% → significance → clustering) on request
+- ✅ Explained the `base977` naming (97.7th-percentile one-tailed cutoff at baseline mean + 2σ) and clarified the one-tailed vs. two-tailed (97.7% vs 95%) distinction
+- ✅ Verified the median-segment derivation (`spike_centered_median`) is mathematically correct and that segment alignment is guaranteed by construction
+- ✅ Verified z-score normalization happens per-segment, before the median merge, using only local pre-spike baselines
+- ✅ Diagnosed and numerically confirmed the per-trial-vs-median detection mismatch (14.6% reliability vs. median "DETECTED"), traced to the fixed 10σ bar being applied to noise levels that differ ~7× between single-trial and median-of-48 baselines
+- ✅ Confirmed the `dim` pixel category is unused in all detection math (B%, clustering) — cosmetic only
+
+## What should we do next? (TODOs)
+- [ ] **Spike reliability analysis — still not finalized.** The per-segment prototype exists only in the scratchpad; nothing has been formalized into `ach_domain_analysis.py`/`RegionAnalyzer`/the GUI. Before any implementation: decide how to make per-trial and median-based detection results comparable (e.g. a noise-scaled or fixed-magnitude threshold instead of a flat `10σ` multiplier applied identically at both noise scales), then redefine what "reliability%" should actually report.
+- [ ] Decide whether to act on the dim/bright finding — collapsing background/dim into one category would simplify `SpatialCategorizer`/`RegionAnalyzer` with no change to detection numbers, but this is a cleanup opportunity, not a bug fix; not yet requested.
+- [ ] (Carried over, still open) Commit the uncommitted z-score pipeline rename changes from `functions/fit_bg_hist.py` (Session 52 and earlier) — still sitting uncommitted per earlier summaries; verify this is still the case next session.
+- [ ] (Carried over, still open) Run the full proc-list/GUI-driven pipeline (`ctrl_img_proc.py`) with all cumulative z-score pipeline changes before trusting it in production.
+- [ ] (Carried over, still open) Check whether `data/pick_list.json`'s change from an earlier GUI smoke-test is wanted or should be reverted.
+
+## Last Session Recap
+※ recap: Investigated the spike-reliability prototype's odd result (14.6% per-trial detection vs. median "DETECTED" for `2025_06_11-0003`) and root-caused it: the fixed 10σ significance bar is ~7× stricter for noisy single trials than for the much-less-noisy median-of-48 segment, so the two numbers aren't directly comparable. Also confirmed the `dim` pixel category is unused in all detection math (cosmetic only). No code changed — pure investigation; reliability analysis and any threshold fix remain undecided/unimplemented.
+
+---
+
 # Log of the project progress 2026-09-05 Sat (Session 52)
 Last working file: `functions/zscore_img_segs.py` (viewing, not editing — user was re-reading this while wrapping up)
 Last working line: n/a (whole-file review)
