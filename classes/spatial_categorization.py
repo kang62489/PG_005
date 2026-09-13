@@ -16,13 +16,11 @@ import numpy as np
 from scipy import ndimage
 from scipy.ndimage import binary_dilation, binary_erosion, generate_binary_structure, label
 from skimage.feature import peak_local_max
-from skimage.filters import threshold_li, threshold_multiotsu, threshold_otsu
 from skimage.segmentation import watershed
 
 # Constants
 NDIM_SINGLE_FRAME = 2
-CATEGORY_DIM = 1
-CATEGORY_BRIGHT = 2
+CATEGORY_BRIGHT = 1
 
 
 class SpatialCategorizer:
@@ -30,40 +28,33 @@ class SpatialCategorizer:
     Spatial-aware intensity categorization for image segments.
 
     This class provides multiple methods for categorizing pixels into
-    background/dim/bright while considering spatial connectivity.
+    background/bright while considering spatial connectivity.
 
     Attributes:
         method: Categorization method ('connected', 'watershed', 'morphological')
-        threshold_method: Auto-thresholding method ('manual', 'multiotsu', 'base977_li', 'base977_otsu')
-        threshold_dim: Manual threshold for dim signal
-        threshold_bright: Manual threshold for bright signal
+        threshold_method: Auto-thresholding method ('baseline_frames_2sigma')
         min_region_size: Minimum pixels per region
-        global_threshold: Whether to use global thresholds across all frames
 
     Example:
         >>> categorizer = SpatialCategorizer.connected(min_region_size=30)
-        >>> categorizer.fit(image_segment)  # 3D array (frames, H, W)
+        >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)  # 3D array (frames, H, W)
         >>> results = categorizer.get_results()
 
         >>> categorizer = SpatialCategorizer.watershed(min_distance=5, min_region_size=20)
-        >>> categorizer.fit(image_segment)
+        >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)
 
         >>> categorizer = SpatialCategorizer.morphological(kernel_size=5)
-        >>> categorizer.fit(image_segment)
+        >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)
     """
 
     GROUPING_METHODS: ClassVar[list[str]] = ["connected", "watershed", "morphological"]
-    THRESHOLD_METHODS: ClassVar[list[str]] = ["manual", "multiotsu", "base977_li", "base977_otsu"]
+    THRESHOLD_METHODS: ClassVar[list[str]] = ["baseline_frames_2sigma"]
 
     def __init__(
         self,
         grouping_method: str,
-        threshold_method: str = "base977_li",
+        threshold_method: str = "baseline_frames_2sigma",
         *,
-        global_threshold: bool = True,
-        # Manual threshold (only when threshold_method="manual")
-        threshold_dim: float | None = None,
-        threshold_bright: float | None = None,
         # Connected/Watershed parameters
         min_region_size: int = 20,
         # Watershed parameters
@@ -86,24 +77,9 @@ class SpatialCategorizer:
             msg = f"Unknown threshold_method: {threshold_method}. Choose from {self.THRESHOLD_METHODS}"
             raise ValueError(msg)
 
-        # Validate manual thresholds
-        if threshold_method == "manual":
-            if threshold_dim is None or threshold_bright is None:
-                msg = "threshold_dim and threshold_bright are required when threshold_method='manual'"
-                raise ValueError(msg)
-        else:
-            # Use placeholder values (will be overwritten by auto-calculation)
-            if threshold_dim is None:
-                threshold_dim = 0.0
-            if threshold_bright is None:
-                threshold_bright = 0.0
-
         self.grouping_method = grouping_method
         self.threshold_method = threshold_method
-        self.threshold_dim = threshold_dim
-        self.threshold_bright = threshold_bright
         self.min_region_size = min_region_size
-        self.global_threshold = global_threshold
 
         # Method-specific parameters
         self.min_distance = min_distance  # watershed
@@ -113,26 +89,20 @@ class SpatialCategorizer:
         self.source_frames: list[np.ndarray] = []
         self.categorized_frames: list[np.ndarray] = []
         self.frame_regions: list[dict] = []
-        self.thresholds_used: tuple | None = None
+        self.threshold_used: float | None = None
 
     @classmethod
     def connected(
         cls,
-        threshold_method: str = "base977_li",
+        threshold_method: str = "baseline_frames_2sigma",
         *,
-        global_threshold: bool = True,
-        threshold_dim: float | None = None,
-        threshold_bright: float | None = None,
         min_region_size: int = 20,
     ) -> "SpatialCategorizer":
         """
         Create a SpatialCategorizer using connected components method.
 
         Args:
-            threshold_method: 'manual', 'multiotsu', 'base977_li', or 'base977_otsu'
-            global_threshold: Use global thresholds across all frames
-            threshold_dim: Manual dim threshold (required if threshold_method='manual')
-            threshold_bright: Manual bright threshold (required if threshold_method='manual')
+            threshold_method: 'baseline_frames_2sigma'
             min_region_size: Minimum pixels per region (smaller regions are removed)
 
         Returns:
@@ -141,20 +111,14 @@ class SpatialCategorizer:
         return cls(
             grouping_method="connected",
             threshold_method=threshold_method,
-            global_threshold=global_threshold,
-            threshold_dim=threshold_dim,
-            threshold_bright=threshold_bright,
             min_region_size=min_region_size,
         )
 
     @classmethod
     def watershed(
         cls,
-        threshold_method: str = "base977_li",
+        threshold_method: str = "baseline_frames_2sigma",
         *,
-        global_threshold: bool = True,
-        threshold_dim: float | None = None,
-        threshold_bright: float | None = None,
         min_region_size: int = 20,
         min_distance: int = 10,
     ) -> "SpatialCategorizer":
@@ -162,10 +126,7 @@ class SpatialCategorizer:
         Create a SpatialCategorizer using watershed segmentation.
 
         Args:
-            threshold_method: 'manual', 'multiotsu', 'base977_li', or 'base977_otsu'
-            global_threshold: Use global thresholds across all frames
-            threshold_dim: Manual dim threshold (required if threshold_method='manual')
-            threshold_bright: Manual bright threshold (required if threshold_method='manual')
+            threshold_method: 'baseline_frames_2sigma'
             min_region_size: Minimum pixels per region (smaller regions are removed)
             min_distance: Minimum distance between peaks (larger = fewer regions)
 
@@ -175,9 +136,6 @@ class SpatialCategorizer:
         return cls(
             grouping_method="watershed",
             threshold_method=threshold_method,
-            global_threshold=global_threshold,
-            threshold_dim=threshold_dim,
-            threshold_bright=threshold_bright,
             min_region_size=min_region_size,
             min_distance=min_distance,
         )
@@ -185,21 +143,15 @@ class SpatialCategorizer:
     @classmethod
     def morphological(
         cls,
-        threshold_method: str = "base977_li",
+        threshold_method: str = "baseline_frames_2sigma",
         *,
-        global_threshold: bool = True,
-        threshold_dim: float | None = None,
-        threshold_bright: float | None = None,
         kernel_size: int = 3,
     ) -> "SpatialCategorizer":
         """
         Create a SpatialCategorizer using morphological cleanup.
 
         Args:
-            threshold_method: 'manual', 'multiotsu', 'base977_li', or 'base977_otsu'
-            global_threshold: Use global thresholds across all frames
-            threshold_dim: Manual dim threshold (required if threshold_method='manual')
-            threshold_bright: Manual bright threshold (required if threshold_method='manual')
+            threshold_method: 'baseline_frames_2sigma'
             kernel_size: Size of erosion/dilation kernel (larger = more aggressive cleanup)
 
         Returns:
@@ -208,33 +160,25 @@ class SpatialCategorizer:
         return cls(
             grouping_method="morphological",
             threshold_method=threshold_method,
-            global_threshold=global_threshold,
-            threshold_dim=threshold_dim,
-            threshold_bright=threshold_bright,
             kernel_size=kernel_size,
         )
 
-    def fit(self, image_segment: np.ndarray, spike_frame_idx: int | None = None) -> "SpatialCategorizer":
+    def fit(self, image_segment: np.ndarray, spike_frame_idx: int) -> "SpatialCategorizer":
         """
         Fit the categorizer to an image segment.
 
         Args:
             image_segment: 3D array (frames, height, width) or 2D array (single frame)
-            spike_frame_idx: Index of the spike frame within image_segment. Required when
-                threshold_method is 'base977_li'/'base977_otsu' and global_threshold=True —
-                frames before this index are treated as the baseline window used to set
-                thresh_dim (baseline mean + 2*std).
+            spike_frame_idx: Index of the spike frame within image_segment. Frames
+                before this index are treated as the baseline window used to set
+                threshold_used (baseline mean + 2*std).
 
         Returns:
             self (for method chaining)
         """
         self.source_frames = [image_segment[i] for i in range(image_segment.shape[0])]
 
-        # Calculate global thresholds if needed
-        if self.global_threshold and self.threshold_method != "manual":
-            self._calculate_global_thresholds(spike_frame_idx)
-        else:
-            self.thresholds_used = (self.threshold_dim, self.threshold_bright)
+        self._calculate_global_threshold(spike_frame_idx)
 
         # Process each frame
         self.categorized_frames = []
@@ -247,51 +191,26 @@ class SpatialCategorizer:
 
         return self
 
-    def _calculate_global_thresholds(self, spike_frame_idx: int | None) -> None:
-        """Calculate thresholds using all frames combined."""
-        all_pixels = np.concatenate([f.flatten() for f in self.source_frames])
-
-        if self.threshold_method == "multiotsu":
-            thresholds = threshold_multiotsu(all_pixels, classes=3)
-            self.thresholds_used = (thresholds[0], thresholds[1])
-        elif self.threshold_method == "base977_li":
-            if spike_frame_idx is None:
-                msg = "spike_frame_idx is required for threshold_method='base977_li' when global_threshold=True"
-                raise ValueError(msg)
-            baseline_pixels = np.concatenate([f.flatten() for f in self.source_frames[:spike_frame_idx]])
-            thresh_dim = baseline_pixels.mean() + 2 * baseline_pixels.std()
-            signal_pixels = all_pixels[all_pixels > thresh_dim]
-            thresh_bright = threshold_li(signal_pixels) if len(signal_pixels) > 0 else thresh_dim
-            self.thresholds_used = (thresh_dim, thresh_bright)
-        elif self.threshold_method == "base977_otsu":
-            if spike_frame_idx is None:
-                msg = "spike_frame_idx is required for threshold_method='base977_otsu' when global_threshold=True"
-                raise ValueError(msg)
-            baseline_pixels = np.concatenate([f.flatten() for f in self.source_frames[:spike_frame_idx]])
-            thresh_dim = baseline_pixels.mean() + 2 * baseline_pixels.std()
-            signal_pixels = all_pixels[all_pixels > thresh_dim]
-            thresh_bright = threshold_otsu(signal_pixels) if len(signal_pixels) > 0 else thresh_dim
-            self.thresholds_used = (thresh_dim, thresh_bright)
-        else:
-            self.thresholds_used = (self.threshold_dim, self.threshold_bright)
+    def _calculate_global_threshold(self, spike_frame_idx: int) -> None:
+        """Calculate the bright threshold from the baseline (pre-spike) frames."""
+        baseline_frame_pixels = np.concatenate([f.flatten() for f in self.source_frames[:spike_frame_idx]])
+        self.threshold_used = float(baseline_frame_pixels.mean() + 2 * baseline_frame_pixels.std())
 
     def _dispatch_frame(self, frame: np.ndarray, frame_idx: int) -> tuple[np.ndarray, dict]:
-        thresh_dim, thresh_bright = self.thresholds_used
+        thresh_bright = self.threshold_used
 
         if self.grouping_method == "connected":
-            return self._apply_connected(frame, frame_idx, thresh_dim, thresh_bright)
+            return self._apply_connected(frame, frame_idx, thresh_bright)
         if self.grouping_method == "watershed":
-            return self._apply_watershed(frame, frame_idx, thresh_dim, thresh_bright)
+            return self._apply_watershed(frame, frame_idx, thresh_bright)
         if self.grouping_method == "morphological":
-            return self._apply_morphological(frame, frame_idx, thresh_dim, thresh_bright)
+            return self._apply_morphological(frame, frame_idx, thresh_bright)
         msg = f"Unknown grouping_method: {self.grouping_method}"
         raise ValueError(msg)
 
-    def _apply_connected(
-        self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
-    ) -> tuple[np.ndarray, dict]:
+    def _apply_connected(self, frame: np.ndarray, frame_idx: int, thresh_bright: float) -> tuple[np.ndarray, dict]:
         """Connected components analysis."""
-        signal_mask = frame > thresh_dim
+        signal_mask = frame > thresh_bright
         labeled_regions, num_regions = label(signal_mask)
 
         categorized = np.zeros_like(frame, dtype=int)
@@ -303,22 +222,14 @@ class SpatialCategorizer:
             if region_size < self.min_region_size:
                 continue
 
-            region_pixels = frame[region_mask]
-            mean_intensity = np.mean(region_pixels)
+            categorized[region_mask] = CATEGORY_BRIGHT
 
-            if mean_intensity > thresh_bright:
-                categorized[region_mask] = 2
-            else:
-                categorized[region_mask] = 1
+        return categorized, {"frame_idx": frame_idx, "threshold": self.threshold_used}
 
-        return categorized, {"frame_idx": frame_idx, "thresholds": self.thresholds_used}
-
-    def _apply_watershed(
-        self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
-    ) -> tuple[np.ndarray, dict]:
+    def _apply_watershed(self, frame: np.ndarray, frame_idx: int, thresh_bright: float) -> tuple[np.ndarray, dict]:
         """Watershed segmentation."""
         smoothed = ndimage.gaussian_filter(frame, sigma=1.5)
-        mask = smoothed > thresh_dim
+        mask = smoothed > thresh_bright
         distance = ndimage.distance_transform_edt(mask)
 
         local_max = peak_local_max(distance, min_distance=self.min_distance, labels=mask, exclude_border=False)
@@ -340,59 +251,41 @@ class SpatialCategorizer:
             if region_size < self.min_region_size:
                 continue
 
-            mean_intensity = np.mean(frame[region_mask])
+            categorized[region_mask] = CATEGORY_BRIGHT
 
-            if mean_intensity > thresh_bright:
-                categorized[region_mask] = 2
-            elif mean_intensity > thresh_dim:
-                categorized[region_mask] = 1
+        return categorized, {"frame_idx": frame_idx, "threshold": self.threshold_used}
 
-        return categorized, {"frame_idx": frame_idx, "thresholds": self.thresholds_used}
-
-    def _apply_morphological(
-        self, frame: np.ndarray, frame_idx: int, thresh_dim: float, thresh_bright: float
-    ) -> tuple[np.ndarray, dict]:
+    def _apply_morphological(self, frame: np.ndarray, frame_idx: int, thresh_bright: float) -> tuple[np.ndarray, dict]:
         """Morphological cleanup."""
-        categorized = np.zeros_like(frame, dtype=int)
-        categorized[frame > thresh_dim] = 1
-        categorized[frame > thresh_bright] = 2
+        bright_mask = frame > thresh_bright
 
         struct = generate_binary_structure(2, 2)
         if self.kernel_size > 1:
             struct = ndimage.iterate_structure(struct, self.kernel_size)
 
-        dim_mask = categorized == CATEGORY_DIM
-        bright_mask = categorized == CATEGORY_BRIGHT
-
-        # Opening then closing for each category
-        dim_cleaned = binary_erosion(dim_mask, structure=struct)
-        dim_cleaned = binary_dilation(dim_cleaned, structure=struct)
-        dim_cleaned = binary_dilation(dim_cleaned, structure=struct)
-        dim_cleaned = binary_erosion(dim_cleaned, structure=struct)
-
+        # Opening then closing
         bright_cleaned = binary_erosion(bright_mask, structure=struct)
         bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
         bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
         bright_cleaned = binary_erosion(bright_cleaned, structure=struct)
 
         categorized = np.zeros_like(frame, dtype=int)
-        categorized[dim_cleaned] = 1
-        categorized[bright_cleaned] = 2
+        categorized[bright_cleaned] = CATEGORY_BRIGHT
 
-        return categorized, {"frame_idx": frame_idx, "thresholds": self.thresholds_used}
+        return categorized, {"frame_idx": frame_idx, "threshold": self.threshold_used}
 
     def get_results(self) -> dict:
         """
         Get all results as a dictionary.
 
         Returns:
-            dict with source_frames, categorized_frames, frame_regions, thresholds_used, method, threshold_method
+            dict with source_frames, categorized_frames, frame_regions, threshold_used, method, threshold_method
         """
         return {
             "source_frames": self.source_frames,
             "categorized_frames": self.categorized_frames,
             "frame_regions": self.frame_regions,
-            "thresholds_used": self.thresholds_used,
+            "threshold_used": self.threshold_used,
             "grouping_method": self.grouping_method,
             "threshold_method": self.threshold_method,
         }

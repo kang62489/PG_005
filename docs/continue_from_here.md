@@ -1,3 +1,53 @@
+# Log of the project progress 2026-09-14 Mon (Session 55)
+Last working file: `prototype_density_hotspots.py`
+Last working line: 17 (`WINDOW_PX = 200`)
+
+## List of modified files
+- `ach_domain_analysis.py` (M)
+- `classes/region_analyzer.py` (M)
+- `classes/results_exporter.py` (M)
+- `classes/spatial_categorization.py` (M)
+- `functions/plot_results.py` (M)
+- `prototype_density_hotspots.py` (new, untracked) (<- Break here, line 17)
+- `prototype_export_zscore_before_after.py` (deleted, staged)
+- `prototype_print_thresholds.py` (deleted, staged)
+- `prototype_reliability_sigma2.py` (deleted, staged)
+- `prototype_segment_contours.py` (deleted, staged)
+
+No commits made this session — all changes above remain unstaged/staged as listed, your call when to commit.
+
+## Summary of current progress (based on modified files, existing plans)
+- Confirmed the prior session's `spatial_categorization.py` refactor (single `baseline_frames_2sigma` threshold, binary 0/1 `CATEGORY_BRIGHT`, `CATEGORY_DIM` removed entirely) still holds — regenerated real `_CAT.tif` files from the new code and diffed them against production originals; user confirmed "looks ok."
+- Cleaned up `output/` and 6 prototype scripts left over from that verification phase (kept pre-existing `gaussian`/`reliability_contours`/`reliability_prototype` folders).
+- Diagnosed two real gaps in the existing detection pipeline: `compute_area_pct`/`pick_critical_frame` in `RegionAnalyzer` count bright pixels blindly with no spatial-density awareness, and `morphological` grouping in `SpatialCategorizer` has no minimum-blob-size filter — both let noise skew per-segment reliability.
+- Ran `SpatialCategorizer` + `RegionAnalyzer` directly on each individual raw segment (not just the spike-centered median) for the two test recordings (`2025_06_11-0003`: 48 segments, `2025_12_15-0012`: 20 segments) to measure per-segment reliability; first pass gave 60.4%/30.0%, but flagged that `RegionAnalyzer`'s 10σ significance bar (tuned for the low-noise median) looks unstable on individual noisier raw segments.
+- Diagnosed a per-segment threshold-instability problem: `baseline_frames_2sigma` estimates `mean + 2*std` from only ~10 pre-spike frames per segment; on some segments this produces catastrophic over-thresholding (up to a third of an entire 1024×1024 frame spuriously "bright").
+- Designed and built `prototype_density_hotspots.py`: a local-density-gated hotspot detector — `uniform_filter` density map (fixed `WINDOW_PX`) → density-threshold gate → cluster via `RegionAnalyzer`'s existing `_run_cluster_seeker` (reused directly, not reinvented) → whole-blob expansion so a hotspot's own ragged edge pixels aren't cut off by the density gate.
+- Iterated through several visualization/counting bugs live with the user: the raw smoothed density field being drawn instead of the real pixel shape, tiny noise-level "qualifying" islands (2–44px) being counted as separate clusters, contour+badge annotations being unreadable on near-uniform noise-failure frames — resolved by reusing `_run_cluster_seeker`'s eps-bridging + 5%-of-bright-pixels relative filter and switching to translucent color-fill shading.
+- Landed on `WINDOW_PX=200`, `DENSITY_THRESH=0.15` as the latest (not yet finalized) settings: `2025_06_11-0003` = 20/48 (41.7%) segments detected, `2025_12_15-0012` = 12/20 (60.0%).
+- Flagged but not yet investigated: `seg28`'s `threshold_used` computed to exactly `2.0000`, raising a question of whether `baseline_frames_2sigma` is effectively pinned near 2.0 for most segments by construction of the per-pixel z-scoring itself, rather than genuinely varying per segment.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Confirmed `spatial_categorization.py`'s threshold refactor via real `_CAT.tif` regeneration and diff against production originals
+- ✅ Cleaned up `output/` and stale prototype scripts from the refactor-verification phase
+- ✅ Diagnosed the spatial-blindness (`compute_area_pct`) and noise-passthrough (`morphological`, no size filter) gaps in the existing detection pipeline
+- ✅ Built and iteratively fixed a working density-gated hotspot-detection prototype, reusing `RegionAnalyzer._run_cluster_seeker` rather than reinventing clustering
+- ✅ Landed on current `WINDOW_PX=200` / `DENSITY_THRESH=0.15` settings with measured reliability numbers for both test recordings
+- ✅ (Carried over from Session 53, now resolved) 3-way pixel categorization simplified: `CATEGORY_DIM` removed entirely, `CATEGORY_BRIGHT` renumbered 0/1
+
+## What should we do next? (TODOs)
+- [ ] Check if including the spike+1 frame (not just the spike frame) increases reliability
+- [ ] Merge the density-hotspot detection code into `region_analyzer.py` (production)
+- [ ] Test the modified `region_analyzer.py` against the original production pipeline that analyzes the median segment (not raw segments) — confirm nothing breaks
+- [ ] Merge the reliability analysis into the main workflow/pipeline
+- [ ] Check whether using only detected segments (vs. all segments) to compute the final median improves results
+- [ ] Rethink how results get presented/plotted (categorized frames, clusters, reliability) given `CATEGORY_DIM` is gone and color-fill cluster shading is the new visualization style
+
+## Last Session Recap
+※ recap: Diagnosed spatial-blindness/noise gaps in the existing hotspot detection pipeline and built `prototype_density_hotspots.py`, a density-gated detector reusing `RegionAnalyzer`'s cluster seeker; landed on WINDOW_PX=200/DENSITY_THRESH=0.15 (41.7%/60.0% reliability on the two test recordings), with 6 concrete next steps pending (spike+1 test, production merge, median-pipeline regression test, reliability-in-workflow, detected-only-median check, replot).
+
+---
+
 # Log of the project progress 2026-09-08 Tue (Session 54)
 Last working file: (discussion only — no files modified this session besides this log)
 Last working line: n/a

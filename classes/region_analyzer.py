@@ -13,8 +13,7 @@ from skimage.measure import label as skimage_label
 
 # Category constants
 CATEGORY_BACKGROUND = 0
-CATEGORY_DIM = 1
-CATEGORY_BRIGHT = 2
+CATEGORY_BRIGHT = 1
 
 # Pixel scaling constants (pixel/um)
 PIXEL_SCALE = {

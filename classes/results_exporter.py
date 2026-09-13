@@ -224,7 +224,7 @@ class ResultsExporter:
             objective: Microscope objective used
             um_per_pixel: Micrometers per pixel scale
             median_stack: Spike-centered median z-score stack
-            categorized_frames: Categorized frames (0=bg, 1=dim, 2=bright)
+            categorized_frames: Categorized frames (0=bg, 1=bright)
             zscore_range: (min, max) z-score across median_stack, from spike_centered_median()
             region_summary: Summary dict from RegionAnalyzer.get_summary()
             region_data: Critical-frame cluster dict from RegionAnalyzer.get_results()
@@ -320,7 +320,7 @@ class ResultsExporter:
         detrend_mode: str,
         normalization: str,
     ) -> None:
-        """Save the categorized stack (0=bg, 1=dim, 2=bright) as a uint8 TIFF."""
+        """Save the categorized stack (0=bg, 1=bright) as a uint8 TIFF."""
         stem = self.build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization, "CAT")
         tifffile.imwrite(files_dir / f"{stem}.tif", np.array(categorized_frames, dtype=np.uint8))
 

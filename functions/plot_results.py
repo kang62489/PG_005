@@ -347,8 +347,8 @@ def _plot_frame_panel(
     cat_frame = categorizer.categorized_frames[frame_idx]
 
     # --- Image ---
-    cmap_cat = ListedColormap(["black", "gray", "white"])
-    ax.imshow(cat_frame, cmap=cmap_cat, vmin=0, vmax=2, interpolation="nearest")
+    cmap_cat = ListedColormap(["black", "white"])
+    ax.imshow(cat_frame, cmap=cmap_cat, vmin=0, vmax=1, interpolation="nearest")
     # Pin view so cluster circles/overlays added later get clipped, not rescaled.
     ax.set_xlim(0, cat_frame.shape[1])
     ax.set_ylim(cat_frame.shape[0], 0)

@@ -333,10 +333,10 @@ def run(
             emitter({"type": "step", "msg": "Categorizing spike frame..."})
         # Real analysis starts here: categorize the z scores for further region analysis (using skimage.measure).
         spike_frame_idx = median_segment.shape[0] // 2
-        categorizer = SpatialCategorizer.morphological(threshold_method="base977_otsu")
+        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_frames_2sigma")
         categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
         console.log(
-            f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), thresholds: {categorizer.thresholds_used}"
+            f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), threshold: {categorizer.threshold_used}"
             f"  ({time.time() - entry_t0:.1f}s)[/green]"
         )
 
