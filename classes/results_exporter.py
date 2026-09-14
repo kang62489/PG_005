@@ -125,6 +125,9 @@ class ResultsExporter:
                 threshold_method TEXT,
                 n_spikes_detected INTEGER,
                 n_spikes_analyzed INTEGER,
+                reliability_pct REAL,
+                n_segments_detected INTEGER,
+                n_segments_total INTEGER,
                 n_clusters INTEGER,
                 has_region INTEGER,
                 critical_frame_offset INTEGER,
@@ -154,6 +157,9 @@ class ResultsExporter:
         self._ensure_columns(
             conn,
             {
+                "reliability_pct": "REAL",
+                "n_segments_detected": "INTEGER",
+                "n_segments_total": "INTEGER",
                 "spike_frame_hotspot_um2": "REAL",
                 "spike_frame_n_clusters": "INTEGER",
                 "spike_plus1_frame_hotspot_um2": "REAL",
@@ -191,6 +197,10 @@ class ResultsExporter:
         # ABF metadata
         num_found_spikes: int,
         n_spikes_analyzed: int,
+        # Reliability metadata
+        reliability_pct: float,
+        n_segments_detected: int,
+        n_segments_total: int,
         # Categorization metadata
         threshold_method: str,
         objective: str,
@@ -221,6 +231,10 @@ class ResultsExporter:
             normalization: Normalization used ("GAUSS"/"ALS")
             num_found_spikes: Total number of spikes detected
             n_spikes_analyzed: Number of spikes analyzed
+            reliability_pct: Percentage of segments with their own density-gated hotspot,
+                from compute_segment_reliability() in ach_domain_analysis.py
+            n_segments_detected: Number of segments that showed a hotspot
+            n_segments_total: Total number of segments checked
             threshold_method: Threshold method used for categorization
             objective: Microscope objective used
             um_per_pixel: Micrometers per pixel scale
@@ -259,6 +273,9 @@ class ResultsExporter:
             img_serial=img_serial,
             num_found_spikes=num_found_spikes,
             n_spikes_analyzed=n_spikes_analyzed,
+            reliability_pct=reliability_pct,
+            n_segments_detected=n_segments_detected,
+            n_segments_total=n_segments_total,
             threshold_method=threshold_method,
             objective=objective,
             um_per_pixel=um_per_pixel,
@@ -332,6 +349,9 @@ class ResultsExporter:
         img_serial: str,
         num_found_spikes: int,
         n_spikes_analyzed: int,
+        reliability_pct: float,
+        n_segments_detected: int,
+        n_segments_total: int,
         threshold_method: str,
         objective: str,
         um_per_pixel: float,
@@ -375,6 +395,7 @@ class ResultsExporter:
                 exp_date, abf_serial, img_serial, timestamp,
                 objective, um_per_pixel, threshold_method,
                 n_spikes_detected, n_spikes_analyzed,
+                reliability_pct, n_segments_detected, n_segments_total,
                 n_clusters, has_region,
                 critical_frame_offset, critical_frame_area_pct, critical_frame_area_um2,
                 spike_frame_hotspot_um2, spike_frame_n_clusters,
@@ -383,7 +404,7 @@ class ResultsExporter:
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um, peak_latency_ms,
                 zscore_min, zscore_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -395,6 +416,9 @@ class ResultsExporter:
                 threshold_method,
                 num_found_spikes,
                 n_spikes_analyzed,
+                reliability_pct,
+                n_segments_detected,
+                n_segments_total,
                 region_summary["n_clusters"],
                 region_summary["has_region"],
                 region_data["critical_frame_offset"],

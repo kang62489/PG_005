@@ -11,7 +11,14 @@ if TYPE_CHECKING:
     from .helper_checkable_dropdown import CheckableDropdown
     from .model_from_dataframe import ModelFromDataFrame
     from .mpl_canvas import MplCanvas
-    from .region_analyzer import RegionAnalyzer
+    from .region_analyzer import (
+        CATEGORY_BRIGHT,
+        DENSITY_THRESH,
+        RegionAnalyzer,
+        compute_eps_px,
+        compute_window_px,
+        detect_hotspot,
+    )
     from .results_exporter import ResultsExporter
     from .spatial_categorization import SpatialCategorizer
 
@@ -32,6 +39,11 @@ __all__ = [
     "RegionAnalyzer",
     "ResultsExporter",
     "SpatialCategorizer",
+    "compute_eps_px",
+    "compute_window_px",
+    "detect_hotspot",
+    "CATEGORY_BRIGHT",
+    "DENSITY_THRESH",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -45,6 +57,11 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "RegionAnalyzer": (".region_analyzer", "RegionAnalyzer"),
     "ResultsExporter": (".results_exporter", "ResultsExporter"),
     "SpatialCategorizer": (".spatial_categorization", "SpatialCategorizer"),
+    "compute_eps_px": (".region_analyzer", "compute_eps_px"),
+    "compute_window_px": (".region_analyzer", "compute_window_px"),
+    "detect_hotspot": (".region_analyzer", "detect_hotspot"),
+    "CATEGORY_BRIGHT": (".region_analyzer", "CATEGORY_BRIGHT"),
+    "DENSITY_THRESH": (".region_analyzer", "DENSITY_THRESH"),
 }
 
 

@@ -21,6 +21,7 @@ from skimage.segmentation import watershed
 # Constants
 NDIM_SINGLE_FRAME = 2
 CATEGORY_BRIGHT = 1
+BASELINE_SIGMA_MULT = 3.0
 
 
 class SpatialCategorizer:
@@ -193,8 +194,43 @@ class SpatialCategorizer:
 
     def _calculate_global_threshold(self, spike_frame_idx: int) -> None:
         """Calculate the bright threshold from the baseline (pre-spike) frames."""
-        baseline_frame_pixels = np.concatenate([f.flatten() for f in self.source_frames[:spike_frame_idx]])
-        self.threshold_used = float(baseline_frame_pixels.mean() + 2 * baseline_frame_pixels.std())
+        self.threshold_used = self.compute_baseline_threshold(self.source_frames[:spike_frame_idx])
+
+    @staticmethod
+    def compute_baseline_threshold(baseline_frames: list[np.ndarray]) -> float:
+        """Bright threshold (mean + 2*std) from a set of baseline (pre-spike) frames.
+
+        Pulled out of _calculate_global_threshold so a caller that already has a segment's
+        baseline frames on hand (e.g. a per-segment reliability check) can compute the same
+        threshold without fitting a full SpatialCategorizer instance first.
+
+        Args:
+            baseline_frames: pre-spike frames, e.g. image_segment[:spike_frame_idx].
+
+        Returns:
+            Bright-pixel threshold: baseline mean + BASELINE_SIGMA_MULT * baseline std.
+        """
+        baseline_pixels = np.concatenate([np.asarray(f).flatten() for f in baseline_frames])
+        return float(baseline_pixels.mean() + BASELINE_SIGMA_MULT * baseline_pixels.std())
+
+    def categorize_frame(self, frame: np.ndarray, frame_idx: int, threshold: float) -> np.ndarray:
+        """Categorize a single frame using an already-known threshold.
+
+        Unlike fit(), this doesn't run the full per-frame loop over every frame in a
+        segment -- useful when only 1-2 specific frames (e.g. spike/spike+1 for a
+        reliability check) actually need categorizing, not the whole segment.
+
+        Args:
+            frame: 2D array to categorize.
+            frame_idx: index of this frame (bookkeeping only, see _dispatch_frame).
+            threshold: bright-pixel threshold, e.g. from compute_baseline_threshold().
+
+        Returns:
+            Categorized frame (0=background, 1=bright).
+        """
+        self.threshold_used = threshold
+        categorized, _ = self._dispatch_frame(frame, frame_idx)
+        return categorized
 
     def _dispatch_frame(self, frame: np.ndarray, frame_idx: int) -> tuple[np.ndarray, dict]:
         thresh_bright = self.threshold_used

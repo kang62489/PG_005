@@ -4,11 +4,13 @@ No PySide6 dependency — these build plain Figure objects for fig.savefig()/
 ResultsExporter.export_figure(), not interactive GUI windows. See classes/mpl_canvas.py
 for the PySide6-coupled canvas widget used by the live GUI.
 
-Two export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
+Three export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
 - plot_spatiotemporal_summary (-> spatial/): density-gated hotspot-area trace showing
   why the critical frame was picked, + cluster shading on the spike and spike+1 panels.
 - plot_full_trace (-> latency/, *_LATENCY.png): the same fixed cluster-ring overlay repeated
   across a 9-panel window, + the full-segment z-score trace with that window annotated.
+- plot_segment_reliability_montage (-> reliability/, *_RELIABILITY.png): one panel per raw
+  segment showing its own density-gated detection result, for reviewing reliability by eye.
 """
 
 ## Modules
@@ -141,7 +143,6 @@ def plot_spatiotemporal_summary(
     """
     n_frames = len(categorizer.source_frames)
     hotspot_area_um2 = region_analyzer.hotspot_area_um2
-    area_pct = region_analyzer.area_pct  # raw B%, diagnostic only -- used for non-critical side-panel captions below
     critical_frame_idx = region_analyzer.critical_frame_idx
     um_per_pixel = region_analyzer.um_per_pixel
 
@@ -156,8 +157,6 @@ def plot_spatiotemporal_summary(
     ax_bd = fig.add_subplot(gs_outer[0])
     ax_bd.plot(np.arange(n_frames) - spike_frame_idx, hotspot_area_um2, color="#3498db", linewidth=1.6,
                marker="o", markersize=3.5)
-
-    total_px = categorizer.categorized_frames[0].size
 
     for frame_idx, label, color in [
         (spike_frame_idx - 1,
@@ -193,7 +192,7 @@ def plot_spatiotemporal_summary(
         return None
 
     hotspot_area_lines = {
-        idx: _format_hotspot_area_line(area_pct[idx], total_px, um_per_pixel, label_frame=_label_frame_for(idx))
+        idx: _format_hotspot_area_line(um_per_pixel, _label_frame_for(idx))
         for idx in range(spike_frame_idx - 4, spike_frame_idx + 5)
         if 0 <= idx < n_frames
     }
@@ -335,6 +334,66 @@ def plot_full_trace(
     return fig
 
 
+def plot_segment_reliability_montage(
+    seg_results: list[dict],
+    rec_stem: str,
+    window_px: int,
+    density_thresh: float,
+) -> Figure:
+    """Grid of per-segment density-gated detection panels, for reviewing reliability by eye.
+
+    One panel per raw (un-merged) segment: its winning frame's bright mask in gray, cluster
+    shading on top, a green (detected) or red (not detected) border, and which frame won
+    (spike vs spike+1). Reliability% is reported once in the suptitle.
+
+    Args:
+        seg_results: per-segment dicts from compute_segment_reliability(), each with
+            "detected", "frame_offset", "bright_mask", "label_frame", "centroids", "n_clusters".
+        rec_stem: recording name, for the title.
+        window_px: density window size used (see compute_window_px()), for the title.
+        density_thresh: density threshold used (DENSITY_THRESH), for the title.
+
+    Returns:
+        Figure, ready for fig.savefig(...) or ResultsExporter.export_figure(...)
+    """
+    n = len(seg_results)
+    ncols = 8
+    nrows = int(np.ceil(n / ncols))
+    fig = Figure(figsize=(ncols * 2.0, nrows * 2.0), dpi=130)
+    axes = np.atleast_1d(fig.subplots(nrows, ncols)).flatten()
+
+    n_detected = sum(r["detected"] for r in seg_results)
+    for seg_idx, result in enumerate(seg_results):
+        ax = axes[seg_idx]
+        ax.imshow(result["bright_mask"], cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+
+        label_frame = result["label_frame"]
+        overlay = np.zeros((*label_frame.shape, 4))
+        for cluster_idx in range(result["n_clusters"]):
+            overlay[label_frame == cluster_idx] = CLUSTER_RGBA[cluster_idx % len(CLUSTER_RGBA)]
+        ax.imshow(overlay, interpolation="nearest")
+
+        color = "limegreen" if result["detected"] else "red"
+        for spine in ax.spines.values():
+            spine.set_edgecolor(color)
+            spine.set_linewidth(3)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        offset_tag = f"+{result['frame_offset']}" if result["frame_offset"] else "sp"
+        ax.set_title(f"seg{seg_idx:02d} [{offset_tag}] n={result['n_clusters']}", fontsize=7, color=color)
+
+    for j in range(n, len(axes)):
+        axes[j].axis("off")
+
+    fig.suptitle(
+        f"{rec_stem} — window_px={window_px}, density>={density_thresh}\n"
+        f"reliability: {n_detected}/{n} = {n_detected / n:.1%}" if n else f"{rec_stem} — no segments",
+        fontsize=11,
+    )
+    fig.tight_layout()
+    return fig
+
+
 def _plot_frame_panel(
     ax: mpl.axes.Axes,
     categorizer: "SpatialCategorizer",
@@ -347,10 +406,10 @@ def _plot_frame_panel(
 ) -> None:
     """One frame's categorized image with a stats title.
 
-    Defaults to a B area line (used by plot_spatiotemporal_summary,
-    where row 0 above is the B% trace). Callers whose companion trace row
-    plots something else (e.g. plot_full_trace's z-score ring trace) should
-    pass stats_lines to show a title relevant to that instead.
+    Defaults to a hotspot area line (used by plot_spatiotemporal_summary,
+    where row 0 above is the density-gated hotspot-area trace). Callers whose
+    companion trace row plots something else (e.g. plot_full_trace's z-score
+    ring trace) should pass stats_lines to show a title relevant to that instead.
 
     No cluster overlay is drawn here -- callers layer that on top afterward
     (see _draw_cluster_shading / _overlay_clusters), since the two export
@@ -386,22 +445,20 @@ def _plot_frame_panel(
 
 
 
-def _format_hotspot_area_line(
-    area_pct_value: float, total_px: int, um_per_pixel: float,
-    label_frame: np.ndarray | None = None,
-) -> str:
-    """Area line for panel titles.
+def _format_hotspot_area_line(um_per_pixel: float, label_frame: np.ndarray | None) -> str | None:
+    """Density-gated hotspot area line for the spike/spike+1 panel titles.
 
-    Critical frame: pass label_frame (already computed by RegionAnalyzer).
-    Other frames: shows raw B% area.
+    Only the spike and spike+1 panels have a density-gated label_frame to report on; other
+    panels (spike-4..spike-2, spike+2..spike+4) get no stats line at all -- there's no
+    B%-style fallback anymore, since that's exactly the raw-threshold metric this pipeline
+    moved away from.
     """
-    if label_frame is not None:
-        hotspot_px = np.count_nonzero(label_frame >= 0)
-        hotspot_um2 = hotspot_px * um_per_pixel ** 2
-        hotspot_pct = 100.0 * hotspot_px / label_frame.size
-        return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
-    raw_um2 = area_pct_value / 100.0 * total_px * um_per_pixel ** 2
-    return f"B%: {raw_um2:.0f} µm² ({area_pct_value:.1f}%)"
+    if label_frame is None:
+        return None
+    hotspot_px = np.count_nonzero(label_frame >= 0)
+    hotspot_um2 = hotspot_px * um_per_pixel ** 2
+    hotspot_pct = 100.0 * hotspot_px / label_frame.size
+    return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
 
 
 def _frame_z_lines(clusters: list[dict], frame_idx: int) -> list[str]:

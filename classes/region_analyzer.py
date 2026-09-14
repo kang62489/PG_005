@@ -130,11 +130,9 @@ class RegionAnalyzer:
     ) -> tuple[int, bool, np.ndarray, list[tuple[float, float]], int]:
         """Pick spike or spike+1 as the critical frame -- earliest one to show a density-gated hotspot.
 
-        Runs density-gated clustering (_run_density_gated_cluster_seeker) on the spike frame
-        first; only falls back to spike+1 (a delayed-signal case) when the spike frame itself
-        has no accepted cluster. Falls back to spike_frame_idx with significant=False when
-        neither candidate has one, so the caller can skip downstream work entirely instead of
-        treating an empty frame as a detection.
+        Thin wrapper around detect_hotspot(): builds the (frame_idx, categorized_frame,
+        z_scored_frame) candidate list from this segment's full cat_stack/med_stack and
+        delegates the earliest-wins detection loop to the shared module-level function.
 
         Returns:
             (critical_frame_idx, significant, label_frame, centroids, n_raw_clusters).
@@ -142,17 +140,10 @@ class RegionAnalyzer:
         candidate_idxs = [spike_frame_idx]
         if spike_frame_idx + 1 < cat_stack.shape[0]:
             candidate_idxs.append(spike_frame_idx + 1)
+        candidates = [(idx, cat_stack[idx], med_stack[idx]) for idx in candidate_idxs]
 
-        for idx in candidate_idxs:
-            bright_mask = cat_stack[idx] == CATEGORY_BRIGHT
-            label_frame, centroids, n_raw = _run_density_gated_cluster_seeker(
-                bright_mask, eps_px, window_px, DENSITY_THRESH, z_frame=med_stack[idx]
-            )
-            if centroids:
-                return idx, True, label_frame, centroids, n_raw
-
-        empty_label_frame = np.full(cat_stack.shape[1:], -2, dtype=int)
-        return spike_frame_idx, False, empty_label_frame, [], 0
+        significant, critical_frame_idx, label_frame, centroids, n_raw = detect_hotspot(candidates, eps_px, window_px)
+        return critical_frame_idx, significant, label_frame, centroids, n_raw
 
     def _compute_hotspot_area_trace(self, cat_stack: np.ndarray, eps_px: int, window_px: int) -> np.ndarray:
         """Density-gated total kept-cluster area (um^2) per frame, for the decay-tau fit.
@@ -464,6 +455,41 @@ def _run_density_gated_cluster_seeker(
         label_frame[whole_mask] = cluster_id
 
     return label_frame, centroids, n_raw
+
+
+def detect_hotspot(
+    candidates: list[tuple[int, np.ndarray, np.ndarray]], eps_px: int, window_px: int
+) -> tuple[bool, int, np.ndarray, list[tuple[float, float]], int]:
+    """Earliest-wins density-gated hotspot detection over a list of candidate frames.
+
+    Tries each candidate in order (e.g. spike frame before spike+1) and returns the first
+    one with an accepted density-gated cluster. Shared by RegionAnalyzer._detect_critical_frame
+    (which has a full cat_stack/med_stack on hand) and any lean, RegionAnalyzer-free caller that
+    only has a couple of already-categorized candidate frames (e.g. a per-segment reliability
+    check that categorizes just spike/spike+1, not the whole segment).
+
+    Args:
+        candidates: (frame_idx, categorized_frame, z_scored_frame) tuples, in the order to try
+            them. categorized_frame is 0=background/1=bright (see CATEGORY_BRIGHT).
+        eps_px: dilation disk radius in pixels, from compute_eps_px().
+        window_px: local-density window size in pixels, from compute_window_px().
+
+    Returns:
+        (detected, frame_idx, label_frame, centroids, n_raw_clusters) -- frame_idx/label_frame/
+        centroids/n_raw_clusters come from the first detecting candidate, or the first candidate
+        (with an empty label_frame, no centroids) when none of them detect.
+    """
+    for idx, cat_frame, z_frame in candidates:
+        bright_mask = cat_frame == CATEGORY_BRIGHT
+        label_frame, centroids, n_raw = _run_density_gated_cluster_seeker(
+            bright_mask, eps_px, window_px, DENSITY_THRESH, z_frame=z_frame
+        )
+        if centroids:
+            return True, idx, label_frame, centroids, n_raw
+
+    first_idx, first_cat_frame, _ = candidates[0]
+    empty_label_frame = np.full(first_cat_frame.shape, -2, dtype=int)
+    return False, first_idx, empty_label_frame, [], 0
 
 
 def _decay_model(t: np.ndarray, amplitude: float, tau: float) -> np.ndarray:

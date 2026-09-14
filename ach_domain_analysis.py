@@ -35,7 +35,17 @@ from rich.console import Console
 from tabulate import tabulate
 
 # Local application imports
-from classes import AbfClip, RegionAnalyzer, ResultsExporter, SpatialCategorizer
+from classes import (
+    CATEGORY_BRIGHT,
+    DENSITY_THRESH,
+    AbfClip,
+    RegionAnalyzer,
+    ResultsExporter,
+    SpatialCategorizer,
+    compute_eps_px,
+    compute_window_px,
+    detect_hotspot,
+)
 from functions import (
     compute_region_stats,
     count_unique_cells,
@@ -43,6 +53,7 @@ from functions import (
     list_parser,
     lookup_rec_from_db,
     plot_full_trace,
+    plot_segment_reliability_montage,
     plot_spatiotemporal_summary,
     spike_centered_median,
     write_cell_summary_xlsx,
@@ -233,6 +244,63 @@ def write_stats_report(
 # ── Pipeline runner ───────────────────────────────────────────────────────────
 
 
+def compute_segment_reliability(
+    lst_zscore: list[np.ndarray], spike_frame_idx: int, obj: str
+) -> tuple[list[dict], float]:
+    """Per-segment density-gated hotspot detection, cheaper than a full RegionAnalyzer per segment.
+
+    Every raw segment has the same frame count as the final median (guaranteed by AbfClip's
+    frame-range construction), so a naive per-segment RegionAnalyzer would cost roughly as much
+    as today's median-only categorization -- times the segment count. This only needs a yes/no
+    per segment, so it categorizes just the spike and spike+1 frames (SpatialCategorizer.
+    categorize_frame) instead of the whole segment, and reuses RegionAnalyzer's own earliest-wins
+    detection loop (detect_hotspot) directly, skipping the decay-trace/cluster-geometry work a
+    full RegionAnalyzer instance would otherwise compute.
+
+    Args:
+        lst_zscore: per-spike z-scored segments, from zscore_img_segs().
+        spike_frame_idx: index of the spike frame within each segment (same for every segment
+            in a recording, by construction of AbfClip's frame ranges).
+        obj: objective magnification, for compute_eps_px()/compute_window_px().
+
+    Returns:
+        (seg_results, reliability_pct) -- one dict per segment: {"detected", "frame_offset"
+        (0 for spike, 1 for spike+1), "bright_mask", "label_frame", "centroids", "n_clusters"}
+        (enough to plot with plot_segment_reliability_montage()), and the percentage of
+        segments detected overall.
+    """
+    eps_px = compute_eps_px(obj)
+    window_px = compute_window_px(obj)
+
+    seg_results: list[dict] = []
+    for segment in lst_zscore:
+        threshold = SpatialCategorizer.compute_baseline_threshold(segment[:spike_frame_idx])
+        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_frames_2sigma")
+
+        candidates = []
+        for idx in (spike_frame_idx, spike_frame_idx + 1):
+            if idx >= segment.shape[0]:
+                continue
+            cat_frame = categorizer.categorize_frame(segment[idx], idx, threshold)
+            candidates.append((idx, cat_frame, segment[idx]))
+
+        detected, frame_idx, label_frame, centroids, _ = detect_hotspot(candidates, eps_px, window_px)
+        winning_cat_frame = next(cat_frame for idx, cat_frame, _ in candidates if idx == frame_idx)
+        seg_results.append({
+            "detected": detected,
+            "frame_offset": frame_idx - spike_frame_idx,
+            "bright_mask": winning_cat_frame == CATEGORY_BRIGHT,
+            "label_frame": label_frame,
+            "centroids": centroids,
+            "n_clusters": len(centroids),
+        })
+
+    n_total = len(seg_results)
+    n_detected = sum(r["detected"] for r in seg_results)
+    reliability_pct = 100.0 * n_detected / n_total if n_total else 0.0
+    return seg_results, reliability_pct
+
+
 def _save_entry_figures(
     exporter: ResultsExporter,
     fig: object,
@@ -322,8 +390,29 @@ def run(
         lst_zscore = zscore_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
         console.log(f"[green]Z-score normalized {len(lst_zscore)} segment(s)  ({time.time() - entry_t0:.1f}s)[/green]")
 
-        # Merge all segments into a single median segment, aligned by the spike frame.
-        median_segment, zscore_range = spike_centered_median(lst_zscore)
+        # Every segment shares the same frame count (AbfClip's ranges are symmetric around
+        # each segment's own spike), so this also equals whichever median we end up computing.
+        spike_frame_idx = lst_zscore[0].shape[0] // 2
+
+        if emitter:
+            emitter({"type": "step", "msg": "Checking per-segment reliability..."})
+        seg_results, reliability_pct = compute_segment_reliability(lst_zscore, spike_frame_idx, obj)
+        n_detected = sum(r["detected"] for r in seg_results)
+        n_total = len(seg_results)
+        console.log(
+            f"[green]Reliability: {n_detected}/{n_total} segment(s) detected ({reliability_pct:.1f}%)"
+            f"  ({time.time() - entry_t0:.1f}s)[/green]"
+        )
+
+        # Only median the segments that actually showed a hotspot -- an all-segments median gets
+        # dragged toward the boundary between "responded" and "didn't" when reliability isn't near
+        # 100%. Falls back to all segments when none detected, purely so downstream export still
+        # has validly-shaped data; final_significant (below) forces that case to "no detection"
+        # regardless of what this fallback median's own RegionAnalyzer reports.
+        segments_for_median = [
+            seg for seg, r in zip(lst_zscore, seg_results, strict=True) if r["detected"]
+        ] or lst_zscore
+        median_segment, zscore_range = spike_centered_median(segments_for_median)
 
         # Free memory from lst_zscore since it's no longer needed after computing the median.
         del lst_zscore
@@ -332,7 +421,6 @@ def run(
         if emitter:
             emitter({"type": "step", "msg": "Categorizing spike frame..."})
         # Real analysis starts here: categorize the z scores for further region analysis (using skimage.measure).
-        spike_frame_idx = median_segment.shape[0] // 2
         categorizer = SpatialCategorizer.morphological(threshold_method="baseline_frames_2sigma")
         categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
         console.log(
@@ -343,18 +431,19 @@ def run(
         region_analyzer = RegionAnalyzer(np.array(categorizer.categorized_frames), median_segment, spike_frame_idx, obj=obj)
         region_results = region_analyzer.get_results()
 
+        # 0% reliability overrides the filtered-median's own significance check -- no segment
+        # ever showed a hotspot, so this recording is "no detection" regardless.
+        final_significant = n_detected > 0 and region_analyzer.significant
+
         if region_results["n_clusters"] == 0:
             console.log("[yellow]No cluster detected[/yellow]")
         else:
             frame_tag = "spike" if region_results["critical_frame_offset"] == 0 else f"spike{region_results['critical_frame_offset']:+d}"
-            console.log(
-                f"[magenta]{region_results['n_clusters']} cluster(s) on {frame_tag} frame "
-                f"(B%={region_results['critical_frame_area_pct']:.2f}%)[/magenta]"
-            )
+            console.log(f"[magenta]{region_results['n_clusters']} cluster(s) on {frame_tag} frame[/magenta]")
             for i, cluster in enumerate(region_results["clusters"]):
                 console.log(f"[cyan]  cluster {i}: R_lat={cluster['R_lat_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
 
-        if region_analyzer.significant:
+        if final_significant:
             for frame_tag_, clusters in (
                 ("spike", region_results["spike_frame_clusters"]),
                 ("spike+1", region_results["spike_plus1_frame_clusters"]),
@@ -375,7 +464,20 @@ def run(
         slice_val = match["SLICE"].item()
         at = match["AT"].item()
         frame_duration_ms = clip.ts_imgs * 1000
-        if region_analyzer.significant and region_results["n_clusters"] > 0:
+
+        # Reliability montage: one panel per raw segment, so reliability% can be checked by eye
+        # against the actual per-segment detections, not just trusted as a number. Exported
+        # regardless of final_significant -- it's exactly what explains a "no detection" result.
+        reliability_montage_fig = plot_segment_reliability_montage(
+            seg_results, proc_tiff_path.stem, compute_window_px(obj), DENSITY_THRESH
+        )
+        reliability_stem = ResultsExporter.build_export_stem(
+            export_data["exp_date"], export_data["img_serial"], animal_idx,
+            slice_val, at, detrend_mode, normalization, "RELIABILITY",
+        )
+        exporter.export_figure("reliability", reliability_montage_fig, f"{reliability_stem}.png")
+
+        if final_significant and region_results["n_clusters"] > 0:
             peak_latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
             lasting_time_ms = region_analyzer.get_lasting_time_ms(frame_duration_ms)
             if lasting_time_ms is not None:
@@ -387,12 +489,12 @@ def run(
                 console.log("[yellow]Lasting time: decay fit failed / insufficient post-peak data[/yellow]")
         else:
             peak_latency_ms, lasting_time_ms = None, None
-            if not region_analyzer.significant:
+            if not final_significant:
                 console.log("[yellow]No ACh detection — skipping MED/CAT TIFFs, latency/lasting time/span export[/yellow]")
             with ana_list_path.open("a", encoding="utf-8") as f:
                 f.write(
                     f"[SKIPPED] {proc_tiff_path.name}: no significant ACh detection "
-                    "(neither spike nor spike+1 frame showed a density-gated hotspot)\n"
+                    f"(reliability {reliability_pct:.1f}% -- {n_detected}/{n_total} segments detected)\n"
                 )
 
         dirs = exporter.export_all(
@@ -417,9 +519,12 @@ def run(
             region_data=region_results,
             peak_latency_ms=peak_latency_ms,
             lasting_time_ms=lasting_time_ms,
-            significant=region_analyzer.significant,
+            significant=final_significant,
+            reliability_pct=reliability_pct,
+            n_segments_detected=n_detected,
+            n_segments_total=n_total,
         )
-        if region_analyzer.significant:
+        if final_significant:
             title_info = {
                 "animal_id": animal_id,
                 "slice": slice_val,
@@ -449,7 +554,7 @@ def run(
             save_thread.start()
         dir_names = "/, ".join(d.name for d in dirs.values())
         console.log(
-            f"[green]Exported {dir_names}/, spatial/, latency/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
+            f"[green]Exported {dir_names}/, reliability/, spatial/, latency/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
         )
 
     if save_thread is not None:
