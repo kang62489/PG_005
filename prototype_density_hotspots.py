@@ -124,15 +124,20 @@ def save_recording_montage(path: Path, rec_stem: str, seg_results: list[dict]) -
             spine.set_linewidth(3)
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_title(f"seg{seg_idx:02d} n={result['n_clusters']}", fontsize=7, color=color)
+        offset_tag = f"+{result['frame_offset']}" if result["frame_offset"] else "sp"
+        ax.set_title(f"seg{seg_idx:02d} [{offset_tag}] n={result['n_clusters']}", fontsize=7, color=color)
 
     for j in range(n, len(axes)):
         axes[j].axis("off")
 
+    n_spike = sum(r["detected_spike_only"] for r in seg_results)
+    n_plus1 = sum(r["detected_plus1_only"] for r in seg_results)
     fig.suptitle(
         f"{rec_stem} — window_px={WINDOW_PX} (fixed), density>={DENSITY_THRESH}\n"
-        f"reliability: {n_detected}/{n} = {n_detected / n:.1%}",
-        fontsize=11,
+        f"spike only: {n_spike}/{n} = {n_spike / n:.1%}  |  "
+        f"spike+1 only: {n_plus1}/{n} = {n_plus1 / n:.1%}  |  "
+        f"spike OR spike+1: {n_detected}/{n} = {n_detected / n:.1%}",
+        fontsize=10,
     )
     fig.tight_layout()
     fig.savefig(path)
@@ -157,12 +162,35 @@ def main() -> None:
         for segment in lst_zscore:
             spike_frame_idx = segment.shape[0] // 2
             threshold_used = compute_threshold(segment, spike_frame_idx)
-            result = run_density_hotspot(segment[spike_frame_idx], threshold_used, obj)
-            seg_results.append(result)
 
-        n_detected = sum(r["detected"] for r in seg_results)
+            result_spike = run_density_hotspot(segment[spike_frame_idx], threshold_used, obj)
+            result_spike["frame_offset"] = 0
+
+            plus1_idx = spike_frame_idx + 1
+            if plus1_idx < segment.shape[0]:
+                result_plus1 = run_density_hotspot(segment[plus1_idx], threshold_used, obj)
+                result_plus1["frame_offset"] = 1
+            else:
+                result_plus1 = None
+
+            # Mirror pick_critical_frame(): spike frame wins if it detects, otherwise fall
+            # back to spike+1. `detected` on the chosen result reflects this combined outcome.
+            if result_spike["detected"] or result_plus1 is None:
+                final = result_spike
+            else:
+                final = result_plus1
+            final["detected_spike_only"] = result_spike["detected"]
+            final["detected_plus1_only"] = result_plus1["detected"] if result_plus1 else False
+            seg_results.append(final)
+
         n = len(seg_results)
-        print(f"{rec_stem}: reliability = {n_detected}/{n} = {n_detected / n:.1%}")
+        n_spike = sum(r["detected_spike_only"] for r in seg_results)
+        n_plus1 = sum(r["detected_plus1_only"] for r in seg_results)
+        n_either = sum(r["detected"] for r in seg_results)
+        print(f"{rec_stem}:")
+        print(f"  spike frame only    = {n_spike}/{n} = {n_spike / n:.1%}")
+        print(f"  spike+1 frame only  = {n_plus1}/{n} = {n_plus1 / n:.1%}")
+        print(f"  spike OR spike+1    = {n_either}/{n} = {n_either / n:.1%}")
 
         for seg_idx, result in enumerate(seg_results):
             save_workflow_figure(

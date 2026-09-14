@@ -1,0 +1,43 @@
+Date Created: 20260914
+Analysis: test new pipeline
+
+Picked: [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
+[2025_06_11-0002.tif, YES, YES, 2025_06_11_0003.abf, YES]
+[2025_06_11-0003.tif, YES, YES, 2025_06_11_0004.abf, YES]
+[2025_12_15-0012.tif, YES, YES, 2025_12_15_0008.abf, YES]
+[2025_12_15-0013.tif, YES, YES, 2025_12_15_0009.abf, YES]
+
+Total 4 records picked
+
+dir_raw_tiffs: D:\Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\Programs\PG_005\proc_tiffs
+
+dir_raw_abfs: D:\Programs\PG_005\raw_abfs
+dir_results: D:/Programs/PG_005/output/test
+
+================================================================================
+Region Analysis Statistics — generated 2026-09-14T00:45:09+00:00
+================================================================================
+Neurons detected ACh release: 2/2
+
+Spatial (skewed — Median/IQR/GeoMean shown):
++-------------------------------+----------+-----------+-------+----------+------------------+----------+---------+---+
+|            Metric             |   Mean   |    Std    |  CV%  |  Median  |    IQR(Q1-Q3)    | GeoMean  | GeoStd* | n |
++-------------------------------+----------+-----------+-------+----------+------------------+----------+---------+---+
+|    spike_frame_hotspot_um2    | 91476.04 | 102685.05 | 112.3 | 91476.04 | 55171.4-127780.7 | 55639.51 |  4.62   | 2 |
+| spike_plus1_frame_hotspot_um2 | 74846.17 | 42767.15  | 57.1  | 74846.17 | 59725.7-89966.6  | 68464.85 |  1.83   | 2 |
++-------------------------------+----------+-----------+-------+----------+------------------+----------+---------+---+
+
+Temporal:
++-----------------+-------+-------+---+
+|     Metric      | Mean  |  Std  | n |
++-----------------+-------+-------+---+
+| peak_latency_ms | 0.00  | 0.00  | 2 |
+| lasting_time_ms | 55.69 | 20.53 | 2 |
++-----------------+-------+-------+---+
+
+Per-Neuron Recording List (filename, detected) [detected/total]:
+neoChAT-587_S4RC1 [(2025_06_11-0002_A1S4RC1_BIEXP_ALS_MED.tif, True),
+                   (2025_06_11-0003_A1S4RC1_BIEXP_ALS_MED.tif, True)] 2/2
+neoChAT-676_S3RC1 [(2025_12_15-0012_A1S3RC1_BIEXP_ALS_MED.tif, True),
+                   (2025_12_15-0013_A1S3RC1_BIEXP_ALS_MED.tif, True)] 2/2

@@ -5,8 +5,8 @@ ResultsExporter.export_figure(), not interactive GUI windows. See classes/mpl_ca
 for the PySide6-coupled canvas widget used by the live GUI.
 
 Two export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
-- plot_spatiotemporal_summary (-> spatial/): B+D% signal trace showing why the
-  critical frame was picked, + cluster shading on just that frame's own panel.
+- plot_spatiotemporal_summary (-> spatial/): density-gated hotspot-area trace showing
+  why the critical frame was picked, + cluster shading on the spike and spike+1 panels.
 - plot_full_trace (-> latency/, *_LATENCY.png): the same fixed cluster-ring overlay repeated
   across a 9-panel window, + the full-segment z-score trace with that window annotated.
 """
@@ -116,13 +116,15 @@ def plot_spatiotemporal_summary(
     vm_segments: list[tuple[np.ndarray, np.ndarray]],
     frame_duration_ms: float,
 ) -> Figure:
-    """Static export figure: B% signal trace (row 1) + critical-frame panels (row 2)
-    + overlapped electrophysiology traces per segment (row 3).
+    """Static export figure: density-gated hotspot-area signal trace (row 1) +
+    spike/spike+1 frame panels (row 2) + overlapped electrophysiology traces per
+    segment (row 3).
 
-    Shows why the critical frame was picked (B% vs the spike/spike+1 candidates)
-    and what DBSCAN found there -- cluster shading is drawn only on the critical
-    frame's own panel, not repeated across every panel (see plot_full_trace for
-    the fixed-overlay version). Row 3 shows the actual detected Vm spike waveform
+    Shows why the critical frame was picked (hotspot area vs the spike/spike+1
+    candidates) and what was found on each of those two frames independently --
+    cluster shading is drawn on both the spike and spike+1 panels, not repeated
+    across every panel (see plot_full_trace for the fixed-overlay version).
+    Row 3 shows the actual detected Vm spike waveform
     for every picked segment in this recording, overlaid, to check shape/timing
     consistency across trials -- independent of the image data above it.
 
@@ -138,7 +140,8 @@ def plot_spatiotemporal_summary(
         Figure, ready for fig.savefig(...) or ResultsExporter.export_figure(...)
     """
     n_frames = len(categorizer.source_frames)
-    area_pct = region_analyzer.area_pct
+    hotspot_area_um2 = region_analyzer.hotspot_area_um2
+    area_pct = region_analyzer.area_pct  # raw B%, diagnostic only -- used for non-critical side-panel captions below
     critical_frame_idx = region_analyzer.critical_frame_idx
     um_per_pixel = region_analyzer.um_per_pixel
 
@@ -147,50 +150,53 @@ def plot_spatiotemporal_summary(
     gs_outer = fig.add_gridspec(3, 1, height_ratios=[2.0, 2.5, 2.0], hspace=0.7)
     gs_panels = gs_outer[1].subgridspec(1, 9, wspace=0.08)
 
-    # --- Row 0: B% per frame trace ---
+    # --- Row 0: density-gated hotspot area per frame trace ---
+    # Plotted in the same units the decay-tau fit below was actually fit on
+    # (hotspot_area_um2), not the raw B% trace -- see RegionAnalyzer._compute_hotspot_area_trace.
     ax_bd = fig.add_subplot(gs_outer[0])
-    ax_bd.plot(np.arange(n_frames) - spike_frame_idx, area_pct, color="#3498db", linewidth=1.6,
+    ax_bd.plot(np.arange(n_frames) - spike_frame_idx, hotspot_area_um2, color="#3498db", linewidth=1.6,
                marker="o", markersize=3.5)
 
-    # Pre-compute µm² for each frame: area_pct / 100 * total_pixels * um_per_pixel²
     total_px = categorizer.categorized_frames[0].size
-    frame_um2 = area_pct * total_px / 100.0 * um_per_pixel ** 2
 
     for frame_idx, label, color in [
         (spike_frame_idx - 1,
-         f"spike-1: {frame_um2[spike_frame_idx - 1]:.0f} µm² ({area_pct[spike_frame_idx - 1]:.1f}%)"
+         f"spike-1: {hotspot_area_um2[spike_frame_idx - 1]:.0f} µm²"
          if spike_frame_idx > 0 else "spike-1 (OOB)", "#888888"),
         (spike_frame_idx,
-         f"spike: {frame_um2[spike_frame_idx]:.0f} µm² ({area_pct[spike_frame_idx]:.1f}%)", "#e74c3c"),
+         f"spike: {hotspot_area_um2[spike_frame_idx]:.0f} µm²", "#e74c3c"),
         (spike_frame_idx + 1,
-         f"spike+1: {frame_um2[spike_frame_idx + 1]:.0f} µm² ({area_pct[spike_frame_idx + 1]:.1f}%)"
+         f"spike+1: {hotspot_area_um2[spike_frame_idx + 1]:.0f} µm²"
          if spike_frame_idx + 1 < n_frames else "spike+1 (OOB)", "#f39c12"),
     ]:
         if 0 <= frame_idx < n_frames:
             ax_bd.axvline(frame_idx - spike_frame_idx, color=color, linestyle="--", linewidth=1.2, alpha=0.8, label=label)
 
-    ax_bd.plot(critical_frame_idx - spike_frame_idx, area_pct[critical_frame_idx], "*", color="white", markersize=14,
+    ax_bd.plot(critical_frame_idx - spike_frame_idx, hotspot_area_um2[critical_frame_idx], "*", color="white", markersize=14,
                markeredgecolor="black", markeredgewidth=1, zorder=5,
-               label=f"critical: frame {critical_frame_idx}  {frame_um2[critical_frame_idx]:.0f} µm² ({area_pct[critical_frame_idx]:.1f}%)")
+               label=f"critical: frame {critical_frame_idx}  {hotspot_area_um2[critical_frame_idx]:.0f} µm²")
 
     _draw_decay_fit(ax_bd, region_analyzer, spike_frame_idx, n_frames, frame_duration_ms)
 
     ax_bd.set_xlabel("Frame offset from spike (0 = spike)", fontsize=12)
-    ax_bd.set_ylabel("B area (%)", fontsize=12)
-    ax_bd.set_title("Bright area coverage per frame  |  star = critical frame (spike or spike+1)", fontsize=12)
+    ax_bd.set_ylabel("Hotspot area (µm²)", fontsize=12)
+    ax_bd.set_title("Density-gated hotspot area per frame  |  star = critical frame (spike or spike+1)", fontsize=12)
     ax_bd.legend(fontsize=10, loc="upper right")
     ax_bd.tick_params(labelsize=10)
 
     # --- Row 1: spike-4 .. spike+4 frame panels ---
+    def _label_frame_for(idx: int) -> np.ndarray | None:
+        if idx == spike_frame_idx:
+            return region_analyzer.spike_frame_label_frame
+        if idx == spike_frame_idx + 1:
+            return region_analyzer.spike_plus1_frame_label_frame
+        return None
+
     hotspot_area_lines = {
-        idx: _format_hotspot_area_line(
-            area_pct[idx], total_px, um_per_pixel,
-            label_frame=region_analyzer.label_frame if idx == critical_frame_idx else None,
-        )
+        idx: _format_hotspot_area_line(area_pct[idx], total_px, um_per_pixel, label_frame=_label_frame_for(idx))
         for idx in range(spike_frame_idx - 4, spike_frame_idx + 5)
         if 0 <= idx < n_frames
     }
-    span_line = _format_span_line(region_analyzer)
 
     for col, offset in enumerate(range(-4, 5)):
         frame_idx = spike_frame_idx + offset
@@ -206,12 +212,19 @@ def plot_spatiotemporal_summary(
                 um_per_pixel,
                 tag,
                 hotspot_area_line=hotspot_area_lines.get(frame_idx),
-                span_line=span_line if frame_idx == region_analyzer.max_area_frame_idx else None,
             )
-            if is_critical_frame:
-                _draw_cluster_shading(ax_frame, region_analyzer.label_frame, region_analyzer.centroids)
-            if frame_idx == region_analyzer.max_area_frame_idx:
-                _draw_span_bbox(ax_frame, region_analyzer)
+            # Both the spike frame and spike+1 frame get their own independent cluster
+            # shading now -- there's no single "max-area frame" winner to pick between.
+            if offset == 0:
+                _draw_cluster_shading(
+                    ax_frame, region_analyzer.spike_frame_label_frame,
+                    [c["centroid"] for c in region_analyzer.spike_frame_clusters],
+                )
+            elif offset == 1 and region_analyzer.spike_plus1_frame_label_frame is not None:
+                _draw_cluster_shading(
+                    ax_frame, region_analyzer.spike_plus1_frame_label_frame,
+                    [c["centroid"] for c in region_analyzer.spike_plus1_frame_clusters],
+                )
         else:
             frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
             ax_frame.set_title(f"{frame_label}\n(out of range)", fontsize=9)
@@ -330,7 +343,6 @@ def _plot_frame_panel(
     um_per_pixel: float,
     tag: str = "",
     hotspot_area_line: str | None = None,
-    span_line: str | None = None,
     stats_lines: list[str] | None = None,
 ) -> None:
     """One frame's categorized image with a stats title.
@@ -359,8 +371,6 @@ def _plot_frame_panel(
         stats_lines = []
         if hotspot_area_line is not None:
             stats_lines.append(hotspot_area_line)
-        if span_line is not None:
-            stats_lines.append(span_line)
 
     # --- Title and decorations ---
     frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
@@ -394,15 +404,6 @@ def _format_hotspot_area_line(
     return f"B%: {raw_um2:.0f} µm² ({area_pct_value:.1f}%)"
 
 
-def _format_span_line(region_analyzer: RegionAnalyzer) -> str | None:
-    """X/Y span line for the max-area frame panel title."""
-    x_span = region_analyzer.max_area_x_span_um
-    y_span = region_analyzer.max_area_y_span_um
-    if x_span is None or y_span is None:
-        return None
-    return f"span x/y: {x_span:.1f} / {y_span:.1f} µm"
-
-
 def _frame_z_lines(clusters: list[dict], frame_idx: int) -> list[str]:
     """Per-frame z-score line(s) for a plot_full_trace panel title.
 
@@ -431,7 +432,9 @@ def _draw_cluster_shading(ax: mpl.axes.Axes, label_frame: np.ndarray, centroids:
     """Translucent per-cluster fill (DBSCAN's raw label map, no ring circles) +
     centroid cross and index label.
 
-    Used only on the critical frame's own panel in plot_spatiotemporal_summary.
+    Used on the spike frame's and spike+1 frame's own panels in
+    plot_spatiotemporal_summary (each with its own independent label_frame/centroids --
+    there's no single "critical"/"max-area" frame winner for this overlay anymore).
     plot_full_trace uses _overlay_clusters (enclosing-circle approximation)
     instead, repeated identically across every panel.
     """
@@ -446,22 +449,6 @@ def _draw_cluster_shading(ax: mpl.axes.Axes, label_frame: np.ndarray, centroids:
         ax.plot(col_c, row_c, "x", color="black", markersize=16, markeredgewidth=4, zorder=10)
         ax.plot(col_c, row_c, "x", color="white", markersize=14, markeredgewidth=2.5, zorder=11)
         ax.text(col_c + 5, row_c - 5, str(cluster_idx), color="white", fontsize=9, fontweight="bold")
-
-
-def _draw_span_bbox(ax: mpl.axes.Axes, region_analyzer: "RegionAnalyzer") -> None:
-    """Dashed bounding-box rectangle over the accepted-mask span on the max-area panel."""
-    x_min = region_analyzer.max_area_x_min_px
-    y_min = region_analyzer.max_area_y_min_px
-    x_span = region_analyzer.max_area_x_span_px
-    y_span = region_analyzer.max_area_y_span_px
-    if x_min is None or y_min is None:
-        return
-    rect = Rectangle(
-        (x_min, y_min), x_span, y_span,
-        linewidth=2.0, edgecolor="#f1c40f", facecolor="none",
-        linestyle="--", alpha=0.85, zorder=4,
-    )
-    ax.add_patch(rect)
 
 
 def _draw_decay_fit(

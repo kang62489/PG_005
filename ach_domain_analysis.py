@@ -155,7 +155,7 @@ def build_stats_report(db_path: Path, run_keys: set[tuple[str, str]] | None = No
         return f"{val:.{decimals}f}" if val is not None else "N/A"
 
     rows_by_metric = {r["metric"]: r for r in stats.to_dicts()}
-    area_metrics = ["max_area_um2", "max_area_eq_radius_um"]
+    area_metrics = ["spike_frame_hotspot_um2", "spike_plus1_frame_hotspot_um2"]
     temporal_metrics = ["peak_latency_ms", "lasting_time_ms"]
 
     area_rows = [
@@ -355,16 +355,17 @@ def run(
                 console.log(f"[cyan]  cluster {i}: R_lat={cluster['R_lat_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
 
         if region_analyzer.significant:
-            max_area_tag = "spike" if region_results["max_area_offset"] == 0 else f"spike{region_results['max_area_offset']:+d}"
-            span_text = (
-                f", span x/y={region_results['max_area_x_span_um']:.1f}/{region_results['max_area_y_span_um']:.1f} µm"
-                if region_results["max_area_x_span_um"] is not None and region_results["max_area_y_span_um"] is not None
-                else ""
-            )
-            console.log(
-                f"[green]Max-area frame {max_area_tag}: area={region_results['max_area_um2']:.0f} µm² "
-                f"(eq. radius={region_results['max_area_eq_radius_um']:.1f} µm){span_text}[/green]"
-            )
+            for frame_tag_, clusters in (
+                ("spike", region_results["spike_frame_clusters"]),
+                ("spike+1", region_results["spike_plus1_frame_clusters"]),
+            ):
+                if clusters is None:
+                    continue
+                if not clusters:
+                    console.log(f"[green]{frame_tag_} frame: no hotspot clusters[/green]")
+                    continue
+                sizes = ", ".join(f"cluster {c['cluster_id']}={c['area_um2']:.0f} µm² ({c['area_px']} px)" for c in clusters)
+                console.log(f"[green]{frame_tag_} frame: {sizes}[/green]")
 
         if emitter:
             emitter({"type": "step", "msg": "Exporting results..."})
@@ -391,7 +392,7 @@ def run(
             with ana_list_path.open("a", encoding="utf-8") as f:
                 f.write(
                     f"[SKIPPED] {proc_tiff_path.name}: no significant ACh detection "
-                    "(neither spike nor spike+1 frame cleared the B% significance threshold)\n"
+                    "(neither spike nor spike+1 frame showed a density-gated hotspot)\n"
                 )
 
         dirs = exporter.export_all(

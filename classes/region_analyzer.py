@@ -1,13 +1,14 @@
 """
 Region analysis for categorized images.
 
-Picks a critical frame (spike or spike+1), clusters its bright pixels with
-morphological dilation + connected components, and computes per-cluster
-spatial/temporal stats. See RegionAnalyzer's docstring for the full picture.
+Picks a critical frame (spike or spike+1) by density-gated hotspot detection,
+clusters its bright pixels with morphological dilation + connected components,
+and computes per-cluster spatial/temporal stats. See RegionAnalyzer's docstring
+for the full picture.
 """
 
 import numpy as np
-from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import distance_transform_edt, uniform_filter
 from scipy.optimize import curve_fit
 from skimage.measure import label as skimage_label
 
@@ -25,11 +26,11 @@ PIXEL_SCALE = {
 EPS_UM = 30.0  # inter-varicosity gap in um; sets dilation disk radius (tunable)
 MIN_CLUSTER_FRACTION = 0.05  # keep clusters covering at least this fraction of bright pixels
 
-AREA_PCT_SIGMA_MULT = 10.0      # baseline_mean + this many std devs = "significant" B% elevation
-AREA_PCT_MIN_ELEVATION = 1    # floor on the sigma term — prevents near-zero baseline std from trivially passing noise
+WINDOW_PX_BY_OBJ = {"10X": 201, "40X": 804, "60X": 1024}  # local-density window size, per objective
+DENSITY_THRESH = 0.15  # min local bright-pixel density (uniform_filter) to qualify as a hotspot
 
 MIN_DECAY_FIT_FRAMES = 3  # fewer post-peak frames than this and the exponential fit is skipped
-MIN_DECAY_FIT_RANGE = 1e-6  # post-peak Bright% must vary by at least this much or the fit is skipped (degenerate/flat trace)
+MIN_DECAY_FIT_RANGE = 1e-6  # post-peak signal must vary by at least this much or the fit is skipped (degenerate/flat trace)
 MIN_DECAY_FIT_R2 = 0.8  # lasting time is suppressed (None) when the decay fit's R^2 is below this
 
 
@@ -37,12 +38,15 @@ class RegionAnalyzer:
     """
     Find clusters of bright pixels on the critical frame.
 
-    Picks the spike frame or spike+1 as the critical frame (whichever clears
-    the B% significance threshold), clusters its bright pixels with
-    morphological dilation + connected components, and drops undersized clusters.
-    Each kept cluster gets a centroid, an enclosing-circle radius (R), and a
-    z-score trace across the segment (inner/outer ring split for a single
-    cluster, whole-cluster trace when there are multiple).
+    Picks the spike frame or spike+1 as the critical frame -- whichever is the
+    earliest to show a density-gated hotspot (local bright-pixel density,
+    from the categorizer's own bright mask, gated at DENSITY_THRESH within a
+    WINDOW_PX_BY_OBJ-sized window, spike frame checked first). Its bright
+    pixels are then clustered with morphological dilation + connected
+    components, and undersized clusters are dropped. Each kept cluster gets a
+    centroid, an enclosing-circle radius (R), and a z-score trace across the
+    segment (inner/outer ring split for a single cluster, whole-cluster trace
+    when there are multiple).
 
     Result dict per cluster (from get_results()):
         centroid : (row, col) in pixels, z-score-weighted toward the cluster's
@@ -54,15 +58,13 @@ class RegionAnalyzer:
 
     critical_frame_area_um2 (from get_results()) is this frame's own
     kept-cluster area (undersized-cluster pixels excluded) --
-    critical_frame_area_pct stays the raw B% (it also drives the
-    significance threshold logic above).
+    critical_frame_area_pct stays the raw B% (diagnostic only; it no longer
+    drives any detection decision).
 
-    Top-level max_area_* fields (from get_results()) instead describe the
-    max-area frame -- whichever of spike/spike+1 has the larger raw B%,
-    independent of the critical/latency frame's significance-threshold pick.
-    The reported area is likewise that frame's kept-cluster area, not
-    the raw non-background count. max_area_eq_radius_um is the circle-equivalent
-    radius (sqrt(area/pi)) of that same area, for direct comparison against R_lat_um.
+    spike_frame_clusters / spike_plus1_frame_clusters (from get_results())
+    independently report every density-gated cluster's own pixel/µm² size on
+    the spike frame and spike+1 frame, regardless of which one was picked as
+    critical -- there is no single "max-area frame" winner.
 
     Example:
         >>> categorizer = SpatialCategorizer.morphological()
@@ -92,54 +94,129 @@ class RegionAnalyzer:
         self.um_per_pixel = 1.0 / self.pixel_per_um
         self.spike_frame_idx = spike_frame_idx
 
-        self.area_pct = compute_area_pct(cat_stack)
-        self.critical_frame_idx, self.significant = pick_critical_frame(self.area_pct, spike_frame_idx)
-
-        peak_search_end = min(self.spike_frame_idx + 2, len(self.area_pct))
-        self.decay_peak_frame_idx = self.spike_frame_idx + int(
-            np.argmax(self.area_pct[self.spike_frame_idx:peak_search_end])
-        )
-        self.decay_fit_A, self.decay_tau_frames, self.decay_fit_r2 = fit_decay_tau(
-            self.area_pct, self.decay_peak_frame_idx
-        )
+        self.area_pct = compute_area_pct(cat_stack)  # diagnostic B% trace only, no longer decision-driving
 
         eps_px = compute_eps_px(obj)
-        if self.significant:
-            self.label_frame, self.centroids, self.n_raw_clusters = _run_cluster_seeker(
-                cat_stack[self.critical_frame_idx], eps_px,
-                z_frame=med_stack[self.critical_frame_idx],
-            )
-        else:
-            self.label_frame = np.full(cat_stack.shape[1:], -2, dtype=int)
-            self.centroids, self.n_raw_clusters = [], 0
+        window_px = compute_window_px(obj)
+
+        (
+            self.critical_frame_idx,
+            self.significant,
+            self.label_frame,
+            self.centroids,
+            self.n_raw_clusters,
+        ) = self._detect_critical_frame(cat_stack, med_stack, spike_frame_idx, eps_px, window_px)
+
+        self.hotspot_area_um2 = self._compute_hotspot_area_trace(cat_stack, eps_px, window_px)
+        peak_search_end = min(self.spike_frame_idx + 2, len(self.hotspot_area_um2))
+        self.decay_peak_frame_idx = self.spike_frame_idx + int(
+            np.argmax(self.hotspot_area_um2[self.spike_frame_idx:peak_search_end])
+        )
+        self.decay_fit_A, self.decay_tau_frames, self.decay_fit_r2 = fit_decay_tau(
+            self.hotspot_area_um2, self.decay_peak_frame_idx
+        )
 
         self.clusters = self._build_clusters(med_stack)
-        if self.significant and len(self.clusters) > 0:
-            (
-                self.max_area_frame_idx,
-                self.max_area_offset,
-                self.max_area_um2,
-                self.max_area_eq_radius_um,
-                self.max_area_x_span_px,
-                self.max_area_y_span_px,
-                self.max_area_x_span_um,
-                self.max_area_y_span_um,
-                self.max_area_x_min_px,
-                self.max_area_y_min_px,
-            ) = self._compute_max_area(cat_stack, med_stack, spike_frame_idx, eps_px)
+
+        (
+            self.spike_frame_label_frame,
+            self.spike_frame_clusters,
+            self.spike_plus1_frame_label_frame,
+            self.spike_plus1_frame_clusters,
+        ) = self._report_frame_clusters(cat_stack, med_stack, spike_frame_idx, eps_px, window_px)
+
+    def _detect_critical_frame(
+        self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, eps_px: int, window_px: int
+    ) -> tuple[int, bool, np.ndarray, list[tuple[float, float]], int]:
+        """Pick spike or spike+1 as the critical frame -- earliest one to show a density-gated hotspot.
+
+        Runs density-gated clustering (_run_density_gated_cluster_seeker) on the spike frame
+        first; only falls back to spike+1 (a delayed-signal case) when the spike frame itself
+        has no accepted cluster. Falls back to spike_frame_idx with significant=False when
+        neither candidate has one, so the caller can skip downstream work entirely instead of
+        treating an empty frame as a detection.
+
+        Returns:
+            (critical_frame_idx, significant, label_frame, centroids, n_raw_clusters).
+        """
+        candidate_idxs = [spike_frame_idx]
+        if spike_frame_idx + 1 < cat_stack.shape[0]:
+            candidate_idxs.append(spike_frame_idx + 1)
+
+        for idx in candidate_idxs:
+            bright_mask = cat_stack[idx] == CATEGORY_BRIGHT
+            label_frame, centroids, n_raw = _run_density_gated_cluster_seeker(
+                bright_mask, eps_px, window_px, DENSITY_THRESH, z_frame=med_stack[idx]
+            )
+            if centroids:
+                return idx, True, label_frame, centroids, n_raw
+
+        empty_label_frame = np.full(cat_stack.shape[1:], -2, dtype=int)
+        return spike_frame_idx, False, empty_label_frame, [], 0
+
+    def _compute_hotspot_area_trace(self, cat_stack: np.ndarray, eps_px: int, window_px: int) -> np.ndarray:
+        """Density-gated total kept-cluster area (um^2) per frame, for the decay-tau fit.
+
+        Centroids aren't needed here (z_frame=None) -- only the total kept-pixel count per
+        frame matters, so _weighted_centroid falls back to its cheap unweighted-mean path.
+        """
+        n_frames = cat_stack.shape[0]
+        hotspot_area_um2 = np.zeros(n_frames, dtype=float)
+        for idx in range(n_frames):
+            bright_mask = cat_stack[idx] == CATEGORY_BRIGHT
+            label_frame, _, _ = _run_density_gated_cluster_seeker(
+                bright_mask, eps_px, window_px, DENSITY_THRESH, z_frame=None
+            )
+            kept_px = int(np.count_nonzero(label_frame >= 0))
+            hotspot_area_um2[idx] = self._area_to_um2(kept_px)
+        return hotspot_area_um2
+
+    def _report_frame_clusters(
+        self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, eps_px: int, window_px: int
+    ) -> tuple[np.ndarray, list[dict], np.ndarray | None, list[dict] | None]:
+        """Per-cluster pixel/um^2 sizes for the spike frame and spike+1 frame, independently.
+
+        Unlike _detect_critical_frame (earliest-wins), both candidate frames are clustered here
+        regardless of which one was picked as critical, so callers can compare the two frames'
+        own hotspots directly instead of only seeing whichever one "won".
+
+        Returns:
+            (spike_frame_label_frame, spike_frame_clusters,
+             spike_plus1_frame_label_frame, spike_plus1_frame_clusters)
+            spike_plus1 fields are None when spike_frame_idx + 1 is out of range.
+        """
+        spike_label_frame, spike_clusters = self._cluster_report_for_frame(
+            cat_stack, med_stack, spike_frame_idx, eps_px, window_px
+        )
+
+        plus1_idx = spike_frame_idx + 1
+        if plus1_idx < cat_stack.shape[0]:
+            plus1_label_frame, plus1_clusters = self._cluster_report_for_frame(
+                cat_stack, med_stack, plus1_idx, eps_px, window_px
+            )
         else:
-            (
-                self.max_area_frame_idx,
-                self.max_area_offset,
-                self.max_area_um2,
-                self.max_area_eq_radius_um,
-                self.max_area_x_span_px,
-                self.max_area_y_span_px,
-                self.max_area_x_span_um,
-                self.max_area_y_span_um,
-                self.max_area_x_min_px,
-                self.max_area_y_min_px,
-            ) = spike_frame_idx, 0, None, None, None, None, None, None, None, None
+            plus1_label_frame, plus1_clusters = None, None
+
+        return spike_label_frame, spike_clusters, plus1_label_frame, plus1_clusters
+
+    def _cluster_report_for_frame(
+        self, cat_stack: np.ndarray, med_stack: np.ndarray, frame_idx: int, eps_px: int, window_px: int
+    ) -> tuple[np.ndarray, list[dict]]:
+        """Density-gated clusters for one frame, as {cluster_id, centroid, area_px, area_um2} dicts."""
+        bright_mask = cat_stack[frame_idx] == CATEGORY_BRIGHT
+        label_frame, centroids, _ = _run_density_gated_cluster_seeker(
+            bright_mask, eps_px, window_px, DENSITY_THRESH, z_frame=med_stack[frame_idx]
+        )
+        clusters = []
+        for cluster_id, centroid in enumerate(centroids):
+            area_px = int(np.count_nonzero(label_frame == cluster_id))
+            clusters.append({
+                "cluster_id": cluster_id,
+                "centroid": centroid,
+                "area_px": area_px,
+                "area_um2": self._area_to_um2(area_px),
+            })
+        return label_frame, clusters
 
     def _build_clusters(self, med_stack: np.ndarray) -> list[dict]:
         """Per-cluster result dicts for the critical frame (self.label_frame/self.centroids).
@@ -177,47 +254,6 @@ class RegionAnalyzer:
                 })
         return clusters
 
-    def _compute_max_area(
-        self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, eps_px: int
-    ) -> tuple[int, int, float, float, int | None, int | None, float | None, float | None, int | None, int | None]:
-        """Max-area frame stats, independent of the critical-frame pick above.
-
-        Picks whichever of frame0 (spike) / frame1 (spike+1) has the larger
-        raw area_pct -- used only for the headline area stat, not latency.
-        The reported area is that frame's kept-cluster area (undersized clusters
-        excluded), not the raw non-background count. X/Y span is measured from
-        the combined kept mask on that same frame.
-
-        Returns:
-            (max_area_frame_idx, max_area_offset, max_area_um2,
-            max_area_eq_radius_um, x_span_px, y_span_px, x_span_um, y_span_um,
-            x_min_px, y_min_px)
-            x_min_px/y_min_px are the top-left corner of the span bbox (col_min,
-            row_min), used by callers drawing a Rectangle overlay. None when no
-            accepted clusters exist.
-        """
-        candidate_idxs = [spike_frame_idx]
-        if spike_frame_idx + 1 < len(self.area_pct):
-            candidate_idxs.append(spike_frame_idx + 1)
-        max_area_frame_idx = max(candidate_idxs, key=lambda idx: self.area_pct[idx])
-        max_area_offset = max_area_frame_idx - spike_frame_idx
-
-        label_frame, _, _ = _run_cluster_seeker(
-            cat_stack[max_area_frame_idx], eps_px,
-            z_frame=med_stack[max_area_frame_idx],
-        )
-        max_area_kept_px = int(np.count_nonzero(label_frame >= 0))
-        max_area_um2 = self._area_to_um2(max_area_kept_px)
-        max_area_eq_radius_um = float(np.sqrt(max_area_um2 / np.pi))
-        mask = label_frame >= 0
-        x_span_px, y_span_px = compute_xy_span(mask)
-        x_span_um = self._px_to_um(x_span_px) if x_span_px is not None else None
-        y_span_um = self._px_to_um(y_span_px) if y_span_px is not None else None
-        coords = np.argwhere(mask)
-        x_min_px = int(coords[:, 1].min()) if coords.size > 0 else None
-        y_min_px = int(coords[:, 0].min()) if coords.size > 0 else None
-        return max_area_frame_idx, max_area_offset, max_area_um2, max_area_eq_radius_um, x_span_px, y_span_px, x_span_um, y_span_um, x_min_px, y_min_px
-
     # ── Unit conversion helpers ────────────────────────────────────────────────
 
     def _px_to_um(self, pixels: float) -> float:
@@ -237,14 +273,8 @@ class RegionAnalyzer:
             "critical_frame_offset":   self.critical_frame_idx - self.spike_frame_idx,
             "critical_frame_area_pct": critical_frame_area_pct,
             "critical_frame_area_um2": self._area_to_um2(critical_frame_kept_px),
-            "max_area_frame_idx":      self.max_area_frame_idx if self.clusters else None,
-            "max_area_offset":         self.max_area_offset if self.clusters else None,
-            "max_area_um2":            self.max_area_um2 if self.clusters else None,
-            "max_area_eq_radius_um":   self.max_area_eq_radius_um if self.clusters else None,
-            "max_area_x_span_px":      self.max_area_x_span_px if self.clusters else None,
-            "max_area_y_span_px":      self.max_area_y_span_px if self.clusters else None,
-            "max_area_x_span_um":      self.max_area_x_span_um if self.clusters else None,
-            "max_area_y_span_um":      self.max_area_y_span_um if self.clusters else None,
+            "spike_frame_clusters":       self.spike_frame_clusters,
+            "spike_plus1_frame_clusters": self.spike_plus1_frame_clusters,
             "decay_peak_frame_idx":    self.decay_peak_frame_idx if self.significant else None,
             "decay_peak_offset":       (self.decay_peak_frame_idx - self.spike_frame_idx) if self.significant else None,
             "decay_fit_r2":            self.decay_fit_r2 if self.significant else None,
@@ -367,46 +397,6 @@ def compute_area_pct(stack: np.ndarray) -> np.ndarray:
     return np.count_nonzero(stack == CATEGORY_BRIGHT, axis=(1, 2)) / total_px * 100
 
 
-def pick_critical_frame(area_pct: np.ndarray, spike_frame_idx: int) -> tuple[int, bool]:
-    """Pick spike or spike+1 for clustering, biased toward the spike frame.
-
-    Compares each candidate frame's B% against a baseline-derived
-    significance threshold (mean + AREA_PCT_SIGMA_MULT * std, over every frame
-    before the spike frame) instead of simply picking whichever is higher --
-    avoids flipping to spike+1 on frame-to-frame noise. Only switches to
-    spike+1 when the spike frame itself isn't significantly elevated but
-    spike+1 is (delayed-signal case).
-
-    Falls back to spike_frame_idx with significant=False when neither
-    candidate clears the threshold, so the caller can skip clustering
-    entirely instead of running it on a frame that's indistinguishable from
-    baseline noise (a small stray cluster there would otherwise still pass
-    MIN_CLUSTER_FRACTION's purely relative size check and register as a
-    false-positive detection).
-
-    Args:
-        area_pct: 1D array (n_frames,), from compute_area_pct().
-        spike_frame_idx: index of the spike frame within the segment.
-
-    Returns:
-        (index of the frame to run clustering on -- spike_frame_idx or
-        spike_frame_idx + 1, whether that frame actually cleared the
-        significance threshold).
-    """
-    baseline = area_pct[:spike_frame_idx]
-    elevation = max(float(AREA_PCT_SIGMA_MULT * baseline.std()), AREA_PCT_MIN_ELEVATION)
-    threshold = float(baseline.mean()) + elevation
-
-    if area_pct[spike_frame_idx] >= threshold:
-        return spike_frame_idx, True
-
-    next_idx = spike_frame_idx + 1
-    if next_idx < len(area_pct) and area_pct[next_idx] >= threshold:
-        return next_idx, True
-
-    return spike_frame_idx, False
-
-
 def compute_eps_px(obj: str) -> int:
     """Convert EPS_UM to pixels for this objective.
 
@@ -419,14 +409,61 @@ def compute_eps_px(obj: str) -> int:
     return int(EPS_UM * PIXEL_SCALE[obj])
 
 
-def compute_xy_span(mask: np.ndarray) -> tuple[int | None, int | None]:
-    """X/Y span of a combined accepted-region mask, in pixels."""
-    coords = np.argwhere(mask)
-    if coords.size == 0:
-        return None, None
-    y_span_px = int(coords[:, 0].max() - coords[:, 0].min() + 1)
-    x_span_px = int(coords[:, 1].max() - coords[:, 1].min() + 1)
-    return x_span_px, y_span_px
+def compute_window_px(obj: str) -> int:
+    """Local-density window size (pixels) for this objective.
+
+    Args:
+        obj: Objective magnification, must be a key of WINDOW_PX_BY_OBJ.
+
+    Returns:
+        uniform_filter window size in pixels, from WINDOW_PX_BY_OBJ.
+    """
+    return WINDOW_PX_BY_OBJ[obj]
+
+
+def _run_density_gated_cluster_seeker(
+    bright_mask: np.ndarray, eps_px: int, window_px: int, density_thresh: float, z_frame: np.ndarray | None
+) -> tuple[np.ndarray, list[tuple[float, float]], int]:
+    """Cluster only the bright pixels that sit in a locally dense neighborhood.
+
+    A flat bright/background mask treats an isolated noise pixel the same as a real,
+    spatially-compact release site. Gating by local density (fraction of bright pixels
+    within a window_px-sized neighborhood) before clustering rejects the former while
+    keeping the latter. Since the density gate can clip a real hotspot's own ragged
+    low-density edge, accepted clusters are expanded back out to the full bright-mask
+    blob(s) they touch, so no genuinely connected bright pixel is lost to a marginal
+    per-pixel density value.
+
+    Args:
+        bright_mask: (H, W) boolean array, True where the categorizer marked a pixel
+            bright (cat_stack[idx] == CATEGORY_BRIGHT).
+        eps_px: dilation disk radius in pixels, from compute_eps_px() -- passed straight
+            through to _run_cluster_seeker.
+        window_px: local-density window size in pixels, from compute_window_px().
+        density_thresh: minimum local bright-pixel density to qualify as a hotspot.
+        z_frame: (H, W) z-scored frame to weight centroids by pixel intensity, or None
+            for an unweighted mean (see _weighted_centroid).
+
+    Returns:
+        (label_frame, centroids, n_raw_clusters) -- label_frame is expanded to full
+        bright-mask blobs, centroids are computed on the pre-expansion gated pixels
+        (see _run_cluster_seeker), same shapes/semantics as _run_cluster_seeker's own return.
+    """
+    density = uniform_filter(bright_mask.astype(float), size=window_px, mode="constant", cval=0.0)
+    hotspot_mask = bright_mask & (density >= density_thresh)
+
+    gated_label_frame, centroids, n_raw = _run_cluster_seeker(hotspot_mask.astype(int), eps_px, z_frame)
+    n_clusters = len(centroids)
+
+    labeled_bright = skimage_label(bright_mask)
+    label_frame = np.full(bright_mask.shape, -2, dtype=int)
+    for cluster_id in range(n_clusters):
+        cluster_mask = gated_label_frame == cluster_id
+        touched_blob_ids = set(labeled_bright[cluster_mask].tolist()) - {0}
+        whole_mask = np.isin(labeled_bright, list(touched_blob_ids))
+        label_frame[whole_mask] = cluster_id
+
+    return label_frame, centroids, n_raw
 
 
 def _decay_model(t: np.ndarray, amplitude: float, tau: float) -> np.ndarray:
@@ -434,8 +471,8 @@ def _decay_model(t: np.ndarray, amplitude: float, tau: float) -> np.ndarray:
     return amplitude * np.exp(-t / tau)
 
 
-def fit_decay_tau(area_pct: np.ndarray, peak_frame_idx: int) -> tuple[float | None, float | None, float | None]:
-    """Fit a single-exponential decay to B% from its post-critical-frame peak onward.
+def fit_decay_tau(signal: np.ndarray, peak_frame_idx: int) -> tuple[float | None, float | None, float | None]:
+    """Fit a single-exponential decay to a per-frame signal from its post-peak-frame peak onward.
 
     t=0 is pinned to peak_frame_idx (not the spike frame) so the fit only
     sees the falling side of the curve, never the rising side. r_squared is
@@ -448,15 +485,16 @@ def fit_decay_tau(area_pct: np.ndarray, peak_frame_idx: int) -> tuple[float | No
     meaningless tau). Also all None if curve_fit doesn't converge.
 
     Args:
-        area_pct: 1D array (n_frames,), from compute_area_pct().
-        peak_frame_idx: index of the B% peak (from RegionAnalyzer.__init__).
+        signal: 1D array (n_frames,) -- currently RegionAnalyzer's density-gated
+            hotspot_area_um2 trace, from _compute_hotspot_area_trace().
+        peak_frame_idx: index of the signal's peak (from RegionAnalyzer.__init__).
 
     Returns:
         (amplitude, tau_frames, r_squared), each None together if the fit was
         skipped or failed. tau_frames is in frame units -- multiply by
         frame_duration_ms to get milliseconds (see get_lasting_time_ms).
     """
-    y = area_pct[peak_frame_idx:]
+    y = signal[peak_frame_idx:]
     if len(y) < MIN_DECAY_FIT_FRAMES or float(np.ptp(y)) < MIN_DECAY_FIT_RANGE:
         return None, None, None
 
@@ -489,10 +527,11 @@ def _weighted_centroid(rows: np.ndarray, cols: np.ndarray, z_frame: np.ndarray |
     Weighting by z_frame's value at each pixel pulls the centroid toward the
     brightest sub-region of a cluster instead of treating every non-background
     pixel (dim or bright) as equally important. Falls back to a plain mean
-    when z_frame is None (caller has no z-score data, e.g. plot_results.py's
-    hotspot-area line, which never uses the returned centroid anyway) or when
-    every weight is non-positive (degenerate/empty overlap, shouldn't happen
-    in practice since these pixels are already above the dim/bright threshold).
+    when z_frame is None (caller has no z-score data, e.g.
+    _compute_hotspot_area_trace(), which only needs kept-pixel counts and
+    never uses the returned centroid) or when every weight is non-positive
+    (degenerate/empty overlap, shouldn't happen in practice since these
+    pixels are already above the dim/bright threshold).
 
     Args:
         rows: row coordinates of the pixel set.

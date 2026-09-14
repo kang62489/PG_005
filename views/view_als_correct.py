@@ -80,7 +80,7 @@ class ViewAlsCorrect:
             canvas.axes.set_axis_off()
             self.lo_als_plot.addWidget(canvas)
 
-        self.btn_run_correct = QPushButton("Calibrate dF/f0 slow fluctuation")
+        self.btn_run_correct = QPushButton("Calibrate slow fluctuation")
         self.btn_run_correct.setFixedHeight(UISizes.BTN_RUN_CORRECT_HEIGHT)
         self.btn_run_correct.setStyleSheet("color: darkgreen; font-weight: bold;")
         self.lo_block_2.addWidget(self.btn_run_correct)

@@ -130,11 +130,10 @@ class ResultsExporter:
                 critical_frame_offset INTEGER,
                 critical_frame_area_pct REAL,
                 critical_frame_area_um2 REAL,
-                max_area_offset INTEGER,
-                max_area_um2 REAL,
-                max_area_eq_radius_um REAL,
-                max_area_x_span_um REAL,
-                max_area_y_span_um REAL,
+                spike_frame_hotspot_um2 REAL,
+                spike_frame_n_clusters INTEGER,
+                spike_plus1_frame_hotspot_um2 REAL,
+                spike_plus1_frame_n_clusters INTEGER,
                 decay_peak_offset INTEGER,
                 decay_fit_r2 REAL,
                 lasting_time_ms REAL,
@@ -155,8 +154,10 @@ class ResultsExporter:
         self._ensure_columns(
             conn,
             {
-                "max_area_x_span_um": "REAL",
-                "max_area_y_span_um": "REAL",
+                "spike_frame_hotspot_um2": "REAL",
+                "spike_frame_n_clusters": "INTEGER",
+                "spike_plus1_frame_hotspot_um2": "REAL",
+                "spike_plus1_frame_n_clusters": "INTEGER",
                 "decay_peak_offset": "INTEGER",
                 "decay_fit_r2": "REAL",
                 "lasting_time_ms": "REAL",
@@ -355,6 +356,18 @@ class ResultsExporter:
         else:
             centroid_y = centroid_x = r_lat_px = r_lat_um = None
 
+        spike_clusters = region_data["spike_frame_clusters"]
+        spike_frame_hotspot_um2 = sum(c["area_um2"] for c in spike_clusters) if spike_clusters else 0.0
+        spike_frame_n_clusters = len(spike_clusters)
+
+        plus1_clusters = region_data["spike_plus1_frame_clusters"]
+        if plus1_clusters is None:
+            spike_plus1_frame_hotspot_um2 = None
+            spike_plus1_frame_n_clusters = None
+        else:
+            spike_plus1_frame_hotspot_um2 = sum(c["area_um2"] for c in plus1_clusters) if plus1_clusters else 0.0
+            spike_plus1_frame_n_clusters = len(plus1_clusters)
+
         conn = sqlite3.connect(self.db_path)
         conn.execute(
             """
@@ -364,12 +377,13 @@ class ResultsExporter:
                 n_spikes_detected, n_spikes_analyzed,
                 n_clusters, has_region,
                 critical_frame_offset, critical_frame_area_pct, critical_frame_area_um2,
-                max_area_offset, max_area_um2, max_area_eq_radius_um, max_area_x_span_um, max_area_y_span_um,
+                spike_frame_hotspot_um2, spike_frame_n_clusters,
+                spike_plus1_frame_hotspot_um2, spike_plus1_frame_n_clusters,
                 decay_peak_offset, decay_fit_r2, lasting_time_ms,
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um, peak_latency_ms,
                 zscore_min, zscore_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -386,11 +400,10 @@ class ResultsExporter:
                 region_data["critical_frame_offset"],
                 region_data["critical_frame_area_pct"],
                 region_data["critical_frame_area_um2"],
-                region_data["max_area_offset"],
-                region_data["max_area_um2"],
-                region_data["max_area_eq_radius_um"],
-                region_data["max_area_x_span_um"],
-                region_data["max_area_y_span_um"],
+                spike_frame_hotspot_um2,
+                spike_frame_n_clusters,
+                spike_plus1_frame_hotspot_um2,
+                spike_plus1_frame_n_clusters,
                 region_data["decay_peak_offset"],
                 region_data["decay_fit_r2"],
                 lasting_time_ms,

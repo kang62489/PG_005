@@ -63,10 +63,10 @@ class ViewAlignSpike:
         self.lo_conditions = QFormLayout()
         self.lo_block_2.addLayout(self.lo_conditions)
 
-        self.lbl_cond_2 = QLabel("Z-score Normalization:")
+        self.lbl_cond_2 = QLabel("Type of Inputing Processed Tiff:")
         self.gb_norm = QButtonGroup()
-        self.rb_norm_1 = QRadioButton("dF/F0 (Gauss)")
-        self.rb_norm_2 = QRadioButton("dF/F0 (Gauss + ALS)")
+        self.rb_norm_1 = QRadioButton("No ALS")
+        self.rb_norm_2 = QRadioButton("ALS Corrected")
         self.gb_norm.addButton(self.rb_norm_1)
         self.gb_norm.addButton(self.rb_norm_2)
 
