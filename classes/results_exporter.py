@@ -49,7 +49,7 @@ class ResultsExporter:
     spatial/ and latency/ are created on demand by export_figure() — export_all() only creates
     median/ and categorized/.
 
-    A{n} is a batch-local sequential animal index (see build_animal_index_map),
+    A{n} is a batch-local sequential animal index (see build_animal_idx_lut),
     not the real ANIMAL_ID; S{slice} is the SLICE value verbatim; C{site} is
     derived from AT (e.g. SITE_1/CELL_1 -> C1).
     """
@@ -66,14 +66,16 @@ class ResultsExporter:
         self._init_db()
 
     @staticmethod
-    def build_animal_index_map(ref_df: pl.DataFrame) -> dict[str, dict[str, int]]:
+    def build_animal_idx_lut(df_checked_tiff: pl.DataFrame) -> dict[str, dict[str, int]]:
         """Map each DOR to a 1-based sequential index per distinct ANIMAL_ID recorded that day.
 
         A{n} resets every DOR (date prefix of Filename, e.g. "2024_02_15-0042.tif" ->
         "2024_02_15") since exp_date already appears in every export filename. Call
-        this once per ana-list run with ref_df's Filename + ANIMAL_ID columns.
+        this once per ana-list run with df_checked_tiff's Filename + ANIMAL_ID columns.
         """
-        dor_df = ref_df.with_columns(ref_df["Filename"].str.split("-").list.first().alias("_dor"))
+        dor_df = df_checked_tiff.with_columns(
+            df_checked_tiff["Filename"].str.split("-").list.first().alias("_dor")
+        )
         index_map: dict[str, dict[str, int]] = {}
         for (dor,), group in dor_df.group_by(["_dor"], maintain_order=True):
             animal_ids = sorted(set(group["ANIMAL_ID"].to_list()))
@@ -223,7 +225,7 @@ class ResultsExporter:
             exp_date: Experiment date string
             abf_serial: ABF file serial number
             img_serial: Image file serial number
-            animal_idx: Batch-local sequential animal index (see build_animal_index_map)
+            animal_idx: Batch-local sequential animal index (see build_animal_idx_lut)
             animal_id: Real ANIMAL_ID (e.g. "neoChAT-677"), stored in the DB record
             slice_val: SLICE value verbatim (e.g. "2R")
             at: AT location (e.g. "SITE_1"/"CELL_1")

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     )
     from .results_exporter import ResultsExporter
     from .spatial_categorization import SpatialCategorizer
+    from .spike_reliability import SpikeReliabilityChecker
 
 from .dialog_confirm import DialogConfirm
 from .dialog_get_path import DialogGetFile, DialogGetPath
@@ -39,6 +40,7 @@ __all__ = [
     "RegionAnalyzer",
     "ResultsExporter",
     "SpatialCategorizer",
+    "SpikeReliabilityChecker",
     "compute_eps_px",
     "compute_window_px",
     "detect_hotspot",
@@ -57,6 +59,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "RegionAnalyzer": (".region_analyzer", "RegionAnalyzer"),
     "ResultsExporter": (".results_exporter", "ResultsExporter"),
     "SpatialCategorizer": (".spatial_categorization", "SpatialCategorizer"),
+    "SpikeReliabilityChecker": (".spike_reliability", "SpikeReliabilityChecker"),
     "compute_eps_px": (".region_analyzer", "compute_eps_px"),
     "compute_window_px": (".region_analyzer", "compute_window_px"),
     "detect_hotspot": (".region_analyzer", "detect_hotspot"),

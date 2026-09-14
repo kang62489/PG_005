@@ -4,13 +4,15 @@ No PySide6 dependency — these build plain Figure objects for fig.savefig()/
 ResultsExporter.export_figure(), not interactive GUI windows. See classes/mpl_canvas.py
 for the PySide6-coupled canvas widget used by the live GUI.
 
-Three export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
+Four export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
 - plot_spatiotemporal_summary (-> spatial/): density-gated hotspot-area trace showing
   why the critical frame was picked, + cluster shading on the spike and spike+1 panels.
 - plot_full_trace (-> latency/, *_LATENCY.png): the same fixed cluster-ring overlay repeated
   across a 9-panel window, + the full-segment z-score trace with that window annotated.
 - plot_segment_reliability_montage (-> reliability/, *_RELIABILITY.png): one panel per raw
   segment showing its own density-gated detection result, for reviewing reliability by eye.
+- plot_spike_detection_summary (-> spikes/, *_spike_analysis.png): full-length Vm trace with
+  picked/skipped/collapsed spikes marked, replacing AbfClip's old per-recording CSV exports.
 """
 
 ## Modules
@@ -643,3 +645,57 @@ def _plot_trace_panel(
     ax.set_title(title, fontsize=12)
     ax.tick_params(labelsize=10)
     ax.grid(True, alpha=0.3)
+
+
+def plot_spike_detection_summary(
+    rec_time: np.ndarray,
+    vm: np.ndarray,
+    picked: tuple[np.ndarray, np.ndarray],
+    skipped: tuple[np.ndarray, np.ndarray],
+    collapsed: tuple[np.ndarray, np.ndarray],
+    title: str,
+) -> Figure:
+    """Full-length Vm trace with picked/skipped/collapsed spikes marked.
+
+    Replaces AbfClip's old *_Vm.csv/*_peaks.csv/*_collapsed_peaks.csv/*_segments.csv export --
+    one glance at this PNG shows the same information the CSVs held (which spikes were used vs
+    dropped, and why) without needing to open 4 separate files.
+
+    Args:
+        rec_time: Full recording time axis (seconds).
+        vm: Full recording membrane-potential trace, same length as rec_time.
+        picked: (times, values) of spikes kept for analysis.
+        skipped: (times, values) of spikes dropped for insufficient baseline margin.
+        collapsed: (times, values) of extra spikes sharing a frame with an earlier spike.
+        title: Figure title (e.g. "2025_06_11 0004").
+
+    Returns:
+        Figure with one axis: Vm line trace + 3 colored spike-category scatter overlays.
+    """
+    fig = Figure(figsize=(14, 5))
+    ax = fig.add_subplot(111)
+
+    ax.plot(rec_time, vm, color="black", linewidth=0.5, alpha=0.7, label="Vm", zorder=1)
+
+    picked_times, picked_values = picked
+    skipped_times, skipped_values = skipped
+    collapsed_times, collapsed_values = collapsed
+
+    if picked_times.size:
+        ax.scatter(picked_times, picked_values, color="#2ecc71", s=35, zorder=3,
+                   label=f"picked (n={picked_times.size})")
+    if skipped_times.size:
+        ax.scatter(skipped_times, skipped_values, color="#e74c3c", s=35, marker="x", zorder=3,
+                   label=f"skipped (n={skipped_times.size})")
+    if collapsed_times.size:
+        ax.scatter(collapsed_times, collapsed_values, color="#f39c12", s=25, marker="^", zorder=2,
+                   label=f"collapsed (n={collapsed_times.size})")
+
+    ax.set_xlabel("Time (s)", fontsize=12)
+    ax.set_ylabel("Vm (mV)", fontsize=12)
+    ax.set_title(title, fontsize=13)
+    ax.legend(loc="upper right", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+
+    return fig

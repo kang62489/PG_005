@@ -27,7 +27,7 @@ EPS_UM = 30.0  # inter-varicosity gap in um; sets dilation disk radius (tunable)
 MIN_CLUSTER_FRACTION = 0.05  # keep clusters covering at least this fraction of bright pixels
 
 WINDOW_PX_BY_OBJ = {"10X": 201, "40X": 804, "60X": 1024}  # local-density window size, per objective
-DENSITY_THRESH = 0.15  # min local bright-pixel density (uniform_filter) to qualify as a hotspot
+DENSITY_THRESH = 0.1  # min local bright-pixel density (uniform_filter) to qualify as a hotspot
 
 MIN_DECAY_FIT_FRAMES = 3  # fewer post-peak frames than this and the exponential fit is skipped
 MIN_DECAY_FIT_RANGE = 1e-6  # post-peak signal must vary by at least this much or the fit is skipped (degenerate/flat trace)

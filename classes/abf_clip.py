@@ -11,7 +11,18 @@ from rich.console import Console
 from scipy.signal import find_peaks
 from tabulate import tabulate
 
+# Local imports
+from functions import plot_spike_detection_summary
+
 console = Console()
+
+# Hard cap on set_interval_frames (baseline + post-spike margin per segment), regardless of how
+# much margin the data would otherwise allow.
+MAX_SET_INTERVAL_FRAMES = 10
+
+# set_interval_frames is picked as this quantile of all spikes' available margins, so at least
+# (1 - KEEP_FRACTION_QUANTILE) of spikes are guaranteed to clear the bar and get analyzed.
+KEEP_FRACTION_QUANTILE = 0.2
 
 
 class AbfClip:
@@ -57,13 +68,13 @@ class AbfClip:
         self.spike_detection()
         self.get_available_spiking_frames()
         self.clip_time_abf_img_segments()
-        self._export_spike_csv()
+        self._export_spike_plot()
 
     def load_abf(self) -> None:
         self.loaded_abf = pyabf.ABF(self.raw_abf_path)
 
     def spike_detection(
-        self, spike_min_distance: int = 3000, spike_min_prominence: float = 20.0
+        self, spike_min_distance: int = 3000, spike_min_prominence: float = 40.0
     ) -> None:
         self.abf_time = self.loaded_abf.sweepX
         self.abf_dataset = self.loaded_abf.data
@@ -92,25 +103,29 @@ class AbfClip:
         self.peak_values = self.Vm[self.peak_indices]
         self.df_peaks = pl.DataFrame({"Time": self.peak_times, "Peaks": self.peak_values})
 
-    def _export_spike_csv(self) -> None:
-        csv_dir = self.results_dir / "spikes"
-        csv_dir.mkdir(parents=True, exist_ok=True)
+    @staticmethod
+    def _xy(df: pl.DataFrame | None, x_col: str, y_col: str) -> tuple[np.ndarray, np.ndarray]:
+        """(x, y) numpy arrays from two columns of df, or empty arrays if df is None/empty."""
+        if df is None or df.is_empty():
+            return np.array([]), np.array([])
+        return df[x_col].to_numpy(), df[y_col].to_numpy()
+
+    def _export_spike_plot(self) -> None:
+        fig_dir = self.results_dir / "spikes"
+        fig_dir.mkdir(parents=True, exist_ok=True)
         stem = f"ABF_{self.exp_date}_{self.abf_serial}_spike_analysis"
 
-        self.df_Vm.write_csv(csv_dir / f"{stem}_Vm.csv")
-        self.df_peaks.write_csv(csv_dir / f"{stem}_peaks.csv")
+        fig = plot_spike_detection_summary(
+            rec_time=self.rec_time,
+            vm=self.Vm,
+            picked=self._xy(self.df_picked_spikes, "Peak_Time", "Peak_Value"),
+            skipped=self._xy(self.df_skipped_spikes, "Peak_Time", "Peak_Value"),
+            collapsed=self._xy(self.df_collapsed_peaks, "Dropped_Peak_Time", "Dropped_Peak_Value"),
+            title=f"{self.exp_date}  {self.abf_serial}",
+        )
+        fig.savefig(fig_dir / f"{stem}.png", dpi=150)
 
-        if self.df_collapsed_peaks is not None and not self.df_collapsed_peaks.is_empty():
-            self.df_collapsed_peaks.write_csv(csv_dir / f"{stem}_collapsed_peaks.csv")
-
-        if self.lst_abf_sample_ranges:
-            seg_cols: dict[str, np.ndarray] = {}
-            for i, (time_slice, vm_slice) in enumerate(self._segment_vm_slices()):
-                seg_cols[f"rec_time(abf_seg_{i})"] = time_slice
-                seg_cols[f"Vm(abf_seg_{i})"] = vm_slice
-            pl.DataFrame(seg_cols).write_csv(csv_dir / f"{stem}_segments.csv")
-
-        console.log(f"[green]Saved spike detection -> {stem}_*.csv[/green]")
+        console.log(f"[green]Saved spike detection plot -> {stem}.png[/green]")
 
     def _segment_vm_slices(self) -> list[tuple[np.ndarray, np.ndarray]]:
         """Per-segment (rec_time slice, Vm slice) pairs, from lst_abf_sample_ranges.
@@ -189,7 +204,9 @@ class AbfClip:
         # bounds into an empty frame range — clamp to 0 ("no margin available") instead.
         inter_spike_frames = np.clip(inter_spike_frames, 0, None)
 
-        # Pass 1: collect min_available_frames for all spikes -> derive set_interval_frames from mode
+        # Pass 1: collect min_available_frames for all spikes -> derive set_interval_frames from
+        # the KEEP_FRACTION_QUANTILE quantile, so at least KEEP_FRACTION of spikes clear the bar
+        # (the old mode-based pick could sit anywhere and silently drop most spikes below it).
         all_min_available: list[int] = []
         for idx_of_spike in range(len(self.spike_frame_indices)):
             left_frames: int = inter_spike_frames[idx_of_spike]
@@ -197,10 +214,12 @@ class AbfClip:
             all_min_available.append(int(np.min([left_frames, right_frames])))
 
         all_min_series = pl.Series("Min_Available_Frames", all_min_available, dtype=pl.Int64)
-        self.set_interval_frames = min(int(all_min_series.mode().min()), 20)
+        quantile_value = all_min_series.quantile(KEEP_FRACTION_QUANTILE, interpolation="lower")
+        self.set_interval_frames = min(int(quantile_value), MAX_SET_INTERVAL_FRAMES)
         console.log(
             f"[bold cyan]Min_Available_Frames — max: {all_min_series.max()}, "
-            f"mode: {all_min_series.mode().to_list()} -> set_interval_frames = {self.set_interval_frames}[/bold cyan]"
+            f"{KEEP_FRACTION_QUANTILE:.0%} quantile: {quantile_value} "
+            f"-> set_interval_frames = {self.set_interval_frames}[/bold cyan]"
         )
 
         # Pass 2: filter spikes using auto-derived set_interval_frames
@@ -209,13 +228,24 @@ class AbfClip:
 
         for idx_of_spike, frame_of_spike in enumerate(self.spike_frame_indices):
             min_available_frames = all_min_available[idx_of_spike]
+            # self.spike_frame_indices = spike_frame_indices_raw[keep_idx], so this entry's
+            # original (pre-collapse) peak is keep_idx[idx_of_spike] -- recover its actual
+            # (time, Vm value) for plot_spike_detection_summary's scatter markers.
+            orig_peak_idx = keep_idx[idx_of_spike]
+            peak_time = float(self.peak_times[orig_peak_idx])
+            peak_value = float(self.peak_values[orig_peak_idx])
 
             # set_interval_frames == 0 means every segment would be just the spike frame itself,
             # with no baseline frames before it — unanalyzable downstream (zscore_img_segs/
             # SpatialCategorizer both need at least 1 baseline frame). Skip rather than crash.
             if self.set_interval_frames < 1 or min_available_frames < self.set_interval_frames:
                 lst_skipped_spikes.append(
-                    {"Spike_Frame_Index": frame_of_spike, "Min_Available_Frames": min_available_frames}
+                    {
+                        "Spike_Frame_Index": frame_of_spike,
+                        "Min_Available_Frames": min_available_frames,
+                        "Peak_Time": peak_time,
+                        "Peak_Value": peak_value,
+                    }
                 )
                 continue
 
@@ -224,16 +254,29 @@ class AbfClip:
                     "Spike_Frame_Index": frame_of_spike,
                     "Min_Available_Frames": min_available_frames,
                     "Set_Interval_Frames": self.set_interval_frames,
+                    "Peak_Time": peak_time,
+                    "Peak_Value": peak_value,
                 }
             )
 
         self.df_skipped_spikes = pl.DataFrame(
             lst_skipped_spikes,
-            schema={"Spike_Frame_Index": pl.Int64, "Min_Available_Frames": pl.Int64},
+            schema={
+                "Spike_Frame_Index": pl.Int64,
+                "Min_Available_Frames": pl.Int64,
+                "Peak_Time": pl.Float64,
+                "Peak_Value": pl.Float64,
+            },
         )
         self.df_picked_spikes = pl.DataFrame(
             lst_picked_spikes,
-            schema={"Spike_Frame_Index": pl.Int64, "Min_Available_Frames": pl.Int64, "Set_Interval_Frames": pl.Int64},
+            schema={
+                "Spike_Frame_Index": pl.Int64,
+                "Min_Available_Frames": pl.Int64,
+                "Set_Interval_Frames": pl.Int64,
+                "Peak_Time": pl.Float64,
+                "Peak_Value": pl.Float64,
+            },
         )
 
         console.log("\n[bold red]" + "-" * 32 + " Skipped Spikes " + "-" * 32 + "\n[/bold red]")

@@ -36,15 +36,11 @@ from tabulate import tabulate
 
 # Local application imports
 from classes import (
-    CATEGORY_BRIGHT,
-    DENSITY_THRESH,
     AbfClip,
     RegionAnalyzer,
     ResultsExporter,
     SpatialCategorizer,
-    compute_eps_px,
-    compute_window_px,
-    detect_hotspot,
+    SpikeReliabilityChecker,
 )
 from functions import (
     compute_region_stats,
@@ -53,7 +49,6 @@ from functions import (
     list_parser,
     lookup_rec_from_db,
     plot_full_trace,
-    plot_segment_reliability_montage,
     plot_spatiotemporal_summary,
     spike_centered_median,
     write_cell_summary_xlsx,
@@ -244,63 +239,6 @@ def write_stats_report(
 # ── Pipeline runner ───────────────────────────────────────────────────────────
 
 
-def compute_segment_reliability(
-    lst_zscore: list[np.ndarray], spike_frame_idx: int, obj: str
-) -> tuple[list[dict], float]:
-    """Per-segment density-gated hotspot detection, cheaper than a full RegionAnalyzer per segment.
-
-    Every raw segment has the same frame count as the final median (guaranteed by AbfClip's
-    frame-range construction), so a naive per-segment RegionAnalyzer would cost roughly as much
-    as today's median-only categorization -- times the segment count. This only needs a yes/no
-    per segment, so it categorizes just the spike and spike+1 frames (SpatialCategorizer.
-    categorize_frame) instead of the whole segment, and reuses RegionAnalyzer's own earliest-wins
-    detection loop (detect_hotspot) directly, skipping the decay-trace/cluster-geometry work a
-    full RegionAnalyzer instance would otherwise compute.
-
-    Args:
-        lst_zscore: per-spike z-scored segments, from zscore_img_segs().
-        spike_frame_idx: index of the spike frame within each segment (same for every segment
-            in a recording, by construction of AbfClip's frame ranges).
-        obj: objective magnification, for compute_eps_px()/compute_window_px().
-
-    Returns:
-        (seg_results, reliability_pct) -- one dict per segment: {"detected", "frame_offset"
-        (0 for spike, 1 for spike+1), "bright_mask", "label_frame", "centroids", "n_clusters"}
-        (enough to plot with plot_segment_reliability_montage()), and the percentage of
-        segments detected overall.
-    """
-    eps_px = compute_eps_px(obj)
-    window_px = compute_window_px(obj)
-
-    seg_results: list[dict] = []
-    for segment in lst_zscore:
-        threshold = SpatialCategorizer.compute_baseline_threshold(segment[:spike_frame_idx])
-        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_frames_2sigma")
-
-        candidates = []
-        for idx in (spike_frame_idx, spike_frame_idx + 1):
-            if idx >= segment.shape[0]:
-                continue
-            cat_frame = categorizer.categorize_frame(segment[idx], idx, threshold)
-            candidates.append((idx, cat_frame, segment[idx]))
-
-        detected, frame_idx, label_frame, centroids, _ = detect_hotspot(candidates, eps_px, window_px)
-        winning_cat_frame = next(cat_frame for idx, cat_frame, _ in candidates if idx == frame_idx)
-        seg_results.append({
-            "detected": detected,
-            "frame_offset": frame_idx - spike_frame_idx,
-            "bright_mask": winning_cat_frame == CATEGORY_BRIGHT,
-            "label_frame": label_frame,
-            "centroids": centroids,
-            "n_clusters": len(centroids),
-        })
-
-    n_total = len(seg_results)
-    n_detected = sum(r["detected"] for r in seg_results)
-    reliability_pct = 100.0 * n_detected / n_total if n_total else 0.0
-    return seg_results, reliability_pct
-
-
 def _save_entry_figures(
     exporter: ResultsExporter,
     fig: object,
@@ -332,31 +270,36 @@ def run(
     )
 
     entries, results_dir, detrend_mode, normalization = parse_ana_list(ana_list_path, detrend_mode, use_als)
-    ref_df = lookup_rec_from_db(entries, db_path, exp_db_path)
-    cell_df = count_unique_cells(ref_df)
+
+    df_checked_tiff = lookup_rec_from_db(entries, db_path, exp_db_path)
+    df_cell_group = count_unique_cells(df_checked_tiff)
     run_keys: set[tuple[str, str]] = {
         tuple(Path(name).stem.split("-", 1))  # type: ignore[misc]
         for name in entries["raw_tiff_name"].to_list()
     }
-    console.log(f"Found {len(entries)} entries in {ana_list_path.name} -> {len(cell_df)} unique cells")
+    console.log(f"Found {len(entries)} entries in {ana_list_path.name} -> {len(df_cell_group)} unique cells")
 
     xlsx_dir = results_dir / "spikes"
     xlsx_dir.mkdir(parents=True, exist_ok=True)
     cell_summary_path = xlsx_dir / f"{ana_list_path.stem}_cells.xlsx"
-    write_cell_summary_xlsx(cell_df, cell_summary_path)
+    write_cell_summary_xlsx(df_cell_group, cell_summary_path)
     console.log(f"Saved cell summary -> {cell_summary_path.name}")
 
-    animal_index_map = ResultsExporter.build_animal_index_map(ref_df)
+    animal_idx_lut = ResultsExporter.build_animal_idx_lut(df_checked_tiff)
     exporter = ResultsExporter(results_root=results_dir)
 
     total = len(entries)
-    save_thread: threading.Thread | None = None
+    figure_export_thread: threading.Thread | None = None
+
     for i, row in enumerate(entries.iter_rows(named=True), 1):
-        if save_thread is not None:
-            save_thread.join()
-            save_thread = None
+        # Wait for the previous entry's background PNG export to finish before starting this
+        # entry -- lets N's plot-saving overlap with N+1's analysis, capped at 1 thread at a time.
+        if figure_export_thread is not None:
+            figure_export_thread.join()
+            figure_export_thread = None
+
         entry_t0 = time.time()
-        match = ref_df.filter(pl.col("Filename") == row["raw_tiff_name"])
+        match = df_checked_tiff.filter(pl.col("Filename") == row["raw_tiff_name"])
         if match.is_empty():
             console.log(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
             continue
@@ -367,6 +310,9 @@ def run(
         if emitter:
             emitter({"type": "progress", "i": i, "total": total, "file": proc_tiff_path.name})
         console.log(f"\n[cyan]{proc_tiff_path.name}  +  {raw_abf_path.name}  [{obj}]  [{i}/{total}][/cyan]")
+
+        # Detect spikes in the paired ABF trace and clip out one image/Vm segment per spike
+        # (baseline frames + spike frame + post-spike frames, per AbfClip's own windowing).
         clip = AbfClip(
             proc_tiff_path=proc_tiff_path,
             raw_abf_path=raw_abf_path,
@@ -375,6 +321,8 @@ def run(
             normalization=normalization,
         )
 
+        # Guard: every spike in this recording got skipped by AbfClip (e.g. spikes too closely
+        # spaced to leave any usable baseline window) -- nothing to analyze, move to next entry.
         if not clip.lst_img_frame_ranges:
             console.log("[yellow]No valid segments — skipping z-score step.[/yellow]")
             with ana_list_path.open("a", encoding="utf-8") as f:
@@ -383,6 +331,16 @@ def run(
                     "(spikes too closely spaced for any baseline window)\n"
                 )
             continue
+
+        # Cheap metadata lookups, needed both for the reliability montage's filename (right below)
+        # and for exporter.export_all() later -- none of this depends on the median/categorize/
+        # region-analysis steps, so it's resolved once, up front, rather than late in the function.
+        export_data = clip.get_export_data()
+        animal_id = match["ANIMAL_ID"].item()
+        animal_idx = animal_idx_lut[export_data["exp_date"]][animal_id]
+        slice_val = match["SLICE"].item()
+        at = match["AT"].item()
+        frame_duration_ms = clip.ts_imgs * 1000
 
         if emitter:
             emitter({"type": "step", "msg": "Z-score normalizing segments..."})
@@ -396,12 +354,22 @@ def run(
 
         if emitter:
             emitter({"type": "step", "msg": "Checking per-segment reliability..."})
-        seg_results, reliability_pct = compute_segment_reliability(lst_zscore, spike_frame_idx, obj)
+        reliability_checker = SpikeReliabilityChecker(obj)
+        seg_results, reliability_pct = reliability_checker.check(lst_zscore, spike_frame_idx)
         n_detected = sum(r["detected"] for r in seg_results)
         n_total = len(seg_results)
         console.log(
             f"[green]Reliability: {n_detected}/{n_total} segment(s) detected ({reliability_pct:.1f}%)"
             f"  ({time.time() - entry_t0:.1f}s)[/green]"
+        )
+
+        # Reliability montage: one panel per raw segment, so reliability% can be checked by eye
+        # against the actual per-segment detections, not just trusted as a number. Exported
+        # regardless of final_significant (below) -- it's exactly what explains a "no detection"
+        # result. Built right here, not after the median/region-analysis steps, since seg_results
+        # is all it actually depends on.
+        reliability_checker.export_montage(
+            exporter, proc_tiff_path.stem, export_data, animal_idx, slice_val, at, detrend_mode, normalization,
         )
 
         # Only median the segments that actually showed a hotspot -- an all-segments median gets
@@ -458,24 +426,6 @@ def run(
 
         if emitter:
             emitter({"type": "step", "msg": "Exporting results..."})
-        export_data = clip.get_export_data()
-        animal_id = match["ANIMAL_ID"].item()
-        animal_idx = animal_index_map[export_data["exp_date"]][animal_id]
-        slice_val = match["SLICE"].item()
-        at = match["AT"].item()
-        frame_duration_ms = clip.ts_imgs * 1000
-
-        # Reliability montage: one panel per raw segment, so reliability% can be checked by eye
-        # against the actual per-segment detections, not just trusted as a number. Exported
-        # regardless of final_significant -- it's exactly what explains a "no detection" result.
-        reliability_montage_fig = plot_segment_reliability_montage(
-            seg_results, proc_tiff_path.stem, compute_window_px(obj), DENSITY_THRESH
-        )
-        reliability_stem = ResultsExporter.build_export_stem(
-            export_data["exp_date"], export_data["img_serial"], animal_idx,
-            slice_val, at, detrend_mode, normalization, "RELIABILITY",
-        )
-        exporter.export_figure("reliability", reliability_montage_fig, f"{reliability_stem}.png")
 
         if final_significant and region_results["n_clusters"] > 0:
             peak_latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
@@ -547,18 +497,18 @@ def run(
                 export_data["exp_date"], export_data["img_serial"], animal_idx,
                 slice_val, at, detrend_mode, normalization, "LATENCY",
             )
-            save_thread = threading.Thread(
+            figure_export_thread = threading.Thread(
                 target=_save_entry_figures,
                 args=(exporter, fig, f"{stem}.png", full_trace_fig, f"{trace_stem}.png"),
             )
-            save_thread.start()
+            figure_export_thread.start()
         dir_names = "/, ".join(d.name for d in dirs.values())
         console.log(
             f"[green]Exported {dir_names}/, reliability/, spatial/, latency/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
         )
 
-    if save_thread is not None:
-        save_thread.join()
+    if figure_export_thread is not None:
+        figure_export_thread.join()
 
     if write_stats_report(ana_list_path, exporter.db_path, run_keys):
         console.log(f"[green]Updated region analysis statistics -> {ana_list_path.name}[/green]")

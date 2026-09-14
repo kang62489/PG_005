@@ -13,31 +13,31 @@ dir_raw_tiffs: D:\Programs\PG_005\raw_tiffs
 dir_proc_tiffs: D:\Programs\PG_005\proc_tiffs
 
 dir_raw_abfs: D:\Programs\PG_005\raw_abfs
-dir_results: D:/Programs/PG_005/output/test2[SKIPPED] 2025_06_11-0003_BIEXP_GAUSS.tif: no significant ACh detection (reliability 14.6% -- 7/48 segments detected)
+dir_results: D:/Programs/PG_005/output/test2
 
 ================================================================================
-Region Analysis Statistics — generated 2026-09-14T11:01:17+00:00
+Region Analysis Statistics — generated 2026-09-14T18:40:13+00:00
 ================================================================================
 Neurons detected ACh release: 2/2
 
 Spatial (skewed — Median/IQR/GeoMean shown):
-+-------------------------------+----------+----------+-------+----------+------------------+----------+---------+---+
-|            Metric             |   Mean   |   Std    |  CV%  |  Median  |    IQR(Q1-Q3)    | GeoMean  | GeoStd* | n |
-+-------------------------------+----------+----------+-------+----------+------------------+----------+---------+---+
-|    spike_frame_hotspot_um2    | 74346.78 | 91442.26 | 123.0 | 74346.78 | 42017.1-106676.5 | 36696.04 |  6.58   | 2 |
-| spike_plus1_frame_hotspot_um2 | 57006.44 | 47723.42 | 83.7  | 57006.44 | 40133.7-73879.2  | 45945.32 |  2.62   | 2 |
-+-------------------------------+----------+----------+-------+----------+------------------+----------+---------+---+
++-------------------------------+-----------+-----------+-------+-----------+------------------+----------+---------+---+
+|            Metric             |   Mean    |    Std    |  CV%  |  Median   |    IQR(Q1-Q3)    | GeoMean  | GeoStd* | n |
++-------------------------------+-----------+-----------+-------+-----------+------------------+----------+---------+---+
+|    spike_frame_hotspot_um2    | 125057.72 | 128683.46 | 102.9 | 125057.72 | 79561.2-170554.2 | 85788.78 |  3.69   | 2 |
+| spike_plus1_frame_hotspot_um2 | 104388.96 | 55410.04  | 53.1  | 104388.96 | 84798.6-123979.4 | 96757.01 |  1.75   | 2 |
++-------------------------------+-----------+-----------+-------+-----------+------------------+----------+---------+---+
 
 Temporal:
-+-----------------+-------+------+---+
-|     Metric      | Mean  | Std  | n |
-+-----------------+-------+------+---+
-| peak_latency_ms | 0.00  | 0.00 | 2 |
-| lasting_time_ms | 71.41 | N/A  | 2 |
-+-----------------+-------+------+---+
++-----------------+--------+-------+---+
+|     Metric      |  Mean  |  Std  | n |
++-----------------+--------+-------+---+
+| peak_latency_ms | -12.50 | 17.68 | 2 |
+| lasting_time_ms | 85.29  | 1.27  | 2 |
++-----------------+--------+-------+---+
 
 Per-Neuron Recording List (filename, detected) [detected/total]:
-neoChAT-587_S4RC1 [(2025_06_11-0002_A1S4RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_06_11-0003_A1S4RC1_BIEXP_GAUSS_MED.tif, False)] 1/2
-neoChAT-676_S3RC1 [(2025_12_15-0012_A1S3RC1_BIEXP_GAUSS_MED.tif, True),
-                   (2025_12_15-0013_A1S3RC1_BIEXP_GAUSS_MED.tif, True)] 2/2
+neoChAT-587_S4RC1 [(2025_06_11-0002_A1S4RC1_BIEXP_ALS_MED.tif, True),
+                   (2025_06_11-0003_A1S4RC1_BIEXP_ALS_MED.tif, True)] 2/2
+neoChAT-676_S3RC1 [(2025_12_15-0012_A1S3RC1_BIEXP_ALS_MED.tif, True),
+                   (2025_12_15-0013_A1S3RC1_BIEXP_ALS_MED.tif, True)] 2/2

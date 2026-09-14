@@ -29,7 +29,12 @@ if TYPE_CHECKING:
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
-    from .plot_results import plot_full_trace, plot_segment_reliability_montage, plot_spatiotemporal_summary
+    from .plot_results import (
+        plot_full_trace,
+        plot_segment_reliability_montage,
+        plot_spatiotemporal_summary,
+        plot_spike_detection_summary,
+    )
     from .spike_alignment import spike_centered_avg, spike_centered_median
     from .tau_estimate import sample_tau
     from .test_cuda import test_cuda
@@ -63,6 +68,7 @@ __all__ = [
     "plot_full_trace",
     "plot_segment_reliability_montage",
     "plot_spatiotemporal_summary",
+    "plot_spike_detection_summary",
     "populate_animal_id_values",
     "raw_tiff_ready",
     "sample_tau",
@@ -89,6 +95,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "plot_spatiotemporal_summary": (".plot_results",                      "plot_spatiotemporal_summary"),
     "plot_full_trace":     (".plot_results",                              "plot_full_trace"),
     "plot_segment_reliability_montage": (".plot_results",                 "plot_segment_reliability_montage"),
+    "plot_spike_detection_summary": (".plot_results",                     "plot_spike_detection_summary"),
     "lookup_rec_from_db":  (".database_ops",                           "lookup_rec_from_db"),
     "populate_animal_id_values": (".database_ops",                     "populate_animal_id_values"),
     "count_unique_cells":  (".database_ops",                           "count_unique_cells"),
