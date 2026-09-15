@@ -21,7 +21,7 @@ from skimage.segmentation import watershed
 # Constants
 NDIM_SINGLE_FRAME = 2
 CATEGORY_BRIGHT = 1
-BASELINE_SIGMA_MULT = 2
+BASELINE_SIGMA_MULT = 3
 
 
 class SpatialCategorizer:
@@ -33,7 +33,7 @@ class SpatialCategorizer:
 
     Attributes:
         method: Categorization method ('connected', 'watershed', 'morphological')
-        threshold_method: Auto-thresholding method ('baseline_frames_2sigma')
+        threshold_method: Auto-thresholding method ('baseline_n_sigma')
         min_region_size: Minimum pixels per region
 
     Example:
@@ -49,12 +49,12 @@ class SpatialCategorizer:
     """
 
     GROUPING_METHODS: ClassVar[list[str]] = ["connected", "watershed", "morphological"]
-    THRESHOLD_METHODS: ClassVar[list[str]] = ["baseline_frames_2sigma"]
+    THRESHOLD_METHODS: ClassVar[list[str]] = ["baseline_n_sigma"]
 
     def __init__(
         self,
         grouping_method: str,
-        threshold_method: str = "baseline_frames_2sigma",
+        threshold_method: str = "baseline_n_sigma",
         *,
         # Connected/Watershed parameters
         min_region_size: int = 20,
@@ -95,7 +95,7 @@ class SpatialCategorizer:
     @classmethod
     def connected(
         cls,
-        threshold_method: str = "baseline_frames_2sigma",
+        threshold_method: str = "baseline_n_sigma",
         *,
         min_region_size: int = 20,
     ) -> "SpatialCategorizer":
@@ -103,7 +103,7 @@ class SpatialCategorizer:
         Create a SpatialCategorizer using connected components method.
 
         Args:
-            threshold_method: 'baseline_frames_2sigma'
+            threshold_method: 'baseline_n_sigma'
             min_region_size: Minimum pixels per region (smaller regions are removed)
 
         Returns:
@@ -118,7 +118,7 @@ class SpatialCategorizer:
     @classmethod
     def watershed(
         cls,
-        threshold_method: str = "baseline_frames_2sigma",
+        threshold_method: str = "baseline_n_sigma",
         *,
         min_region_size: int = 20,
         min_distance: int = 10,
@@ -127,7 +127,7 @@ class SpatialCategorizer:
         Create a SpatialCategorizer using watershed segmentation.
 
         Args:
-            threshold_method: 'baseline_frames_2sigma'
+            threshold_method: 'baseline_n_sigma'
             min_region_size: Minimum pixels per region (smaller regions are removed)
             min_distance: Minimum distance between peaks (larger = fewer regions)
 
@@ -144,7 +144,7 @@ class SpatialCategorizer:
     @classmethod
     def morphological(
         cls,
-        threshold_method: str = "baseline_frames_2sigma",
+        threshold_method: str = "baseline_n_sigma",
         *,
         kernel_size: int = 3,
     ) -> "SpatialCategorizer":
@@ -152,7 +152,7 @@ class SpatialCategorizer:
         Create a SpatialCategorizer using morphological cleanup.
 
         Args:
-            threshold_method: 'baseline_frames_2sigma'
+            threshold_method: 'baseline_n_sigma'
             kernel_size: Size of erosion/dilation kernel (larger = more aggressive cleanup)
 
         Returns:

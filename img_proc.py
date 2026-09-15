@@ -127,7 +127,7 @@ def process_biexp(file: str, raw_dir: Path, proc_dir: Path, cuda_available: bool
     if emitter:
         emitter({"type": "step", "msg": "Fitting background noise..."})
     console.log("  Fitting background noise (stack-wide histogram)...")
-    bg_mean, bg_sigma = fit_hist_sigma(detrended)
+    bg_mean, bg_sigma = fit_hist_sigma(detrended, cuda_available=cuda_available)
     console.log(f"  Background: mean={bg_mean:.4f}  sigma={bg_sigma:.4f}  ({time.time() - t0:.1f}s)")
     zscored = img_zscore_convert(detrended, bg_mean, bg_sigma)
     del detrended

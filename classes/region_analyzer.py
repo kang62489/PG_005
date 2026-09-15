@@ -12,9 +12,7 @@ from scipy.ndimage import distance_transform_edt, uniform_filter
 from scipy.optimize import curve_fit
 from skimage.measure import label as skimage_label
 
-# Category constants
-CATEGORY_BACKGROUND = 0
-CATEGORY_BRIGHT = 1
+from classes.spatial_categorization import CATEGORY_BRIGHT
 
 # Pixel scaling constants (pixel/um)
 PIXEL_SCALE = {
@@ -23,11 +21,15 @@ PIXEL_SCALE = {
     "60X": 4.5,
 }
 
-EPS_UM = 30.0  # inter-varicosity gap in um; sets dilation disk radius (tunable)
+EPS_UM = 50.0  # inter-varicosity gap in um; sets dilation disk radius (tunable)
 MIN_CLUSTER_FRACTION = 0.05  # keep clusters covering at least this fraction of bright pixels
 
-WINDOW_PX_BY_OBJ = {"10X": 201, "40X": 804, "60X": 1024}  # local-density window size, per objective
-DENSITY_THRESH = 0.1  # min local bright-pixel density (uniform_filter) to qualify as a hotspot
+WINDOW_PX_BY_OBJ = {"10X": 201, "40X": 255, "60X": 511}  # local-density window size, per objective
+
+# Min local bright-pixel density (uniform_filter) to qualify as a hotspot, per objective --
+# lower magnification packs more (smaller, noisier) bright pixels per window, so needs a
+# looser bar than higher magnification's larger, cleaner bright regions.
+DENSITY_THRESH_BY_OBJ = {"10X": 0.15, "40X": 0.1, "60X": 0.05}
 
 MIN_DECAY_FIT_FRAMES = 3  # fewer post-peak frames than this and the exponential fit is skipped
 MIN_DECAY_FIT_RANGE = 1e-6  # post-peak signal must vary by at least this much or the fit is skipped (degenerate/flat trace)
@@ -40,7 +42,7 @@ class RegionAnalyzer:
 
     Picks the spike frame or spike+1 as the critical frame -- whichever is the
     earliest to show a density-gated hotspot (local bright-pixel density,
-    from the categorizer's own bright mask, gated at DENSITY_THRESH within a
+    from the categorizer's own bright mask, gated at DENSITY_THRESH_BY_OBJ[obj] within a
     WINDOW_PX_BY_OBJ-sized window, spike frame checked first). Its bright
     pixels are then clustered with morphological dilation + connected
     components, and undersized clusters are dropped. Each kept cluster gets a
@@ -98,6 +100,7 @@ class RegionAnalyzer:
 
         eps_px = compute_eps_px(obj)
         window_px = compute_window_px(obj)
+        density_thresh = compute_density_thresh(obj)
 
         (
             self.critical_frame_idx,
@@ -105,9 +108,9 @@ class RegionAnalyzer:
             self.label_frame,
             self.centroids,
             self.n_raw_clusters,
-        ) = self._detect_critical_frame(cat_stack, med_stack, spike_frame_idx, eps_px, window_px)
+        ) = self._detect_critical_frame(cat_stack, med_stack, spike_frame_idx, eps_px, window_px, density_thresh)
 
-        self.hotspot_area_um2 = self._compute_hotspot_area_trace(cat_stack, eps_px, window_px)
+        self.hotspot_area_um2 = self._compute_hotspot_area_trace(cat_stack, eps_px, window_px, density_thresh)
         peak_search_end = min(self.spike_frame_idx + 2, len(self.hotspot_area_um2))
         self.decay_peak_frame_idx = self.spike_frame_idx + int(
             np.argmax(self.hotspot_area_um2[self.spike_frame_idx:peak_search_end])
@@ -123,10 +126,16 @@ class RegionAnalyzer:
             self.spike_frame_clusters,
             self.spike_plus1_frame_label_frame,
             self.spike_plus1_frame_clusters,
-        ) = self._report_frame_clusters(cat_stack, med_stack, spike_frame_idx, eps_px, window_px)
+        ) = self._report_frame_clusters(cat_stack, med_stack, spike_frame_idx, eps_px, window_px, density_thresh)
 
     def _detect_critical_frame(
-        self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, eps_px: int, window_px: int
+        self,
+        cat_stack: np.ndarray,
+        med_stack: np.ndarray,
+        spike_frame_idx: int,
+        eps_px: int,
+        window_px: int,
+        density_thresh: float,
     ) -> tuple[int, bool, np.ndarray, list[tuple[float, float]], int]:
         """Pick spike or spike+1 as the critical frame -- earliest one to show a density-gated hotspot.
 
@@ -142,10 +151,14 @@ class RegionAnalyzer:
             candidate_idxs.append(spike_frame_idx + 1)
         candidates = [(idx, cat_stack[idx], med_stack[idx]) for idx in candidate_idxs]
 
-        significant, critical_frame_idx, label_frame, centroids, n_raw = detect_hotspot(candidates, eps_px, window_px)
+        significant, critical_frame_idx, label_frame, centroids, n_raw = detect_hotspot(
+            candidates, eps_px, window_px, density_thresh
+        )
         return critical_frame_idx, significant, label_frame, centroids, n_raw
 
-    def _compute_hotspot_area_trace(self, cat_stack: np.ndarray, eps_px: int, window_px: int) -> np.ndarray:
+    def _compute_hotspot_area_trace(
+        self, cat_stack: np.ndarray, eps_px: int, window_px: int, density_thresh: float
+    ) -> np.ndarray:
         """Density-gated total kept-cluster area (um^2) per frame, for the decay-tau fit.
 
         Centroids aren't needed here (z_frame=None) -- only the total kept-pixel count per
@@ -156,14 +169,20 @@ class RegionAnalyzer:
         for idx in range(n_frames):
             bright_mask = cat_stack[idx] == CATEGORY_BRIGHT
             label_frame, _, _ = _run_density_gated_cluster_seeker(
-                bright_mask, eps_px, window_px, DENSITY_THRESH, z_frame=None
+                bright_mask, eps_px, window_px, density_thresh, z_frame=None
             )
             kept_px = int(np.count_nonzero(label_frame >= 0))
             hotspot_area_um2[idx] = self._area_to_um2(kept_px)
         return hotspot_area_um2
 
     def _report_frame_clusters(
-        self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, eps_px: int, window_px: int
+        self,
+        cat_stack: np.ndarray,
+        med_stack: np.ndarray,
+        spike_frame_idx: int,
+        eps_px: int,
+        window_px: int,
+        density_thresh: float,
     ) -> tuple[np.ndarray, list[dict], np.ndarray | None, list[dict] | None]:
         """Per-cluster pixel/um^2 sizes for the spike frame and spike+1 frame, independently.
 
@@ -177,13 +196,13 @@ class RegionAnalyzer:
             spike_plus1 fields are None when spike_frame_idx + 1 is out of range.
         """
         spike_label_frame, spike_clusters = self._cluster_report_for_frame(
-            cat_stack, med_stack, spike_frame_idx, eps_px, window_px
+            cat_stack, med_stack, spike_frame_idx, eps_px, window_px, density_thresh
         )
 
         plus1_idx = spike_frame_idx + 1
         if plus1_idx < cat_stack.shape[0]:
             plus1_label_frame, plus1_clusters = self._cluster_report_for_frame(
-                cat_stack, med_stack, plus1_idx, eps_px, window_px
+                cat_stack, med_stack, plus1_idx, eps_px, window_px, density_thresh
             )
         else:
             plus1_label_frame, plus1_clusters = None, None
@@ -191,12 +210,18 @@ class RegionAnalyzer:
         return spike_label_frame, spike_clusters, plus1_label_frame, plus1_clusters
 
     def _cluster_report_for_frame(
-        self, cat_stack: np.ndarray, med_stack: np.ndarray, frame_idx: int, eps_px: int, window_px: int
+        self,
+        cat_stack: np.ndarray,
+        med_stack: np.ndarray,
+        frame_idx: int,
+        eps_px: int,
+        window_px: int,
+        density_thresh: float,
     ) -> tuple[np.ndarray, list[dict]]:
         """Density-gated clusters for one frame, as {cluster_id, centroid, area_px, area_um2} dicts."""
         bright_mask = cat_stack[frame_idx] == CATEGORY_BRIGHT
         label_frame, centroids, _ = _run_density_gated_cluster_seeker(
-            bright_mask, eps_px, window_px, DENSITY_THRESH, z_frame=med_stack[frame_idx]
+            bright_mask, eps_px, window_px, density_thresh, z_frame=med_stack[frame_idx]
         )
         clusters = []
         for cluster_id, centroid in enumerate(centroids):
@@ -412,6 +437,18 @@ def compute_window_px(obj: str) -> int:
     return WINDOW_PX_BY_OBJ[obj]
 
 
+def compute_density_thresh(obj: str) -> float:
+    """Local-density hotspot threshold for this objective.
+
+    Args:
+        obj: Objective magnification, must be a key of DENSITY_THRESH_BY_OBJ.
+
+    Returns:
+        Minimum local bright-pixel density to qualify as a hotspot, from DENSITY_THRESH_BY_OBJ.
+    """
+    return DENSITY_THRESH_BY_OBJ[obj]
+
+
 def _run_density_gated_cluster_seeker(
     bright_mask: np.ndarray, eps_px: int, window_px: int, density_thresh: float, z_frame: np.ndarray | None
 ) -> tuple[np.ndarray, list[tuple[float, float]], int]:
@@ -458,7 +495,7 @@ def _run_density_gated_cluster_seeker(
 
 
 def detect_hotspot(
-    candidates: list[tuple[int, np.ndarray, np.ndarray]], eps_px: int, window_px: int
+    candidates: list[tuple[int, np.ndarray, np.ndarray]], eps_px: int, window_px: int, density_thresh: float
 ) -> tuple[bool, int, np.ndarray, list[tuple[float, float]], int]:
     """Earliest-wins density-gated hotspot detection over a list of candidate frames.
 
@@ -473,6 +510,8 @@ def detect_hotspot(
             them. categorized_frame is 0=background/1=bright (see CATEGORY_BRIGHT).
         eps_px: dilation disk radius in pixels, from compute_eps_px().
         window_px: local-density window size in pixels, from compute_window_px().
+        density_thresh: minimum local bright-pixel density to qualify as a hotspot,
+            from compute_density_thresh() -- varies per objective.
 
     Returns:
         (detected, frame_idx, label_frame, centroids, n_raw_clusters) -- frame_idx/label_frame/
@@ -482,7 +521,7 @@ def detect_hotspot(
     for idx, cat_frame, z_frame in candidates:
         bright_mask = cat_frame == CATEGORY_BRIGHT
         label_frame, centroids, n_raw = _run_density_gated_cluster_seeker(
-            bright_mask, eps_px, window_px, DENSITY_THRESH, z_frame=z_frame
+            bright_mask, eps_px, window_px, density_thresh, z_frame=z_frame
         )
         if centroids:
             return True, idx, label_frame, centroids, n_raw

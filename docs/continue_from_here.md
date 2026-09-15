@@ -1,3 +1,49 @@
+# Log of the project progress 2026-09-15 Tue (Session 56)
+Last working file: `classes/spike_reliability.py`
+Last working line: end of file (`SpikeReliabilityChecker.export_montage`)
+
+## List of modified files
+- `classes/spatial_categorization.py` — extracted the hardcoded `2` in `compute_baseline_threshold()` to a named constant `BASELINE_SIGMA_MULT` (user later changed its value from `2.0` to `3.0` directly in the IDE, outside this session's own edits).
+- `classes/abf_clip.py` — two real fixes:
+  - Replaced the old 4-CSV spike export (`_export_spike_csv`) with a single PNG (`_export_spike_plot`) showing the full Vm trace with picked/skipped/collapsed spikes color-marked. Added `Peak_Time`/`Peak_Value` columns to `df_picked_spikes`/`df_skipped_spikes` so the plot can place markers.
+  - **Bug fix**: `set_interval_frames` was picked via the *mode* of `all_min_available`, silently dropping any spike whose own margin fell short of that value (52% of spikes dropped on a real test recording). Replaced with the 20th-percentile of `all_min_available` (new `KEEP_FRACTION_QUANTILE = 0.2` constant), which guarantees ≥80% of spikes clear the bar by construction — verified drop rate fell from 52% to 18% on `2025_06_11-0003`. Also extracted the old hardcoded `20` cap to `MAX_SET_INTERVAL_FRAMES`.
+- `ach_domain_analysis.py` — multiple structural cleanups, all confirmed with the user before applying:
+  - Renamed `ref_df`/`cell_df`/`save_thread` → `df_checked_tiff`/`df_cell_group`/`figure_export_thread`; added blank-line separation to the previously dense setup block (~L335-369 pre-session numbering).
+  - Renamed `animal_index_map` → `animal_idx_lut`, and its builder `ResultsExporter.build_animal_idx_lut()` (was `build_animal_index_map`).
+  - Added clarifying comments around the `AbfClip` construction + no-segments guard block, and around the background-figure-export-thread throttle at the top of the main loop.
+  - **Structural fix**: the reliability montage export used to run *after* the median/categorize/region-analysis block, even though it only depends on `seg_results` (available right after the reliability check) — moved the cheap metadata lookups (`export_data`, `animal_idx`, `slice_val`, `at`, `frame_duration_ms`) earlier and the montage export to run immediately after the reliability check, before the heavier median/region-analysis steps.
+  - Moved `compute_segment_reliability()` out entirely — first to `functions/spike_reliability.py` as a renamed free function `compute_reliability()`, then (per the user's explicit request) restructured again into a class, `SpikeReliabilityChecker`, in `classes/spike_reliability.py` — owns `check()` (the detection loop) and `export_montage()` (the montage PNG export that used to be a separate `_save_reliability_montage()` helper). The class imports `SpatialCategorizer`/`RegionAnalyzer`'s helper functions rather than instantiating either class, preserving the original performance intent (avoiding a full `RegionAnalyzer` per raw segment).
+- `functions/plot_results.py` — new `plot_spike_detection_summary()` (full Vm trace + picked/skipped/collapsed spike markers), used by `AbfClip._export_spike_plot()`.
+- `functions/__init__.py`, `classes/__init__.py` — lazy-import registry updates to match all of the above (registered `plot_spike_detection_summary` and `SpikeReliabilityChecker`; removed the short-lived `functions/spike_reliability.py` registration after that module was superseded by the class).
+- `export_zscore_segments.py` (new, from earlier in the session) — exports GAUSS-normalized per-spike z-scored segments of `2025_06_11-0003` and `2025_12_15-0012` to `output/` subfolders for manual inspection.
+- All changes were committed by the user along the way (two intermediate backup commits: `4d10000`, `2303dca`); working tree is clean as of this wrap-up.
+
+## Summary of current progress
+- Confirmed all 6 TODOs from Session 55's tracker are done: spike+1 reliability check, density-gated detection merged into `RegionAnalyzer`, tested against the production median pipeline, reliability merged into the main workflow, detected-only-segments median, and results re-plotted (reliability montage + B% removal) — user explicitly confirmed this at the top of today's session.
+- Ran an "assembly-line" debugging pass at the user's request: one issue at a time, each investigated and confirmed before any edit, each fix verified against a real recording (`2025_06_11-0003` and/or `2025_12_15-0012`) before moving on. Every fix in this session followed that pattern — no code was changed without an explicit go-ahead (one exception self-corrected: an early rename was applied before confirmation, caught by the user, and reverted before being reapplied properly).
+- Found and fixed a real, previously-unnoticed bug: the spike-segment windowing (`set_interval_frames`) used the *mode* of available margins, which silently discarded roughly half of all detected spikes on a real recording. This was not a hypothetical — verified with before/after counts on real data.
+- Iteratively restructured the reliability-checking code's location and shape based on direct user feedback: function → moved to `functions/` → renamed → finally reshaped into a class in `classes/` that owns both the detection logic and its own figure export, at the user's explicit design request (mirroring how `RegionAnalyzer`/`SpatialCategorizer` are structured).
+- User expressed real frustration partway through ("the codes so messy", "I am really messed") — this is a reaction to the accumulated state of research code being audited closely for the first time, not to anything done in today's session; today's changes were all incremental, targeted, and verified. See [[feedback_pace_and_tone]].
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ All 6 TODOs from Session 55 confirmed done by the user
+- ✅ Extracted `BASELINE_SIGMA_MULT` magic number in `SpatialCategorizer`
+- ✅ Renamed `ref_df`/`cell_df`/`save_thread` and `animal_index_map` to intuitive names, with formatting cleanup
+- ✅ Replaced `AbfClip`'s 4-CSV spike export with a single annotated PNG plot
+- ✅ Fixed the `set_interval_frames` mode-based spike-dropping bug (52% → 18% drop rate, verified on real data)
+- ✅ Extracted `MAX_SET_INTERVAL_FRAMES` magic number
+- ✅ Fixed the reliability-montage export ordering (now runs right after the reliability check, not after the median/region-analysis block)
+- ✅ Restructured per-segment reliability checking into `SpikeReliabilityChecker` (`classes/spike_reliability.py`), verified end-to-end after each restructuring step
+
+## What should we do next? (TODOs)
+- (none — the `CATEGORY_BRIGHT`/`CATEGORY_BACKGROUND` duplication was fixed in a same-day follow-up: `classes/region_analyzer.py` now imports `CATEGORY_BRIGHT` from `classes/spatial_categorization.py` instead of redefining it; `CATEGORY_BACKGROUND` dead code removed. Verified all three import paths — `region_analyzer`, `spatial_categorization`, and `classes`'s lazy loader — resolve to the identical object.)
+- (Informational, not a bug) `DENSITY_THRESH` is currently `0.1` in `classes/region_analyzer.py`, versus `0.15` recorded as the confirmed value in an earlier session's plan doc. User clarified this is their own in-progress tuning, to be optimized per objective (10X/40X/60X) later — no action needed unless the user raises it again.
+
+## Last Session Recap
+※ recap: Ran a user-directed "assembly-line" debugging pass over `ach_domain_analysis.py`/`AbfClip`/the reliability-checking code, fixing issues one at a time with confirmation before each edit and real-data verification after. Found and fixed a genuine bug (mode-based spike windowing was dropping ~52% of spikes; replaced with a 20th-percentile cutoff, verified 52%→18%). Replaced `AbfClip`'s messy 4-CSV export with one annotated PNG. Renamed several unclear variables/functions. Restructured the reliability-checking code through several iterations into `SpikeReliabilityChecker`, a class in `classes/spike_reliability.py`, per the user's explicit design direction. Later the same day, closed the last open item: deduplicated `CATEGORY_BRIGHT`/`CATEGORY_BACKGROUND` (region_analyzer.py now imports from spatial_categorization.py). No open TODOs remain from this session.
+
+---
+
 # Log of the project progress 2026-09-14 Mon (Session 55)
 Last working file: `prototype_density_hotspots.py`
 Last working line: 17 (`WINDOW_PX = 200`)

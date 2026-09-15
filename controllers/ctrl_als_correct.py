@@ -145,7 +145,7 @@ class CtrlAlsCorrect:
             ax.legend(fontsize=7)
             self.view.canvases[i].draw()
 
-    # ── Calculate dF/F0 for All ────────────────────────────────────────────────
+    # ── Run ALS Correction for All ──────────────────────────────────────────────
 
     def on_run_correct(self) -> None:
         if self._proc_list_path is None:
@@ -192,7 +192,7 @@ class CtrlAlsCorrect:
 
     def _on_correct_done(self) -> None:
         self.view.btn_run_correct.setEnabled(True)
-        console.log("[green bold]dF/F0 calculation complete.[/green bold]")
+        console.log("[green bold]ALS correction complete.[/green bold]")
         self.view.le_processing_step.setText("All done!")
 
     # ── ROI switcher ───────────────────────────────────────────────────────────

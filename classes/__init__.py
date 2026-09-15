@@ -13,8 +13,8 @@ if TYPE_CHECKING:
     from .mpl_canvas import MplCanvas
     from .region_analyzer import (
         CATEGORY_BRIGHT,
-        DENSITY_THRESH,
         RegionAnalyzer,
+        compute_density_thresh,
         compute_eps_px,
         compute_window_px,
         detect_hotspot,
@@ -41,11 +41,11 @@ __all__ = [
     "ResultsExporter",
     "SpatialCategorizer",
     "SpikeReliabilityChecker",
+    "compute_density_thresh",
     "compute_eps_px",
     "compute_window_px",
     "detect_hotspot",
     "CATEGORY_BRIGHT",
-    "DENSITY_THRESH",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -60,11 +60,11 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "ResultsExporter": (".results_exporter", "ResultsExporter"),
     "SpatialCategorizer": (".spatial_categorization", "SpatialCategorizer"),
     "SpikeReliabilityChecker": (".spike_reliability", "SpikeReliabilityChecker"),
+    "compute_density_thresh": (".region_analyzer", "compute_density_thresh"),
     "compute_eps_px": (".region_analyzer", "compute_eps_px"),
     "compute_window_px": (".region_analyzer", "compute_window_px"),
     "detect_hotspot": (".region_analyzer", "detect_hotspot"),
     "CATEGORY_BRIGHT": (".region_analyzer", "CATEGORY_BRIGHT"),
-    "DENSITY_THRESH": (".region_analyzer", "DENSITY_THRESH"),
 }
 
 

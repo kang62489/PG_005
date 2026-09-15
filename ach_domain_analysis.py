@@ -389,7 +389,7 @@ def run(
         if emitter:
             emitter({"type": "step", "msg": "Categorizing spike frame..."})
         # Real analysis starts here: categorize the z scores for further region analysis (using skimage.measure).
-        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_frames_2sigma")
+        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
         categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
         console.log(
             f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), threshold: {categorizer.threshold_used}"

@@ -336,64 +336,95 @@ def plot_full_trace(
     return fig
 
 
+MONTAGE_NCOLS = 8
+MONTAGE_MAX_ROWS = 4
+MONTAGE_PAGE_SIZE = MONTAGE_NCOLS * MONTAGE_MAX_ROWS  # segments per PNG, before starting a new one
+
+
 def plot_segment_reliability_montage(
     seg_results: list[dict],
     rec_stem: str,
     window_px: int,
     density_thresh: float,
-) -> Figure:
+    sigma_mult: float,
+) -> list[Figure]:
     """Grid of per-segment density-gated detection panels, for reviewing reliability by eye.
 
     One panel per raw (un-merged) segment: its winning frame's bright mask in gray, cluster
     shading on top, a green (detected) or red (not detected) border, and which frame won
-    (spike vs spike+1). Reliability% is reported once in the suptitle.
+    (spike vs spike+1). Reliability% (computed over all segments, not just the current page)
+    is reported in every page's suptitle.
+
+    Capped at MONTAGE_MAX_ROWS x MONTAGE_NCOLS (4x8 = 32) panels per figure -- a recording with
+    more segments than that gets multiple figures ("pages") instead of one increasingly-tall PNG.
 
     Args:
-        seg_results: per-segment dicts from compute_segment_reliability(), each with
+        seg_results: per-segment dicts from SpikeReliabilityChecker.check(), each with
             "detected", "frame_offset", "bright_mask", "label_frame", "centroids", "n_clusters".
         rec_stem: recording name, for the title.
         window_px: density window size used (see compute_window_px()), for the title.
-        density_thresh: density threshold used (DENSITY_THRESH), for the title.
+        density_thresh: density threshold used (see compute_density_thresh()), for the title.
+        sigma_mult: bright-pixel threshold's sigma multiplier (see BASELINE_SIGMA_MULT), for the title.
 
     Returns:
-        Figure, ready for fig.savefig(...) or ResultsExporter.export_figure(...)
+        One Figure per page (single-element list when segments fit on one page), each ready
+        for fig.savefig(...) or ResultsExporter.export_figure(...).
     """
     n = len(seg_results)
-    ncols = 8
-    nrows = int(np.ceil(n / ncols))
-    fig = Figure(figsize=(ncols * 2.0, nrows * 2.0), dpi=130)
-    axes = np.atleast_1d(fig.subplots(nrows, ncols)).flatten()
-
     n_detected = sum(r["detected"] for r in seg_results)
-    for seg_idx, result in enumerate(seg_results):
-        ax = axes[seg_idx]
-        ax.imshow(result["bright_mask"], cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+    reliability_line = f"reliability: {n_detected}/{n} = {n_detected / n:.1%}" if n else "no segments"
 
-        label_frame = result["label_frame"]
-        overlay = np.zeros((*label_frame.shape, 4))
-        for cluster_idx in range(result["n_clusters"]):
-            overlay[label_frame == cluster_idx] = CLUSTER_RGBA[cluster_idx % len(CLUSTER_RGBA)]
-        ax.imshow(overlay, interpolation="nearest")
+    if n == 0:
+        fig = Figure(figsize=(MONTAGE_NCOLS * 2.0, 2.0), dpi=130)
+        fig.suptitle(f"{rec_stem} — no segments", fontsize=11)
+        return [fig]
 
-        color = "limegreen" if result["detected"] else "red"
-        for spine in ax.spines.values():
-            spine.set_edgecolor(color)
-            spine.set_linewidth(3)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        offset_tag = f"+{result['frame_offset']}" if result["frame_offset"] else "sp"
-        ax.set_title(f"seg{seg_idx:02d} [{offset_tag}] n={result['n_clusters']}", fontsize=7, color=color)
+    page_starts = list(range(0, n, MONTAGE_PAGE_SIZE))
+    n_pages = len(page_starts)
+    figures = []
 
-    for j in range(n, len(axes)):
-        axes[j].axis("off")
+    for page_idx, page_start in enumerate(page_starts):
+        page_results = seg_results[page_start : page_start + MONTAGE_PAGE_SIZE]
+        n_page = len(page_results)
+        nrows = int(np.ceil(n_page / MONTAGE_NCOLS))
+        fig = Figure(figsize=(MONTAGE_NCOLS * 2.0, nrows * 2.0), dpi=130)
+        axes = np.atleast_1d(fig.subplots(nrows, MONTAGE_NCOLS)).flatten()
 
-    fig.suptitle(
-        f"{rec_stem} — window_px={window_px}, density>={density_thresh}\n"
-        f"reliability: {n_detected}/{n} = {n_detected / n:.1%}" if n else f"{rec_stem} — no segments",
-        fontsize=11,
-    )
-    fig.tight_layout()
-    return fig
+        for i, result in enumerate(page_results):
+            seg_idx = page_start + i
+            ax = axes[i]
+            ax.imshow(result["bright_mask"], cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+
+            label_frame = result["label_frame"]
+            overlay = np.zeros((*label_frame.shape, 4))
+            for cluster_idx in range(result["n_clusters"]):
+                overlay[label_frame == cluster_idx] = CLUSTER_RGBA[cluster_idx % len(CLUSTER_RGBA)]
+            ax.imshow(overlay, interpolation="nearest")
+
+            color = "limegreen" if result["detected"] else "red"
+            for spine in ax.spines.values():
+                spine.set_edgecolor(color)
+                spine.set_linewidth(3)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            frame_tag = f"sp+{result['frame_offset']}" if result["frame_offset"] else "sp"
+            ax.set_title(
+                f"seg{seg_idx:02d} [{frame_tag}] n_clusters={result['n_clusters']}", fontsize=7, color=color
+            )
+
+        for j in range(n_page, len(axes)):
+            axes[j].axis("off")
+
+        page_tag = f"  (page {page_idx + 1}/{n_pages})" if n_pages > 1 else ""
+        fig.suptitle(
+            f"{rec_stem} — window_px={window_px}, density>={density_thresh}, threshold={sigma_mult:g}σ{page_tag}\n"
+            f"{reliability_line}",
+            fontsize=11,
+        )
+        fig.tight_layout()
+        figures.append(fig)
+
+    return figures
 
 
 def _plot_frame_panel(
@@ -675,11 +706,18 @@ def plot_spike_detection_summary(
     fig = Figure(figsize=(14, 5))
     ax = fig.add_subplot(111)
 
-    ax.plot(rec_time, vm, color="black", linewidth=0.5, alpha=0.7, label="Vm", zorder=1)
+    # rec_time is absolute ABF sweep time (starts wherever the TTL trigger fired, not 0) --
+    # shift every time array by the same offset so the plot's x-axis starts at 0, without
+    # touching AbfClip's own rec_time (other code relies on its absolute values for indexing).
+    t0 = rec_time[0]
+    ax.plot(rec_time - t0, vm, color="black", linewidth=0.5, alpha=0.7, label="Vm", zorder=1)
 
     picked_times, picked_values = picked
     skipped_times, skipped_values = skipped
     collapsed_times, collapsed_values = collapsed
+    picked_times = picked_times - t0 if picked_times.size else picked_times
+    skipped_times = skipped_times - t0 if skipped_times.size else skipped_times
+    collapsed_times = collapsed_times - t0 if collapsed_times.size else collapsed_times
 
     if picked_times.size:
         ax.scatter(picked_times, picked_values, color="#2ecc71", s=35, zorder=3,

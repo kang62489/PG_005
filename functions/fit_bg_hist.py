@@ -1,17 +1,13 @@
-"""
-fit_bg_hist.py  --  Stack-wide background-noise z-score normalization (CPU, Numba JIT).
-
-Public API
-----------
-fit_hist_sigma(detrended, n_bins)         ->  tuple[float, float]
-img_zscore_convert(detrended, mean, sigma) ->  np.ndarray
-"""
+"""fit_bg_hist.py -- stack-wide background-noise z-score normalization (CPU Numba JIT + CUDA GPU)."""
 
 ## Modules
+# Standard library imports
+import math
+
 # Third-party imports
 import numba
 import numpy as np
-from numba import njit, prange
+from numba import cuda, njit, prange
 from scipy.optimize import curve_fit
 
 # Constants
@@ -22,16 +18,16 @@ def _gaussian(x: np.ndarray, amp: float, mean: float, sigma: float) -> np.ndarra
     return amp * np.exp(-((x - mean) ** 2) / (2 * sigma**2))
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def _cpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, bin_width: float) -> np.ndarray:
-    """Parallel histogram: per-thread local bins combined at the end (avoids write races)."""
     n = values.shape[0]
     n_threads = numba.get_num_threads()
-    local_counts = np.zeros((n_threads, n_bins), dtype=np.int64)
+    local_counts = np.zeros((n_threads, n_bins), dtype=np.int64)  # per-thread bins, avoids write races
 
     for i in prange(n):
         tid = numba.get_thread_id()
         idx = int((values[i] - lo) / bin_width)
+        # clamp: float rounding can push the max value 1 past the last bin
         if idx < 0:
             idx = 0
         elif idx >= n_bins:
@@ -40,13 +36,13 @@ def _cpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, bin_width:
 
     counts = np.zeros(n_bins, dtype=np.int64)
     for t in range(n_threads):
-        counts += local_counts[t]
+        counts += local_counts[t]  # combine per-thread bins
     return counts
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def _cpu_masked_std(values: np.ndarray, threshold: float) -> float:
-    """Std of values <= threshold, single pass, no boolean-mask copy."""
+    # std of values <= threshold, single pass (sum/sum_sq/count), no boolean-mask copy
     n = values.shape[0]
     n_threads = numba.get_num_threads()
     local_sum = np.zeros(n_threads, dtype=np.float64)
@@ -70,29 +66,80 @@ def _cpu_masked_std(values: np.ndarray, threshold: float) -> float:
     return np.sqrt(variance) if variance > 0.0 else 0.0
 
 
-def fit_hist_sigma(detrended: np.ndarray, n_bins: int = N_HIST_BINS) -> tuple[float, float]:
-    """
-    Estimate the background-noise center/sigma from a stack-wide histogram.
+@cuda.jit
+def _gpu_histogram_kernel(
+    values: np.ndarray, counts: np.ndarray, n_bins: int, lo: float, bin_width: float
+) -> None:
+    # one thread per value, atomic-add into the shared bin counter (GPU equivalent of the
+    # CPU version's per-thread-bins-then-combine trick)
+    i = cuda.grid(1)
+    if i >= values.shape[0]:
+        return
+    idx = int((values[i] - lo) / bin_width)
+    if idx < 0:
+        idx = 0
+    elif idx >= n_bins:
+        idx = n_bins - 1
+    cuda.atomic.add(counts, idx, 1)
 
-    Pools every pixel/frame value in `detrended` (bi-exp detrend residual, y - trend)
-    into one histogram, finds the peak (background mode), then fits a Gaussian to
-    the peak and its left side only — the right side is contaminated by real signal
-    transients (hotspots), so fitting only the uncontaminated half keeps the sigma
-    estimate robust.
 
-    Args:
-        detrended: Detrend residual stack, any shape.
-        n_bins: Number of histogram bins spanning the full data range (min to max).
+def _gpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, bin_width: float) -> np.ndarray:
+    n = values.shape[0]
+    d_values = cuda.to_device(values.astype(np.float32))
+    d_counts = cuda.to_device(np.zeros(n_bins, dtype=np.int64))
+    threads = 256
+    blocks = math.ceil(n / threads)
+    _gpu_histogram_kernel[blocks, threads](d_values, d_counts, n_bins, np.float32(lo), np.float32(bin_width))
+    cuda.synchronize()
+    return d_counts.copy_to_host()
 
-    Returns:
-        (mean, sigma) of the fitted background-noise Gaussian.
-    """
+
+@cuda.jit
+def _gpu_masked_sum_kernel(values: np.ndarray, threshold: float, sums: np.ndarray) -> None:
+    # sums = [sum, sum_sq, count] accumulator, one thread per value, atomic-add
+    i = cuda.grid(1)
+    if i >= values.shape[0]:
+        return
+    v = values[i]
+    if v <= threshold:
+        cuda.atomic.add(sums, 0, v)
+        cuda.atomic.add(sums, 1, v * v)
+        cuda.atomic.add(sums, 2, 1.0)
+
+
+def _gpu_masked_std(values: np.ndarray, threshold: float) -> float:
+    n = values.shape[0]
+    d_values = cuda.to_device(values.astype(np.float64))
+    d_sums = cuda.to_device(np.zeros(3, dtype=np.float64))
+    threads = 256
+    blocks = math.ceil(n / threads)
+    _gpu_masked_sum_kernel[blocks, threads](d_values, np.float64(threshold), d_sums)
+    cuda.synchronize()
+    total_sum, total_sum_sq, total_count = d_sums.copy_to_host()
+
+    mean = total_sum / total_count
+    variance = total_sum_sq / total_count - mean * mean
+    return float(np.sqrt(variance)) if variance > 0.0 else 0.0
+
+
+def fit_hist_sigma(
+    detrended: np.ndarray, n_bins: int = N_HIST_BINS, cuda_available: bool = False
+) -> tuple[float, float]:
+    # Pool every pixel/frame value into one histogram, find the peak (background mode), fit a
+    # Gaussian to the peak + left side only -- right side is contaminated by real signal
+    # transients (hotspots), so fitting only the clean half keeps sigma robust.
     values = detrended.ravel()
     lo = float(values.min())
     hi = float(values.max())
     bin_width = (hi - lo) / n_bins
 
-    counts = _cpu_histogram_counts(values, n_bins, lo, bin_width)
+    # histogram build + masked-std seed scale with stack size -> GPU when available.
+    # The final curve_fit below always runs on CPU: it only ever fits n_bins points, already
+    # trivially fast regardless of stack size.
+    if cuda_available:
+        counts = _gpu_histogram_counts(values, n_bins, lo, bin_width)
+    else:
+        counts = _cpu_histogram_counts(values, n_bins, lo, bin_width)
     edges = lo + bin_width * np.arange(n_bins + 1)
     centers = (edges[:-1] + edges[1:]) / 2
 
@@ -103,7 +150,7 @@ def fit_hist_sigma(detrended: np.ndarray, n_bins: int = N_HIST_BINS) -> tuple[fl
     x_left = centers[left_mask]
     y_left = counts[left_mask]
 
-    sigma_seed = _cpu_masked_std(values, x_peak)
+    sigma_seed = _gpu_masked_std(values, x_peak) if cuda_available else _cpu_masked_std(values, x_peak)
     p0 = [float(counts[peak_idx]), x_peak, float(sigma_seed)]
     popt, _ = curve_fit(_gaussian, x_left, y_left, p0=p0, maxfev=5000)
     _amp_fit, mean_fit, sigma_fit = popt
@@ -111,5 +158,4 @@ def fit_hist_sigma(detrended: np.ndarray, n_bins: int = N_HIST_BINS) -> tuple[fl
 
 
 def img_zscore_convert(detrended: np.ndarray, mean: float, sigma: float) -> np.ndarray:
-    """Convert a detrend residual stack to z-scores using a stack-wide background mean/sigma."""
     return (detrended - mean) / sigma

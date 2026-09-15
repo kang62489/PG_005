@@ -4,13 +4,13 @@ import numpy as np
 
 from classes.region_analyzer import (
     CATEGORY_BRIGHT,
-    DENSITY_THRESH,
+    compute_density_thresh,
     compute_eps_px,
     compute_window_px,
     detect_hotspot,
 )
 from classes.results_exporter import ResultsExporter
-from classes.spatial_categorization import SpatialCategorizer
+from classes.spatial_categorization import BASELINE_SIGMA_MULT, SpatialCategorizer
 from functions.plot_results import plot_segment_reliability_montage
 
 
@@ -37,6 +37,7 @@ class SpikeReliabilityChecker:
         self.obj = obj
         self.eps_px = compute_eps_px(obj)
         self.window_px = compute_window_px(obj)
+        self.density_thresh = compute_density_thresh(obj)
         self.seg_results: list[dict] = []
         self.reliability_pct: float = 0.0
 
@@ -57,7 +58,7 @@ class SpikeReliabilityChecker:
         seg_results: list[dict] = []
         for segment in lst_zscore:
             threshold = SpatialCategorizer.compute_baseline_threshold(segment[:spike_frame_idx])
-            categorizer = SpatialCategorizer.morphological(threshold_method="baseline_frames_2sigma")
+            categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
 
             candidates = []
             for idx in (spike_frame_idx, spike_frame_idx + 1):
@@ -66,7 +67,9 @@ class SpikeReliabilityChecker:
                 cat_frame = categorizer.categorize_frame(segment[idx], idx, threshold)
                 candidates.append((idx, cat_frame, segment[idx]))
 
-            detected, frame_idx, label_frame, centroids, _ = detect_hotspot(candidates, self.eps_px, self.window_px)
+            detected, frame_idx, label_frame, centroids, _ = detect_hotspot(
+                candidates, self.eps_px, self.window_px, self.density_thresh
+            )
             winning_cat_frame = next(cat_frame for idx, cat_frame, _ in candidates if idx == frame_idx)
             seg_results.append({
                 "detected": detected,
@@ -96,15 +99,21 @@ class SpikeReliabilityChecker:
         detrend_mode: str,
         normalization: str,
     ) -> None:
-        """Build and export the per-segment reliability montage PNG.
+        """Build and export the per-segment reliability montage PNG(s).
 
         Only needs self.seg_results (from check()) plus filename-naming lookups -- no dependency
         on the median/categorize/region-analysis steps, so this can (and should) run right after
-        check(), not after them.
+        check(), not after them. More than MONTAGE_PAGE_SIZE segments split into multiple PNGs
+        (RELIABILITY_P1.png, RELIABILITY_P2.png, ...) instead of one increasingly-tall image.
         """
-        fig = plot_segment_reliability_montage(self.seg_results, rec_stem, self.window_px, DENSITY_THRESH)
-        stem = ResultsExporter.build_export_stem(
-            export_data["exp_date"], export_data["img_serial"], animal_idx,
-            slice_val, at, detrend_mode, normalization, "RELIABILITY",
+        figures = plot_segment_reliability_montage(
+            self.seg_results, rec_stem, self.window_px, self.density_thresh, BASELINE_SIGMA_MULT
         )
-        exporter.export_figure("reliability", fig, f"{stem}.png")
+        n_pages = len(figures)
+        for page_idx, fig in enumerate(figures):
+            file_type = "RELIABILITY" if n_pages == 1 else f"RELIABILITY_P{page_idx + 1}"
+            stem = ResultsExporter.build_export_stem(
+                export_data["exp_date"], export_data["img_serial"], animal_idx,
+                slice_val, at, detrend_mode, normalization, file_type,
+            )
+            exporter.export_figure("reliability", fig, f"{stem}.png")

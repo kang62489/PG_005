@@ -52,7 +52,7 @@ class ViewAlsCorrect:
         self.lbl_als_num_iters = QLabel("ALS Num Iters: ")
 
         self.le_als_lam = QLineEdit("100")
-        self.le_als_p = QLineEdit("0.05")
+        self.le_als_p = QLineEdit("0.02")
         self.le_als_num_iters = QLineEdit("10")
 
         self.lo_als_config.addWidget(self.lbl_als_lam, 0, 0)
