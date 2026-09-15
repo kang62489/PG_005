@@ -18,7 +18,7 @@ def _gaussian(x: np.ndarray, amp: float, mean: float, sigma: float) -> np.ndarra
     return amp * np.exp(-((x - mean) ** 2) / (2 * sigma**2))
 
 
-@njit(parallel=True, cache=True)
+@njit(parallel=True)
 def _cpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, bin_width: float) -> np.ndarray:
     n = values.shape[0]
     n_threads = numba.get_num_threads()
@@ -40,7 +40,7 @@ def _cpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, bin_width:
     return counts
 
 
-@njit(parallel=True, cache=True)
+@njit(parallel=True)
 def _cpu_masked_std(values: np.ndarray, threshold: float) -> float:
     # std of values <= threshold, single pass (sum/sum_sq/count), no boolean-mask copy
     n = values.shape[0]

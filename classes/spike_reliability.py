@@ -15,7 +15,7 @@ from functions.plot_results import plot_segment_reliability_montage
 
 
 class SpikeReliabilityChecker:
-    """Checks each raw z-scored segment for its own density-gated hotspot, cheaper than a full
+    """Checks each raw segment for its own density-gated hotspot, cheaper than a full
     RegionAnalyzer per segment, and exports the resulting per-segment montage.
 
     Every raw segment has the same frame count as the final median (guaranteed by AbfClip's
@@ -28,7 +28,7 @@ class SpikeReliabilityChecker:
 
     Example:
         >>> checker = SpikeReliabilityChecker(obj="40X")
-        >>> seg_results, reliability_pct = checker.check(lst_zscore, spike_frame_idx)
+        >>> seg_results, reliability_pct = checker.check(lst_segments, spike_frame_idx)
         >>> checker.export_montage(exporter, rec_stem, export_data, animal_idx, slice_val, at,
         ...                        detrend_mode, normalization)
     """
@@ -41,11 +41,11 @@ class SpikeReliabilityChecker:
         self.seg_results: list[dict] = []
         self.reliability_pct: float = 0.0
 
-    def check(self, lst_zscore: list[np.ndarray], spike_frame_idx: int) -> tuple[list[dict], float]:
+    def check(self, lst_segments: list[np.ndarray], spike_frame_idx: int) -> tuple[list[dict], float]:
         """Per-segment density-gated hotspot detection.
 
         Args:
-            lst_zscore: per-spike z-scored segments, from zscore_img_segs().
+            lst_segments: per-spike raw (detrended, unnormalized) segments, from load_img_segs().
             spike_frame_idx: index of the spike frame within each segment (same for every segment
                 in a recording, by construction of AbfClip's frame ranges).
 
@@ -56,7 +56,7 @@ class SpikeReliabilityChecker:
             Also stored on self for export_montage() to use.
         """
         seg_results: list[dict] = []
-        for segment in lst_zscore:
+        for segment in lst_segments:
             threshold = SpatialCategorizer.compute_baseline_threshold(segment[:spike_frame_idx])
             categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
 

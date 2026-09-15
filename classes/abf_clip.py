@@ -236,8 +236,8 @@ class AbfClip:
             peak_value = float(self.peak_values[orig_peak_idx])
 
             # set_interval_frames == 0 means every segment would be just the spike frame itself,
-            # with no baseline frames before it — unanalyzable downstream (zscore_img_segs/
-            # SpatialCategorizer both need at least 1 baseline frame). Skip rather than crash.
+            # with no baseline frames before it — unanalyzable downstream (SpatialCategorizer
+            # needs at least 1 baseline frame). Skip rather than crash.
             if self.set_interval_frames < 1 or min_available_frames < self.set_interval_frames:
                 lst_skipped_spikes.append(
                     {

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
+    from .load_img_segs import load_img_segs
     from .plot_results import (
         plot_full_trace,
         plot_segment_reliability_montage,
@@ -40,7 +41,6 @@ if TYPE_CHECKING:
     from .test_cuda import test_cuda
     from .xlsx_reader import get_picked_pairs
     from .xlsx_writer import write_cell_summary_xlsx
-    from .zscore_img_segs import zscore_img_segs
 
 __all__ = [
     "abf_ready",
@@ -63,8 +63,8 @@ __all__ = [
     "get_picked_pairs",
     "img_zscore_convert",
     "list_parser",
+    "load_img_segs",
     "lookup_rec_from_db",
-    "zscore_img_segs",
     "plot_full_trace",
     "plot_segment_reliability_montage",
     "plot_spatiotemporal_summary",
@@ -92,6 +92,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "gaussian_blur_run":   (".gaussian_blur",                             "gaussian_blur_run"),
     "get_memory_usage":    (".get_memory_use",                            "get_memory_usage"),
     "list_parser":         (".list_parser",                               "list_parser"),
+    "load_img_segs":       (".load_img_segs",                             "load_img_segs"),
     "plot_spatiotemporal_summary": (".plot_results",                      "plot_spatiotemporal_summary"),
     "plot_full_trace":     (".plot_results",                              "plot_full_trace"),
     "plot_segment_reliability_montage": (".plot_results",                 "plot_segment_reliability_montage"),
@@ -102,7 +103,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "compute_region_stats": (".database_ops",                          "compute_region_stats"),
     "get_excluded_recordings": (".database_ops",                       "get_excluded_recordings"),
     "get_cell_recording_status": (".database_ops",                     "get_cell_recording_status"),
-    "zscore_img_segs":     (".zscore_img_segs",                           "zscore_img_segs"),
     "fit_hist_sigma":      (".fit_bg_hist",                                "fit_hist_sigma"),
     "img_zscore_convert":  (".fit_bg_hist",                                "img_zscore_convert"),
     "spike_centered_avg":  (".spike_alignment",                           "spike_centered_avg"),

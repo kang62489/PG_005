@@ -1,3 +1,44 @@
+# Log of the project progress 2026-09-15 Tue (Session 57)
+Last working file: `functions/database_ops.py`
+Last working line: `compute_region_stats()`, metric-column Float64 cast
+
+## List of modified files
+- `functions/zscore_img_segs.py` → renamed `functions/load_img_segs.py` — removed the per-segment z-score numba kernel (`_cpu_zscore_segment`) entirely; the function now just reads raw (detrended, unnormalized) frames off the proc TIFF. Per the user's explicit request to stop re-baselining reliability/median/categorization against each segment's own z-score.
+- `ach_domain_analysis.py`, `classes/spike_reliability.py` — updated to call `load_img_segs`/use `lst_segments` throughout; reliability check and the final median/categorization now both run on the same raw values.
+- `functions/spike_alignment.py` — `zscore_range` → `intensity_range` in `spike_centered_median`/`spike_centered_avg` (math was already unit-agnostic, pure rename).
+- `classes/results_exporter.py` — DB columns `zscore_min`/`zscore_max` → `intensity_min`/`intensity_max`, added non-destructively via `_ensure_columns` (old DBs keep their orphaned `zscore_min`/`zscore_max` columns, harmless).
+- `functions/plot_results.py`, `classes/region_analyzer.py` — updated plot labels/titles/docstrings that would otherwise be actively wrong now that values aren't z-scored (`"Mean z-score"` → `"Mean intensity"`, `"Ring z-score traces"` → `"Ring intensity traces"`, etc.).
+- `export_zscore_segments.py`, `export_als_segments.py` — updated to call `load_img_segs` instead of the removed `zscore_img_segs`.
+- `functions/fit_bg_hist.py` — removed `cache=True` from `_cpu_histogram_counts`/`_cpu_masked_std`: both call `numba.get_num_threads()`/`get_thread_id()` (dynamic globals), so caching was always silently ineffective and only produced a `NumbaWarning` every run. Confirmed via `ruff` + real GPU/CPU pipeline run that removing it changes nothing functionally.
+- `functions/database_ops.py` — **real bug fix**: `compute_region_stats()` crashed with `InvalidOperationError: quantile operation not supported for dtype null` whenever a metric column (e.g. `lasting_time_ms`) was entirely NULL in the DB — `pl.read_database` infers such a column as polars dtype `Null`, and `.quantile()` (unlike `.mean()`/`.std()`) refuses to run on that dtype. Fixed by casting all four `metric_cols` to `Float64` right after reading, before any aggregation. Verified with a synthetic all-null `lasting_time_ms` row: previously crashed, now returns clean `None`s for every stat on that metric.
+
+## Summary of current progress
+- Investigated (no code change) what the reliability montage's background mask actually is: `SpikeReliabilityChecker.check()` categorizes the spike/spike+1 frame fresh from the raw segment each time (same method as CAT.tif generation), not a pre-existing CAT file.
+- Investigated (no code change) the density-gating mechanism in detail: `uniform_filter(bright_mask, window_px)` computes local density *from the categorized mask itself*, not an independently-derived signal — `hotspot_mask = bright_mask & (density >= density_thresh)`.
+- Confirmed `SpatialCategorizer.compute_baseline_threshold()` is generic (`mean + BASELINE_SIGMA_MULT * std` over whatever baseline frames are passed) — works identically on raw or z-scored input, which made the z-score removal safe.
+- At the user's request, removed z-scoring from the entire spike-aligned pipeline (reliability check + median + categorization + region analysis) — see modified files above. Verified end-to-end on `2025_06_11-0003`: 18/82 (22.0%) reliability, cluster detected, decay tau fit succeeded (86ms, R²=0.97), new `intensity_min`/`intensity_max` DB columns populated correctly.
+- Flagged an important side-effect the user didn't anticipate: the proc TIFF (`*_BIEXP_GAUSS.tif`) is already z-scored at an *earlier, separate* preprocessing stage (`img_proc.py`'s `img_zscore_convert`, stack-wide background-noise normalization) — untouched by this session's change. "Raw segments" now means background-normalized but no longer per-segment/per-pixel re-baselined, not fully raw camera counts.
+- Diagnosed (no code change) a follow-up visual confusion from the same change: with per-segment z-scoring removed, static bright structure (fixed hot pixels, autofluorescence) that used to be erased by the old *per-pixel* baseline correction now clears the single global `mean + Nσ` threshold everywhere, producing scattered "bright" specks in the montage background that the density gate correctly excludes from any cluster. Ran a live diagnostic on `2025_06_11-0003` seg37: 15,330 bright pixels across 101 raw blobs, only 615 survive the local-density gate and merge into 1 accepted cluster — every other blob (including an 1179px one) has zero pixels locally dense enough to pass, which is why visually similar-sized blobs can have different accepted/rejected status (acceptance depends on neighborhood bright-pixel density, not the blob's own size).
+- Confirmed (via code read, no change) that the spike-centered median already only uses reliability-detected segments (`ach_domain_analysis.py:380-382`, falls back to all segments only when 0 detected, with `final_significant` forcing that case to "no detection" regardless).
+- One-off scratch script (not committed, not part of the pipeline): exported per-segment spike/spike+1 categorized-mask TIFFs for `2025_06_11-0002` to `output/test2/cat_check/` for manual inspection, per user request.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Removed z-scoring from the spike-aligned pipeline (reliability, median, categorization, region analysis) — renamed `zscore_img_segs`→`load_img_segs`, `zscore_range`→`intensity_range`, DB columns `zscore_min/max`→`intensity_min/max`, updated all affected plot labels/docstrings
+- ✅ Verified the no-zscore pipeline end-to-end on real data (`2025_06_11-0003`)
+- ✅ Removed the ineffective `cache=True` from `fit_bg_hist.py`'s two CPU-jitted functions
+- ✅ Fixed the real `compute_region_stats()` null-quantile crash (Float64 cast on metric columns), verified with a synthetic all-null test case
+- ✅ Confirmed spike-centered median already uses only reliability-detected segments (no change needed)
+- ✅ Explained/diagnosed (no code changes) the reliability montage's background-mask semantics and the density-gate's blob-acceptance behavior, at the user's request
+
+## What should we do next? (TODOs)
+- Re-tune `density_thresh`/`window_px` per objective for raw intensities — these were tuned back when segments were z-scored (much less static-structure speckle in the bright mask); the user acknowledged "the density threshold gave me a hard time" but said reliability is acceptable for now. Revisit only if it comes up again.
+- User's stated next task: modify the **latency analysis** (not yet scoped/discussed this session).
+
+## Last Session Recap
+※ recap: At the user's request, removed z-scoring entirely from the spike-aligned pipeline (reliability check, median, categorization, region analysis) — the proc TIFF already carries an earlier, separate stack-wide z-score normalization from `img_proc.py`, so this only removed the *per-segment, per-pixel* re-baselining step. Verified end-to-end on real data. Spent significant time explaining/diagnosing (no code changes) exactly what the reliability montage displays and why the density-gated hotspot detector accepts/rejects visually-similar-looking bright blobs (acceptance depends on local neighborhood density, not blob size) — this surfaced as user confusion after the z-score removal made static bright structure newly visible in the montage background. Confirmed the spike-centered median already correctly uses only reliability-detected segments. Also fixed two smaller, previously-flagged items at the user's request: removed an ineffective `cache=True` from `fit_bg_hist.py`, and fixed a real `compute_region_stats()` crash on all-null metric columns (polars `Null`-dtype quantile). Next up: latency analysis (not yet scoped).
+
+---
+
 # Log of the project progress 2026-09-15 Tue (Session 56)
 Last working file: `classes/spike_reliability.py`
 Last working line: end of file (`SpikeReliabilityChecker.export_montage`)

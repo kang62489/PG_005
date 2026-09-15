@@ -47,12 +47,12 @@ from functions import (
     count_unique_cells,
     get_cell_recording_status,
     list_parser,
+    load_img_segs,
     lookup_rec_from_db,
     plot_full_trace,
     plot_spatiotemporal_summary,
     spike_centered_median,
     write_cell_summary_xlsx,
-    zscore_img_segs,
 )
 
 console = Console()
@@ -343,19 +343,19 @@ def run(
         frame_duration_ms = clip.ts_imgs * 1000
 
         if emitter:
-            emitter({"type": "step", "msg": "Z-score normalizing segments..."})
-        # Coverts each segment to z-score normalized values using the baseline frames before the spike frame.
-        lst_zscore = zscore_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
-        console.log(f"[green]Z-score normalized {len(lst_zscore)} segment(s)  ({time.time() - entry_t0:.1f}s)[/green]")
+            emitter({"type": "step", "msg": "Loading raw segments..."})
+        # Reads each segment's raw (detrended, unnormalized) frames from the proc tiff.
+        lst_segments = load_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
+        console.log(f"[green]Loaded {len(lst_segments)} segment(s)  ({time.time() - entry_t0:.1f}s)[/green]")
 
         # Every segment shares the same frame count (AbfClip's ranges are symmetric around
         # each segment's own spike), so this also equals whichever median we end up computing.
-        spike_frame_idx = lst_zscore[0].shape[0] // 2
+        spike_frame_idx = lst_segments[0].shape[0] // 2
 
         if emitter:
             emitter({"type": "step", "msg": "Checking per-segment reliability..."})
         reliability_checker = SpikeReliabilityChecker(obj)
-        seg_results, reliability_pct = reliability_checker.check(lst_zscore, spike_frame_idx)
+        seg_results, reliability_pct = reliability_checker.check(lst_segments, spike_frame_idx)
         n_detected = sum(r["detected"] for r in seg_results)
         n_total = len(seg_results)
         console.log(
@@ -378,13 +378,13 @@ def run(
         # has validly-shaped data; final_significant (below) forces that case to "no detection"
         # regardless of what this fallback median's own RegionAnalyzer reports.
         segments_for_median = [
-            seg for seg, r in zip(lst_zscore, seg_results, strict=True) if r["detected"]
-        ] or lst_zscore
-        median_segment, zscore_range = spike_centered_median(segments_for_median)
+            seg for seg, r in zip(lst_segments, seg_results, strict=True) if r["detected"]
+        ] or lst_segments
+        median_segment, intensity_range = spike_centered_median(segments_for_median)
 
-        # Free memory from lst_zscore since it's no longer needed after computing the median.
-        del lst_zscore
-        console.log(f"[green]Median shape: {median_segment.shape}, z-score range: [{zscore_range[0]:.2f}, {zscore_range[1]:.2f}][/green]")
+        # Free memory from lst_segments since it's no longer needed after computing the median.
+        del lst_segments
+        console.log(f"[green]Median shape: {median_segment.shape}, intensity range: [{intensity_range[0]:.2f}, {intensity_range[1]:.2f}][/green]")
 
         if emitter:
             emitter({"type": "step", "msg": "Categorizing spike frame..."})
@@ -464,7 +464,7 @@ def run(
             um_per_pixel=region_analyzer.um_per_pixel,
             median_stack=median_segment,
             categorized_frames=categorizer.categorized_frames,
-            zscore_range=zscore_range,
+            intensity_range=intensity_range,
             region_summary=region_analyzer.get_summary(),
             region_data=region_results,
             peak_latency_ms=peak_latency_ms,

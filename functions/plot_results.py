@@ -8,7 +8,7 @@ Four export figures, mirroring the validated demo (archive/_demo_dbscan_tmp.py):
 - plot_spatiotemporal_summary (-> spatial/): density-gated hotspot-area trace showing
   why the critical frame was picked, + cluster shading on the spike and spike+1 panels.
 - plot_full_trace (-> latency/, *_LATENCY.png): the same fixed cluster-ring overlay repeated
-  across a 9-panel window, + the full-segment z-score trace with that window annotated.
+  across a 9-panel window, + the full-segment intensity trace with that window annotated.
 - plot_segment_reliability_montage (-> reliability/, *_RELIABILITY.png): one panel per raw
   segment showing its own density-gated detection result, for reviewing reliability by eye.
 - plot_spike_detection_summary (-> spikes/, *_spike_analysis.png): full-length Vm trace with
@@ -266,7 +266,7 @@ def plot_full_trace(
     title_info: dict,
 ) -> Figure:
     """Standalone export figure: fixed cluster-ring overlay (row 1, 9 panels) +
-    full-segment per-cluster z-score traces with that window annotated (row 2).
+    full-segment per-cluster intensity traces with that window annotated (row 2).
 
     Every panel (spike-4..spike+4) shows the same fixed critical-frame cluster
     overlay, so you can see how the underlying pixel pattern moves/changes under
@@ -276,7 +276,7 @@ def plot_full_trace(
     Args:
         region_analyzer: RegionAnalyzer built from the segment
         categorizer: fitted SpatialCategorizer (source_frames + categorized_frames)
-        median_segment: 3D z-scored segment (frames, height, width)
+        median_segment: 3D raw-intensity segment (frames, height, width)
         spike_frame_idx: index of the spike frame within the segment
         frame_duration_ms: milliseconds per frame (e.g. AbfClip.ts_imgs * 1000)
         title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial"
@@ -320,7 +320,7 @@ def plot_full_trace(
             ax.set_title(f"{frame_label}\n(out of range)", fontsize=9)
             ax.axis("off")
 
-    # --- Row 1: full-segment z-score traces, with the 9-panel window annotated ---
+    # --- Row 1: full-segment intensity traces, with the 9-panel window annotated ---
     ax_trace = fig.add_subplot(gs[1, :])
     _plot_trace_panel(ax_trace, region_analyzer, median_segment, spike_frame_idx, frame_duration_ms, highlight)
 
@@ -441,7 +441,7 @@ def _plot_frame_panel(
 
     Defaults to a hotspot area line (used by plot_spatiotemporal_summary,
     where row 0 above is the density-gated hotspot-area trace). Callers whose
-    companion trace row plots something else (e.g. plot_full_trace's z-score
+    companion trace row plots something else (e.g. plot_full_trace's intensity
     ring trace) should pass stats_lines to show a title relevant to that instead.
 
     No cluster overlay is drawn here -- callers layer that on top afterward
@@ -495,11 +495,11 @@ def _format_hotspot_area_line(um_per_pixel: float, label_frame: np.ndarray | Non
 
 
 def _frame_z_lines(clusters: list[dict], frame_idx: int) -> list[str]:
-    """Per-frame z-score line(s) for a plot_full_trace panel title.
+    """Per-frame intensity line(s) for a plot_full_trace panel title.
 
     Mirrors _plot_trace_panel's split so the panel title and the trace row
-    below refer to the same numbers: 1 cluster -> inner/outer ring z-score at
-    this frame; >1 clusters -> each cluster's whole-cluster z-score.
+    below refer to the same numbers: 1 cluster -> inner/outer ring intensity at
+    this frame; >1 clusters -> each cluster's whole-cluster intensity.
     """
     if len(clusters) == 1:
         cluster = clusters[0]
@@ -646,7 +646,7 @@ def _plot_trace_panel(
     frame_duration_ms: float,
     highlight: set[int],
 ) -> None:
-    """Per-cluster z-score traces across the full segment (never cropped -- the
+    """Per-cluster intensity traces across the full segment (never cropped -- the
     caller draws a shaded window annotation and calls legend() on top of this)."""
     clusters = region_analyzer.clusters
     latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
@@ -661,7 +661,7 @@ def _plot_trace_panel(
         ax.plot(x, cluster["inner_trace"], color="#e74c3c", linewidth=1.8, label=f"inner (0-{split_um:.1f} µm)")
         ax.plot(x, cluster["outer_trace"], color="#3498db", linewidth=1.8,
                 label=f"outer ({split_um:.1f}-{cluster['R_lat_um']:.1f} µm)")
-        title = f"Ring z-score traces — 1 cluster (red=inner  blue=outer)\nLatency: {latency_label}"
+        title = f"Ring intensity traces — 1 cluster (red=inner  blue=outer)\nLatency: {latency_label}"
     else:
         for i, cluster in enumerate(clusters):
             color = CLUSTER_RGBA[i % len(CLUSTER_RGBA)][:3]
@@ -669,10 +669,10 @@ def _plot_trace_panel(
             alpha = 1.0 if i in highlight else 0.55
             ax.plot(x, cluster["trace"], color=color, linewidth=line_width, alpha=alpha,
                     label=f"cluster {i} (R_lat={cluster['R_lat_um']:.1f} µm)")
-        title = f"Whole-cluster z-score traces — {len(clusters)} clusters, no ring split\nLatency: {latency_label}"
+        title = f"Whole-cluster intensity traces — {len(clusters)} clusters, no ring split\nLatency: {latency_label}"
 
     ax.set_xlabel("Frame offset from spike (0 = spike)", fontsize=12)
-    ax.set_ylabel("Mean z-score", fontsize=12)
+    ax.set_ylabel("Mean intensity", fontsize=12)
     ax.set_title(title, fontsize=12)
     ax.tick_params(labelsize=10)
     ax.grid(True, alpha=0.3)

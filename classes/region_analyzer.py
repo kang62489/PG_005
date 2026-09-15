@@ -24,12 +24,12 @@ PIXEL_SCALE = {
 EPS_UM = 50.0  # inter-varicosity gap in um; sets dilation disk radius (tunable)
 MIN_CLUSTER_FRACTION = 0.05  # keep clusters covering at least this fraction of bright pixels
 
-WINDOW_PX_BY_OBJ = {"10X": 201, "40X": 255, "60X": 511}  # local-density window size, per objective
+WINDOW_PX_BY_OBJ = {"10X": 201, "40X": 201, "60X": 201}  # local-density window size, per objective
 
 # Min local bright-pixel density (uniform_filter) to qualify as a hotspot, per objective --
 # lower magnification packs more (smaller, noisier) bright pixels per window, so needs a
 # looser bar than higher magnification's larger, cleaner bright regions.
-DENSITY_THRESH_BY_OBJ = {"10X": 0.15, "40X": 0.1, "60X": 0.05}
+DENSITY_THRESH_BY_OBJ = {"10X": 0.1, "40X": 0.025, "60X": 0.016}
 
 MIN_DECAY_FIT_FRAMES = 3  # fewer post-peak frames than this and the exponential fit is skipped
 MIN_DECAY_FIT_RANGE = 1e-6  # post-peak signal must vary by at least this much or the fit is skipped (degenerate/flat trace)
@@ -46,12 +46,12 @@ class RegionAnalyzer:
     WINDOW_PX_BY_OBJ-sized window, spike frame checked first). Its bright
     pixels are then clustered with morphological dilation + connected
     components, and undersized clusters are dropped. Each kept cluster gets a
-    centroid, an enclosing-circle radius (R), and a z-score trace across the
+    centroid, an enclosing-circle radius (R), and an intensity trace across the
     segment (inner/outer ring split for a single cluster, whole-cluster trace
     when there are multiple).
 
     Result dict per cluster (from get_results()):
-        centroid : (row, col) in pixels, z-score-weighted toward the cluster's
+        centroid : (row, col) in pixels, intensity-weighted toward the cluster's
                    brightest sub-region rather than its plain geometric mean
                    (see _weighted_centroid)
         R_lat_px : enclosing-circle radius in pixels, from the critical/latency
@@ -82,7 +82,7 @@ class RegionAnalyzer:
         Args:
             cat_stack: 3D array (frames, height, width) of categorized frames
                 (0=background, 1=dim, 2=bright).
-            med_stack: 3D array (frames, height, width) of z-scored median frames,
+            med_stack: 3D array (frames, height, width) of raw-intensity median frames,
                 same shape as cat_stack.
             spike_frame_idx: index of the spike frame within the segment.
             obj: Objective magnification ("10X", "40X", "60X")
@@ -311,7 +311,7 @@ class RegionAnalyzer:
         }
 
     def get_temporal_traces(self) -> list[dict]:
-        """Per-cluster z-score traces computed in __init__.
+        """Per-cluster intensity traces computed in __init__.
 
         1 cluster -> inner/outer ring split (spread within the one release site).
         >1 clusters -> one whole-cluster trace per cluster (no ring split), so
@@ -469,7 +469,7 @@ def _run_density_gated_cluster_seeker(
             through to _run_cluster_seeker.
         window_px: local-density window size in pixels, from compute_window_px().
         density_thresh: minimum local bright-pixel density to qualify as a hotspot.
-        z_frame: (H, W) z-scored frame to weight centroids by pixel intensity, or None
+        z_frame: (H, W) intensity frame to weight centroids by pixel value, or None
             for an unweighted mean (see _weighted_centroid).
 
     Returns:
@@ -587,12 +587,12 @@ def fit_decay_tau(signal: np.ndarray, peak_frame_idx: int) -> tuple[float | None
 
 
 def _weighted_centroid(rows: np.ndarray, cols: np.ndarray, z_frame: np.ndarray | None) -> tuple[float, float]:
-    """Z-score-weighted centroid of a pixel set, falling back to an unweighted mean.
+    """Intensity-weighted centroid of a pixel set, falling back to an unweighted mean.
 
     Weighting by z_frame's value at each pixel pulls the centroid toward the
     brightest sub-region of a cluster instead of treating every non-background
     pixel (dim or bright) as equally important. Falls back to a plain mean
-    when z_frame is None (caller has no z-score data, e.g.
+    when z_frame is None (caller has no intensity data, e.g.
     _compute_hotspot_area_trace(), which only needs kept-pixel counts and
     never uses the returned centroid) or when every weight is non-positive
     (degenerate/empty overlap, shouldn't happen in practice since these
@@ -601,7 +601,7 @@ def _weighted_centroid(rows: np.ndarray, cols: np.ndarray, z_frame: np.ndarray |
     Args:
         rows: row coordinates of the pixel set.
         cols: column coordinates of the pixel set (same length as rows).
-        z_frame: (H, W) z-scored frame to weight by, or None to skip weighting.
+        z_frame: (H, W) intensity frame to weight by, or None to skip weighting.
 
     Returns:
         (centroid_row, centroid_col).
@@ -627,7 +627,7 @@ def _run_cluster_seeker(
     Args:
         frame: 2D array (0=background, 1=dim, 2=bright) for a single frame.
         eps_px: dilation disk radius in pixels, from compute_eps_px().
-        z_frame: (H, W) z-scored frame to weight centroids by pixel intensity;
+        z_frame: (H, W) intensity frame to weight centroids by pixel value;
             None for an unweighted mean (see _weighted_centroid).
 
     Returns:
@@ -707,13 +707,13 @@ def compute_ring_traces(
     med_stack: np.ndarray,
     cluster_k: int,
 ) -> tuple[np.ndarray, np.ndarray, float, np.ndarray, np.ndarray]:
-    """Inner/outer ring z-score traces for one kept cluster.
+    """Inner/outer ring intensity traces for one kept cluster.
 
     R is the enclosing-circle radius (max centroid-to-pixel distance among the
     cluster's pixels), capped at the centroid's distance to the nearest frame
     edge so the drawn circle never extends past the frame (see _resolve_R).
     Cluster pixels are split into two equal-area rings at R/sqrt(2): inner =
-    0 <= r <= R/sqrt(2), outer = R/sqrt(2) < r <= R. Mean z-score from
+    0 <= r <= R/sqrt(2), outer = R/sqrt(2) < r <= R. Mean intensity from
     med_stack is computed per ring per frame.
 
     Assumes label_frame contains at least one pixel labeled cluster_k; callers
@@ -723,12 +723,12 @@ def compute_ring_traces(
         label_frame: (H, W) array from _run_cluster_seeker (-2=background,
             -1=noise, 0..N-1=kept clusters).
         centroid: (row, col) of this cluster, from _run_cluster_seeker.
-        med_stack: 3D array (frames, height, width) of z-scored median frames.
+        med_stack: 3D array (frames, height, width) of raw-intensity median frames.
         cluster_k: which kept cluster to analyze.
 
     Returns:
-        inner_trace: 1D array (n_frames,), mean z-score in the inner ring per frame.
-        outer_trace: 1D array (n_frames,), mean z-score in the outer ring per frame.
+        inner_trace: 1D array (n_frames,), mean intensity in the inner ring per frame.
+        outer_trace: 1D array (n_frames,), mean intensity in the outer ring per frame.
         R: enclosing-circle radius in pixels.
         inner_mask: (H, W) boolean mask of the inner ring.
         outer_mask: (H, W) boolean mask of the outer ring.
@@ -759,7 +759,7 @@ def compute_cluster_trace(
     med_stack: np.ndarray,
     cluster_k: int,
 ) -> tuple[np.ndarray, float, np.ndarray]:
-    """Whole-cluster z-score trace for one kept cluster (no inner/outer ring split).
+    """Whole-cluster intensity trace for one kept cluster (no inner/outer ring split).
 
     Used when there is more than one kept cluster: each cluster is
     represented by a single trace over its own pixels so cluster-to-cluster
@@ -771,11 +771,11 @@ def compute_cluster_trace(
         label_frame: (H, W) array from _run_cluster_seeker (-2=background,
             -1=noise, 0..N-1=kept clusters).
         centroid: (row, col) of this cluster, from _run_cluster_seeker.
-        med_stack: 3D array (frames, height, width) of z-scored median frames.
+        med_stack: 3D array (frames, height, width) of raw-intensity median frames.
         cluster_k: which kept cluster to analyze.
 
     Returns:
-        trace: 1D array (n_frames,), mean z-score within the cluster per frame.
+        trace: 1D array (n_frames,), mean intensity within the cluster per frame.
         R: enclosing-circle radius in pixels (for display only), capped at the
             centroid's distance to the nearest frame edge (see _resolve_R).
         mask: (H, W) boolean mask of the cluster's own pixels.

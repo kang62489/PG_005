@@ -248,6 +248,12 @@ def compute_region_stats(
     metric_cols = ["spike_frame_hotspot_um2", "spike_plus1_frame_hotspot_um2", "peak_latency_ms", "lasting_time_ms"]
     df = _filter_by_run_keys(_read_experiments(results_db_path), run_keys)
 
+    if not df.is_empty():
+        # A metric column that's all-NULL in the DB (e.g. every decay fit failed) comes back
+        # as polars dtype Null, which crashes .quantile() below -- cast it back to Float64 so
+        # mean/std/quantile all just see nulls, the same as a column with some non-null values.
+        df = df.with_columns([pl.col(c).cast(pl.Float64) for c in metric_cols])
+
     if df.is_empty():
         return pl.DataFrame(schema={
             "metric": pl.Utf8,

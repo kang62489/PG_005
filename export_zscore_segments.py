@@ -1,4 +1,4 @@
-"""Export each raw (un-merged) z-scored segment of 2025_06_11-0003 and 2025_12_15-0012
+"""Export each raw (un-merged) segment of 2025_06_11-0003 and 2025_12_15-0012
 (GAUSS-normalized, the pipeline's default) to output/zscore_segments_{stem}/, so the
 individual segments can be inspected directly.
 """
@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from classes import AbfClip  # noqa: E402
-from functions import zscore_img_segs  # noqa: E402
+from functions import load_img_segs  # noqa: E402
 
 RECORDINGS = [
     ("2025_06_11-0003_BIEXP_GAUSS.tif", "2025_06_11_0004.abf"),
@@ -34,12 +34,12 @@ def main() -> None:
             detrend_mode="BIEXP",
             normalization="GAUSS",
         )
-        lst_zscore = zscore_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
+        lst_segments = load_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
 
-        for seg_idx, segment in enumerate(lst_zscore):
+        for seg_idx, segment in enumerate(lst_segments):
             tifffile.imwrite(out_dir / f"seg{seg_idx:02d}.tif", segment.astype(np.float32))
 
-        print(f"Exported {len(lst_zscore)} segment(s) to {out_dir}")
+        print(f"Exported {len(lst_segments)} segment(s) to {out_dir}")
 
 
 if __name__ == "__main__":

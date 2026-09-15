@@ -151,8 +151,8 @@ class ResultsExporter:
                 R_lat_px REAL,
                 R_lat_um REAL,
                 peak_latency_ms REAL,
-                zscore_min REAL,
-                zscore_max REAL,
+                intensity_min REAL,
+                intensity_max REAL,
                 UNIQUE(exp_date, abf_serial, img_serial)
             )
         """)
@@ -169,6 +169,8 @@ class ResultsExporter:
                 "decay_peak_offset": "INTEGER",
                 "decay_fit_r2": "REAL",
                 "lasting_time_ms": "REAL",
+                "intensity_min": "REAL",
+                "intensity_max": "REAL",
             },
         )
         conn.commit()
@@ -210,7 +212,7 @@ class ResultsExporter:
         # Data to save
         median_stack: np.ndarray,
         categorized_frames: list[np.ndarray],
-        zscore_range: tuple[float, float],
+        intensity_range: tuple[float, float],
         # Analysis results
         region_summary: dict,
         region_data: dict,
@@ -240,9 +242,9 @@ class ResultsExporter:
             threshold_method: Threshold method used for categorization
             objective: Microscope objective used
             um_per_pixel: Micrometers per pixel scale
-            median_stack: Spike-centered median z-score stack
+            median_stack: Spike-centered median intensity stack
             categorized_frames: Categorized frames (0=bg, 1=bright)
-            zscore_range: (min, max) z-score across median_stack, from spike_centered_median()
+            intensity_range: (min, max) raw intensity across median_stack, from spike_centered_median()
             region_summary: Summary dict from RegionAnalyzer.get_summary()
             region_data: Critical-frame cluster dict from RegionAnalyzer.get_results()
             peak_latency_ms: Peak-timing latency, from RegionAnalyzer.get_peak_latency_ms()
@@ -283,7 +285,7 @@ class ResultsExporter:
             um_per_pixel=um_per_pixel,
             region_summary=region_summary,
             region_data=region_data,
-            zscore_range=zscore_range,
+            intensity_range=intensity_range,
             animal_id=animal_id,
             slice_val=slice_val,
             at=at,
@@ -359,7 +361,7 @@ class ResultsExporter:
         um_per_pixel: float,
         region_summary: dict,
         region_data: dict,
-        zscore_range: tuple[float, float],
+        intensity_range: tuple[float, float],
         animal_id: str,
         slice_val: str,
         at: str,
@@ -405,7 +407,7 @@ class ResultsExporter:
                 decay_peak_offset, decay_fit_r2, lasting_time_ms,
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um, peak_latency_ms,
-                zscore_min, zscore_max
+                intensity_min, intensity_max
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -442,8 +444,8 @@ class ResultsExporter:
                 r_lat_px,
                 r_lat_um,
                 peak_latency_ms,
-                zscore_range[0],
-                zscore_range[1],
+                intensity_range[0],
+                intensity_range[1],
             ),
         )
         conn.commit()
