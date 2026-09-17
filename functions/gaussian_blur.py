@@ -36,12 +36,30 @@ def _cpu_kernel(sigma: float, size: int | None = None) -> np.ndarray:
 
 
 @jit(nopython=True, cache=True)
+def _reflect_index(idx: int, size: int) -> int:
+    """Mirror an out-of-bounds index back into [0, size) (scipy 'reflect': edge pixel duplicated).
+
+    Kernel half-width (18 px for sigma=6) is far smaller than any real image dimension,
+    so a single reflection always lands back in range -- no need to handle multiple bounces.
+    """
+    if idx < 0:
+        return -idx - 1
+    if idx >= size:
+        return 2 * size - 1 - idx
+    return idx
+
+
+@jit(nopython=True, cache=True)
 def _cpu_conv(arr: np.ndarray, kernel: np.ndarray, axis: int) -> np.ndarray:
     """
-    Apply a 1D kernel along `axis` with edge normalization.
+    Apply a 1D kernel along `axis` with reflect-padded edges.
 
     axis=0 → vertical (along rows), axis=1 → horizontal (along columns).
-    Out-of-bounds positions are skipped; weights are renormalized accordingly.
+    Out-of-bounds positions are mirrored back into the image (matches scipy's default
+    'reflect' mode) so every pixel, including at the border, is averaged over the full
+    kernel -- previously out-of-bounds taps were skipped and the remaining weights
+    renormalized, which averaged corner/edge pixels over far fewer independent samples
+    and left much more noise there than in the interior.
     """
     result = np.zeros_like(arr)
     kernel_half = len(kernel) // 2
@@ -51,20 +69,15 @@ def _cpu_conv(arr: np.ndarray, kernel: np.ndarray, axis: int) -> np.ndarray:
     for row in range(height):
         for col in range(width):
             val = 0.0
-            w_sum = 0.0
             if axis == 0:  # vertical
                 for kp in range(kernel_size):
-                    nr = row + kp - kernel_half
-                    if 0 <= nr < height:
-                        val += arr[nr, col] * kernel[kp]
-                        w_sum += kernel[kp]
+                    nr = _reflect_index(row + kp - kernel_half, height)
+                    val += arr[nr, col] * kernel[kp]
             else:           # horizontal
                 for kp in range(kernel_size):
-                    nc = col + kp - kernel_half
-                    if 0 <= nc < width:
-                        val += arr[row, nc] * kernel[kp]
-                        w_sum += kernel[kp]
-            result[row, col] = val / w_sum if w_sum > 0 else arr[row, col]
+                    nc = _reflect_index(col + kp - kernel_half, width)
+                    val += arr[row, nc] * kernel[kp]
+            result[row, col] = val
 
     return result
 
@@ -111,14 +124,33 @@ def _cpu_gaussian_blur(stack: np.ndarray, sigma: float) -> np.ndarray:
 #             kernel_out[i] /= total
 
 
+@cuda.jit(device=True)
+def _gpu_reflect_index(idx: int, size: int) -> int:
+    """Mirror an out-of-bounds index back into [0, size) (scipy 'reflect': edge pixel duplicated).
+
+    Kernel half-width (18 px for sigma=6) is far smaller than any real image dimension,
+    so a single reflection always lands back in range -- no need to handle multiple bounces.
+    """
+    if idx < 0:
+        return -idx - 1
+    if idx >= size:
+        return 2 * size - 1 - idx
+    return idx
+
+
 @cuda.jit
 def _gpu_conv(
     input_img: np.ndarray, output_img: np.ndarray, kernel: np.ndarray, height: int, width: int, kernel_size: int, axis: int
 ) -> None:
     """
-    CUDA kernel: 1D convolution along a given axis with boundary clamping.
+    CUDA kernel: 1D convolution along a given axis with reflect-padded edges.
 
     axis=0 → vertical (along rows), axis=1 → horizontal (along columns).
+    Out-of-bounds positions are mirrored back into the image (matches scipy's default
+    'reflect' mode and the CPU path in _cpu_conv) instead of clamping to the edge pixel --
+    clamping repeats the same single noisy pixel for every out-of-bounds tap, which averages
+    together fewer independent samples near the border than reflection does, leaving more
+    residual noise right at the edges/corners.
     All threads in a warp take the same branch — no warp divergence.
     """
     row = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
@@ -127,16 +159,14 @@ def _gpu_conv(
         return
     half = kernel_size // 2
     val = 0.0
-    w_sum = 0.0
     for kp in range(kernel_size):
         if axis == 0:  # vertical
-            nr = min(max(row + kp - half, 0), height - 1)
+            nr = _gpu_reflect_index(row + kp - half, height)
             val += input_img[nr * width + col] * kernel[kp]
         else:           # horizontal
-            nc = min(max(col + kp - half, 0), width - 1)
+            nc = _gpu_reflect_index(col + kp - half, width)
             val += input_img[row * width + nc] * kernel[kp]
-        w_sum += kernel[kp]
-    output_img[row * width + col] = val / w_sum if w_sum > 0 else input_img[row * width + col]
+    output_img[row * width + col] = val
 
 
 def _gpu_gaussian_blur(stack: np.ndarray, sigma: float) -> np.ndarray:

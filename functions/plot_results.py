@@ -737,3 +737,223 @@ def plot_spike_detection_summary(
     fig.tight_layout()
 
     return fig
+
+
+# Exploratory direction-analysis exports. Keep GUI and existing analyses unchanged.
+def _direction_map(ax, old, new, center) -> None:
+    image = np.zeros((*old.shape, 3)) + 0.10
+    image[old & new] = (0.42, 0.42, 0.42)
+    image[new & ~old] = (1.0, 0.28, 0.25)
+    image[old & ~new] = (0.12, 0.65, 1.0)
+    ax.imshow(image)
+    ax.plot(center[1], center[0], marker="+", color="#77ff77", ms=13, mew=2)
+    for angle in np.arange(12) * np.pi / 6:
+        ax.plot([center[1], center[1] + 1500 * np.cos(angle)],
+                [center[0], center[0] - 1500 * np.sin(angle)], color="white", lw=0.5, alpha=0.18)
+    ax.set_xlim(0, old.shape[1] - 1)
+    ax.set_ylim(old.shape[0] - 1, 0)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+
+def plot_hotspot_change_maps(masks, pairs, title) -> Figure:
+    fig = Figure(figsize=(20, 10), layout="constrained")
+    for i, item in enumerate(pairs):
+        ax = fig.add_subplot(2, 4, i + 1)
+        _direction_map(ax, masks[i], masks[i + 1], item["center"])
+        ax.set_title(f"spike+{i} -> +{i + 1}\nGain {item['gain_total'] / 1000:.1f}k px | loss {item['loss_total'] / 1000:.1f}k px")
+        polar = fig.add_subplot(2, 4, i + 5, projection="polar")
+        theta = (np.arange(12) + 0.5) * np.pi / 6
+        polar.bar(theta - 0.11, item["gain"] / 1000, width=0.21, color="#ef534b", label="Gained")
+        polar.bar(theta + 0.11, item["loss"] / 1000, width=0.21, color="#2196db", label="Lost")
+        polar.set_xticks(np.arange(4) * np.pi / 2, ["E", "N", "W", "S"])
+        polar.set_title(f"Sector area (1000 pixels)\nGain R1={item['gain_r1']:.2f} | loss R1={item['loss_r1']:.2f}")
+        polar.legend(loc="lower right", bbox_to_anchor=(1.25, -0.15), fontsize=9)
+    fig.suptitle(title + "\nRed: gained | blue: lost | gray: retained | green cross: fixed initial-mask centroid"
+                 "\nAll accepted mask pixels; 12 angular sectors. R1: one-sided concentration, not a radial-flow score.", fontsize=16)
+    return fig
+
+
+def plot_hotspot_direction_heatmaps(results, title) -> Figure:
+    fig = Figure(figsize=(21, 14), layout="constrained")
+    axes = fig.subplots(3, 4)
+    keys = ("gain", "loss", "gain_normalized", "loss_normalized")
+    names = ("Gained area (1000 px)", "Lost area (1000 px)",
+             "Gain / old boundary length (px)", "Loss / old boundary length (px)")
+    for col, (key, name) in enumerate(zip(keys, names, strict=True)):
+        arrays = [np.array([pair[key] for pair in pairs]).T / (1000 if col < 2 else 1)
+                  for pairs in results.values()]
+        upper = max(float(np.nanmax(array)) for array in arrays)
+        for row, ((sigma, _), array) in enumerate(zip(results.items(), arrays, strict=True)):
+            ax = axes[row, col]
+            im = ax.imshow(array, origin="lower", aspect="auto", vmin=0, vmax=upper or 1,
+                           cmap="Reds" if col % 2 == 0 else "Blues")
+            label = f"sigma={sigma} px" if isinstance(sigma, (int, float)) else str(sigma)
+            ax.set_title(f"{label} | {name}")
+            ax.set_xticks(range(4), ["0 -> 1", "1 -> 2", "2 -> 3", "3 -> 4"])
+            ax.set_yticks(range(12), [f"{j * 30}-{(j + 1) * 30}" for j in range(12)])
+            ax.set_ylabel("Angle (degrees): E=0, N=90, W=180, S=270")
+            fig.colorbar(im, ax=ax, shrink=0.8)
+    fig.suptitle(title + "\nSame color scale down each column | blank: no measurable old boundary in sector"
+                 "\nArea / boundary length is a descriptive equivalent thickness, not tracked displacement or velocity.", fontsize=16)
+    return fig
+
+
+def plot_hotspot_model_comparison(masks, model_pairs, center, title) -> Figure:
+    fig = Figure(figsize=(28, 19), layout="constrained")
+    axes = fig.subplots(4, 6)
+    for row, models in enumerate(model_pairs):
+        _direction_map(axes[row, 0], masks[row], masks[row + 1], center)
+        axes[row, 0].set_title(f"Observed: spike+{row} -> +{row + 1}\nRed gain / blue loss")
+        for col, model in enumerate(models, 1):
+            ax = axes[row, col]
+            predicted, observed = model["prediction"], masks[row + 1]
+            rgb = np.zeros((*predicted.shape, 3)) + 0.1
+            rgb[predicted & observed] = (0.5, 0.5, 0.5)
+            rgb[predicted & ~observed] = (1.0, 0.55, 0.15)
+            rgb[observed & ~predicted] = (0.7, 0.3, 0.95)
+            ax.imshow(rgb)
+            ax.plot(center[1], center[0], "+", color="#77ff77", ms=10)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            flag = " | bound reached" if model["at_bound"] else ""
+            flag += " | fit incomplete" if not model["converged"] else ""
+            parameters = "Empty prediction" if model["name"] == "Disappearance" else (
+                f"Scale {model['scale']:.2f} | shift (x,y) = ({model['shift'][1]:.0f}, {-model['shift'][0]:.0f}) px"
+            )
+            ax.set_title(f"{model['name']} ({model['parameters']} parameters){flag}\n"
+                         f"Holdout error reduction: {model['reduction']:.0%} | IoU: {model['iou']:.2f}\n"
+                         + parameters, fontsize=10)
+    fig.suptitle(title + "\nModel panels: gray agreement | orange predicted-only | purple observed-only"
+                 "\nFit: alternating 128-px tiles; score: held-out tiles. Reduction relative to unchanged; negative = worse."
+                 "\nExploratory spatial holdout, not independent replication. Outside field assumed empty; clipped hotspots make fits provisional.", fontsize=16)
+    return fig
+
+
+def plot_hotspot_robustness(groups, title) -> Figure:
+    fig = Figure(figsize=(22, 14), layout="constrained")
+    axes = fig.subplots(3, 3)
+    row_names = ("R1: one-sided concentration", "R2: opposing-axis concentration", "Preferred direction (degrees)")
+    for col, (name, variants) in enumerate(groups.items()):
+        for row, suffix in enumerate(("r1", "r2", "angle")):
+            matrix = []
+            for pair in range(4):
+                for kind in ("gain", "loss"):
+                    values = [pairs[pair][f"{kind}_{suffix}"] for pairs in variants.values()]
+                    if suffix == "angle":
+                        values = [np.degrees(value) % 360 if pairs[pair][f"{kind}_r1"] >= 0.1 else np.nan
+                                  for value, pairs in zip(values, variants.values(), strict=True)]
+                    matrix.append(values)
+            ax = axes[row, col]
+            im = ax.imshow(matrix, aspect="auto", vmin=0, vmax=360 if suffix == "angle" else 1,
+                           cmap="twilight" if suffix == "angle" else "viridis")
+            ax.set_xticks(range(len(variants)), list(variants), rotation=35, ha="right")
+            ax.set_yticks(range(8), [f"{i} -> {i + 1} {kind}" for i in range(4) for kind in ("gain", "loss")])
+            ax.set_title(name + "\n" + row_names[row])
+            for iy, values in enumerate(matrix):
+                for ix, value in enumerate(values):
+                    if np.isfinite(value):
+                        ax.text(ix, iy, f"{value:.0f}" if suffix == "angle" else f"{value:.2f}",
+                                ha="center", va="center", color="white", fontsize=8,
+                                bbox={"facecolor": "black", "alpha": 0.25, "edgecolor": "none", "pad": 1})
+            fig.colorbar(im, ax=ax, shrink=0.7)
+    fig.suptitle(title + "\nAll variants use the same fixed reference center except the explicit center-shift columns."
+                 "\nAngles: E=0, N=90, W=180, S=270. Angle hidden when R1<0.1 (display rule, not a significance threshold)."
+                 "\nLow R1 does not prove uniformity; high R2 can reveal two opposing lobes.", fontsize=16)
+    return fig
+
+
+def plot_hotspot_quality(masks, pairs, cropped, counts, model_sets, title) -> Figure:
+    fig = Figure(figsize=(18, 12), layout="constrained")
+    axes = fig.subplots(2, 2)
+    axes[0, 0].plot(range(5), [mask.sum() / 1000 for mask in masks], "o-", label="Accepted area")
+    axes[0, 0].set(xlabel="Frame after spike", ylabel="Area (1000 pixels)", title="Hotspot extent and accepted cluster count")
+    for i, count in enumerate(counts):
+        axes[0, 0].annotate(f"{count} cluster(s)", (i, masks[i].sum() / 1000), xytext=(0, 10), textcoords="offset points", ha="center")
+    axes[0, 0].margins(y=0.25)
+    axes[0, 1].bar(range(4), [item["border_fraction"] * 100 for item in pairs], color="#cf873a")
+    axes[0, 1].set(xlabel="Earlier frame in pair", ylabel="Boundary pixels within 16 px of image edge (%)",
+                   title="Near the field-of-view edge: possible truncation")
+    for kind, color in (("gain", "#ef534b"), ("loss", "#2196db")):
+        axes[1, 0].plot(range(4), [p[f"{kind}_r1"] for p in pairs], "o-", color=color, label=f"{kind}: full image")
+        axes[1, 0].plot(range(4), [p[f"{kind}_r1"] for p in cropped], "s--", color=color, label=f"{kind}: omit outer 32 px")
+    axes[1, 0].set(xlabel="Earlier frame in pair", ylabel="R1", ylim=(0, 1), title="Border exclusion sensitivity (does not restore missing data)")
+    axes[1, 0].legend()
+    for sigma, models in model_sets.items():
+        axes[1, 1].plot(range(4), [pair[2]["reduction"] for pair in models], "o-", label=f"Centered scale, sigma={sigma}")
+    axes[1, 1].plot(range(4), [pair[4]["reduction"] for pair in model_sets[3]], "s--", color="black", label="Disappearance, sigma=3")
+    axes[1, 1].axhline(0, color="gray", ls="--")
+    axes[1, 1].set(xlabel="Earlier frame in pair", ylabel="Held-out error reduction vs unchanged", title="Does the centered-scale fit survive smoothing changes?")
+    axes[1, 1].legend()
+    for ax in axes.flat:
+        ax.grid(alpha=0.2)
+    fig.suptitle(title + "\nUnion of accepted clusters; count changes do not establish merging/splitting. No physical-flow claim.", fontsize=16)
+    return fig
+
+
+def plot_hotspot_event_consistency(events, median_pairs, total, title) -> tuple[Figure, Figure]:
+    heat = Figure(figsize=(21, 13), layout="constrained")
+    scatter = Figure(figsize=(21, 11), layout="constrained")
+    heat_axes, scatter_axes = heat.subplots(2, 4), scatter.subplots(2, 4)
+    for row, kind in enumerate(("gain", "loss")):
+        for pair in range(4):
+            ax = heat_axes[row, pair]
+            matrix = np.array([event[pair][kind] / max(event[pair][f"{kind}_total"], 1) for event in events])
+            empty = np.array([event[pair][f"{kind}_total"] == 0 for event in events])
+            matrix[empty] = np.nan
+            im = ax.imshow(matrix, aspect="auto", origin="upper", vmin=0, vmax=0.5,
+                           cmap="Reds" if kind == "gain" else "Blues")
+            ax.set_xticks([0, 3, 6, 9], ["0-30 E", "90-120 N", "180-210 W", "270-300 S"], rotation=35, ha="right")
+            ax.set_ylabel("Detected event (time order)")
+            ax.set_title(f"{kind}: spike+{pair} -> +{pair + 1}")
+            heat.colorbar(im, ax=ax, shrink=0.7, label="Fraction of this event's changed area")
+            ax = scatter_axes[row, pair]
+            x = [event[pair][f"{kind}_r1"] for event in events]
+            y = [event[pair][f"{kind}_r2"] for event in events]
+            ax.scatter(x, y, s=22, alpha=0.5, color="#ef534b" if row == 0 else "#2196db", label="Individual events")
+            ax.scatter(median_pairs[pair][f"{kind}_r1"], median_pairs[pair][f"{kind}_r2"],
+                       marker="*", s=220, color="gold", edgecolor="black", label="Median-stack mask")
+            ax.set(xlim=(0, 1), ylim=(0, 1), xlabel="R1: one-sided", ylabel="R2: opposing-axis",
+                   title=f"{kind}: {pair} -> {pair + 1} | n={np.sum(np.isfinite(x))}")
+            ax.grid(alpha=0.2)
+    scatter_axes[0, 0].legend(fontsize=8)
+    for fig in (heat, scatter):
+        fig.suptitle(title + f"\n{len(events)}/{total} events detected at spike or spike+1; sigma=3 px; same median-derived fixed center"
+                     "\nEmpty changes are missing, not zero concentration. Events are repeated observations within one recording, not biological replicates.", fontsize=16)
+    return heat, scatter
+
+
+
+def plot_hotspot_reference_centers(masks, centers, results, fits, title) -> Figure:
+    fig = Figure(figsize=(19, 13), layout="constrained")
+    axes = fig.subplots(2, 2)
+    ax = axes[0, 0]
+    ax.set_facecolor("#202020")
+    for i, mask in enumerate(masks):
+        ax.contour(mask.astype(float), levels=[0.5], colors=[str(0.3 + i * 0.15)], linewidths=0.6)
+    colors = ("#e64c3c", "#238bdf", "#34ad66")
+    for (name, center), color in zip(centers.items(), colors, strict=True):
+        ax.plot(center[1], center[0], "+", ms=15, mew=3, color=color, label=name)
+    ax.set(xlim=(0, masks[0].shape[1]), ylim=(masks[0].shape[0], 0), aspect="equal",
+           title="Three reference centers, each fixed for all four pairs")
+    ax.legend(loc="lower right", fontsize=9)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for (name, models), color in zip(fits.items(), colors, strict=True):
+        axes[0, 1].plot(range(4), [m["reduction"] for m in models], "o-", color=color, label=name)
+        axes[1, 0].plot(range(4), [m["iou"] for m in models], "o-", color=color, label=name)
+        values = [pairs["gain_r1"] if i == 0 else pairs["loss_r1"] for i, pairs in enumerate(results[name])]
+        axes[1, 1].plot(range(4), values, "o-", color=color, label=name)
+    axes[0, 1].axhline(0, color="gray", ls="--")
+    axes[0, 1].set(title="Centered-scale prediction: held-out error reduction", ylabel="Reduction vs unchanged")
+    axes[1, 0].set(title="Centered-scale prediction: full-image overlap", ylabel="Intersection / union", ylim=(0, 1))
+    axes[1, 1].set(title="Directional concentration of the dominant change", ylabel="R1 (gain for 0->1; loss thereafter)", ylim=(0, 1))
+    for ax in (axes[0, 1], axes[1, 0], axes[1, 1]):
+        ax.set_xticks(range(4), ["0 -> 1", "1 -> 2", "2 -> 3", "3 -> 4"])
+        ax.set_xlabel("Frame pair after spike")
+        ax.grid(alpha=0.2)
+        ax.legend(fontsize=9)
+    fig.suptitle(title + "\nSensitivity to the choice of a specific center | sigma=3 px"
+                 "\nInitial, maximum-area and final-mask centroids are geometric reference candidates, not identified release sites."
+                 "\nLater-derived centers are post hoc; these comparisons do not independently validate a source center.", fontsize=16)
+    return fig

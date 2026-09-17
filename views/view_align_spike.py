@@ -110,11 +110,13 @@ class ViewAlignSpike:
         self.lbl_current_total.setFixedHeight(UISizes.LE_PROCESSING_INFO_HEIGHT)
         self.le_current_total = QLineEdit()
         self.le_current_total.setFixedHeight(UISizes.LE_PROCESSING_INFO_HEIGHT)
+        self.le_current_total.setReadOnly(True)
 
         self.lbl_status = QLabel("Status: ")
         self.lbl_status.setFixedHeight(UISizes.LE_PROCESSING_INFO_HEIGHT)
         self.le_status = QLineEdit()
         self.le_status.setFixedHeight(UISizes.LE_PROCESSING_INFO_HEIGHT)
+        self.le_status.setReadOnly(True)
 
         self.lo_processing_info.addRow(self.lbl_current_total, self.le_current_total)
         self.lo_processing_info.addRow(self.lbl_status, self.le_status)

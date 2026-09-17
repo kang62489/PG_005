@@ -1,5 +1,5 @@
 """
-ach_domain_analysis.py  --  Spike-aligned image analysis pipeline.
+ach_domain_analysis.py  --  Spike-aligned image analysis pipeline.oh
 ===================================================================
 Reads an analysis list (ana_*.txt), loads the appropriate processed TIFF
 (*_GAUSS.tif or *_ALS.tif) together with its paired ABF file, runs spike

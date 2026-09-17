@@ -1,3 +1,89 @@
+# Log of the project progress 2026-09-16 Wed (Session 59)
+Last working file: `prototype_front_velocity.py` (scratch-only session, no pipeline files touched)
+Last working line: end of file (`run()`)
+
+## List of modified files
+- None in `classes/`/`functions/`/`ach_domain_analysis.py`. Entire session was scratch prototyping in the repo root (all new, untracked `prototype_*.py` files) plus this log:
+  - `prototype_reliability_group_analysis.py`, `prototype_rose_map_batch.py` — copied in from prior sessions' OS-temp scratchpads, per user request, so they survive in the repo instead of a temp dir.
+  - `prototype_piv.py`, `prototype_piv_sanity_check.py`, `prototype_piv_sanity_check2.py`, `prototype_piv_streamline.py`, `prototype_piv_alt_methods.py`, `prototype_diff_maps.py`, `prototype_front_velocity.py` — new this session (PIV exploration + alternatives).
+
+## Summary of current progress
+- **PI's request**: group spikes into detected ("success") vs. failure segments and compare Vm shape and spatial (B%) density. Built `prototype_reliability_group_analysis.py`: confirmed `seg_results`/`df_picked_spikes`/`clip.get_vm_segments()` all share the same per-segment order by construction, so grouping is a clean index-match. Iterated through user feedback: pooled → per-recording folders (`output/reliability_group/<recording>/`) → peak-aligned Vm traces (each trace's own spike peak at t=0, via `argmax(vm)`). Final result across all 6 recordings in `ana_20260915_000.txt`: reliability ranged 56.1%–100%, B% histogram of detected segments heavily skewed toward 0–0.25, and peak-aligned success/failure Vm shapes look visually indistinguishable (FWHM/shape comparison itself deferred — user said "later").
+- **PIV exploration on `2025_06_11-0002`** (spike..spike+4 MED frames): built a windowed cross-correlation PIV prototype (`prototype_piv.py`). Result was chaotic/noisy regardless of masking strategy (raw CAT bright mask, density-gated hotspot mask, or MED×CAT pixel-masking — exported as `output/piv/med_and_cat_0002.tif` at the user's request). Diagnosed two real, compounding causes: (1) the CAT/density-gate threshold is far too permissive on this recording (47–77% of the frame reads "bright" at spike+0/+1/+2 — the same open Session-57 calibration TODO), so masking barely restricted anything; (2) even where correctly masked, a smooth Gaussian-blurred blob's interior has no texture for cross-correlation to lock onto (the aperture problem).
+- **Validated the PIV code itself is correct** using two real seeded-particle benchmark datasets the user provided (`output/piv/test_image_set/`, `output/piv/test_image_set_2/`): `test_image_set` gave a highly consistent 0.100 px/pair displacement across all 199 consecutive frame pairs (a synthetic subpixel-accuracy calibration set); `test_image_set_2` (real bubble/particle images) gave a genuine, physically-plausible recirculation pattern once windowed small enough (20px) and cleaned with a median-filter outlier pass + `plt.streamplot` (`output/piv/streamline_wedge_zoom.png`) — user's initial reaction to the raw quiver version was "are you crazy... I would rather ask you plot streamline instead of this."
+- **Found and fixed a real quiver sign bug**: every quiver call this session (carried over incorrectly from last session's rose-map polar-plot convention) passed `V = -dv_row` instead of `V = dv_row` on `imshow`+`quiver` axes, vertically mirroring every flow field shown. Caught by the user directly comparing `test_image_set_2`'s quiver against the image's visually-obvious up-left flow. Verified the correct sign empirically (a plain `V=+30` test) before fixing all three affected scripts and regenerating every plot.
+- At the user's explicit redirect ("I have a feeling now you kind of being restricted by the idea of PIV... what's the main purpose... do you have any solutions?"), stepped back from PIV specifically and tried two texture-free alternatives on `2025_06_11-0002`, per user request, exported to their own `output/` subfolders:
+  - **`prototype_diff_maps.py`** → `output/diff_maps/diffmap_0002.png`: plain `frame[n+1]-frame[n]` diverging heatmaps for both MED and CAT. Directly showed a retreating margin moving frame to frame (CAT: +250,235px gained at spike+0→+1, then −174,999/−321,471/−224,100px lost over the next three pairs) — no motion/correspondence assumption, so nothing to fabricate.
+  - **`prototype_front_velocity.py`** → `output/front_velocity/frontvel_0002.png`: front-normal velocity via the level-set relation `v = -(dI/dt)*grad(I)/|grad(I)|^2`, masked to only trust blocks with sufficient local gradient (so it honestly reports "no information" in the flat interior instead of fabricating a vector, unlike optical flow — see below). spike+0→+1 showed a real, coherent fan-like pattern; later pairs (fewer bright pixels remaining) were much noisier.
+  - **Optical flow (TV-L1) was tried and explicitly invalidated**: it initially looked deceptively clean (a single uniform downward direction across the whole masked region), but a synthetic control test (a blob that only *shrinks* in place, zero true motion) produced a spurious median "speed" of 22.9px from `optical_flow_tvl1` — proving it doesn't escape the shrink-vs-move confound, it just hides it behind a smooth-looking field. This result was not trusted/reported as a finding.
+  - **Gradient-magnitude PIV** (Sobel-filtered images fed into the same windowed correlation) was also tried at two window sizes (15µm, 45µm) — stayed chaotic at both, with the larger window actually showing *higher* median speed (12-15 vs 5.8-6 µm/pair), which is backwards from what real signal averaging would do.
+- User's verdict on all of the above: "still not what I want... tired." Session paused there (interrupted further by an unplanned Windows update restart, but no work was lost — verified via `git status` and `ls output/` after reconnecting).
+- **Discovered mid-session** (before the restart) two unfamiliar, more-thorough output folders (`output/spatial_change_preview_20260916_023908/`, `output/spatial_change_refined_20260916_025431/`) covering all 6 recordings with forward/backward-consistency-checked optical flow, explicit signal-support masking, and stated caveats in `HOW_TO_READ.txt`. Flagged directly to the user rather than assumed — confirmed by the user afterward: **this is separate, parallel work they're doing with another AI tool ("Astra"/ChatGPT) on the same problem**, not something to merge into or take credit for. User explicitly said they're continuing that exploration elsewhere and will discuss with this session later.
+- Cleaned up `output/piv/` at the user's request (removed pre-sign-fix stale files and debug-only previews, renamed quiver outputs to simple `quiver_*.png` names) after being told directly: "why every time you just don't show where the fuck you export the file and I have to keep asking" — saved as a standing memory rule (`feedback_always_state_export_paths.md`) to always state full export paths immediately, unprompted, going forward.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Built and delivered the PI-requested reliability-group analysis (detected vs. failure Vm traces + B% histogram), per-recording, peak-aligned, across all 6 recordings in `ana_20260915_000.txt`
+- ✅ Exhaustively tested PIV (raw MED, CAT-masked, gradient-magnitude, multiple window sizes) on `2025_06_11-0002` — confirmed not viable for this data (no texture)
+- ✅ Validated the PIV/quiver code itself is correct against two independent real benchmark datasets, including a proper streamline-based cleanup of a noisy-but-real result
+- ✅ Found, root-caused, and fixed a real quiver vertical-sign bug across all affected scripts and outputs
+- ✅ Tried and honestly evaluated two texture-free alternatives (diff maps, front-normal velocity) per the user's explicit redirect away from PIV-specific thinking
+- ✅ Caught and invalidated a deceptively-clean optical-flow result via a synthetic shrink-only control test, rather than reporting it as a false win
+- ✅ Copied two scratch prototype scripts into the repo root (from prior sessions' OS-temp scratchpads) at the user's request, so they persist
+- ✅ Cleaned up `output/piv/` naming/clutter per user request
+
+## What should we do next? (TODOs)
+- [ ] **Spatial-change method for spike..spike+4 is still unresolved.** Neither PIV/optical-flow/gradient-PIV nor diff-maps/front-velocity fully satisfied the user. The user is now exploring this in parallel with another AI tool (ChatGPT/"Astra") — next session, check in on what that produced (`output/spatial_change_refined_20260916_025431/` and `output/spatial_change_preview_20260916_023908/` are its outputs) before trying anything further from scratch.
+- [ ] **Decide rose-map's fate.** Paused mid-exploration in Session 58 ("forget about it temporarily" this session) — still an open question whether/how it fits into the final spatial-change approach, especially given its known bipolar-elongation blind spot (flagged Session 58).
+
+## Last Session Recap
+※ recap: Explored PIV (and found/fixed a real quiver sign bug) plus two texture-free alternatives (diff maps, front-normal velocity) for characterizing spike..spike+4 spatial changes on `2025_06_11-0002` — none fully satisfied the user, who is now exploring the same problem in parallel with another AI tool. Also delivered the PI-requested detected-vs-failure Vm/B% reliability comparison across all 6 recordings. No production code touched; all work in new `prototype_*.py` scratch scripts.
+
+---
+
+# Log of the project progress 2026-09-15 Tue (Session 58)
+Last working file: (none — scratch-only session, no pipeline files touched)
+Last working line: n/a
+
+## List of modified files
+- None. This entire session was exploratory prototyping in the scratchpad (`rose_map_prototype.py`, `rose_map_batch.py`) — no `classes/`/`functions/`/`ach_domain_analysis.py` files were edited.
+
+## Summary of current progress
+- User asked how to better visualize/quantify whether a hotspot's bright pixels show directional spreading, as a replacement/addition to `RegionAnalyzer`'s current inner/outer-ring peak-latency metric (`region_analyzer.py:313-384`, `compute_ring_traces`) — flagged as weak: only 2 radial bins, assumes radial symmetry, not physically grounded, and multi-cluster mode measures something different (asynchrony) than single-cluster mode (spreading).
+- Iterated through several proposed approaches with the user before landing on one:
+  - Centroid-trajectory tracking — user correctly pointed out this confounds real movement with the mask simply shrinking/growing asymmetrically (a shrink toward one side looks identical to movement).
+  - Fixed-origin "new pixels only" front-tracking — addressed the shrink confound but the user proposed something better.
+  - **User's own idea** (adopted): fix the origin at the spike-frame bright-mask centroid, then for spike..spike+N compute an 8-direction (compass) normalized radial histogram ("rose map") of the bright mask at each frame, plus an anisotropy score. This separates "how much" (total bright count) from "which way" (share per direction) by construction, so shrink/grow alone doesn't fake a directional signal.
+- Built a scratch prototype (`rose_map_prototype.py`, later generalized to `rose_map_batch.py`) computing, per frame from spike to spike+4, on the same spike-centered MED stack `RegionAnalyzer` already uses (confirmed explicitly at the user's check "this should be done on MED?"):
+  - 8-sector share histogram anchored at the fixed spike-frame centroid.
+  - Anisotropy `R` = resultant-vector length of the 8 shares (0 = isotropic, 1 = fully one-sided).
+  - 3-row figure: frame panels (bright mask + origin marker) / rose maps / per-direction share vs. frame line plot.
+- **Caught and fixed two real bugs during prototyping, both before trusting any result:**
+  - Angle sign: `atan2(dr, dc)` used image-row-down as positive, but polar plots draw "up" as positive — the whole rose map was vertically flipped relative to the actual image. Fixed with `atan2(-dr, dc)`.
+  - Sector/label misalignment: `np.histogram` bins from `linspace(-180, 180, 9)` don't center on the 8 compass directions (first bin centered at -157.5°, not -22.5°/E) — the printed "S"/"SW" labels were actually reporting the N/NW bins' data. Fixed by defining bin edges offset -22.5° from each compass-direction center, with an explicit angle-wrapping step. Caught by inspecting the rendered rose-map wedge positions against the printed shares and noticing they didn't match.
+- Ran the corrected prototype on 4 recordings (`2025_06_11-0002` 60X, `2025_06_11-0003` 10X, `2025_11_13-0017` 40X, `2025_12_15-0012` 10X) — results are genuinely recording-dependent, not a uniform pattern:
+  - `0002`: clean, monotonic, real signal — `R` climbs 0.01→0.66 as the blob shrinks and retreats toward N/NW from its spike-frame centroid.
+  - `0003`: noisy, non-monotonic (`R` bounces 0.10→0.24→0.02→0.22→0.40) — mostly small edge-fragment noise, not a clean trend.
+  - `0017`: dominated by the static-structure issue from this session's earlier z-score removal — 60-80% of the frame is "bright," `R` stays low (0.01-0.14) throughout; not much real hotspot signal to extract direction from.
+  - `0012`: revealed a genuine **blind spot in the `R` metric** — the mask is elongated N-S from the start and stays elongated (a "bowtie": N and S shares both grow together, 24%→37% and 23%→31%, while other directions shrink), but `R` stays near 0 (0.00→0.09) because N and S are diametrically opposite and cancel out in the resultant-vector sum. `R` only detects one-sided (unipolar) bias, not symmetric two-sided (bipolar) elongation.
+- All output is scratch-only, saved for reference: `output/test2/rose_map_prototype_0002.png`, `_0003.png`, `_0017.png`, `_0012.png`, plus the two scripts (`rose_map_prototype.py`, `rose_map_batch.py`) in this session's scratchpad directory:
+  `C:\Users\Kang\AppData\Local\Temp\claude\D--Programs-PG-005\5894e6bd-ab69-4f03-9cf9-5bbc33b3c812\scratchpad\`
+  **Caveat**: this is an OS temp directory tied to this specific session, not part of the repo — it is not guaranteed to persist. If it's gone next session, `rose_map_batch.py` (the more complete, generalized version) can be regenerated from the PNGs' methodology described above (fixed spike-frame centroid origin, 8-sector compass-aligned histogram via `SECTOR_EDGES = np.deg2rad(np.arange(-22.5, 360, 45))`, resultant-vector `R`, `atan2(-dr, dc)` for correct on-screen orientation) rather than re-derived from scratch.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Explored and prototyped a directional-spreading visualization/metric at the user's request — landed on the user's own fixed-origin rose-map idea, validated (with two bugs caught and fixed) against 4 real recordings
+
+## What should we do next? (TODOs)
+- Not yet wired into the real pipeline — this was explicitly kept as scratch-only prototyping. Before any `region_analyzer.py`/`plot_results.py` change, still need to decide:
+  - Add a second "elongation" statistic (e.g. fit shares as a 2nd-moment ellipse, or compute R per opposite-direction pair) to catch the `0012`-style bipolar pattern that plain `R` misses.
+  - Possibly test more sectors (e.g. 16) and/or more recordings to see how robust the `0002`-style unipolar pattern really is.
+  - The `0017` result is a reminder that the density_thresh/window_px re-tuning TODO from Session 57 (for raw-intensity static structure) is still open and may affect how trustworthy any of these direction numbers are.
+- User's original "modify the latency analysis" task is still open-ended beyond this rose-map exploration — no decision yet on whether rose-map replaces or supplements the existing `get_peak_latency_ms()`/ring-trace metric.
+
+## Last Session Recap
+※ recap: User wanted a better way to check whether a hotspot's bright pixels show directional spreading, replacing/supplementing the current 2-ring peak-latency metric. After iterating through a few proposals (centroid tracking had a shrink/grow confound the user caught themselves), the user proposed a fixed-origin, 8-direction rose-map + anisotropy score, which we prototyped in the scratchpad against 4 real recordings (no pipeline files touched). Caught and fixed two real bugs along the way (a vertical-flip angle-sign error, and a sector-label/bin misalignment) before trusting any result. Final finding: the method genuinely works and shows a clean monotonic directional signal on `2025_06_11-0002`, but testing on 3 more recordings surfaced real recording-dependent variation, including a genuine blind spot in the anisotropy score itself — it misses symmetric "bowtie" (bipolar) elongation like `2025_12_15-0012` shows, since opposite-direction shares cancel out in the resultant-vector sum. Nothing wired into the real pipeline yet; next step (not yet started) is likely adding a second elongation-aware statistic before deciding how/whether to integrate this into `region_analyzer.py`.
+
+---
+
 # Log of the project progress 2026-09-15 Tue (Session 57)
 Last working file: `functions/database_ops.py`
 Last working line: `compute_region_stats()`, metric-column Float64 cast
