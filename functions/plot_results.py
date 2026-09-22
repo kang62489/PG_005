@@ -739,6 +739,166 @@ def plot_spike_detection_summary(
     return fig
 
 
+def plot_full_stack_kymographs(profiles, um_per_pixel, spikes: np.ndarray, title) -> Figure:
+    """Full-duration, whole-image band means and peak positions, without time crops."""
+    names = ("Left to right", "Top to bottom", "Top-left to bottom-right", "Bottom-left to top-right")
+    frames = profiles[0].shape[1]
+    times = np.arange(frames) / 20
+    vmin, vmax = np.percentile(np.concatenate([p.ravel() for p in profiles]), [1, 99])
+    fig = Figure(figsize=(21, 15), layout="constrained")
+    axes = fig.subplots(4, 1, sharex=True)
+    for ax, profile, name in zip(axes, profiles, names, strict=True):
+        image = ax.imshow(profile, origin="lower", aspect="auto", interpolation="nearest", cmap="inferno",
+                          vmin=vmin, vmax=vmax, extent=(-0.025, times[-1] + 0.025, 0, len(profile) * 16 * um_per_pixel))
+        peak = np.argmax(profile, axis=0)
+        ax.plot(times, (peak + 0.5) * 16 * um_per_pixel, color="#59d9ff", lw=0.6, alpha=0.9,
+                label="Brightest band (every frame)")
+        ax.plot(spikes, np.full(len(spikes), 1.01), "|", transform=ax.get_xaxis_transform(),
+                color="#d34b69", ms=5, clip_on=False, label="ABF spikes")
+        ax.set_ylabel("Position (µm)")
+        ax.set_title(name, loc="left", fontsize=11, pad=12)
+        ax.set_xlim(0, frames / 20)
+        ax.set_xticks(np.arange(0, frames / 20 + 0.1, 5))
+        ax.tick_params(labelbottom=True)
+    axes[-1].set_xlabel("Time from first processed frame (seconds)")
+    axes[0].legend(loc="upper right", fontsize=8)
+    fig.colorbar(image, ax=list(axes), shrink=0.8, label="Mean strip intensity (shared scale within figure)")
+    fig.suptitle(f"{title} | full {frames / 20:.0f} seconds | 20 Hz | whole image, no ROI\n"
+                 f"16-pixel bands ({16 * um_per_pixel:.1f} µm); no temporal smoothing; spikes shown as ticks above panels\n"
+                 "Cyan = position of the maximum strip mean, not a tracked hotspot. Diagonal end bands contain fewer pixels.",
+                 fontsize=13)
+    return fig
+
+
+def plot_wave_persistence(tests, title) -> Figure:
+    """Plot observed directional runs against block-shuffled peak trajectories."""
+    names = ("Left to right", "Top to bottom", "Top-left to bottom-right", "Bottom-left to top-right")
+    fig = Figure(figsize=(13, 9), layout="constrained")
+    axes = fig.subplots(2, 2)
+    for ax, test, name in zip(axes.flat, tests, names, strict=True):
+        blocks = np.asarray(test["block_frames"]) * 50
+        ax.plot(blocks, test["null95_ms"], color="#777777", label="Shuffle 95th percentile")
+        ax.plot(blocks, test["null_max_ms"], color="#e08a30", label="Shuffle maximum")
+        ax.axhline(test["observed_ms"], color="#218ca8", lw=2, label="Observed")
+        ax.set_title(f"{name}\nPeaks in first/last band: {test['edge_peak_fraction']:.0%}")
+        ax.set_xlabel("Shuffled block duration (ms)")
+        ax.set_ylabel("Mean directional run duration (ms)")
+        ax.grid(alpha=0.15)
+    axes[0, 0].legend(fontsize=8)
+    fig.suptitle(f"{title} | ALS peak-position persistence | full recording\n"
+                 "1,000 permutations per block length; zero-velocity steps break runs; mean includes all nonzero runs.\n"
+                 "Exploratory Matityahu-inspired null comparison, not their tuned event detector or a wave diagnosis.", fontsize=12)
+    return fig
+
+
+def plot_med_kymographs(med: np.ndarray, um_per_pixel, frame_ms, title) -> Figure:
+    """Band-average unmodified MED intensities across the entire image.
+
+    Four axes are exploratory image coordinates, not anatomical directions.
+    No temporal interpolation/smoothing or statistical wave detection is used.
+    """
+    yy, xx = np.indices(med.shape[1:])
+    axes_spec = ((1, 0, "Left to right"), (0, 1, "Top to bottom"),
+                 (1, 1, "Top-left to bottom-right"), (1, -1, "Bottom-left to top-right"))
+    band_px = 16
+    profiles = []
+    for dx, dy, label in axes_spec:
+        coordinate = (dx * xx + dy * yy) / np.hypot(dx, dy)
+        origin = coordinate.min()
+        bins = np.floor((coordinate - origin) / band_px).astype(int)
+        count = int(bins.max()) + 1
+        samples = np.bincount(bins.ravel(), minlength=count)
+        profile = np.full((count, len(med)), np.nan)
+        for t, frame in enumerate(med):
+            sums = np.bincount(bins.ravel(), weights=frame.ravel(), minlength=count)
+            np.divide(sums, samples, out=profile[:, t], where=samples > 0)
+        profiles.append((profile, label))
+    vmin, vmax = np.nanpercentile(np.concatenate([p.ravel() for p, _ in profiles]), [1, 99])
+    times = (np.arange(len(med)) - len(med) // 2) * frame_ms
+    fig = Figure(figsize=(14, 11), layout="constrained")
+    axes = fig.subplots(2, 2)
+    for ax, (profile, label) in zip(axes.flat, profiles, strict=True):
+        image = ax.imshow(
+            profile, origin="lower", aspect="auto", interpolation="nearest", cmap="inferno",
+            vmin=vmin, vmax=vmax,
+            extent=(times[0] - frame_ms / 2, times[-1] + frame_ms / 2,
+                    0, len(profile) * band_px * um_per_pixel),
+        )
+        valid = np.isfinite(profile).any(axis=0)
+        peaks = np.argmax(np.where(np.isfinite(profile), profile, -np.inf), axis=0)
+        positions = (peaks + 0.5) * band_px * um_per_pixel
+        ax.plot(times[valid], positions[valid], "o-", color="#59d9ff", ms=3, lw=0.9,
+                label="Maximum band intensity")
+        ax.axvline(0, color="white", ls="--", lw=1, label="Spike frame")
+        ax.set_title(label)
+        ax.set_xlabel("Time relative to spike frame (ms)")
+        ax.set_ylabel("Position along axis (µm)")
+    axes[0, 0].legend(loc="upper left", fontsize=8, facecolor="#eeeeee", framealpha=0.85)
+    fig.colorbar(image, ax=list(axes.flat), shrink=0.85, label="Mean MED intensity (shared 1st–99th percentile scale)")
+    fig.suptitle(
+        f"{title}\nFour-axis space–time profiles | 20 Hz | band width {band_px} px ({band_px * um_per_pixel:.1f} µm)\n"
+        "Whole image: all pixels included; MED intensity averaged within each band. No CAT mask.\n"
+        "No temporal smoothing. Diagonal end bands contain fewer pixels. Peak trace is argmax, not a tracked object.\n"
+        "Exploratory adaptation of Matityahu et al. 2023: a diagonal ridge is a candidate, not a confirmed wave.",
+        fontsize=11,
+    )
+    return fig
+
+
+def plot_directional_change(result, title) -> Figure:
+    """Show fixed-sector gains/losses in consecutive exported CAT frames."""
+    count = len(result["labels"])
+    offsets = result["offsets"]
+    fig = Figure(figsize=(19, 10), layout="constrained")
+    grid = fig.add_gridspec(3, len(offsets), height_ratios=(1.25, 1, 0.8))
+    cy, cx = result["center"]
+    radius = result["radius"]
+    angles = np.arange(count) * 2 * np.pi / count
+    cmap = ListedColormap(["#151b26", "#7e8796", "#26cc96", "#ed728a"])
+    limit = max(result["gain"].max(), result["loss"].max(), 1) * 1.12
+    net_limit = max(np.abs(result["net"]).max(), 1) * 1.12
+    for col, offset in enumerate(offsets):
+        ax = fig.add_subplot(grid[0, col])
+        ax.imshow(result["changes"][col], cmap=cmap, vmin=0, vmax=3, interpolation="nearest")
+        ax.add_patch(Circle((cx, cy), radius, fill=False, color="white", lw=1))
+        for angle in angles + np.pi / count:
+            ax.plot([cx, cx + radius * np.sin(angle)], [cy, cy - radius * np.cos(angle)],
+                    color="white", lw=0.6, alpha=0.7)
+        ax.plot(cx, cy, "+", color="yellow", ms=9)
+        ax.set_title(f"Frame {offset:+d} to {offset + 1:+d}\nChange inside circle: {result['coverage'][col]:.0%}")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        polar = fig.add_subplot(grid[1, col], projection="polar")
+        polar.set_theta_zero_location("N")
+        polar.set_theta_direction(-1)
+        closed = np.r_[angles, angles[0]]
+        for key, color in (("gain", "#149d72"), ("loss", "#d34b69")):
+            polar.plot(closed, np.r_[result[key][col], result[key][col, 0]], color=color, label=key)
+        polar.set_xticks(angles, result["labels"])
+        polar.set_ylim(0, limit)
+        polar.tick_params(labelsize=8)
+        polar.set_title(f"Gain nonuniformity CV = {result['cv'][col]:.2f}", fontsize=10, pad=17)
+        if col == 0:
+            polar.legend(loc="lower left", bbox_to_anchor=(-0.3, -0.2), fontsize=8)
+        bar = fig.add_subplot(grid[2, col])
+        net = result["net"][col]
+        bar.bar(result["labels"], net, color=np.where(net >= 0, "#149d72", "#d34b69"))
+        bar.axhline(0, color="gray", lw=0.7)
+        bar.set_ylim(-net_limit, net_limit)
+        bar.set_title("Net = gain - loss", fontsize=10)
+        bar.tick_params(labelsize=8)
+        if col == 0:
+            bar.set_ylabel("Pixels / frame")
+    fig.suptitle(
+        f"{title} | {count} directions | CAT-bright median response\n"
+        "Green: newly bright | Pink: lost bright | Gray: retained bright | White circle: analyzed area\n"
+        "Fixed spike-frame centroid; N = image top. Polar units: pixels/frame (shared scale).\n"
+        "CV = SD/mean of gain per sector area; 0 = uniform. Descriptive, not an isotropy significance test.",
+        fontsize=12,
+    )
+    return fig
+
+
 # Exploratory direction-analysis exports. Keep GUI and existing analyses unchanged.
 def _direction_map(ax, old, new, center) -> None:
     image = np.zeros((*old.shape, 3)) + 0.10

@@ -13,6 +13,7 @@ PROJECT_ROOT = Path("D:/Programs/PG_005")
 sys.path.insert(0, str(PROJECT_ROOT))
 
 CATEGORY_BRIGHT = 1
+Z_MIN = 0.15
 
 MED_DIR = PROJECT_ROOT / "output" / "test4" / "median"
 CAT_DIR = PROJECT_ROOT / "output" / "test4" / "categorized"
@@ -21,6 +22,10 @@ RECORDINGS = [
     # tag used in the *_MED.tif / *_CAT.tif filenames
     "2025_06_11-0002_A1S4RC1_BIEXP_ALS",
     "2025_06_11-0003_A1S4RC1_BIEXP_ALS",
+    "2025_11_13-0017_A1S1RC2_BIEXP_ALS",
+    "2025_11_13-0018_A1S1RC2_BIEXP_ALS",
+    "2025_12_15-0012_A1S3RC1_BIEXP_ALS",
+    "2025_12_15-0013_A1S3RC1_BIEXP_ALS",
 ]
 
 
@@ -30,15 +35,17 @@ def plot_med_height_map_series(
     n_frames: int,
     title: str,
     bright_mask_stack: np.ndarray | None = None,
+    n_pre_frames: int = 0,
+    zmin: float | None = None,
     z_label: str = "MED intensity",
     cmap: str = "inferno",
     elev: float = 35.0,
     azim: float = -60.0,
-    stride: int = 4,
+    stride: int = 8,
 ) -> Figure:
     """3D intensity height-map (surface) panels for spike-aligned MED frames.
 
-    One Axes3D panel per frame in [spike_frame_idx, spike_frame_idx + n_frames),
+    One Axes3D panel per frame in [spike_frame_idx - n_pre_frames, spike_frame_idx + n_frames),
     clamped to med_stack bounds. z = med_stack's own values as given (caller decides
     raw MED intensity vs. baseline z-score, etc.) -- this function doesn't transform
     them. Shared z-limits and color scale across panels so hill height is directly
@@ -51,12 +58,18 @@ def plot_med_height_map_series(
     """
     from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers the "3d" projection)
 
-    frame_idxs = [idx for idx in range(spike_frame_idx, spike_frame_idx + n_frames) if idx < med_stack.shape[0]]
+    frame_idxs = [
+        idx
+        for idx in range(spike_frame_idx - n_pre_frames, spike_frame_idx + n_frames)
+        if 0 <= idx < med_stack.shape[0]
+    ]
     height, width = med_stack.shape[1], med_stack.shape[2]
     x, y = np.meshgrid(np.arange(width), np.arange(height))
 
     selected = med_stack[frame_idxs]
     vmin, vmax = float(np.nanmin(selected)), float(np.nanmax(selected))
+    if zmin is not None:
+        vmin = zmin
 
     fig = Figure(figsize=(5 * len(frame_idxs), 5), layout="constrained")
     surf = None
@@ -99,14 +112,15 @@ def run_one(tag: str, use_mask: bool) -> None:
 
     fig = plot_med_height_map_series(
         median_segment, spike_frame_idx, n_frames=5, title=f"{tag} MED height-map",
-        bright_mask_stack=bright_mask_stack,
+        bright_mask_stack=bright_mask_stack, n_pre_frames=4, zmin=Z_MIN,
     )
     out_path = PROJECT_ROOT / "output" / "test4" / "med_height_map" / f"{tag}_HEIGHTMAP{suffix}.png"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=130)
+    fig.savefig(out_path, dpi=90)
     print(f"Saved: {out_path}")
 
 
 if __name__ == "__main__":
     for tag in RECORDINGS:
         run_one(tag, use_mask=True)
+        run_one(tag, use_mask=False)

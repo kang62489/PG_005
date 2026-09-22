@@ -137,7 +137,7 @@ def run(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ALS slow-fluctuation removal pipeline")
     parser.add_argument("--proc_list", required=True, type=Path, help="Path to processing list file (proc_*.txt)")
-    parser.add_argument("--lam", type=float, default=1e2, help="ALS smoothness (default: 100)")
+    parser.add_argument("--lam", type=float, default=11, help="ALS smoothness (default: 11)")
     parser.add_argument("--p", type=float, default=0.05, help="ALS asymmetry (default: 0.05)")
     parser.add_argument("--n_iter", type=int, default=10, help="ALS iterations (default: 10)")
     args = parser.parse_args()

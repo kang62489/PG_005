@@ -20,7 +20,7 @@ os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "40")
 
 # ── Defaults ───────────────────────────────────────────────────────────────────
 
-LAM: float = 1e2    # smoothness: larger → smoother baseline
+LAM: float = 11     # smoothness: larger → smoother baseline
 P: float = 0.02     # asymmetry: small → baseline hugs the lower envelope
 N_ITER: int = 10    # ALS iterations (10 is usually sufficient)
 MAX_T: int = 2048   # compile-time local-array size; must be >= number of frames
