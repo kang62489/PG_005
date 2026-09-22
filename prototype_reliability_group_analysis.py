@@ -6,7 +6,7 @@ For each of the 6 recordings in data/ana_20260915_000.txt, separately:
 2. 1x2 Vm trace overlay: left = detected ("success") segments, right = failure segments.
 
 Reuses AbfClip / load_img_segs / SpikeReliabilityChecker exactly as ach_domain_analysis.py does,
-no production files touched. Output goes to output/reliability_group/<recording_stem>/.
+no production files touched. Output goes directly to output/reliability_group/.
 """
 
 import sys
@@ -21,6 +21,9 @@ import numpy as np  # noqa: E402
 from ach_domain_analysis import parse_ana_list  # noqa: E402
 from classes import AbfClip, SpikeReliabilityChecker  # noqa: E402
 from functions import load_img_segs, lookup_rec_from_db  # noqa: E402
+
+# Prototype-only: skip AbfClip's automatic spike-detection PNG export (results_dir/spikes/).
+AbfClip._export_spike_plot = lambda self: None  # noqa: SLF001, ARG005
 
 ANA_LIST = PROJECT_ROOT / "data" / "ana_20260915_000.txt"
 OUTPUT_ROOT = PROJECT_ROOT / "output" / "reliability_group"
@@ -39,14 +42,12 @@ for row in entries.iter_rows(named=True):
     proc_tiff_path = Path(row["proc_tiff_path"])
     raw_abf_path = Path(row["raw_abf_path"])
     rec_stem = proc_tiff_path.stem
-    rec_out_dir = OUTPUT_ROOT / rec_stem
-    rec_out_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n{proc_tiff_path.name}  +  {raw_abf_path.name}  [{obj}]")
 
     clip = AbfClip(
         proc_tiff_path=proc_tiff_path,
         raw_abf_path=raw_abf_path,
-        results_dir=rec_out_dir,
+        results_dir=OUTPUT_ROOT,
         detrend_mode=detrend_mode,
         normalization=normalization,
     )
@@ -75,14 +76,15 @@ for row in entries.iter_rows(named=True):
             failure_vm.append(vm_pair)
 
     # ── 1. B% histogram, 4 bins over [0, 1] ─────────────────────────────────
-    fig1, ax1 = plt.subplots(figsize=(6, 4))
-    ax1.hist(bp_detected, bins=np.linspace(0, 1, 5), edgecolor="black")
-    ax1.set_xlabel("Bright-pixel fraction (B%, 0-1)")
-    ax1.set_ylabel("Count")
-    ax1.set_title(f"{rec_stem}\nWinning-frame B% of detected segments (n={len(bp_detected)})")
-    fig1.tight_layout()
-    fig1.savefig(rec_out_dir / "bp_histogram.png", dpi=150)
-    plt.close(fig1)
+    # Temporarily bypassed.
+    # fig1, ax1 = plt.subplots(figsize=(6, 4))
+    # ax1.hist(bp_detected, bins=np.linspace(0, 1, 5), edgecolor="black")
+    # ax1.set_xlabel("Bright-pixel fraction (B%, 0-1)")
+    # ax1.set_ylabel("Count")
+    # ax1.set_title(f"{rec_stem}\nWinning-frame B% of detected segments (n={len(bp_detected)})")
+    # fig1.tight_layout()
+    # fig1.savefig(OUTPUT_ROOT / f"{rec_stem}_bp_histogram.png", dpi=150)
+    # plt.close(fig1)
 
     # ── 2. 1x2 Vm trace overlay: success vs failure, each trace's own peak at t=0 ──
     fig2, (ax_success, ax_fail) = plt.subplots(1, 2, figsize=(12, 4), sharey=True)
@@ -93,6 +95,8 @@ for row in entries.iter_rows(named=True):
     ax_success.set_title(f"Detected (success), n={len(detected_vm)}")
     ax_success.set_xlabel("Time from own spike peak (ms)")
     ax_success.set_ylabel("Vm (mV)")
+    ax_success.set_xlim(-50, 50)
+    ax_success.grid(True)
 
     for time_ms, vm in failure_vm:
         peak_idx = int(np.argmax(vm))
@@ -100,11 +104,13 @@ for row in entries.iter_rows(named=True):
     ax_fail.axvline(0, color="black", linewidth=0.6, linestyle="--")
     ax_fail.set_title(f"Failure, n={len(failure_vm)}")
     ax_fail.set_xlabel("Time from own spike peak (ms)")
+    ax_fail.set_xlim(-50, 50)
+    ax_fail.grid(True)
 
     fig2.suptitle(rec_stem)
     fig2.tight_layout()
-    fig2.savefig(rec_out_dir / "vm_success_vs_failure.png", dpi=150)
+    out_path = OUTPUT_ROOT / f"{rec_stem}_vm_success_vs_failure.png"
+    fig2.savefig(out_path, dpi=150)
     plt.close(fig2)
 
-    print(f"  Saved: {rec_out_dir / 'bp_histogram.png'}")
-    print(f"  Saved: {rec_out_dir / 'vm_success_vs_failure.png'}")
+    print(f"  Saved: {out_path}")

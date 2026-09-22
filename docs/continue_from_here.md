@@ -1,3 +1,40 @@
+# Log of the project progress 2026-09-22 Tue (Session 61)
+Last working file: `prototype_reliability_group_analysis.py`
+Last working line: end of file (`print(f"  Saved: ...")`)
+
+## List of modified files
+- `prototype_reliability_group_analysis.py` — iterated at user request across the session:
+  - Monkey-patched `AbfClip._export_spike_plot` to a no-op before the loop, so the automatic `results_dir/spikes/*.png` export is skipped (prototype-only patch; `classes/abf_clip.py` itself untouched).
+  - Commented out the B% histogram block (`bp_detected` is still collected in case it's restored later).
+  - Dropped per-recording subfolders — output now goes flat into `output/reliability_group/` as `<recording_stem>_vm_success_vs_failure.png`.
+  - Success/failure Vm axes: `grid(True)` added, x-limits iterated 200 → 100 → final **±50 ms**.
+- `docs/continue_from_here.md` — this log entry.
+
+## Summary of current progress
+- **Todo "reprocess all selected raw TIFFs" is done** — all recordings reprocessed to both GAUSS and ALS this session (earlier attempts had been blocked mid-session waiting on the GAUSS pass to finish).
+- Regenerated all 6 recordings' `vm_success_vs_failure.png` against the freshly reprocessed GAUSS TIFFs — flat into `output/reliability_group/`, ±50 ms window, grid on, no B% histogram, no spikes/ subfolder.
+- This zoomed-in success-vs-failure Vm view also satisfies the **"zoom in to see the details of successful and failed spikes"** todo.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Recorded and refined the 8-item project TODO list in this log (Matityahu/DA wave check, reprocess TIFFs, separate by objective, median vs. segment comparison, induced vs. spontaneous reliability, success/failure spike zoom-in, Astra/Claude rosemap locality argument, dataset sort for Jeff)
+- ✅ Reprocessed all selected raw TIFFs to both GAUSS and ALS
+- ✅ Updated `prototype_reliability_group_analysis.py` (skip spikes/ export, bypass B% histogram, flat output, ±50ms Vm x-limits, grid on) — ruff clean
+- ✅ Regenerated all 6 `vm_success_vs_failure.png` outputs into `output/reliability_group/`
+- ✅ Zoom in on successful and failed spikes (via the ±50ms Vm success/failure plots above)
+
+## What should we do next? (TODOs)
+- [ ] Large spacing and multiple/different frequencies of spontaneous ACh hotspots may suggest ACh propagation is not wavelike but a series of adjacent hotspots occurring — need to double check against Matityahu and the original DA wave paper.
+- [ ] Separate results based on objective.
+- [ ] Compare the difference between the median and its segments.
+- [ ] Discuss the reliability between induced and spontaneous.
+- [ ] Think about Astra's model analysis and Claude's rosemap for the argument that major hotspots are not "diffusively" transmitted across large space but are local and restricted.
+- [ ] Properly sort and mark the dataset used, then put it in the bucket for Jeff.
+
+## Last Session Recap
+※ recap: Finished reprocessing all raw TIFFs to GAUSS and ALS. Iterated `prototype_reliability_group_analysis.py` (skip spikes/ export, bypass B% histogram, flat output layout, ±50ms Vm window with grid) and regenerated all 6 recordings' success-vs-failure Vm plots into `output/reliability_group/` — this also covers the "zoom in on successful/failed spikes" todo.
+
+---
+
 # Log of the project progress 2026-09-17 Thu (Session 60)
 Last working file: `views/view_align_spike.py`
 Last working line: 120 (`self.le_status.setReadOnly(True)`)
