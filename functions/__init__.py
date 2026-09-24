@@ -25,7 +25,7 @@ if TYPE_CHECKING:
         gauss_ready,
         raw_tiff_ready,
     )
-    from .fit_bg_hist import fit_hist_sigma, img_zscore_convert
+    from .fit_hist import find_background_threshold, fit_hist_sigma, img_zscore_convert
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
@@ -33,8 +33,12 @@ if TYPE_CHECKING:
     from .plot_results import (
         plot_full_trace,
         plot_segment_reliability_montage,
+        plot_single_zone,
         plot_spatiotemporal_summary,
         plot_spike_detection_summary,
+        plot_zone_overlay,
+        plot_zone_stats,
+        zone_colors,
     )
     from .spike_alignment import spike_centered_avg, spike_centered_median
     from .tau_estimate import sample_tau
@@ -53,6 +57,7 @@ __all__ = [
     "check_cuda",
     "compute_region_stats",
     "count_unique_cells",
+    "find_background_threshold",
     "fit_hist_sigma",
     "gauss_exists",
     "gauss_ready",
@@ -67,8 +72,11 @@ __all__ = [
     "lookup_rec_from_db",
     "plot_full_trace",
     "plot_segment_reliability_montage",
+    "plot_single_zone",
     "plot_spatiotemporal_summary",
     "plot_spike_detection_summary",
+    "plot_zone_overlay",
+    "plot_zone_stats",
     "populate_animal_id_values",
     "raw_tiff_ready",
     "sample_tau",
@@ -76,6 +84,7 @@ __all__ = [
     "spike_centered_median",
     "test_cuda",
     "write_cell_summary_xlsx",
+    "zone_colors",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -97,14 +106,19 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "plot_full_trace":     (".plot_results",                              "plot_full_trace"),
     "plot_segment_reliability_montage": (".plot_results",                 "plot_segment_reliability_montage"),
     "plot_spike_detection_summary": (".plot_results",                     "plot_spike_detection_summary"),
+    "plot_zone_overlay":   (".plot_results",                              "plot_zone_overlay"),
+    "plot_zone_stats":     (".plot_results",                              "plot_zone_stats"),
+    "plot_single_zone":    (".plot_results",                              "plot_single_zone"),
+    "zone_colors":         (".plot_results",                              "zone_colors"),
     "lookup_rec_from_db":  (".database_ops",                           "lookup_rec_from_db"),
     "populate_animal_id_values": (".database_ops",                     "populate_animal_id_values"),
     "count_unique_cells":  (".database_ops",                           "count_unique_cells"),
     "compute_region_stats": (".database_ops",                          "compute_region_stats"),
     "get_excluded_recordings": (".database_ops",                       "get_excluded_recordings"),
     "get_cell_recording_status": (".database_ops",                     "get_cell_recording_status"),
-    "fit_hist_sigma":      (".fit_bg_hist",                                "fit_hist_sigma"),
-    "img_zscore_convert":  (".fit_bg_hist",                                "img_zscore_convert"),
+    "fit_hist_sigma":      (".fit_hist",                                   "fit_hist_sigma"),
+    "find_background_threshold": (".fit_hist",                            "find_background_threshold"),
+    "img_zscore_convert":  (".fit_hist",                                   "img_zscore_convert"),
     "spike_centered_avg":  (".spike_alignment",                           "spike_centered_avg"),
     "spike_centered_median": (".spike_alignment",                         "spike_centered_median"),
     "sample_tau":          (".tau_estimate",                              "sample_tau"),

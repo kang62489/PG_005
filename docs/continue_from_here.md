@@ -1,3 +1,70 @@
+# Refined TODOs (2026-09-24, replaces Session 61's six-item list)
+Plan: `.claude/plans/2026-09-24_als_spontaneous_flow_plan.md` -- executed phase by phase, user checks after each phase.
+All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
+
+| # | TODO | Absorbs old item(s) | Phase | Status |
+|---|------|---------------------|-------|--------|
+| A | Default the pipeline (CLI + GUI) to ALS | new | 0 | [x] |
+| B | Merge `../PG_010/sp_ach_zones.py` into PG_005 as classes/functions: 10X only, sensor-aware (iAChSnFR / GACh3.0 / rACh1h), numba CPU+CUDA acceleration, readable xlsx names/columns, zone size/frequency/period stats, output to `results/spontaneous/` | #1 wave vs hotspots, #4 spontaneous side | 1 | [x] |
+| C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [ ] |
+| D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [ ] |
+| E | Further flow analysis: per-pair speed, radial outflow, divergence, coherence -> `flow_pairs` table | #5 locality argument | 4 | [ ] |
+| F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [ ] |
+
+Still open, outside this plan:
+- [ ] Separate results by objective (old #2)
+- [ ] Compare the median with its segments (old #3)
+- [ ] Sort and mark the dataset used, put it in the bucket for Jeff (old #6)
+
+---
+
+# Log of the project progress 2026-09-24 Thu (Session 63)
+Last working file: `functions/plot_results.py`
+Last working line: 1203 (`plot_zone_stats` -> `panels = (...)`, frequency panel switched to log scale)
+
+## List of modified files
+- `ach_domain_analysis.py` — Phase 0: ALS is the default (`use_als=True` in `parse_ana_list()`/`run()`); CLI flag `--use_als` replaced by `--use_gauss`.
+- `views/view_align_spike.py` — GUI radio button defaults to "ALS Corrected".
+- `views/view_als_correct.py` — ALS lambda line edit default `100` -> `11` (matches `als_correct.py --lam` default).
+- `classes/sp_zone_analyzer.py` (new) — `SpontaneousZoneAnalyzer`, port of `../PG_010/sp_ach_zones.py` (detect -> group -> map, `save()`), `timed()` sub-step timer, 0-hotspot guard, `CROSSOVER_RATIO = 1.5`, `HIGH_FREQ_FLAG_HZ = 1.0` -> `high_freq_flag` column.
+- `spontaneous_analysis.py` (new) — CLI runner: proc list -> 10X-only (OBJ/SENSOR from rec_data.db) -> per-recording xlsx/tif/npz + zone-map PNGs -> `spontaneous_summary.xlsx` + `spontaneous_stats.png`, all under `<results_dir>/spontaneous/` (default `results/`). Flags: `--sigma 1.5`, `--proj`, `--color`, `--all_obj` (testing), `--debug`.
+- `functions/fit_bg_hist.py` -> `functions/fit_hist.py` (git mv) — restructured into Step 1 histogram / Step 2 left-Gaussian fit / Step 3 consumers; `fit_hist_sigma()` (img_proc) unchanged (CPU bit-identical, GPU within its own 1e-11 atomic-add noise); new `find_background_threshold()` for zones (1000 bins, 0.1–99.9 pct range, out-of-range dropped) with a float16 fast path (`float16_code_counts` / `percentiles_from_counts` / `rebin_code_counts`, bit-identical to `np.percentile` path, ~10 s -> 0.3 s).
+- `functions/zone_kernels.py` (new) — numba CPU + CUDA: `zone_mask()` (threshold/open/close + fill holes/small blobs, pixel-identical to scipy, 56 s -> 4.5 s) and `footprint_traces()` (114 s -> ~1 s, float16 last-digit rounding only, zones identical); float16 lookup-table trick.
+- `functions/plot_results.py` — new headless figures `plot_zone_overlay`, `plot_single_zone`, `zone_colors`, `plot_zone_stats` (zone area + frequency per sensor, both log scale, fixed sensor colors validated with the dataviz validator, hollow dots = high-frequency flag).
+- `functions/__init__.py`, `classes/__init__.py` — lazy-import registry updates (fit_hist, find_background_threshold, zone plots, SpontaneousZoneAnalyzer).
+- `functions/detrend.py` — docstring reference `fit_bg_hist.py` -> `fit_hist.py`.
+- `data/proc_20260922_000.txt`, `data/pick_20260922_000.txt` — removed red-control recordings `2025_11_08-0032` / `-0033` (tdTomato, 1202p with ABF); `Total` line corrected to the actual 201 rows (was "214" but held 203).
+- `docs/knowledgebase/zone_analysis_speedup_techniques.md` (new) — speed-up write-up (learn-from-code skill).
+- `.claude/plans/2026-09-24_als_spontaneous_flow_plan.md` (new) — the approved phase plan.
+- **Not from this session's edits:** `classes/spatial_categorization.py` `BASELINE_SIGMA_MULT 2 -> 1.5` (user's own IDE edit; affects spike-aligned bright-pixel thresholds), `data/pick_list.json` (GUI state).
+
+## Summary of current progress
+- **Phase 0 done:** pipeline defaults to `*_BIEXP_ALS.tif` (CLI + GUI). Verified via `--help` and `parse_ana_list` resolving ALS paths.
+- **Phase 1 done (spontaneous zones):**
+  - Parity: at 512 bins / σ=1.5 the port reproduces PG_010 results **exactly** on all 7 PG_010 stacks (threshold, mask TIF, zone count, area, events, freq). PG_010's results turned out to have been made with `--sigma 1.5`, not the script default 2 (solved k = 1.500) -> 1.5 is now the default.
+  - Switched to 1000 bins via the shared `fit_hist` kernel (user's choice). Batch A shifts: 0003 43 -> 41 zones, 0018 35 -> 40, 0012 32 -> 25 (threshold +13% on 0012) — user decided 1000 is fine, no stability check needed.
+  - Speed: ~212 s -> 36–50 s per recording (fast vs slow run: masks + all 4 xlsx sheets identical); fast threshold added afterwards (bit-identical), expected ~30 s (not yet measured end-to-end).
+  - `proc_20260922_000.txt` dry run: 203 rows -> 107 10X selected (GACh3.0 103, iAChSnFR 2, tdTomato 2) -> red controls removed -> 105 remain. Formal run deferred by user.
+  - Frequency calculation kept as in PG_010 (user's decision). Zones > 1 Hz are flagged, not removed (user: trials contain several manually induced hotspots with higher frequencies). Single-event zones show as ~0.017 Hz (= 1/60 s recording length, a lower bound by the PG_010 convention).
+- Test outputs only in `output/test6/` (17.1 GB, scratch): `spontaneous/` (512-bin parity, 7 rec), `bins1000/` (slow, 3 rec), `fast/` (latest code, 3 rec), `spontaneous/spontaneous_stats_preview.png`.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ TODO A — ALS default (CLI + GUI) + ALS lambda GUI default 11
+- ✅ TODO B — sp_ach_zones merged, 10X/sensor-aware, readable outputs, 1000-bin shared histogram, numba/CUDA speed-up, high-frequency flags, stats figure
+- ✅ Red-control recordings removed from the 20260922 proc/pick lists
+- ✅ Knowledge-base note on the speed-up techniques
+
+## What should we do next? (TODOs)
+- [ ] Phase 2 (TODO C): merge `prototype_reliability_group_analysis.py` into `SpikeReliabilityChecker` — success/failure Vm ±50 ms PNGs in `reliability/`, AP threshold voltages (dV/dt ≥ 20 mV/ms proposed).
+- [ ] Phases 3 + 4 (TODOs D + E): replace ring peak-latency with pre-masked TV-L1 flow in `RegionAnalyzer` (`flow/` replaces `latency/`), then flow metrics (speed, radial outflow, divergence, coherence).
+- [ ] Delete scratch `output/test6/` (17.1 GB) once the commit is done.
+- [ ] Optional: GUI entry for the spontaneous analysis (CLI only for now).
+
+## Last Session Recap
+※ recap: Made ALS the pipeline default and merged PG_010's spontaneous zone analysis into PG_005 (`sp_zone_analyzer.py` + `spontaneous_analysis.py`), verified exact parity, sped it up ~5× with numba/CUDA (identical results), added high-frequency flags and a per-sensor stats figure; formal run and Phase 2 pending.
+
+---
+
 # Log of the project progress 2026-09-24 Thu (Session 62)
 Last working file: `prototype_flow_analysis.py`
 Last working line: end of file (`run()`)

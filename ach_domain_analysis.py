@@ -16,7 +16,7 @@ Detrend mode selects which processed TIFF prefix is loaded:
 
 Usage:
     python ach_domain_analysis.py --ana_list data/ana_list_20260601_000.txt
-                             [--detrend BIEXP] [--use_als]
+                             [--detrend BIEXP] [--use_gauss]
                              [--db data/rec_data.db] [--exp_db data/exp_info.db]
 """
 # Standard library imports
@@ -64,7 +64,7 @@ console = Console()
 def parse_ana_list(
     ana_list_path: Path,
     detrend_mode: str = "BIEXP",
-    use_als: bool = False,
+    use_als: bool = True,
 ) -> tuple[pl.DataFrame, Path, str, str]:
     """Parse an ana list file and filter rows by existence flags.
 
@@ -253,7 +253,7 @@ def _save_entry_figures(
 def run(
     ana_list_path: Path,
     detrend_mode: str = "BIEXP",
-    use_als: bool = False,
+    use_als: bool = True,
     db_path: Path = Path("data/rec_data.db"),
     exp_db_path: Path = Path("data/exp_info.db"),
     emitter=None,
@@ -522,10 +522,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Spike-aligned image analysis pipeline")
     parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_*.txt)")
     parser.add_argument("--detrend", choices=["BIEXP"], default="BIEXP", help="Detrend mode (default: BIEXP)")
-    parser.add_argument("--use_als", action="store_true", help="Load *_ALS.tif instead of *_GAUSS.tif")
+    parser.add_argument("--use_gauss", action="store_true", help="Load *_GAUSS.tif instead of *_ALS.tif (default: ALS)")
     parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db (default: data/rec_data.db)")
     parser.add_argument("--exp_db", type=Path, default=Path("data/exp_info.db"), help="Path to exp_info.db (default: data/exp_info.db)")
     args = parser.parse_args()
 
-    run(args.ana_list, args.detrend, args.use_als, args.db, args.exp_db)
+    run(args.ana_list, args.detrend, not args.use_gauss, args.db, args.exp_db)
 

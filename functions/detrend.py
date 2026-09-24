@@ -6,7 +6,7 @@ Public API
 biexp_detrend(img, tau1, tau2, cuda_available)        ->  np.ndarray
 
 Returns the detrended stack (y - trend), not a ratio. Downstream normalization to a
-stack-wide z-score happens separately in functions/fit_bg_hist.py.
+stack-wide z-score happens separately in functions/fit_hist.py.
 """
 
 import math

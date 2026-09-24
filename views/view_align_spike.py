@@ -70,7 +70,7 @@ class ViewAlignSpike:
         self.gb_norm.addButton(self.rb_norm_1)
         self.gb_norm.addButton(self.rb_norm_2)
 
-        self.rb_norm_1.setChecked(True)  # Default to Gauss-only normalization
+        self.rb_norm_2.setChecked(True)  # Default to ALS-corrected input
 
         self.lo_norm = QHBoxLayout()
         self.lo_norm.addWidget(self.rb_norm_1)

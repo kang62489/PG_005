@@ -1117,3 +1117,129 @@ def plot_hotspot_reference_centers(masks, centers, results, fits, title) -> Figu
                  "\nInitial, maximum-area and final-mask centroids are geometric reference candidates, not identified release sites."
                  "\nLater-derived centers are post hoc; these comparisons do not independently validate a source center.", fontsize=16)
     return fig
+
+
+# ── Spontaneous zone maps (-> spontaneous/zone_maps/) ────────────────────────
+
+
+def _tint_background(background: np.ndarray, color: str) -> np.ndarray:
+    """Normalize to [0, 1]; if not gray, put it in one RGB channel."""
+    bg_norm = (background - background.min()) / (background.max() - background.min())
+    if color == "gray":
+        return bg_norm
+    bg_rgb = np.zeros((*bg_norm.shape, 3), dtype=bg_norm.dtype)
+    bg_rgb[..., {"red": 0, "green": 1, "blue": 2}[color]] = bg_norm
+    return bg_rgb
+
+
+def _label_zone(ax: mpl.axes.Axes, zone_id: int, centroid: tuple[float, float]) -> None:
+    cy, cx = centroid
+    ax.text(cx, cy, str(zone_id), color="white", fontsize=9, fontweight="bold",
+            ha="center", va="center", bbox={"boxstyle": "circle", "fc": "black", "alpha": 0.6})
+
+
+def zone_colors(zone_ids: list[int]) -> dict[int, tuple]:
+    """Fixed tab20 color per zone id (sorted order), shared by the overlay and single-zone maps."""
+    palette = mpl.colormaps["tab20"].colors
+    return {z: palette[i % len(palette)] for i, z in enumerate(sorted(zone_ids))}
+
+
+def plot_zone_overlay(zone_masks: dict[int, np.ndarray], zone_centroids: dict[int, tuple[float, float]],
+                      background: np.ndarray, bg_color: str, title: str) -> Figure:
+    """All zones as translucent fills; largest painted first so small zones stay on top."""
+    from skimage.color import label2rgb
+
+    bg_tinted = _tint_background(background, bg_color)
+    zone_label_map = np.zeros(background.shape, dtype=np.int32)
+    for zone_id in sorted(zone_masks, key=lambda z: zone_masks[z].sum(), reverse=True):
+        zone_label_map[zone_masks[zone_id]] = zone_id
+
+    overlay = label2rgb(zone_label_map, image=bg_tinted, bg_label=0, alpha=0.5,
+                        colors=mpl.colormaps["tab20"].colors, saturation=1)
+
+    fig = Figure(figsize=(11, 11), layout="tight")
+    ax = fig.add_subplot()
+    ax.imshow(overlay)
+    for zone_id in sorted(zone_masks):
+        if zone_id in zone_centroids:
+            _label_zone(ax, zone_id, zone_centroids[zone_id])
+    ax.set_title(title)
+    ax.axis("off")
+    return fig
+
+
+def plot_single_zone(zone_id: int, mask: np.ndarray, color: tuple, centroid: tuple[float, float] | None,
+                     background: np.ndarray, bg_color: str, title: str) -> Figure:
+    """One zone's outline over the background."""
+    fig = Figure(figsize=(11, 11), layout="tight")
+    ax = fig.add_subplot()
+    ax.imshow(_tint_background(background, bg_color), cmap="gray" if bg_color == "gray" else None)
+    ax.contour(mask.astype(float), levels=[0.5], colors=[color], linewidths=2.5)
+    if centroid is not None:
+        _label_zone(ax, zone_id, centroid)
+    ax.set_title(title)
+    ax.axis("off")
+    return fig
+
+
+# ── Spontaneous zone stats (-> spontaneous/spontaneous_stats.png) ───────────
+
+# Fixed color per sensor (color follows the entity, never its rank); validated all-pairs
+# with the dataviz palette validator. Unknown sensors fall back to neutral gray.
+SENSOR_COLORS = {"GACh3.0": "#2a78d6", "iAChSnFR": "#eb6834", "rACh1h": "#1baf7a"}
+_INK_PRIMARY, _INK_SECONDARY, _INK_GRID, _SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+
+
+def plot_zone_stats(zones, title: str) -> Figure:
+    """Zone area (log) and event frequency per sensor: every zone as a dot + median/IQR box.
+
+    zones: pooled zone table with columns recording, sensor, area_um2, mean_freq_hz.
+    """
+    sensors = [s for s in SENSOR_COLORS if s in set(zones["sensor"])]
+    sensors += sorted(set(zones["sensor"]) - set(sensors))
+    rng = np.random.default_rng(0)  # fixed jitter so reruns look identical
+
+    fig = Figure(figsize=(11, 5), layout="constrained", facecolor=_SURFACE)
+    panels = (("area_um2", "Zone area (µm², log scale)", True), ("mean_freq_hz", "Zone event frequency (Hz, log scale)", True))
+    for i, (col, ylabel, log) in enumerate(panels):
+        ax = fig.add_subplot(1, 2, i + 1, facecolor=_SURFACE)
+        for x, sensor in enumerate(sensors):
+            rows = zones[zones["sensor"] == sensor].dropna(subset=[col])
+            if log:
+                rows = rows[rows[col] > 0]
+            if rows.empty:
+                continue
+            vals = rows[col].to_numpy(dtype=float)
+            flagged = rows["high_freq_flag"].to_numpy(dtype=bool) if "high_freq_flag" in rows else np.zeros(len(rows), bool)
+            color = SENSOR_COLORS.get(sensor, "#8a8984")
+            ax.boxplot(vals, positions=[x], widths=0.5, showfliers=False, patch_artist=True,
+                       boxprops={"facecolor": "none", "edgecolor": _INK_SECONDARY, "linewidth": 1},
+                       medianprops={"color": _INK_PRIMARY, "linewidth": 2},
+                       whiskerprops={"color": _INK_SECONDARY, "linewidth": 1},
+                       capprops={"color": _INK_SECONDARY, "linewidth": 1})
+            jitter = x + rng.uniform(-0.18, 0.18, vals.size)
+            ax.scatter(jitter[~flagged], vals[~flagged], s=22, color=color, alpha=0.75,
+                       edgecolors=_SURFACE, linewidths=0.8, zorder=3)
+            ax.scatter(jitter[flagged], vals[flagged], s=34, facecolors=_SURFACE, edgecolors=color,
+                       linewidths=1.6, zorder=4)  # hollow = high-frequency flag
+        if log:
+            ax.set_yscale("log")
+        n_rec = zones.groupby("sensor")["recording"].nunique()
+        n_zone = zones.groupby("sensor").size()
+        ax.set_xticks(range(len(sensors)),
+                      [f"{s}\n{n_zone.get(s, 0)} zones / {n_rec.get(s, 0)} rec." for s in sensors],
+                      color=_INK_PRIMARY)
+        ax.set_ylabel(ylabel, color=_INK_PRIMARY)
+        ax.tick_params(colors=_INK_SECONDARY)
+        ax.grid(axis="y", color=_INK_GRID, linewidth=0.8)
+        ax.set_axisbelow(True)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(_INK_GRID)
+    fig.suptitle(title, color=_INK_PRIMARY)
+    if "high_freq_flag" in zones and zones["high_freq_flag"].any():
+        fig.text(0.5, -0.02, f"Hollow dots: {int(zones['high_freq_flag'].sum())} zones flagged high-frequency "
+                 "(mean_freq_hz > 1 Hz, e.g. manually induced hotspots) -- kept, not removed.",
+                 ha="center", va="top", color=_INK_SECONDARY, fontsize=9)
+    return fig

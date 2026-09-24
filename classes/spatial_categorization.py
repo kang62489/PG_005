@@ -21,7 +21,7 @@ from skimage.segmentation import watershed
 # Constants
 NDIM_SINGLE_FRAME = 2
 CATEGORY_BRIGHT = 1
-BASELINE_SIGMA_MULT = 2
+BASELINE_SIGMA_MULT = 1.5
 
 
 class SpatialCategorizer:
