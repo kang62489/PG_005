@@ -1,0 +1,10 @@
+Date Created: 20260924
+Analysis: z score rACh1h
+
+Picked: [raw_tiff_name, paired_abf]
+[2026_09_03-0034.tif, N/A]
+[2026_09_03-0035.tif, N/A]
+[2026_09_03-0036.tif, N/A]
+[2026_09_03-0037.tif, N/A]
+
+Total 4 records picked

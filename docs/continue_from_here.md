@@ -1,3 +1,36 @@
+# Log of the project progress 2026-09-24 Thu (Session 62)
+Last working file: `prototype_flow_analysis.py`
+Last working line: end of file (`run()`)
+
+## List of modified files
+- `prototype_flow_analysis.py` (new, final/kept) — TV-L1 optical flow on production blurred MED/CAT (`output/test4/`), pre-masked (mask applied to the input frames BEFORE calling `optical_flow_tvl1`, not after), masked display only, 5 panels per recording: `spike-1->spike`, `spike->spike+1`, ... `spike+3->spike+4`. Output: `output/test5/optical_flow/{tag}_FLOW_PREMASKED.png`, one per recording, all 6 regenerated and confirmed working.
+- Five earlier scratch scripts from this session (`prototype_noblur_optical_flow.py`, `prototype_export_masked_med.py`, `prototype_compare_cat_masks.py`, `prototype_noblur_vs_blurred_batch.py`, `prototype_premask_optical_flow.py`) were written, used to reach the conclusions below, then **deleted** at the user's explicit request once scope narrowed — see "how we got here" below. Only `prototype_flow_analysis.py` remains.
+- `output/test5/` cleaned up from 29GB down to 9.1MB — removed all no-blur detrend/ALS/median/CAT tiffs, the old masked/unmasked/cumulative/blurred-vs-noblur flow PNGs, the CAT-mask comparison PNGs, and the `spikes/` side-export folder. Only the 6 final `*_FLOW_PREMASKED.png` files remain.
+- None of today's other tracked-file changes (ALS `LAM` tuning, `prototype_med_height_map.py` extensions) were made this session -- those were already committed by the user (`ee08289`, `21954b9`) before this session's work began.
+
+## Summary of current progress (how we got here -- read in order, conclusions were revised twice)
+1. **Motivating question**: does removing the Gaussian blur (a smooth, textureless blob has no interior structure for TV-L1 optical flow to lock onto -- the root cause of every previously-invalidated PIV/optical-flow attempt) let optical flow say something useful about post-spike spatial dynamics?
+2. **No-blur reprocessing built and compared against blurred, all 6 recordings** (now superseded, see #4): no-blur CAT masks looked far more spatially localized than the blurred production CAT (which over-thresholds 50-90% of the frame on 4/6 recordings -- the known density/threshold-calibration TODO since Session 57, now shown clearly side-by-side). No-blur optical flow also looked more spatially varied/plausible than blurred flow, which showed either a suspiciously uniform "clean" field or near-zero flow. **User's initial verdict at this point: no-blur works, merge it later.**
+3. **User then asked a sharper question**: was the mask applied before or after computing flow? Answer: after -- flow was always computed on the FULL frame, and CAT only filtered which arrows got drawn. Since TV-L1 is globally regularized, background pixels outside the nominal mask can still pull the "masked" region's flow estimate.
+4. **Pre-masking test (mask applied to input frames before `optical_flow_tvl1`, not after) overturned part of #2**: on `2025_12_15-0012`/`-0013` blurred data, the previously "clean" spike->spike+1 flow collapsed to near-zero once background was floored out first -- confirming that result was mostly background leakage, not real signal. The one pattern that *survived* pre-masking was a symmetric bilateral divergent flow at spike-1->spike (arrows pointing away from the centerline on both sides).
+5. **User's final scope call**: no-blur reprocessing, cumulative (direct spike->spike+4) flow, and unmasked display are all dropped. Kept: blurred (production) data only, pre-masked flow, masked-only display, per-step pairs including the newly-added pre-spike pair. This is what `prototype_flow_analysis.py` implements, confirmed running clean on all 6 recordings.
+6. **Process note**: a mid-session scare where `output/test5`'s entire prior contents vanished turned out to be the user manually deleting them, not a bug.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Explored no-blur reprocessing as a way around TV-L1's blurred-blob limitation, then correctly abandoned it once pre-masking showed the real fix was in how masking interacts with flow computation, not in the input blur itself
+- ✅ Diagnosed and fixed a real methodological issue: masking after flow computation lets background influence the "masked" result; masking before computation doesn't
+- ✅ Landed on a final, narrowed analysis: blurred data, pre-masked, masked-display, per-step + pre-spike pairs -- confirmed across all 6 recordings
+- ✅ Consolidated 5 scratch scripts down to one (`prototype_flow_analysis.py`) and deleted the superseded ones at the user's request
+- ✅ Cleaned up `output/test5` (29GB -> 9.1MB), keeping only the final 6 result PNGs
+
+## What should we do next? (TODOs)
+- None from this session -- user explicitly decided not to pursue the pre-spike pattern interpretation, the pipeline-merge decision, or the CAT-threshold recalibration as follow-ups.
+
+## Last Session Recap
+※ recap: Explored no-blur reprocessing to fix TV-L1 optical flow's blurred-blob problem, initially looked promising across all 6 recordings, but a follow-up test (masking before vs after flow computation) showed much of that "clean" result was background leakage from not masking early enough -- corrected by pre-masking, which collapsed most per-step flow to near-zero but left one surviving pattern (symmetric divergent flow at spike-1->spike) unexplained. Final scope narrowed to blurred-only, pre-masked, masked-display, per-step+pre-spike pairs, consolidated into a single script (`prototype_flow_analysis.py`) after deleting 5 superseded scratch scripts; `output/test5` cleaned from 29GB to 9.1MB. User decided not to pursue this line further (no interpretation, no pipeline merge, no threshold recalibration) -- this optical-flow investigation is closed.
+
+---
+
 # Log of the project progress 2026-09-22 Tue (Session 61)
 Last working file: `prototype_reliability_group_analysis.py`
 Last working line: end of file (`print(f"  Saved: ...")`)
