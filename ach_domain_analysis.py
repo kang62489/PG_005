@@ -1,12 +1,14 @@
 """
-ach_domain_analysis.py  --  Spike-aligned image analysis pipeline.oh
+ach_domain_analysis.py  --  Spike-aligned image analysis pipeline.
 ===================================================================
-Reads an analysis list (ana_*.txt), loads the appropriate processed TIFF
-(*_GAUSS.tif or *_ALS.tif) together with its paired ABF file, runs spike
-detection and alignment, spatial categorization, and region analysis.
+For every ana-list entry (processed TIFF + paired ABF, OBJ looked up in rec_data.db):
 
-For each entry, the objective (10X / 40X / 60X) is looked up automatically
-from rec_data.db using the raw TIFF filename.
+  Step 1. Clip        : spikes in the ABF -> one image/Vm segment per spike
+  Step 2. Reliability : per-segment hotspot check -> RELIABILITY.png + VM_SUCCESS_FAIL.png
+  Step 3. Median      : spike-centered median of the detected segments
+  Step 4. Categorize  : bright / background per frame
+  Step 5. Region+Flow : critical-frame clusters, hotspot area decay, pre-masked TV-L1 flow
+  Step 6. Export      : results.db row, MED/CAT TIFFs, SPATIAL.png + FLOW.png
 
 Ana list format (column names declared on the 'Picked:' line):
   [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
@@ -49,7 +51,7 @@ from functions import (
     list_parser,
     load_img_segs,
     lookup_rec_from_db,
-    plot_full_trace,
+    plot_flow_panels,
     plot_spatiotemporal_summary,
     spike_centered_median,
     write_cell_summary_xlsx,
@@ -162,7 +164,7 @@ def build_stats_report(db_path: Path, run_keys: set[tuple[str, str]] | None = No
 
     rows_by_metric = {r["metric"]: r for r in stats.to_dicts()}
     area_metrics = ["spike_frame_hotspot_um2", "spike_plus1_frame_hotspot_um2"]
-    temporal_metrics = ["peak_latency_ms", "lasting_time_ms"]
+    temporal_metrics = ["lasting_time_ms"]
 
     area_rows = [
         {
@@ -236,18 +238,224 @@ def write_stats_report(
     return True
 
 
-# ── Pipeline runner ───────────────────────────────────────────────────────────
+# ===========================================================================
+#
+#   PIPELINE -- per entry: 1 Clip -> 2 Reliability -> 3 Median -> 4 Categorize
+#                          -> 5 Region + Flow -> 6 Export
+#
+# ===========================================================================
 
 
-def _save_entry_figures(
+def _save_entry_figures(exporter: ResultsExporter, figures: list[tuple[str, object, str]]) -> None:
+    """Save (category, figure, filename) triples -- runs on a background thread."""
+    for category, fig, filename in figures:
+        exporter.export_figure(category, fig, filename)
+
+
+def _log_skip(ana_list_path: Path, msg: str) -> None:
+    """Append a '[SKIPPED] ...' line to the ana list."""
+    with ana_list_path.open("a", encoding="utf-8") as f:
+        f.write(f"[SKIPPED] {msg}\n")
+
+
+def analyze_entry(
+    row: dict,
+    progress: tuple[int, int],
+    df_checked_tiff: pl.DataFrame,
+    animal_idx_lut: dict,
     exporter: ResultsExporter,
-    fig: object,
-    stem_path: str,
-    full_fig: object,
-    trace_path: str,
-) -> None:
-    exporter.export_figure("spatial", fig, stem_path)
-    exporter.export_figure("latency", full_fig, trace_path)
+    results_dir: Path,
+    detrend_mode: str,
+    normalization: str,
+    ana_list_path: Path,
+    emitter=None,
+) -> list[tuple[str, object, str]]:
+    """Analyze one ana-list entry; returns the (category, figure, filename) triples still to be saved."""
+    entry_t0 = time.time()
+    i, total = progress
+
+    # ----- STEP 1. Clip: spikes in the ABF -> one image/Vm segment per spike -----
+    match = df_checked_tiff.filter(pl.col("Filename") == row["raw_tiff_name"])
+    if match.is_empty():
+        console.log(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
+        return []
+    obj = match["OBJ"].item()
+
+    proc_tiff_path = Path(row["proc_tiff_path"])
+    raw_abf_path = Path(row["raw_abf_path"])
+    if emitter:
+        emitter({"type": "progress", "i": i, "total": total, "file": proc_tiff_path.name})
+    console.log(f"\n[cyan]{proc_tiff_path.name}  +  {raw_abf_path.name}  [{obj}]  [{i}/{total}][/cyan]")
+
+    clip = AbfClip(
+        proc_tiff_path=proc_tiff_path,
+        raw_abf_path=raw_abf_path,
+        results_dir=results_dir,
+        detrend_mode=detrend_mode,
+        normalization=normalization,
+    )
+    if not clip.lst_img_frame_ranges:  # every spike skipped (too closely spaced for a baseline window)
+        console.log("[yellow]No valid segments — skipping z-score step.[/yellow]")
+        _log_skip(ana_list_path, f"{proc_tiff_path.name}: no valid segments "
+                                 "(spikes too closely spaced for any baseline window)")
+        return []
+
+    # Filename / DB metadata, needed from step 2 on
+    export_data = clip.get_export_data()
+    animal_id = match["ANIMAL_ID"].item()
+    animal_idx = animal_idx_lut[export_data["exp_date"]][animal_id]
+    slice_val = match["SLICE"].item()
+    at = match["AT"].item()
+    frame_duration_ms = clip.ts_imgs * 1000
+    name_args = (animal_idx, slice_val, at, detrend_mode, normalization)
+
+    def export_stem(file_type: str) -> str:
+        return ResultsExporter.build_export_stem(export_data["exp_date"], export_data["img_serial"], *name_args, file_type)
+
+    # ----- STEP 2. Reliability: per-segment hotspot check + montage + success/failure Vm -----
+    if emitter:
+        emitter({"type": "step", "msg": "Loading raw segments..."})
+    lst_segments = load_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)  # detrended, unnormalized
+    console.log(f"[green]Loaded {len(lst_segments)} segment(s)  ({time.time() - entry_t0:.1f}s)[/green]")
+    spike_frame_idx = lst_segments[0].shape[0] // 2  # segments are symmetric around their spike
+
+    if emitter:
+        emitter({"type": "step", "msg": "Checking per-segment reliability..."})
+    reliability_checker = SpikeReliabilityChecker(obj)
+    seg_results, reliability_pct = reliability_checker.check(lst_segments, spike_frame_idx)
+    n_detected = sum(r["detected"] for r in seg_results)
+    n_total = len(seg_results)
+    console.log(
+        f"[green]Reliability: {n_detected}/{n_total} segment(s) detected ({reliability_pct:.1f}%)"
+        f"  ({time.time() - entry_t0:.1f}s)[/green]"
+    )
+    # Exported regardless of significance -- they explain a "no detection" result.
+    reliability_checker.export_montage(exporter, proc_tiff_path.stem, export_data, *name_args)
+    reliability_checker.export_vm_groups(exporter, proc_tiff_path.stem, clip.get_vm_segments(), export_data, *name_args)
+
+    # ----- STEP 3. Median: detected segments only (all segments if none detected) -----
+    segments_for_median = [
+        seg for seg, r in zip(lst_segments, seg_results, strict=True) if r["detected"]
+    ] or lst_segments
+    median_segment, intensity_range = spike_centered_median(segments_for_median)
+    del lst_segments
+    console.log(f"[green]Median shape: {median_segment.shape}, intensity range: [{intensity_range[0]:.2f}, {intensity_range[1]:.2f}][/green]")
+
+    # ----- STEP 4. Categorize: bright / background per frame -----
+    if emitter:
+        emitter({"type": "step", "msg": "Categorizing spike frame..."})
+    categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
+    categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
+    console.log(
+        f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), threshold: {categorizer.threshold_used}"
+        f"  ({time.time() - entry_t0:.1f}s)[/green]"
+    )
+
+    # ----- STEP 5. Region + Flow -----
+    # --- 5a. critical-frame clusters, spike / spike+1 sizes, decay ---
+    cat_stack = np.array(categorizer.categorized_frames)
+    region_analyzer = RegionAnalyzer(cat_stack, median_segment, spike_frame_idx, obj=obj)
+    region_results = region_analyzer.get_results()
+    final_significant = n_detected > 0 and region_analyzer.significant  # 0% reliability -> no detection
+
+    if region_results["n_clusters"] == 0:
+        console.log("[yellow]No cluster detected[/yellow]")
+    else:
+        frame_tag = "spike" if region_results["critical_frame_offset"] == 0 else f"spike{region_results['critical_frame_offset']:+d}"
+        console.log(f"[magenta]{region_results['n_clusters']} cluster(s) on {frame_tag} frame[/magenta]")
+        for k, cluster in enumerate(region_results["clusters"]):
+            console.log(f"[cyan]  cluster {k}: R_lat={cluster['R_lat_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
+
+    if final_significant:
+        for frame_tag_, clusters in (
+            ("spike", region_results["spike_frame_clusters"]),
+            ("spike+1", region_results["spike_plus1_frame_clusters"]),
+        ):
+            if clusters is None:
+                continue
+            if not clusters:
+                console.log(f"[green]{frame_tag_} frame: no hotspot clusters[/green]")
+                continue
+            sizes = ", ".join(f"cluster {c['cluster_id']}={c['area_um2']:.0f} µm² ({c['area_px']} px)" for c in clusters)
+            console.log(f"[green]{frame_tag_} frame: {sizes}[/green]")
+
+    if final_significant and region_results["n_clusters"] > 0:
+        lasting_time_ms = region_analyzer.get_lasting_time_ms(frame_duration_ms)
+        if lasting_time_ms is not None:
+            console.log(
+                f"[green]Lasting time (decay tau): {lasting_time_ms:.0f} ms "
+                f"(R²={region_results['decay_fit_r2']:.2f})[/green]"
+            )
+        else:
+            console.log("[yellow]Lasting time: decay fit failed / insufficient post-peak data[/yellow]")
+    else:
+        lasting_time_ms = None
+        if not final_significant:
+            console.log("[yellow]No ACh detection — skipping MED/CAT TIFFs, flow/lasting time export[/yellow]")
+        _log_skip(ana_list_path, f"{proc_tiff_path.name}: no significant ACh detection "
+                                 f"(reliability {reliability_pct:.1f}% -- {n_detected}/{n_total} segments detected)")
+
+    # --- 5b. pre-masked flow (significant recordings only) ---
+    if final_significant:
+        if emitter:
+            emitter({"type": "step", "msg": "Computing hotspot flow..."})
+        region_analyzer.compute_flow(cat_stack, median_segment)
+        console.log(f"[green]Flow: {len(region_analyzer.flow_pairs)} pair(s)  ({time.time() - entry_t0:.1f}s)[/green]")
+
+    # ----- STEP 6. Export: DB row + MED/CAT TIFFs now, figures on a background thread -----
+    if emitter:
+        emitter({"type": "step", "msg": "Exporting results..."})
+    dirs = exporter.export_all(
+        exp_date=export_data["exp_date"],
+        abf_serial=export_data["abf_serial"],
+        img_serial=export_data["img_serial"],
+        animal_idx=animal_idx,
+        animal_id=animal_id,
+        slice_val=slice_val,
+        at=at,
+        detrend_mode=detrend_mode,
+        normalization=normalization,
+        num_found_spikes=export_data["num_found_spikes"],
+        n_spikes_analyzed=export_data["n_spikes_analyzed"],
+        threshold_method=categorizer.threshold_method,
+        objective=obj,
+        um_per_pixel=region_analyzer.um_per_pixel,
+        median_stack=median_segment,
+        categorized_frames=categorizer.categorized_frames,
+        intensity_range=intensity_range,
+        region_summary=region_analyzer.get_summary(),
+        region_data=region_results,
+        lasting_time_ms=lasting_time_ms,
+        significant=final_significant,
+        reliability_pct=reliability_pct,
+        n_segments_detected=n_detected,
+        n_segments_total=n_total,
+    )
+
+    figures: list[tuple[str, object, str]] = []
+    if final_significant:
+        title_info = {
+            "animal_id": animal_id,
+            "slice": slice_val,
+            "at": at,
+            "obj": obj,
+            "tiff_serial": export_data["img_serial"],
+            "abf_serial": export_data["abf_serial"],
+        }
+        spatial_fig = plot_spatiotemporal_summary(
+            categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
+        )
+        flow_fig = plot_flow_panels(median_segment, cat_stack, region_analyzer.flow_pairs, title_info)
+        figures = [
+            ("spatial", spatial_fig, f"{export_stem('SPATIAL')}.png"),
+            ("flow", flow_fig, f"{export_stem('FLOW')}.png"),
+        ]
+
+    dir_names = "/, ".join(d.name for d in dirs.values())
+    console.log(
+        f"[green]Exported {dir_names}/, reliability/, spatial/, flow/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
+    )
+    return figures
 
 
 def run(
@@ -292,220 +500,17 @@ def run(
     figure_export_thread: threading.Thread | None = None
 
     for i, row in enumerate(entries.iter_rows(named=True), 1):
-        # Wait for the previous entry's background PNG export to finish before starting this
-        # entry -- lets N's plot-saving overlap with N+1's analysis, capped at 1 thread at a time.
+        # Previous entry's PNG export must finish first (matplotlib isn't thread-safe) -- 1 thread max.
         if figure_export_thread is not None:
             figure_export_thread.join()
             figure_export_thread = None
-
-        entry_t0 = time.time()
-        match = df_checked_tiff.filter(pl.col("Filename") == row["raw_tiff_name"])
-        if match.is_empty():
-            console.log(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
-            continue
-        obj = match["OBJ"].item()
-
-        proc_tiff_path = Path(row["proc_tiff_path"])
-        raw_abf_path = Path(row["raw_abf_path"])
-        if emitter:
-            emitter({"type": "progress", "i": i, "total": total, "file": proc_tiff_path.name})
-        console.log(f"\n[cyan]{proc_tiff_path.name}  +  {raw_abf_path.name}  [{obj}]  [{i}/{total}][/cyan]")
-
-        # Detect spikes in the paired ABF trace and clip out one image/Vm segment per spike
-        # (baseline frames + spike frame + post-spike frames, per AbfClip's own windowing).
-        clip = AbfClip(
-            proc_tiff_path=proc_tiff_path,
-            raw_abf_path=raw_abf_path,
-            results_dir=results_dir,
-            detrend_mode=detrend_mode,
-            normalization=normalization,
+        figures = analyze_entry(
+            row, (i, total), df_checked_tiff, animal_idx_lut, exporter,
+            results_dir, detrend_mode, normalization, ana_list_path, emitter,
         )
-
-        # Guard: every spike in this recording got skipped by AbfClip (e.g. spikes too closely
-        # spaced to leave any usable baseline window) -- nothing to analyze, move to next entry.
-        if not clip.lst_img_frame_ranges:
-            console.log("[yellow]No valid segments — skipping z-score step.[/yellow]")
-            with ana_list_path.open("a", encoding="utf-8") as f:
-                f.write(
-                    f"[SKIPPED] {proc_tiff_path.name}: no valid segments "
-                    "(spikes too closely spaced for any baseline window)\n"
-                )
-            continue
-
-        # Cheap metadata lookups, needed both for the reliability montage's filename (right below)
-        # and for exporter.export_all() later -- none of this depends on the median/categorize/
-        # region-analysis steps, so it's resolved once, up front, rather than late in the function.
-        export_data = clip.get_export_data()
-        animal_id = match["ANIMAL_ID"].item()
-        animal_idx = animal_idx_lut[export_data["exp_date"]][animal_id]
-        slice_val = match["SLICE"].item()
-        at = match["AT"].item()
-        frame_duration_ms = clip.ts_imgs * 1000
-
-        if emitter:
-            emitter({"type": "step", "msg": "Loading raw segments..."})
-        # Reads each segment's raw (detrended, unnormalized) frames from the proc tiff.
-        lst_segments = load_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)
-        console.log(f"[green]Loaded {len(lst_segments)} segment(s)  ({time.time() - entry_t0:.1f}s)[/green]")
-
-        # Every segment shares the same frame count (AbfClip's ranges are symmetric around
-        # each segment's own spike), so this also equals whichever median we end up computing.
-        spike_frame_idx = lst_segments[0].shape[0] // 2
-
-        if emitter:
-            emitter({"type": "step", "msg": "Checking per-segment reliability..."})
-        reliability_checker = SpikeReliabilityChecker(obj)
-        seg_results, reliability_pct = reliability_checker.check(lst_segments, spike_frame_idx)
-        n_detected = sum(r["detected"] for r in seg_results)
-        n_total = len(seg_results)
-        console.log(
-            f"[green]Reliability: {n_detected}/{n_total} segment(s) detected ({reliability_pct:.1f}%)"
-            f"  ({time.time() - entry_t0:.1f}s)[/green]"
-        )
-
-        # Reliability montage: one panel per raw segment, so reliability% can be checked by eye
-        # against the actual per-segment detections, not just trusted as a number. Exported
-        # regardless of final_significant (below) -- it's exactly what explains a "no detection"
-        # result. Built right here, not after the median/region-analysis steps, since seg_results
-        # is all it actually depends on.
-        reliability_checker.export_montage(
-            exporter, proc_tiff_path.stem, export_data, animal_idx, slice_val, at, detrend_mode, normalization,
-        )
-
-        # Only median the segments that actually showed a hotspot -- an all-segments median gets
-        # dragged toward the boundary between "responded" and "didn't" when reliability isn't near
-        # 100%. Falls back to all segments when none detected, purely so downstream export still
-        # has validly-shaped data; final_significant (below) forces that case to "no detection"
-        # regardless of what this fallback median's own RegionAnalyzer reports.
-        segments_for_median = [
-            seg for seg, r in zip(lst_segments, seg_results, strict=True) if r["detected"]
-        ] or lst_segments
-        median_segment, intensity_range = spike_centered_median(segments_for_median)
-
-        # Free memory from lst_segments since it's no longer needed after computing the median.
-        del lst_segments
-        console.log(f"[green]Median shape: {median_segment.shape}, intensity range: [{intensity_range[0]:.2f}, {intensity_range[1]:.2f}][/green]")
-
-        if emitter:
-            emitter({"type": "step", "msg": "Categorizing spike frame..."})
-        # Real analysis starts here: categorize the z scores for further region analysis (using skimage.measure).
-        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
-        categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
-        console.log(
-            f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), threshold: {categorizer.threshold_used}"
-            f"  ({time.time() - entry_t0:.1f}s)[/green]"
-        )
-
-        region_analyzer = RegionAnalyzer(np.array(categorizer.categorized_frames), median_segment, spike_frame_idx, obj=obj)
-        region_results = region_analyzer.get_results()
-
-        # 0% reliability overrides the filtered-median's own significance check -- no segment
-        # ever showed a hotspot, so this recording is "no detection" regardless.
-        final_significant = n_detected > 0 and region_analyzer.significant
-
-        if region_results["n_clusters"] == 0:
-            console.log("[yellow]No cluster detected[/yellow]")
-        else:
-            frame_tag = "spike" if region_results["critical_frame_offset"] == 0 else f"spike{region_results['critical_frame_offset']:+d}"
-            console.log(f"[magenta]{region_results['n_clusters']} cluster(s) on {frame_tag} frame[/magenta]")
-            for i, cluster in enumerate(region_results["clusters"]):
-                console.log(f"[cyan]  cluster {i}: R_lat={cluster['R_lat_um']:.1f} µm  centroid={cluster['centroid']}[/cyan]")
-
-        if final_significant:
-            for frame_tag_, clusters in (
-                ("spike", region_results["spike_frame_clusters"]),
-                ("spike+1", region_results["spike_plus1_frame_clusters"]),
-            ):
-                if clusters is None:
-                    continue
-                if not clusters:
-                    console.log(f"[green]{frame_tag_} frame: no hotspot clusters[/green]")
-                    continue
-                sizes = ", ".join(f"cluster {c['cluster_id']}={c['area_um2']:.0f} µm² ({c['area_px']} px)" for c in clusters)
-                console.log(f"[green]{frame_tag_} frame: {sizes}[/green]")
-
-        if emitter:
-            emitter({"type": "step", "msg": "Exporting results..."})
-
-        if final_significant and region_results["n_clusters"] > 0:
-            peak_latency_ms = region_analyzer.get_peak_latency_ms(frame_duration_ms)
-            lasting_time_ms = region_analyzer.get_lasting_time_ms(frame_duration_ms)
-            if lasting_time_ms is not None:
-                console.log(
-                    f"[green]Lasting time (decay tau): {lasting_time_ms:.0f} ms "
-                    f"(R²={region_results['decay_fit_r2']:.2f})[/green]"
-                )
-            else:
-                console.log("[yellow]Lasting time: decay fit failed / insufficient post-peak data[/yellow]")
-        else:
-            peak_latency_ms, lasting_time_ms = None, None
-            if not final_significant:
-                console.log("[yellow]No ACh detection — skipping MED/CAT TIFFs, latency/lasting time/span export[/yellow]")
-            with ana_list_path.open("a", encoding="utf-8") as f:
-                f.write(
-                    f"[SKIPPED] {proc_tiff_path.name}: no significant ACh detection "
-                    f"(reliability {reliability_pct:.1f}% -- {n_detected}/{n_total} segments detected)\n"
-                )
-
-        dirs = exporter.export_all(
-            exp_date=export_data["exp_date"],
-            abf_serial=export_data["abf_serial"],
-            img_serial=export_data["img_serial"],
-            animal_idx=animal_idx,
-            animal_id=animal_id,
-            slice_val=slice_val,
-            at=at,
-            detrend_mode=detrend_mode,
-            normalization=normalization,
-            num_found_spikes=export_data["num_found_spikes"],
-            n_spikes_analyzed=export_data["n_spikes_analyzed"],
-            threshold_method=categorizer.threshold_method,
-            objective=obj,
-            um_per_pixel=region_analyzer.um_per_pixel,
-            median_stack=median_segment,
-            categorized_frames=categorizer.categorized_frames,
-            intensity_range=intensity_range,
-            region_summary=region_analyzer.get_summary(),
-            region_data=region_results,
-            peak_latency_ms=peak_latency_ms,
-            lasting_time_ms=lasting_time_ms,
-            significant=final_significant,
-            reliability_pct=reliability_pct,
-            n_segments_detected=n_detected,
-            n_segments_total=n_total,
-        )
-        if final_significant:
-            title_info = {
-                "animal_id": animal_id,
-                "slice": slice_val,
-                "at": at,
-                "obj": obj,
-                "tiff_serial": export_data["img_serial"],
-                "abf_serial": export_data["abf_serial"],
-            }
-            fig = plot_spatiotemporal_summary(
-                categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
-            )
-            stem = ResultsExporter.build_export_stem(
-                export_data["exp_date"], export_data["img_serial"], animal_idx,
-                slice_val, at, detrend_mode, normalization, "SPATIAL",
-            )
-            full_trace_fig = plot_full_trace(
-                region_analyzer, categorizer, median_segment, spike_frame_idx, frame_duration_ms, title_info
-            )
-            trace_stem = ResultsExporter.build_export_stem(
-                export_data["exp_date"], export_data["img_serial"], animal_idx,
-                slice_val, at, detrend_mode, normalization, "LATENCY",
-            )
-            figure_export_thread = threading.Thread(
-                target=_save_entry_figures,
-                args=(exporter, fig, f"{stem}.png", full_trace_fig, f"{trace_stem}.png"),
-            )
+        if figures:
+            figure_export_thread = threading.Thread(target=_save_entry_figures, args=(exporter, figures))
             figure_export_thread.start()
-        dir_names = "/, ".join(d.name for d in dirs.values())
-        console.log(
-            f"[green]Exported {dir_names}/, reliability/, spatial/, latency/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
-        )
 
     if figure_export_thread is not None:
         figure_export_thread.join()

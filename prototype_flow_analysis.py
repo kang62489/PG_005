@@ -1,27 +1,11 @@
-"""Spike-aligned TV-L1 optical flow, blurred (production) data, pre-masked.
+"""Scratch: spike-aligned pre-masked TV-L1 flow, drawn over the paired CAT masks.
 
-Scratch script only -- no pipeline edits. Narrowed scope after earlier
-iterations ruled out several variants:
-  - No-blur reprocessing: dropped -- the whole point was working around TV-L1's
-    inability to find texture in a blurred blob, but the production CAT mask
-    (and everything downstream of it) is built on blurred data, so comparing
-    against it needs blurred data too.
-  - Cumulative (direct spike->spike+4) flow: dropped -- redundant once the
-    per-step pairs are trusted; added complexity without a clear use.
-  - Unmasked display: dropped -- the point of masking is to only look at the
-    hotspot; showing the unmasked field was only useful for the earlier
-    background-leakage diagnosis, which is now resolved by masking BEFORE
-    flow computation instead of after.
+  Step 1. Load : MED/CAT exported by the pipeline (Phase 3 run, current ALS + σ settings)
+  Step 2. Flow : functions.hotspot_flow.compute_flow_pairs -- the exact pipeline code
+  Step 3. Plot : background = paired CAT masks (from-only / to-only / both, 3 colors),
+                 arrows auto-scaled per recording so sub-pixel flow stays visible
 
-Key finding this scope reflects: TV-L1's global regularization pulls flow
-estimates from background pixels into the "masked" region if masking is only
-applied to the DISPLAY after computing flow on the full frame -- see
-premasked_flow(). Masking before computation floors non-bright pixels to
-background first, so flow inside the mask only reflects the bright region's
-own content.
-
-Pairs analyzed per recording: spike-1->spike, then spike->spike+1 through
-spike+3->spike+4 (5 panels total).
+Output: output/test8/flow/optical_flow/{tag}_FLOW_CAT.png
 """
 
 import sys
@@ -30,22 +14,31 @@ from pathlib import Path
 import numpy as np
 import tifffile
 from matplotlib.figure import Figure
+from matplotlib.patches import Patch
 from scipy.ndimage import maximum_filter
-from skimage.registration import optical_flow_tvl1
 
 PROJECT_ROOT = Path("D:/Programs/PG_005")
 sys.path.insert(0, str(PROJECT_ROOT))
 
-CATEGORY_BRIGHT = 1
-MED_DIR = PROJECT_ROOT / "output" / "test4" / "median"
-CAT_DIR = PROJECT_ROOT / "output" / "test4" / "categorized"
-FLOW_DIR = PROJECT_ROOT / "output" / "test5" / "optical_flow"
+from classes.spatial_categorization import CATEGORY_BRIGHT  # noqa: E402
+from functions.hotspot_flow import compute_flow_pairs  # noqa: E402
 
-QUIVER_STEP = 24
-QUIVER_SCALE = 0.8  # arrow_length_px = magnitude / QUIVER_SCALE
+# ===== CONFIG =====
+SRC_DIR = PROJECT_ROOT / "output" / "test7" / "phase3" / "after"
+FLOW_DIR = PROJECT_ROOT / "output" / "test8" / "flow" / "optical_flow"
 
-RECORDINGS = [
-    # tag used in the *_MED.tif / *_CAT.tif filenames
+QUIVER_STEP = 24              # px between arrows
+ARROW_REF_PCTL = 95           # this percentile of drawn |flow| (all panels of a recording) ...
+ARROW_REF_LEN_PX = QUIVER_STEP  # ... is drawn this long
+
+MASK_COLORS = {               # RGB on a black background
+    "from": (0.20, 0.60, 0.86),   # blue: bright in the "from" frame only
+    "to":   (0.95, 0.61, 0.07),   # orange: bright in the "to" frame only
+    "both": (0.75, 0.75, 0.75),   # gray: bright in both
+}
+ARROW_COLOR = "lime"
+
+RECORDINGS = [  # tag used in the *_MED.tif / *_CAT.tif filenames
     "2025_06_11-0002_A1S4RC1_BIEXP_ALS",
     "2025_06_11-0003_A1S4RC1_BIEXP_ALS",
     "2025_11_13-0017_A1S1RC2_BIEXP_ALS",
@@ -55,82 +48,69 @@ RECORDINGS = [
 ]
 
 
-def mask_frame(frame: np.ndarray, keep: np.ndarray) -> np.ndarray:
-    """Floor everything outside `keep` to this frame's own min."""
-    return np.where(keep, frame, float(frame.min()))
+def cat_pair_rgb(bright_from: np.ndarray, bright_to: np.ndarray) -> np.ndarray:
+    """(H, W, 3) image: from-only / to-only / both in MASK_COLORS, black elsewhere."""
+    rgb = np.zeros((*bright_from.shape, 3))
+    rgb[bright_from & ~bright_to] = MASK_COLORS["from"]
+    rgb[~bright_from & bright_to] = MASK_COLORS["to"]
+    rgb[bright_from & bright_to] = MASK_COLORS["both"]
+    return rgb
 
 
-def premasked_flow(med: np.ndarray, cat: np.ndarray, idx_from: int, idx_to: int) -> tuple[np.ndarray, np.ndarray]:
-    """TV-L1 flow computed on frames pre-masked to the union of both frames' CAT-bright pixels.
-
-    Masking before computation (rather than after, on the full-frame flow result)
-    keeps TV-L1's global regularization from pulling background motion into the
-    displayed hotspot region.
-    """
-    keep = (cat[idx_from] == CATEGORY_BRIGHT) | (cat[idx_to] == CATEGORY_BRIGHT)
-    frame_from = mask_frame(med[idx_from], keep)
-    frame_to = mask_frame(med[idx_to], keep)
-    return optical_flow_tvl1(frame_from, frame_to)
-
-
-def plot_flow_panels(med: np.ndarray, cat: np.ndarray, spike_frame_idx: int, title: str) -> Figure:
-    """Quiver-overlay pre-masked TV-L1 flow: spike-1->spike, then spike->spike+1..spike+3->spike+4.
-
-    Arrows are only drawn at grid points within QUIVER_STEP of a CAT-bright
-    pixel in the "from" frame (a max-filter dilation of the mask, not just an
-    exact-pixel hit -- otherwise a coarse quiver grid can straddle every bright
-    pixel and plot nothing at all).
-    """
-    pairs = [(spike_frame_idx - 1, spike_frame_idx)] + [
-        (spike_frame_idx + i, spike_frame_idx + i + 1) for i in range(4)
-    ]
-    n_panels = len(pairs)
-    fig = Figure(figsize=(6 * n_panels, 6), layout="constrained")
-    height, width = med.shape[1], med.shape[2]
+def plot_flow_panels(cat: np.ndarray, flow_pairs: list[dict], title: str) -> Figure:
+    """One panel per pair: paired CAT masks + lime arrows near the "from" frame's bright pixels."""
+    n_panels = len(flow_pairs)
+    fig = Figure(figsize=(6 * n_panels, 6.6), layout="constrained")
+    height, width = cat.shape[1], cat.shape[2]
     grid_y, grid_x = np.mgrid[0:height:QUIVER_STEP, 0:width:QUIVER_STEP]
 
-    for i, (idx_from, idx_to) in enumerate(pairs):
-        v, u = premasked_flow(med, cat, idx_from, idx_to)
+    # --- arrows drawn per panel + one shared scale for the whole recording ---
+    drawn = []
+    for pair in flow_pairs:
+        near = maximum_filter(cat[pair["idx_from"]] == CATEGORY_BRIGHT, size=QUIVER_STEP)[grid_y, grid_x]
+        u, v = pair["u"][grid_y, grid_x][near], pair["v"][grid_y, grid_x][near]
+        drawn.append((grid_x[near], grid_y[near], u, v))
+    all_mag = np.concatenate([np.hypot(u, v) for _, _, u, v in drawn]) if drawn else np.array([])
+    ref_mag = float(np.percentile(all_mag, ARROW_REF_PCTL)) if all_mag.size else 0.0
+    scale = ref_mag / ARROW_REF_LEN_PX if ref_mag > 0 else 1.0  # |flow| px per drawn px
 
+    for i, (pair, (px, py, u, v)) in enumerate(zip(flow_pairs, drawn, strict=True)):
+        bright_from = cat[pair["idx_from"]] == CATEGORY_BRIGHT
+        bright_to = cat[pair["idx_to"]] == CATEGORY_BRIGHT
         ax = fig.add_subplot(1, n_panels, i + 1)
-        ax.imshow(med[idx_from], cmap="gray", origin="upper")
-
-        bright_dilated = maximum_filter(cat[idx_from] == CATEGORY_BRIGHT, size=QUIVER_STEP)
-        keep = bright_dilated[grid_y, grid_x]
-        plot_x, plot_y = grid_x[keep], grid_y[keep]
-        sample_u, sample_v = u[grid_y, grid_x][keep], v[grid_y, grid_x][keep]
-
-        if plot_x.size:
-            ax.quiver(
-                plot_x, plot_y, sample_u, sample_v,
-                color="red", angles="xy", scale_units="xy", scale=QUIVER_SCALE, width=0.003,
-                headwidth=2.5, headlength=3, headaxislength=2.5,
-            )
-        offset_from = idx_from - spike_frame_idx
-        offset_to = idx_to - spike_frame_idx
-        from_label = "spike" if offset_from == 0 else f"spike{offset_from:+d}"
-        to_label = "spike" if offset_to == 0 else f"spike{offset_to:+d}"
-        ax.set_title(f"{from_label} -> {to_label}", fontsize=10)
+        ax.imshow(cat_pair_rgb(bright_from, bright_to), origin="upper", interpolation="nearest")
+        if px.size:
+            ax.quiver(px, py, u, v, color=ARROW_COLOR, angles="xy", scale_units="xy", scale=scale,
+                      width=0.003, headwidth=2.5, headlength=3, headaxislength=2.5)
+        keep = pair["keep_mask"]
+        mean_mag = float(np.hypot(pair["u"], pair["v"])[keep].mean()) if keep.any() else 0.0
+        ax.set_title(f"{pair['label']}\nmean |flow| in mask = {mean_mag:.2f} px", fontsize=10)
         ax.set_xticks([])
         ax.set_yticks([])
 
-    fig.suptitle(title + " (pre-masked, masked to CAT-bright)", fontsize=13)
+    fig.legend(
+        handles=[Patch(color=MASK_COLORS["from"], label="bright in 'from' only"),
+                 Patch(color=MASK_COLORS["to"], label="bright in 'to' only"),
+                 Patch(color=MASK_COLORS["both"], label="bright in both")],
+        loc="outside lower center", ncol=3, fontsize=11, frameon=False,
+    )
+    fig.suptitle(f"{title}  (pre-masked)  --  arrow scale: {ARROW_REF_LEN_PX} px drawn = {ref_mag:.2f} px flow "
+                 f"({ARROW_REF_PCTL}th pct)", fontsize=13)
     return fig
 
 
 def run() -> None:
     FLOW_DIR.mkdir(parents=True, exist_ok=True)
-
     for tag in RECORDINGS:
-        print(f"\n=== {tag} ===")
-        med = tifffile.imread(MED_DIR / f"{tag}_MED.tif")
-        cat = tifffile.imread(CAT_DIR / f"{tag}_CAT.tif")
-        spike_frame_idx = med.shape[0] // 2
+        print(f"\n=== {tag} ===", flush=True)
+        med = tifffile.imread(SRC_DIR / "median" / f"{tag}_MED.tif")
+        cat = tifffile.imread(SRC_DIR / "categorized" / f"{tag}_CAT.tif")
+        pairs = compute_flow_pairs(med, cat, med.shape[0] // 2)
 
-        fig = plot_flow_panels(med, cat, spike_frame_idx, title=tag)
-        out_path = FLOW_DIR / f"{tag}_FLOW_PREMASKED.png"
+        fig = plot_flow_panels(cat, pairs, title=tag)
+        out_path = FLOW_DIR / f"{tag}_FLOW_CAT.png"
         fig.savefig(out_path, dpi=110)
-        print(f"  Saved: {out_path}")
+        print(f"  Saved: {out_path}", flush=True)
 
 
 if __name__ == "__main__":

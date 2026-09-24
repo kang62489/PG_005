@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .als import als_run
+    from .ap_threshold import find_ap_threshold
     from .check_cuda import check_cuda
     from .database_ops import (
         compute_region_stats,
@@ -28,14 +29,16 @@ if TYPE_CHECKING:
     from .fit_hist import find_background_threshold, fit_hist_sigma, img_zscore_convert
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
+    from .hotspot_flow import compute_flow_pairs, premasked_flow
     from .list_parser import list_parser
     from .load_img_segs import load_img_segs
     from .plot_results import (
-        plot_full_trace,
+        plot_flow_panels,
         plot_segment_reliability_montage,
         plot_single_zone,
         plot_spatiotemporal_summary,
         plot_spike_detection_summary,
+        plot_vm_success_vs_failure,
         plot_zone_overlay,
         plot_zone_stats,
         zone_colors,
@@ -55,8 +58,10 @@ __all__ = [
     "build_filename_index",
     "build_proc_file_index",
     "check_cuda",
+    "compute_flow_pairs",
     "compute_region_stats",
     "count_unique_cells",
+    "find_ap_threshold",
     "find_background_threshold",
     "fit_hist_sigma",
     "gauss_exists",
@@ -70,14 +75,16 @@ __all__ = [
     "list_parser",
     "load_img_segs",
     "lookup_rec_from_db",
-    "plot_full_trace",
+    "plot_flow_panels",
     "plot_segment_reliability_montage",
     "plot_single_zone",
     "plot_spatiotemporal_summary",
     "plot_spike_detection_summary",
+    "plot_vm_success_vs_failure",
     "plot_zone_overlay",
     "plot_zone_stats",
     "populate_animal_id_values",
+    "premasked_flow",
     "raw_tiff_ready",
     "sample_tau",
     "spike_centered_avg",
@@ -89,6 +96,7 @@ __all__ = [
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "als_run":        (".als",                                      "als_run"),
+    "find_ap_threshold":   (".ap_threshold",                              "find_ap_threshold"),
     "biexp_detrend":       (".detrend",                                   "biexp_detrend"),
     "abf_ready":           (".file_status",                               "abf_ready"),
     "als_exists":          (".file_status",                               "als_exists"),
@@ -103,9 +111,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "list_parser":         (".list_parser",                               "list_parser"),
     "load_img_segs":       (".load_img_segs",                             "load_img_segs"),
     "plot_spatiotemporal_summary": (".plot_results",                      "plot_spatiotemporal_summary"),
-    "plot_full_trace":     (".plot_results",                              "plot_full_trace"),
+    "plot_flow_panels":    (".plot_results",                              "plot_flow_panels"),
+    "compute_flow_pairs":  (".hotspot_flow",                              "compute_flow_pairs"),
+    "premasked_flow":      (".hotspot_flow",                              "premasked_flow"),
     "plot_segment_reliability_montage": (".plot_results",                 "plot_segment_reliability_montage"),
     "plot_spike_detection_summary": (".plot_results",                     "plot_spike_detection_summary"),
+    "plot_vm_success_vs_failure": (".plot_results",                       "plot_vm_success_vs_failure"),
     "plot_zone_overlay":   (".plot_results",                              "plot_zone_overlay"),
     "plot_zone_stats":     (".plot_results",                              "plot_zone_stats"),
     "plot_single_zone":    (".plot_results",                              "plot_single_zone"),

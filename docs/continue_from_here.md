@@ -6,8 +6,8 @@ All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
 |---|------|---------------------|-------|--------|
 | A | Default the pipeline (CLI + GUI) to ALS | new | 0 | [x] |
 | B | Merge `../PG_010/sp_ach_zones.py` into PG_005 as classes/functions: 10X only, sensor-aware (iAChSnFR / GACh3.0 / rACh1h), numba CPU+CUDA acceleration, readable xlsx names/columns, zone size/frequency/period stats, output to `results/spontaneous/` | #1 wave vs hotspots, #4 spontaneous side | 1 | [x] |
-| C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [ ] |
-| D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [ ] |
+| C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [x] (uncommitted) |
+| D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [~] code done + verified identical, uncommitted -- user wants to re-check what it really fixed |
 | E | Further flow analysis: per-pair speed, radial outflow, divergence, coherence -> `flow_pairs` table | #5 locality argument | 4 | [ ] |
 | F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [ ] |
 
@@ -15,6 +15,57 @@ Still open, outside this plan:
 - [ ] Separate results by objective (old #2)
 - [ ] Compare the median with its segments (old #3)
 - [ ] Sort and mark the dataset used, put it in the bucket for Jeff (old #6)
+
+---
+
+# Log of the project progress 2026-09-25 Fri (Session 64)
+Last working file: `classes/spatial_categorization.py`
+Last working line: 202 (`compute_baseline_threshold` -> now calls `fit_hist.find_background_threshold`, k = 1.5)
+
+## List of modified files (all UNCOMMITTED)
+Phase 2 (TODO C) -- reliability Vm + AP threshold:
+- `functions/ap_threshold.py` (new) — `find_ap_threshold()` (first dV/dt >= 20 mV/ms before the peak, 5 ms search window), `baseline_vm()` (mean Vm -20..-5 ms).
+- `classes/spike_reliability.py` — neatness refactor (step banners, logic unchanged) + new `export_vm_groups()` -> `reliability/{stem}_VM_SUCCESS_FAIL.png`.
+- `functions/plot_results.py` — new `plot_vm_success_vs_failure()` (±50 ms, threshold dots, mean±SD threshold + "above baseline" line in titles).
+
+Phase 3 (TODO D) -- ring latency removed, pre-masked flow added:
+- `functions/hotspot_flow.py` (new) — `premasked_flow()`, `compute_flow_pairs()` (5 pairs spike-1->spike .. spike+3->spike+4).
+- `classes/region_analyzer.py` — refactor (CONFIG + step banners); removed `compute_ring_traces`, `compute_cluster_trace`, `_peak_offset_from_spike`, `get_peak_latency_ms`, `get_temporal_traces`; kept centroid + R_lat (`cluster_radius()`); new `compute_flow()`.
+- `functions/plot_results.py` — removed `plot_full_trace` + 5 ring/trace helpers; new `plot_flow_panels()` -> `flow/{stem}_FLOW.png`.
+- `ach_domain_analysis.py` — `run()` split into `analyze_entry()` (1 Clip -> 2 Reliability -> 3 Median -> 4 Categorize -> 5 Region+Flow -> 6 Export); `flow/` replaces `latency/`; stats block drops `peak_latency_ms`.
+- `classes/results_exporter.py`, `functions/database_ops.py` — `peak_latency_ms` no longer written/summarized (column kept as legacy).
+- `functions/__init__.py` — registry: + `find_ap_threshold`, `plot_vm_success_vs_failure`, `plot_flow_panels`, `compute_flow_pairs`, `premasked_flow`; − `plot_full_trace`.
+
+Threshold method (spontaneous zones AND CAT masks now share one function):
+- `functions/fit_hist.py` — `find_background_threshold()`: center = **smoothed histogram peak** (new `smoothed_peak()`: Savitzky-Golay derivative = 0, window 5% of range), sigma = Gaussian fitted left of the peak (center pinned), **256 bins** (`ZONE_HIST_BINS`), 0.1-99.9 pct range, sigma seed from p50-p16. `fit_left_gaussian()` got an optional `center=`. `ZONE_SIGMA_SEED` removed; `N_HIST_BINS = 1000` kept for img_proc `fit_hist_sigma()` (unchanged).
+- `classes/spatial_categorization.py` — `compute_baseline_threshold()` (median CAT **and** per-segment reliability check) now = `find_background_threshold(baseline, BASELINE_SIGMA_MULT=1.5)` instead of mean + 1.5*std.
+- `classes/sp_zone_analyzer.py` — net unchanged (comment/log text edited and restored).
+- `prototype_flow_analysis.py` — reads `output/test7/phase3/after`, uses `compute_flow_pairs`, 3-color CAT-pair background, auto arrow scale -> `output/test8/flow/optical_flow/`.
+
+## Summary of current progress
+- **Phase 2 verified:** σ=2 parity with Session 61 (0003 48/34 split identical); AP threshold dots at the upstroke knee; relative threshold ≈ +4 mV above baseline in spontaneous-like cells (0003 success +3.9 vs failure +3.8 -> threshold does not explain failures).
+- **Phase 3 verified behavior-identical:** all results.db columns (except peak_latency_ms) + all MED/CAT TIFFs identical before/after refactor; flow bit-identical to the prototype. Flow step costs 50-100 s per recording (6-rec run 163 s -> 441 s).
+- **Threshold story (read in order):** (1) wanted fit_hist's left-Gaussian method for CAT baseline frames -> (2) 1000 bins: float16 value grid makes a comb, "tallest bin" center jumps -> (3) 256 bins stabilised CAT -> (4) same function in spontaneous: 0012 still jumped even at 256 (flat-topped histogram) -> (5) median-pinned center fixed bin dependence but is pulled right by a bright tail (CAT 0002) -> (6) **derivative-zero (smoothed peak) center** = true noise peak, nearly bin-stable -> user chose it for both, **k = 1.5** (zones: N@2 removed too many events; N@1.5 ≈ previous zone maps).
+- Production thresholds now: spontaneous 0003 0.1903 / 0018 0.1823 / 0012 0.1888; CAT baseline (6 rec) 0.0749 / 0.0915 / 0.0886 / 0.1245 / 0.1185 / 0.1050 -- verified equal to the tests.
+- **Check run (0003/0012/0018, new CAT):** 0012 and 0018 fine (+3-6 % area). **0003 problem:** per-segment reliability 75/82 -> **82/82**; segments that failed with A now "pass" on scattered speckle (density gate tuned for the old threshold); median uses all 82 segments -> spike hotspot area ×2. The N@2 patched run gave 64/82 (its montage titles wrongly say 1.5σ -- title uses the constant).
+- **Optical flow findings (scratch):** pre-mask pins flow to ~0 at the mask edge (0012 spike->spike+1: 0.28 px edge vs 5.1 px core); flow-then-mask has no edge gradient but moves background too -> absolute level unknown; 0003 flow is sub-pixel (arrows invisible at fixed scale); spike-1->spike "flow" is mostly brightening, not motion.
+- **Zones:** near-duplicate zones found (trace-corr groups never proximity-merged; e.g. 0012 zones 1/5: 16 px, IoU 0.73); first merge rule (IoU>=0.4 or <50 px, union-find) over-merged -> parked.
+- `output/` cleaned 32 GB -> ~1.3 GB (test6, reliability_group, stale test7/test8 folders deleted; test4 kept). `output/test8/README.txt` describes every remaining folder.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ TODO C (Phase 2) — Vm success/failure + AP threshold (+ relative-to-baseline line)
+- ✅ TODO D (Phase 3) code — flow replaces latency, region_analyzer / ach_domain_analysis refactor, verified identical
+- ✅ Threshold method unified (smoothed-peak center, 256 bins, k=1.5) for spontaneous + CAT
+- ✅ output/ cleanup + test8 README
+
+## What should we do next? (TODOs)
+- [ ] **Review what files and pipelines were changed this session** (list above) before committing anything.
+- [ ] **Re-check what Phase 3 really fixed** (flow vs old latency; pre-mask edge artifact; is the flow output meaningful).
+- [ ] Optical flow -- next steps to be determined (candidates: noise-floor test on baseline pairs, pre-mask vs flow-then-mask, arrows inside the mask only, 5-pair parallel speed-up).
+- Open problems observed, not yet prioritized: per-segment reliability k (0003 82/82 with N@1.5 -- N@2 / old A / density gate); montage title shows the constant, not the k used; bump at ~0 in spontaneous histograms; zone merge rules (parked); formal spontaneous re-run (threshold changed, PG_010 parity gone); GUI smoke test; commit.
+
+## Last Session Recap
+※ recap: Finished Phase 2 (Vm + AP threshold) and Phase 3 (flow replaces latency, verified identical), and unified the spontaneous + CAT thresholds on a smoothed-peak left-Gaussian fit (256 bins, k=1.5); all uncommitted. Pending: review changes, 0003 reliability now 100%, optical-flow direction.
 
 ---
 

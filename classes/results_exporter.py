@@ -43,10 +43,10 @@ class ResultsExporter:
         │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_CAT.tif
         ├── spatial/
         │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_SPATIAL.png
-        └── latency/
-            └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_LATENCY.png
+        └── flow/
+            └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_FLOW.png
 
-    spatial/ and latency/ are created on demand by export_figure() — export_all() only creates
+    spatial/, flow/ and reliability/ are created on demand by export_figure() — export_all() only creates
     median/ and categorized/.
 
     A{n} is a batch-local sequential animal index (see build_animal_idx_lut),
@@ -150,7 +150,7 @@ class ResultsExporter:
                 centroid_x REAL,
                 R_lat_px REAL,
                 R_lat_um REAL,
-                peak_latency_ms REAL,
+                peak_latency_ms REAL,  -- legacy (ring latency removed), no longer written
                 intensity_min REAL,
                 intensity_max REAL,
                 UNIQUE(exp_date, abf_serial, img_serial)
@@ -216,7 +216,6 @@ class ResultsExporter:
         # Analysis results
         region_summary: dict,
         region_data: dict,
-        peak_latency_ms: float | None,
         lasting_time_ms: float | None,
         significant: bool = True,
     ) -> dict[str, Path]:
@@ -247,7 +246,6 @@ class ResultsExporter:
             intensity_range: (min, max) raw intensity across median_stack, from spike_centered_median()
             region_summary: Summary dict from RegionAnalyzer.get_summary()
             region_data: Critical-frame cluster dict from RegionAnalyzer.get_results()
-            peak_latency_ms: Peak-timing latency, from RegionAnalyzer.get_peak_latency_ms()
             lasting_time_ms: Decay time constant, from RegionAnalyzer.get_lasting_time_ms()
             significant: When False, skips MED/CAT TIFF writes (no ACh detected).
 
@@ -289,7 +287,6 @@ class ResultsExporter:
             animal_id=animal_id,
             slice_val=slice_val,
             at=at,
-            peak_latency_ms=peak_latency_ms,
             lasting_time_ms=lasting_time_ms,
             med_filename=f"{med_stem}.tif",
         )
@@ -365,7 +362,6 @@ class ResultsExporter:
         animal_id: str,
         slice_val: str,
         at: str,
-        peak_latency_ms: float | None,
         lasting_time_ms: float | None,
         med_filename: str,
     ) -> None:
@@ -406,9 +402,9 @@ class ResultsExporter:
                 spike_plus1_frame_hotspot_um2, spike_plus1_frame_n_clusters,
                 decay_peak_offset, decay_fit_r2, lasting_time_ms,
                 ANIMAL_ID, SLICE, AT, med_filename,
-                centroid_y, centroid_x, R_lat_px, R_lat_um, peak_latency_ms,
+                centroid_y, centroid_x, R_lat_px, R_lat_um,
                 intensity_min, intensity_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -443,7 +439,6 @@ class ResultsExporter:
                 centroid_x,
                 r_lat_px,
                 r_lat_um,
-                peak_latency_ms,
                 intensity_range[0],
                 intensity_range[1],
             ),

@@ -245,7 +245,7 @@ def compute_region_stats(
     Returns one row per metric with columns: metric, mean, std, cv_pct,
     median, iqr_q1, iqr_q3, geomean, geostd_factor, n_detected, n_total.
     """
-    metric_cols = ["spike_frame_hotspot_um2", "spike_plus1_frame_hotspot_um2", "peak_latency_ms", "lasting_time_ms"]
+    metric_cols = ["spike_frame_hotspot_um2", "spike_plus1_frame_hotspot_um2", "lasting_time_ms"]
     df = _filter_by_run_keys(_read_experiments(results_db_path), run_keys)
 
     if not df.is_empty():

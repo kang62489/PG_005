@@ -18,10 +18,12 @@ from scipy.ndimage import binary_dilation, binary_erosion, generate_binary_struc
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 
+from functions.fit_hist import find_background_threshold
+
 # Constants
 NDIM_SINGLE_FRAME = 2
 CATEGORY_BRIGHT = 1
-BASELINE_SIGMA_MULT = 1.5
+BASELINE_SIGMA_MULT = 1.5  # bright threshold = baseline histogram peak + this many fitted sigmas
 
 
 class SpatialCategorizer:
@@ -172,7 +174,7 @@ class SpatialCategorizer:
             image_segment: 3D array (frames, height, width) or 2D array (single frame)
             spike_frame_idx: Index of the spike frame within image_segment. Frames
                 before this index are treated as the baseline window used to set
-                threshold_used (baseline mean + 2*std).
+                threshold_used (see compute_baseline_threshold).
 
         Returns:
             self (for method chaining)
@@ -198,20 +200,14 @@ class SpatialCategorizer:
 
     @staticmethod
     def compute_baseline_threshold(baseline_frames: list[np.ndarray]) -> float:
-        """Bright threshold (mean + 2*std) from a set of baseline (pre-spike) frames.
+        """Bright threshold from baseline (pre-spike) frames: histogram peak + BASELINE_SIGMA_MULT * sigma.
 
-        Pulled out of _calculate_global_threshold so a caller that already has a segment's
-        baseline frames on hand (e.g. a per-segment reliability check) can compute the same
-        threshold without fitting a full SpatialCategorizer instance first.
-
-        Args:
-            baseline_frames: pre-spike frames, e.g. image_segment[:spike_frame_idx].
-
-        Returns:
-            Bright-pixel threshold: baseline mean + BASELINE_SIGMA_MULT * baseline std.
+        Same method as the spontaneous zones (fit_hist.find_background_threshold): 256-bin histogram,
+        smoothed-derivative peak as the center, sigma from a Gaussian fitted left of the peak. Static, so
+        the per-segment reliability check can use it without fitting a SpatialCategorizer.
         """
-        baseline_pixels = np.concatenate([np.asarray(f).flatten() for f in baseline_frames])
-        return float(baseline_pixels.mean() + BASELINE_SIGMA_MULT * baseline_pixels.std())
+        baseline = np.stack([np.asarray(f) for f in baseline_frames])
+        return find_background_threshold(baseline, BASELINE_SIGMA_MULT)
 
     def categorize_frame(self, frame: np.ndarray, frame_idx: int, threshold: float) -> np.ndarray:
         """Categorize a single frame using an already-known threshold.
