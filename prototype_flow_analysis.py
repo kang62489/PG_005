@@ -5,7 +5,7 @@
   Step 3. Plot : background = paired CAT masks (from-only / to-only / both, 3 colors),
                  arrows auto-scaled per recording so sub-pixel flow stays visible
 
-Output: output/test8/flow/optical_flow/{tag}_FLOW_CAT.png
+Output: output/test8/optical_flow/{tag}_FLOW_CAT.png
 """
 
 import sys
@@ -25,7 +25,7 @@ from functions.hotspot_flow import compute_flow_pairs  # noqa: E402
 
 # ===== CONFIG =====
 SRC_DIR = PROJECT_ROOT / "output" / "test7" / "phase3" / "after"
-FLOW_DIR = PROJECT_ROOT / "output" / "test8" / "flow" / "optical_flow"
+FLOW_DIR = PROJECT_ROOT / "output" / "test8" / "optical_flow"
 
 QUIVER_STEP = 24              # px between arrows
 ARROW_REF_PCTL = 95           # this percentile of drawn |flow| (all panels of a recording) ...

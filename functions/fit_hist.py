@@ -5,7 +5,7 @@ fit_hist.py  --  Pixel-value histogram + left-side Gaussian fit (CPU Numba JIT +
                       float16 stacks: exact per-code counts -> percentiles + rebinning, no sort
   Step 2. Left fit  : fit a Gaussian to the peak + left side only (right side holds real signal)
   Step 3. Consumers : fit_hist_sigma()            -> background mean/sigma for img_proc z-scoring
-                      find_background_threshold() -> peak + k*sigma threshold (spontaneous zones, CAT baseline)
+                      find_background_threshold() -> peak + k*sigma hotspot threshold for spontaneous zones
 """
 
 ## Modules
@@ -17,7 +17,6 @@ import numba
 import numpy as np
 from numba import cuda, njit, prange
 from scipy.optimize import curve_fit
-from scipy.signal import savgol_filter
 
 # ===========================================================================
 #
@@ -25,10 +24,9 @@ from scipy.signal import savgol_filter
 #
 # ===========================================================================
 
-N_HIST_BINS = 1000                 # img_proc z-scoring (fit_hist_sigma)
-ZONE_HIST_BINS = 256               # background thresholds (zones + CAT): wide bins average out the float16 comb
-ZONE_HIST_RANGE_PCT = (0.1, 99.9)  # histogram spans these percentiles, so rare outliers can't widen the bins
-ZONE_SMOOTH_FRAC = 0.05            # peak finding: Savitzky-Golay window = this fraction of the histogram range
+N_HIST_BINS = 1000
+ZONE_HIST_RANGE_PCT = (0.1, 99.9)  # zones: histogram spans these percentiles, so rare outliers can't widen the bins
+ZONE_SIGMA_SEED = 0.0016           # zones: initial sigma guess for the fixed-mean fit
 
 
 # ===========================================================================
@@ -230,15 +228,13 @@ def _gaussian(x: np.ndarray, amp: float, mean: float, sigma: float) -> np.ndarra
     return amp * np.exp(-((x - mean) ** 2) / (2 * sigma**2))
 
 
-def fit_left_gaussian(counts: np.ndarray, centers: np.ndarray, fix_mean: bool, sigma_seed: float,
-                      center: float | None = None) -> tuple[float, float]:
+def fit_left_gaussian(counts: np.ndarray, centers: np.ndarray, fix_mean: bool, sigma_seed: float) -> tuple[float, float]:
     """(mean, sigma) of a Gaussian fit to the histogram's peak + left side.
 
-    fix_mean=True pins the mean and fits only amplitude + sigma: at `center` when given,
-    otherwise at the tallest bin.
+    fix_mean=True pins the mean at the peak bin and fits only amplitude + sigma.
     """
-    peak_idx = int(np.argmax(counts)) if center is None else int(np.searchsorted(centers, center, side="right")) - 1
-    x_peak = float(centers[peak_idx]) if center is None else float(center)
+    peak_idx = int(np.argmax(counts))
+    x_peak = float(centers[peak_idx])
     left_mask = centers <= x_peak
     x_left, y_left = centers[left_mask], counts[left_mask]
 
@@ -267,44 +263,23 @@ def fit_hist_sigma(detrended: np.ndarray, n_bins: int = N_HIST_BINS, cuda_availa
     return fit_left_gaussian(counts, centers, fix_mean=False, sigma_seed=float(sigma_seed))
 
 
-def smoothed_peak(counts: np.ndarray, centers: np.ndarray) -> float:
-    """Histogram peak = + -> - zero crossing of the Savitzky-Golay derivative nearest the smoothed maximum.
-
-    Smoothing (window = ZONE_SMOOTH_FRAC of the range, same in intensity units for any n_bins) removes the
-    float16 comb, so the peak neither jumps between comb spikes (tallest bin) nor follows a bright tail (median).
-    """
-    bin_w = float(centers[1] - centers[0])
-    window = max(5, round(ZONE_SMOOTH_FRAC * (centers[-1] - centers[0]) / bin_w) | 1)  # odd, >= 5
-    smooth = savgol_filter(counts.astype(np.float64), window, 2)
-    deriv = savgol_filter(counts.astype(np.float64), window, 2, deriv=1)
-    crossings = np.flatnonzero((deriv[:-1] > 0) & (deriv[1:] <= 0))
-    if not crossings.size:
-        return float(centers[int(np.argmax(smooth))])
-    i = int(crossings[np.argmin(np.abs(crossings - np.argmax(smooth)))])
-    return float(centers[i] + bin_w * deriv[i] / (deriv[i] - deriv[i + 1]))  # interpolated zero
-
-
-def find_background_threshold(stack: np.ndarray, sigma_ratio: float, n_bins: int = ZONE_HIST_BINS,
+def find_background_threshold(stack: np.ndarray, sigma_ratio: float, n_bins: int = N_HIST_BINS,
                               cuda_available: bool = False) -> float:
-    """Threshold = histogram peak + sigma_ratio * sigma, sigma from a Gaussian fitted left of the peak.
+    """Hotspot threshold = background peak + sigma_ratio * fitted sigma, over the 0.1-99.9 percentile range.
 
-    Histogram over the 0.1-99.9 percentile range; peak from smoothed_peak(). Used by the spontaneous
-    zones (whole stack) and the CAT masks (baseline frames). float16 stacks take the code-count path.
+    float16 stacks take the code-count path (no sort, no float32 copy); others use np.percentile.
     """
-    pcts = (ZONE_HIST_RANGE_PCT[0], 15.87, 50.0, ZONE_HIST_RANGE_PCT[1])
     if stack.dtype == np.float16:
         codes_value, codes_count = float16_code_counts(stack)
-        lo, p16, p50, hi = percentiles_from_counts(codes_value, codes_count, pcts)
+        lo, hi = percentiles_from_counts(codes_value, codes_count, ZONE_HIST_RANGE_PCT)
         counts, centers = rebin_code_counts(codes_value, codes_count, n_bins, lo, hi)
     else:
-        values = np.ascontiguousarray(stack).ravel()
-        lo, p16, p50, hi = (float(x) for x in np.percentile(values, pcts))
-        counts, centers = histogram_counts(values, n_bins, lo, hi, cuda_available, drop_outside=True)
+        values = stack.ravel()
+        lo, hi = np.percentile(values, ZONE_HIST_RANGE_PCT)
+        counts, centers = histogram_counts(values, n_bins, float(lo), float(hi), cuda_available, drop_outside=True)
 
-    sigma_seed = max(p50 - p16, float(centers[1] - centers[0]))  # ~1 sigma for a Gaussian
-    center, sigma = fit_left_gaussian(counts, centers, fix_mean=True, sigma_seed=sigma_seed,
-                                      center=smoothed_peak(counts, centers))
-    return float(center + sigma_ratio * sigma)
+    peak, sigma = fit_left_gaussian(counts, centers, fix_mean=True, sigma_seed=ZONE_SIGMA_SEED)
+    return float(peak + sigma_ratio * sigma)
 
 
 def img_zscore_convert(detrended: np.ndarray, mean: float, sigma: float) -> np.ndarray:
