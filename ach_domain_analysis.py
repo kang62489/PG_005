@@ -7,7 +7,7 @@ For every ana-list entry (processed TIFF + paired ABF, OBJ looked up in rec_data
   Step 2. Reliability : per-segment hotspot check -> RELIABILITY.png + VM_SUCCESS_FAIL.png
   Step 3. Median      : spike-centered median of the detected segments
   Step 4. Categorize  : bright / background per frame
-  Step 5. Region+Flow : critical-frame clusters, hotspot area decay, pre-masked TV-L1 flow
+  Step 5. Region+Flow : critical-frame clusters, hotspot area decay, TV-L1 flow (+ CAT keep mask)
   Step 6. Export      : results.db row, MED/CAT TIFFs, SPATIAL.png + FLOW.png
 
 Ana list format (column names declared on the 'Picked:' line):
@@ -395,7 +395,7 @@ def analyze_entry(
         _log_skip(ana_list_path, f"{proc_tiff_path.name}: no significant ACh detection "
                                  f"(reliability {reliability_pct:.1f}% -- {n_detected}/{n_total} segments detected)")
 
-    # --- 5b. pre-masked flow (significant recordings only) ---
+    # --- 5b. TV-L1 flow (significant recordings only) ---
     if final_significant:
         if emitter:
             emitter({"type": "step", "msg": "Computing hotspot flow..."})

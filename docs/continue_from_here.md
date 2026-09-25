@@ -7,14 +7,45 @@ All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
 | A | Default the pipeline (CLI + GUI) to ALS | new | 0 | [x] |
 | B | Merge `../PG_010/sp_ach_zones.py` into PG_005 as classes/functions: 10X only, sensor-aware (iAChSnFR / GACh3.0 / rACh1h), numba CPU+CUDA acceleration, readable xlsx names/columns, zone size/frequency/period stats, output to `results/spontaneous/` | #1 wave vs hotspots, #4 spontaneous side | 1 | [x] |
 | C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [x] committed (`325e09f`) |
-| D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [x] tuned (Session 66): thresholds fixed; flow now UNMASKED TV-L1 then CAT mask; FLOW.png 4 rows (quivers + µm/s speed, masked / full field). Uncommitted |
+| D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [x] tuned (Session 66): thresholds fixed; flow now UNMASKED TV-L1 then CAT mask; FLOW.png 4 rows (quivers + µm/s speed, masked / full field). Committed `3d59aca` |
 | E | Further flow analysis: per-pair speed, radial outflow, divergence, coherence -> `flow_pairs` table | #5 locality argument | 4 | [ ] (speed in µm/s already drawn in FLOW.png, not stored) |
-| F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [ ] |
+| F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [~] skill `.claude/skills/neat-refactor/` created; files not refactored yet |
 
 Still open, outside this plan:
-- [ ] Separate results by objective (old #2)
-- [ ] Compare the median with its segments (old #3)
-- [ ] Sort and mark the dataset used, put it in the bucket for Jeff (old #6)
+- [ ] Sort and mark the dataset used, separate results by objective, put it in the bucket for Jeff (old #6, merged with old #2 on 2026-09-25)
+- ~~Compare the median with its segments (old #3)~~ -- dropped 2026-09-25
+
+---
+
+# Log of the project progress 2026-09-25 Fri (Session 67, after commit `3d59aca`)
+Last working file: `spontaneous_analysis.py`
+Last working line: 127 (`export_zone_maps` -> `tifffile.imwrite(..., compression="zlib")`)
+
+## List of modified files (UNCOMMITTED)
+- `functions/hotspot_flow.py` — `premasked_flow` -> `pair_flow`; unused `mask_frame()` removed.
+- `functions/__init__.py` — registry: `premasked_flow` -> `pair_flow`.
+- `classes/region_analyzer.py`, `ach_domain_analysis.py`, `functions/plot_results.py` — "pre-masked" wording in docstrings/comments updated (no logic change).
+- `spontaneous_analysis.py` — zone-map TIFF written with lossless zlib (0003: 230 MB -> 42 MB, pixels identical).
+- `.claude/skills/neat-refactor/SKILL.md` (new) — TODO F workflow: one file at a time, plan -> approval -> before run -> edit -> ruff -> after run -> compare identical.
+- Scratch: `output/test3/run_test3.py` fixed (local `FLOW_QUIVER_SCALE = 0.8`); stale PNG folders in `output/test5/spontaneous/zone_maps/` deleted.
+
+## Summary of current progress
+- Cleanups 4-6 done; old #7 merged into #9 (dataset bucket), old #8 dropped.
+- `prototype_flow_analysis.py` left as-is for now (still says "pre-masked"; retired prototype).
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ User committed Session 66 work (`3d59aca`)
+- ✅ neat-refactor skill created
+- ✅ Cleanups: pair_flow rename, run_test3.py fix, stale zone-map folders
+- ✅ zlib compression for zone-map TIFFs
+
+## What should we do next? (TODOs)
+- [ ] TODO F via `neat-refactor`: start with `functions/hotspot_flow.py`, then `ach_domain_analysis.py`, `classes/spike_reliability.py`, `classes/region_analyzer.py`, `classes/abf_clip.py` (light).
+- [ ] Flow speed-up (5 TV-L1 pairs in parallel threads, identical to serial), then Phase 4 / TODO E `flow_pairs` metrics table.
+- [ ] Dataset bucket for Jeff: sort/mark the dataset used + separate results by objective.
+
+## Last Session Recap
+※ recap: After committing 3d59aca, renamed premasked_flow -> pair_flow, fixed run_test3.py, removed stale zone-map folders, zlib-compressed zone-map TIFFs (230 -> 42 MB), and created the neat-refactor skill. Pending: TODO F refactors, flow speed-up + Phase 4, Jeff dataset.
 
 ---
 
@@ -48,12 +79,13 @@ Scratch (output/, not code): `output/test1` (spontaneous threshold test + fittin
 - ✅ Verification run in output/test5
 
 ## What should we do next? (TODOs)
-- [ ] **Commit today's edits** (user) -- 7 pipeline files listed above.
+- [x] Commit today's edits -- user committed `3d59aca` "completed phase 3 and part of phase 4 (flow speed)".
+- [ ] TODO F: run the `neat-refactor` skill file by file (behavior-identical, verified before/after).
 - [ ] Flow speed-up: 5 TV-L1 pairs in parallel threads first (measure; must be identical to serial). GPU = own numba-cuda TV-L1, big job.
 - [ ] Phase 4 / TODO E flow metrics -> `flow_pairs` table (speed µm/s, radial outflow, divergence, coherence), on the unmasked-then-masked flow.
-- [ ] Cleanup: rename `premasked_flow` (flow is unmasked now) + remove unused `mask_frame()` in `functions/hotspot_flow.py` (update `functions/__init__.py` registry).
-- [ ] Cleanup: fix or delete `output/test3/run_test3.py` (imports removed `FLOW_QUIVER_SCALE`).
-- [ ] Cleanup: stale per-recording zone-map PNG folders (e.g. `output/test5/spontaneous/zone_maps/{stem}/`).
+- [x] Cleanup: `premasked_flow` -> `pair_flow`, unused `mask_frame()` removed, registry + "pre-masked" docstrings updated (uncommitted).
+- [x] Cleanup: `output/test3/run_test3.py` fixed (local `FLOW_QUIVER_SCALE = 0.8`).
+- [x] Cleanup: stale zone-map PNG folders in `output/test5/spontaneous/zone_maps/` deleted.
 
 ## Last Session Recap
 ※ recap: Compared and fixed thresholds (spontaneous 512-bin smoothed-peak fit; CAT p0.1-p99.9 trim, k 1.5), switched flow to unmasked TV-L1 + CAT mask with µm/s speed rows, scale bars, zone-map TIFF stack; verified in output/test5. Pending: commit, flow speed-up, Phase 4 metrics, cleanups.

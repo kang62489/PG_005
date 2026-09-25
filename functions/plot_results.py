@@ -7,8 +7,8 @@ for the PySide6-coupled canvas widget used by the live GUI.
 Export figures:
 - plot_spatiotemporal_summary (-> spatial/): density-gated hotspot-area trace showing
   why the critical frame was picked, + cluster shading on the spike and spike+1 panels.
-- plot_flow_panels (-> flow/, *_FLOW.png): pre-masked TV-L1 flow arrows, spike-1->spike
-  through spike+3->spike+4.
+- plot_flow_panels (-> flow/, *_FLOW.png): TV-L1 flow arrows + speed (µm/s), in the CAT mask
+  and over the full field, spike-1->spike through spike+3->spike+4.
 - plot_segment_reliability_montage (-> reliability/, *_RELIABILITY.png): one panel per raw
   segment showing its own density-gated detection result, for reviewing reliability by eye.
 - plot_vm_success_vs_failure (-> reliability/, *_VM_SUCCESS_FAIL.png): peak-aligned Vm of

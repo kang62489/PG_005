@@ -124,7 +124,7 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, background: np.ndarray, 
                                f"zone {zone_id} ({title_tag})", analyzer.um_per_px)
         pages.append(_figure_to_rgb(fig))
 
-    tifffile.imwrite(out_path, np.stack(pages), photometric="rgb")  # one series: (pages, H, W, 3)
+    tifffile.imwrite(out_path, np.stack(pages), photometric="rgb", compression="zlib")  # one series: (pages, H, W, 3)
     return len(zone_ids)
 
 

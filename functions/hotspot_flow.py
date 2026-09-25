@@ -26,12 +26,7 @@ def _offset_label(offset: int) -> str:
     return "spike" if offset == 0 else f"spike{offset:+d}"
 
 
-def mask_frame(frame: np.ndarray, keep: np.ndarray) -> np.ndarray:
-    """Floor everything outside `keep` to this frame's own min."""
-    return np.where(keep, frame, float(frame.min()))
-
-
-def premasked_flow(
+def pair_flow(
     med: np.ndarray, cat: np.ndarray, idx_from: int, idx_to: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(v, u, keep): TV-L1 flow of the raw frame pair; keep = union of both frames' CAT-bright pixels."""
@@ -51,7 +46,7 @@ def compute_flow_pairs(med: np.ndarray, cat: np.ndarray, spike_frame_idx: int) -
         idx_from, idx_to = spike_frame_idx + offset_from, spike_frame_idx + offset_to
         if idx_from < 0 or idx_to >= n_frames:
             continue
-        v, u, keep = premasked_flow(med, cat, idx_from, idx_to)
+        v, u, keep = pair_flow(med, cat, idx_from, idx_to)
         pairs.append({
             "label": f"{_offset_label(offset_from)} -> {_offset_label(offset_to)}",
             "offset_from": offset_from,
