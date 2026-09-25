@@ -60,8 +60,12 @@ class AbfClip:
         detrend_mode: str,
         normalization: str,
         fs_imgs: float = 20,
+        export_plot: bool = True,
     ) -> None:
-        """Parse exp_date / serials from the file names, then run steps 1-5 (fs_imgs = imaging rate, Hz)."""
+        """Parse exp_date / serials from the file names, then run steps 1-5 (fs_imgs = imaging rate, Hz).
+
+        export_plot=False skips step 5 -- the caller runs export_spike_plot() itself (e.g. on a figure thread).
+        """
         self.proc_tiff_path = proc_tiff_path
         self.raw_abf_path = raw_abf_path
         self.results_dir = results_dir
@@ -95,7 +99,8 @@ class AbfClip:
         self.spike_detection()
         self.get_available_spiking_frames()
         self.clip_time_abf_img_segments()
-        self._export_spike_plot()
+        if export_plot:
+            self.export_spike_plot()
 
     # =======================================================================
     #
@@ -346,7 +351,7 @@ class AbfClip:
             return np.array([]), np.array([])
         return df[x_col].to_numpy(), df[y_col].to_numpy()
 
-    def _export_spike_plot(self) -> None:
+    def export_spike_plot(self) -> None:
         """spikes/ABF_{exp_date}_{abf_serial}_spike_analysis.png -- picked / skipped / collapsed spikes."""
         fig_dir = self.results_dir / "spikes"
         fig_dir.mkdir(parents=True, exist_ok=True)

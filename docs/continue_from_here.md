@@ -17,6 +17,44 @@ Still open, outside this plan:
 
 ---
 
+# Log of the project progress 2026-09-25 Fri (Session 69)
+Last working file: `pyproject.toml`
+Last working line: 29-30 (`nvidia-cuda-nvrtc-cu12` / `nvidia-nvjitlink-cu12` pins via `uv add`)
+
+## List of modified files
+Committed by user (`c3e6ff9`, then `spike_reli` fast-forwarded into `main`):
+- TODO F neat-refactor, each verified byte-identical in `output/test7/` (spike-aligned + spontaneous runs): `functions/hotspot_flow.py`, `classes/spatial_categorization.py`, `functions/plot_results.py`, `ach_domain_analysis.py` (+ log text "skipping z-score step" -> "skipping this entry"), `classes/spike_reliability.py`, `classes/region_analyzer.py`, `classes/abf_clip.py` (+ typo `trailing_interval_frames`).
+- Prototype cleanup: `prototype_flow_analysis.py`, `prototype_reliability_group_analysis.py` -> `archive/`; deleted `prototype_rose_map_batch.py`, `prototype_directional_change.py`, `prototype_hotspot_direction_analysis.py`, `prototype_med_height_map.py`, `prototype_reaction_diffusion.py`, `classes/directional_change.py`, `classes/hotspot_direction_analysis.py`, and `plot_results.py` Step 5b (plot_directional_change, _direction_map, 7 plot_hotspot_*). Kept: `prototype_peak_tracking.py`, `prototype_med_kymographs.py`, `prototype_full_als_waves.py` (+ `classes/wave_profiles.py`, Step 5a plots).
+- Cluster scripts: `run_ach.slm` -> `run_on_deigo.slm` (compute, CPU, /flash logs, `data/ana_20260922_000_deigo.txt`); new `run_on_saion.slm` (spontaneous, GPU, /work logs + results, `data/proc_20260922_000_saion.txt`).
+- New lists: `data/proc_20260922_000_saion.txt` (footer -> /work/WickensU/kang), `data/ana_20260922_000_deigo.txt` (built from proc_20260922_000, 201 rows, flags set YES unchecked, footer -> /flash/WickensU/kang).
+
+UNCOMMITTED:
+- `run_on_saion.slm` — `--partition=gpu` (account can't use `gpu-v100`); resource lines now exactly the user's srun flags (`gpu`, `gpu:1`, `saion-gpu21`, 16G, 12 h) -- my extra `--cpus-per-task=16` / `--nodes` / `--ntasks` removed (the 16 CPUs had kept the job at PD Resources).
+- `pyproject.toml`, `uv.lock` — `nvidia-cuda-nvrtc-cu12>=12.9.86`, `nvidia-nvjitlink-cu12>=12.9.86` (keeps nvrtc / nvJitLink on CUDA 12 for the V100; local RTX 5070 Ti kernel test OK).
+
+Scratch: `output/test6` (centre_refine + flow_streamlines scripts/PNGs) and `output/test7` run folders deleted; `output/test7/compare_test7.py <before> <after>` kept (reusable). `output/test4/directional_change/`, `med_height_map/` deleted.
+
+## Summary of current progress
+- TODO F finished: 7 files neat, behaviour-identical (20 PNGs, 6 TIFFs, `experiments` + `flow_pairs`, spontaneous zone TIFFs / stats PNG all identical).
+- `ach_domain_analysis.py` confirmed CPU-only (no CUDA module imported) -> runs on deigo; `spontaneous_analysis.py` uses the GPU -> runs on saion.
+- Both `.slm` jobs ran successfully on the clusters (saion job 4731852 on saion-gpu21).
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ TODO F neat-refactor (7 files)
+- ✅ test6 / test7 / test4 scratch cleanup, prototype archive + removal
+- ✅ spike_reli merged into main (fast-forward)
+- ✅ Cluster run setup: slm scripts + `_saion` / `_deigo` lists; both jobs ran
+
+## What should we do next? (TODOs)
+- [ ] Copy and check the results from the clusters (saion `/work/WickensU/kang/results/spontaneous/`, deigo `/flash/WickensU/kang/results/` + `[SKIPPED]` lines / stats block in `data/ana_20260922_000_deigo.txt`).
+- [ ] Dataset bucket for Jeff: sort/mark the dataset used + separate results by objective.
+- [ ] Remove unused `NDIM_SINGLE_FRAME` from `classes/spatial_categorization.py`.
+
+## Last Session Recap
+※ recap: Finished TODO F (7 files refactored, all byte-identical), archived/removed old prototypes, merged spike_reli into main, set up run_on_saion.slm / run_on_deigo.slm + cluster lists (both ran), added CUDA 12 pins. Pending: check cluster results, Jeff dataset, NDIM_SINGLE_FRAME.
+
+---
+
 # Log of the project progress 2026-09-25 Fri (Session 68)
 Last working file: `functions/plot_results.py`
 Last working line: 375 (`_draw_angle_crosshair` -> 0/90/180/270° crosshair on anisotropic STREAMLINES panels)

@@ -2,12 +2,9 @@
 #SBATCH --job-name=sp_zones
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=kang.chu@oist.jp
-#SBATCH --partition=gpu-v100
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --nodelist=saion-gpu21
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
 #SBATCH --mem=16G
 #SBATCH --time=12:00:00
 #SBATCH --output=/work/WickensU/kang/logs/spont_%j.out

@@ -28,7 +28,9 @@ import argparse
 import os
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 # Third-party imports
@@ -243,10 +245,10 @@ def write_stats_report(
 # ===========================================================================
 
 
-def _save_entry_figures(exporter: ResultsExporter, figures: list[tuple[str, object, str]]) -> None:
-    """Save (category, figure, filename) triples -- runs on a background thread."""
-    for category, fig, filename in figures:
-        exporter.export_figure(category, fig, filename)
+def _run_figure_jobs(jobs: list[Callable[[], None]]) -> None:
+    """Build + save one entry's PNGs -- runs on the background figure thread (the only matplotlib user)."""
+    for job in jobs:
+        job()
 
 
 def _log_skip(ana_list_path: Path, msg: str) -> None:
@@ -266,8 +268,8 @@ def analyze_entry(
     normalization: str,
     ana_list_path: Path,
     emitter=None,
-) -> list[tuple[str, object, str]]:
-    """Analyze one ana-list entry; returns the (category, figure, filename) triples still to be saved."""
+) -> list[Callable[[], None]]:
+    """Analyze one ana-list entry; returns the figure jobs (build + save PNG) for the background thread."""
     entry_t0 = time.time()
     i, total = progress
 
@@ -290,12 +292,14 @@ def analyze_entry(
         results_dir=results_dir,
         detrend_mode=detrend_mode,
         normalization=normalization,
+        export_plot=False,
     )
+    jobs: list[Callable[[], None]] = [clip.export_spike_plot]
     if not clip.lst_img_frame_ranges:  # every spike skipped (too closely spaced for a baseline window)
         console.log("[yellow]No valid segments — skipping this entry.[/yellow]")
         _log_skip(ana_list_path, f"{proc_tiff_path.name}: no valid segments "
                                  "(spikes too closely spaced for any baseline window)")
-        return []
+        return jobs
 
     # Filename / DB metadata, needed from step 2 on
     export_data = clip.get_export_data()
@@ -327,8 +331,10 @@ def analyze_entry(
         f"  ({time.time() - entry_t0:.1f}s)[/green]"
     )
     # Exported regardless of significance -- they explain a "no detection" result.
-    reliability_checker.export_montage(exporter, proc_tiff_path.stem, export_data, *name_args)
-    reliability_checker.export_vm_groups(exporter, proc_tiff_path.stem, clip.get_vm_segments(), export_data, *name_args)
+    jobs.append(partial(reliability_checker.export_montage, exporter, proc_tiff_path.stem, export_data, *name_args))
+    jobs.append(partial(
+        reliability_checker.export_vm_groups, exporter, proc_tiff_path.stem, clip.get_vm_segments(), export_data, *name_args
+    ))
 
     # --- Step 3. Median: detected segments only (all segments if none detected) ---
     segments_for_median = [
@@ -432,7 +438,6 @@ def analyze_entry(
         export_data["exp_date"], export_data["abf_serial"], export_data["img_serial"], region_analyzer.flow_pairs,
     )
 
-    figures: list[tuple[str, object, str]] = []
     if final_significant:
         title_info = {
             "animal_id": animal_id,
@@ -442,22 +447,25 @@ def analyze_entry(
             "tiff_serial": export_data["img_serial"],
             "abf_serial": export_data["abf_serial"],
         }
-        spatial_fig = plot_spatiotemporal_summary(
-            categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
-        )
-        flow_fig = plot_flow_panels(median_segment, region_analyzer.flow_pairs, title_info, frame_duration_ms)
-        stream_fig = plot_flow_streamlines(median_segment, region_analyzer.flow_pairs, title_info)
-        figures = [
-            ("spatial", spatial_fig, f"{export_stem('SPATIAL')}.png"),
-            ("flow", flow_fig, f"{export_stem('FLOW')}.png"),
-            ("flow", stream_fig, f"{export_stem('STREAMLINES')}.png"),
-        ]
+
+        def export_result_figures() -> None:
+            spatial_fig = plot_spatiotemporal_summary(
+                categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
+            )
+            exporter.export_figure("spatial", spatial_fig, f"{export_stem('SPATIAL')}.png")
+            flow_fig = plot_flow_panels(median_segment, region_analyzer.flow_pairs, title_info, frame_duration_ms)
+            exporter.export_figure("flow", flow_fig, f"{export_stem('FLOW')}.png")
+            stream_fig = plot_flow_streamlines(median_segment, region_analyzer.flow_pairs, title_info)
+            exporter.export_figure("flow", stream_fig, f"{export_stem('STREAMLINES')}.png")
+
+        jobs.append(export_result_figures)
 
     dir_names = "/, ".join(d.name for d in dirs.values())
     console.log(
-        f"[green]Exported {dir_names}/, reliability/, spatial/, flow/  (entry: {time.time() - entry_t0:.1f}s)[/green]"
+        f"[green]Exported {dir_names}/ (PNGs: spikes/, reliability/, spatial/, flow/ on the figure thread)"
+        f"  (entry: {time.time() - entry_t0:.1f}s)[/green]"
     )
-    return figures
+    return jobs
 
 
 def run(
@@ -502,16 +510,17 @@ def run(
     figure_export_thread: threading.Thread | None = None
 
     for i, row in enumerate(entries.iter_rows(named=True), 1):
-        # Previous entry's PNG export must finish first (matplotlib isn't thread-safe) -- 1 thread max.
-        if figure_export_thread is not None:
-            figure_export_thread.join()
-            figure_export_thread = None
-        figures = analyze_entry(
+        # analyze_entry makes no matplotlib calls, so it overlaps the previous entry's figure thread.
+        jobs = analyze_entry(
             row, (i, total), df_checked_tiff, animal_idx_lut, exporter,
             results_dir, detrend_mode, normalization, ana_list_path, emitter,
         )
-        if figures:
-            figure_export_thread = threading.Thread(target=_save_entry_figures, args=(exporter, figures))
+        # Previous entry's PNGs must finish first (matplotlib isn't thread-safe) -- 1 figure thread max.
+        if figure_export_thread is not None:
+            figure_export_thread.join()
+            figure_export_thread = None
+        if jobs:
+            figure_export_thread = threading.Thread(target=_run_figure_jobs, args=(jobs,))
             figure_export_thread.start()
 
     if figure_export_thread is not None:

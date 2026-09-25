@@ -1,8 +1,10 @@
 """
-Spike-aligned TV-L1 optical flow on the median stack, CAT mask applied after the flow (CPU, one thread per pair).
+Spike-aligned TV-L1 optical flow on the median stack, CAT mask applied after the flow (CPU, numba).
 
-  Step 1. Flow  : skimage TV-L1 on one raw (unmasked) MED pair + keep = union of both frames' CAT-bright pixels
-  Step 2. Pairs : every in-range FLOW_OFFSETS pair (spike-1->spike ... spike+3->spike+4), run in parallel threads
+  Step 1. Flow  : numba TV-L1 (functions/tvl1_flow.py, identical to skimage) on one raw (unmasked) MED pair
+                  + keep = union of both frames' CAT-bright pixels
+  Step 2. Pairs : every in-range FLOW_OFFSETS pair (spike-1->spike ... spike+3->spike+4), one after another
+                  (each pair is already parallel inside numba)
 
 plot_flow_panels draws arrows only inside keep.
 
@@ -12,15 +14,12 @@ Example:
 """
 
 ## Modules
-# Standard library imports
-from concurrent.futures import ThreadPoolExecutor
-
 # Third-party imports
 import numpy as np
-from skimage.registration import optical_flow_tvl1
 
 # Local imports
 from classes.spatial_categorization import CATEGORY_BRIGHT
+from functions.tvl1_flow import optical_flow_tvl1_numba
 
 # ===========================================================================
 #
@@ -30,7 +29,6 @@ from classes.spatial_categorization import CATEGORY_BRIGHT
 
 # --- Step 2: pairs ---------------------------------------------------------
 FLOW_OFFSETS = [(-1, 0), (0, 1), (1, 2), (2, 3), (3, 4)]  # (from, to) frame offsets from the spike
-N_THREADS_FLOW = len(FLOW_OFFSETS)  # one thread per pair (~3.4x faster, identical output)
 
 
 # ===========================================================================
@@ -45,7 +43,7 @@ def pair_flow(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(v, u, keep): TV-L1 flow of the raw frame pair; keep = union of both frames' CAT-bright pixels."""
     keep = (cat[idx_from] == CATEGORY_BRIGHT) | (cat[idx_to] == CATEGORY_BRIGHT)
-    v, u = optical_flow_tvl1(med[idx_from], med[idx_to])
+    v, u = optical_flow_tvl1_numba(med[idx_from], med[idx_to])
     return v, u, keep
 
 
@@ -72,8 +70,7 @@ def compute_flow_pairs(med: np.ndarray, cat: np.ndarray, spike_frame_idx: int) -
         for offset_from, offset_to in FLOW_OFFSETS
         if spike_frame_idx + offset_from >= 0 and spike_frame_idx + offset_to < n_frames
     ]
-    with ThreadPoolExecutor(N_THREADS_FLOW) as pool:
-        flows = list(pool.map(lambda p: pair_flow(med, cat, p[2], p[3]), in_range))
+    flows = [pair_flow(med, cat, idx_from, idx_to) for _, _, idx_from, idx_to in in_range]
 
     pairs = []
     for (offset_from, offset_to, idx_from, idx_to), (v, u, keep) in zip(in_range, flows, strict=True):
