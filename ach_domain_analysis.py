@@ -8,7 +8,7 @@ For every ana-list entry (processed TIFF + paired ABF, OBJ looked up in rec_data
   Step 3. Median      : spike-centered median of the detected segments
   Step 4. Categorize  : bright / background per frame
   Step 5. Region+Flow : critical-frame clusters, hotspot area decay, TV-L1 flow (+ CAT keep mask)
-  Step 6. Export      : results.db row, MED/CAT TIFFs, SPATIAL.png + FLOW.png
+  Step 6. Export      : results.db rows (experiments + flow_pairs), MED/CAT TIFFs, SPATIAL.png + FLOW.png + STREAMLINES.png
 
 Ana list format (column names declared on the 'Picked:' line):
   [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
@@ -52,6 +52,7 @@ from functions import (
     load_img_segs,
     lookup_rec_from_db,
     plot_flow_panels,
+    plot_flow_streamlines,
     plot_spatiotemporal_summary,
     spike_centered_median,
     write_cell_summary_xlsx,
@@ -431,6 +432,9 @@ def analyze_entry(
         n_segments_detected=n_detected,
         n_segments_total=n_total,
     )
+    exporter.export_flow_pairs(  # empty flow_pairs (not significant) clears stale rows
+        export_data["exp_date"], export_data["abf_serial"], export_data["img_serial"], region_analyzer.flow_pairs,
+    )
 
     figures: list[tuple[str, object, str]] = []
     if final_significant:
@@ -446,9 +450,11 @@ def analyze_entry(
             categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
         )
         flow_fig = plot_flow_panels(median_segment, region_analyzer.flow_pairs, title_info, frame_duration_ms)
+        stream_fig = plot_flow_streamlines(median_segment, region_analyzer.flow_pairs, title_info)
         figures = [
             ("spatial", spatial_fig, f"{export_stem('SPATIAL')}.png"),
             ("flow", flow_fig, f"{export_stem('FLOW')}.png"),
+            ("flow", stream_fig, f"{export_stem('STREAMLINES')}.png"),
         ]
 
     dir_names = "/, ".join(d.name for d in dirs.values())

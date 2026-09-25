@@ -27,6 +27,7 @@ if TYPE_CHECKING:
         raw_tiff_ready,
     )
     from .fit_hist import find_background_threshold, fit_hist_sigma, img_zscore_convert
+    from .flow_pattern import fit_flow_pattern
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
     from .hotspot_flow import compute_flow_pairs, pair_flow
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
     from .load_img_segs import load_img_segs
     from .plot_results import (
         plot_flow_panels,
+        plot_flow_streamlines,
         plot_segment_reliability_montage,
         plot_single_zone,
         plot_spatiotemporal_summary,
@@ -63,6 +65,7 @@ __all__ = [
     "count_unique_cells",
     "find_ap_threshold",
     "find_background_threshold",
+    "fit_flow_pattern",
     "fit_hist_sigma",
     "gauss_exists",
     "gauss_ready",
@@ -77,6 +80,7 @@ __all__ = [
     "lookup_rec_from_db",
     "pair_flow",
     "plot_flow_panels",
+    "plot_flow_streamlines",
     "plot_segment_reliability_montage",
     "plot_single_zone",
     "plot_spatiotemporal_summary",
@@ -112,8 +116,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "load_img_segs":       (".load_img_segs",                             "load_img_segs"),
     "plot_spatiotemporal_summary": (".plot_results",                      "plot_spatiotemporal_summary"),
     "plot_flow_panels":    (".plot_results",                              "plot_flow_panels"),
+    "plot_flow_streamlines": (".plot_results",                            "plot_flow_streamlines"),
     "compute_flow_pairs":  (".hotspot_flow",                              "compute_flow_pairs"),
     "pair_flow":           (".hotspot_flow",                              "pair_flow"),
+    "fit_flow_pattern":    (".flow_pattern",                              "fit_flow_pattern"),
     "plot_segment_reliability_montage": (".plot_results",                 "plot_segment_reliability_montage"),
     "plot_spike_detection_summary": (".plot_results",                     "plot_spike_detection_summary"),
     "plot_vm_success_vs_failure": (".plot_results",                       "plot_vm_success_vs_failure"),

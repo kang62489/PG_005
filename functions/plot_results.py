@@ -9,6 +9,8 @@ Export figures:
   why the critical frame was picked, + cluster shading on the spike and spike+1 panels.
 - plot_flow_panels (-> flow/, *_FLOW.png): TV-L1 flow arrows + speed (µm/s), in the CAT mask
   and over the full field, spike-1->spike through spike+3->spike+4.
+- plot_flow_streamlines (-> flow/, *_STREAMLINES.png): the same flow as streamlines, in the CAT
+  mask and over the full field; CAT-row titles show the pair's source / sink / anisotropic type.
 - plot_segment_reliability_montage (-> reliability/, *_RELIABILITY.png): one panel per raw
   segment showing its own density-gated detection result, for reviewing reliability by eye.
 - plot_vm_success_vs_failure (-> reliability/, *_VM_SUCCESS_FAIL.png): peak-aligned Vm of
@@ -39,6 +41,7 @@ from classes.region_analyzer import (
     _decay_model,
 )
 from functions.ap_threshold import baseline_vm, find_ap_threshold
+from functions.flow_pattern import FLOW_PATTERN_BLOCK, block_mean
 
 # Cluster fill/outline colors, cycled by cluster index (red, green, blue, orange, purple)
 CLUSTER_RGBA = [
@@ -338,6 +341,101 @@ def plot_flow_panels(
         f"Flow Analysis: {title_info['animal_id']} {title_info['slice']} {title_info['at']} "
         f"{title_info['obj']} TIFF_{title_info['tiff_serial']} ABF_{title_info['abf_serial']}"
         "  (unmasked TV-L1; rows 1-2 in CAT mask, rows 3-4 full field)",
+        fontsize=13,
+    )
+    return fig
+
+
+FLOW_STREAM_DENSITY = 2.5    # matplotlib streamplot density
+
+
+def _draw_flow_streamlines(ax: mpl.axes.Axes, frame: np.ndarray, pair: dict, masked: bool,
+                           um_per_pixel: float, intensity_range: tuple[float, float]) -> None:
+    """MED frame (shared intensity_range) + red streamlines (block-averaged flow; CAT blocks only if masked) + scale bar."""
+    height, width = frame.shape
+    ax.imshow(frame, cmap="gray", origin="upper", vmin=intensity_range[0], vmax=intensity_range[1])
+    u_small = block_mean(pair["u"])
+    v_small = block_mean(pair["v"])
+    if masked:
+        keep_small = block_mean(pair["keep_mask"].astype(float)) > 0
+    else:
+        keep_small = np.ones(u_small.shape, dtype=bool)
+    if keep_small.any():
+        ys = np.arange(u_small.shape[0]) * FLOW_PATTERN_BLOCK + FLOW_PATTERN_BLOCK / 2
+        xs = np.arange(u_small.shape[1]) * FLOW_PATTERN_BLOCK + FLOW_PATTERN_BLOCK / 2
+        ax.streamplot(
+            xs, ys, np.ma.masked_where(~keep_small, u_small), np.ma.masked_where(~keep_small, v_small),
+            color="red", density=FLOW_STREAM_DENSITY, linewidth=0.8, arrowsize=1.2,
+        )
+    ax.set_xlim(0, width)
+    ax.set_ylim(height, 0)
+    _add_scale_bar(um_per_pixel, ax, width, height)
+
+
+def _draw_angle_crosshair(ax: mpl.axes.Axes, width: int, height: int) -> None:
+    """Dashed crosshair at the frame centre with 0° (→) / 90° (↑) / 180° (←) / 270° (↓) arm labels, for reading drift angles."""
+    cx, cy, arm = width / 2, height / 2, 0.3 * min(width, height)
+    style = {"color": "cyan", "linewidth": 1.5, "linestyle": "--", "zorder": 5}
+    ax.plot([cx - arm, cx + arm], [cy, cy], **style)
+    ax.plot([cx, cx], [cy - arm, cy + arm], **style)
+    bbox = {"boxstyle": "round,pad=0.15", "facecolor": "white", "alpha": 0.8, "edgecolor": "none"}
+    for text, (x, y) in {"0°": (cx + arm, cy), "90°": (cx, cy - arm), "180°": (cx - arm, cy), "270°": (cx, cy + arm)}.items():
+        ax.text(x, y, text, ha="center", va="center", fontsize=9, color="teal", fontweight="bold", bbox=bbox, zorder=6)
+
+
+def _pattern_title(pair: dict) -> str:
+    """' · source' / ' · sink' / ' · anisotropic 53°'; '' if unfitted."""
+    pattern = pair.get("pattern", {})
+    label = pattern.get("label")
+    if label is None:
+        return ""
+    if label == "anisotropic":
+        return f" · anisotropic {pattern['drift_angle_deg']:.0f}°"
+    return f" · {label}"
+
+
+def plot_flow_streamlines(
+    med_stack: np.ndarray,
+    flow_pairs: list[dict],
+    title_info: dict,
+) -> Figure:
+    """One column per flow pair (same flow as plot_flow_panels), two rows:
+
+      Row 1: MED "from" frame + red streamlines inside the CAT mask, title = CAT-fit pattern
+      Row 2: MED "from" frame + red streamlines over the full field
+
+    Streamlines run on FLOW_PATTERN_BLOCK x FLOW_PATTERN_BLOCK block-averaged u, v; row 1 keeps the blocks
+    touching the pair's keep_mask; its title carries the CAT-fit pattern (pair["pattern"],
+    functions/flow_pattern.py), and anisotropic panels get a 0/90/180/270° crosshair for reading the
+    drift angle. MED panels share one gray range (1st-99th percentile of med_stack).
+
+    Args:
+        med_stack: (frames, H, W) median stack the flow was computed on.
+        flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask" (from compute_flow_pairs()).
+        title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial".
+    """
+    n_panels = max(len(flow_pairs), 1)
+    fig = Figure(figsize=(6 * n_panels, 12), dpi=110, layout="constrained")
+    axes = fig.subplots(2, n_panels, squeeze=False)
+    um_per_pixel = 1.0 / PIXEL_SCALE[title_info["obj"]]
+    intensity_range = tuple(float(x) for x in np.percentile(med_stack, [1, 99]))
+
+    for i, pair in enumerate(flow_pairs):
+        frame = med_stack[pair["idx_from"]]
+        _draw_flow_streamlines(axes[0, i], frame, pair, True, um_per_pixel, intensity_range)
+        if pair.get("pattern", {}).get("label") == "anisotropic":
+            _draw_angle_crosshair(axes[0, i], frame.shape[1], frame.shape[0])
+        axes[0, i].set_title(f"{pair['label']}  (CAT mask){_pattern_title(pair)}", fontsize=10)
+        _draw_flow_streamlines(axes[1, i], frame, pair, False, um_per_pixel, intensity_range)
+        axes[1, i].set_title(f"{pair['label']}  (full field)", fontsize=10)
+        for ax in axes[:, i]:
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    fig.suptitle(
+        f"Flow Streamlines: {title_info['animal_id']} {title_info['slice']} {title_info['at']} "
+        f"{title_info['obj']} TIFF_{title_info['tiff_serial']} ABF_{title_info['abf_serial']}"
+        "  (unmasked TV-L1; row 1 in CAT mask, row 2 full field)",
         fontsize=13,
     )
     return fig

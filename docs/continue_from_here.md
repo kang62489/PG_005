@@ -8,7 +8,7 @@ All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
 | B | Merge `../PG_010/sp_ach_zones.py` into PG_005 as classes/functions: 10X only, sensor-aware (iAChSnFR / GACh3.0 / rACh1h), numba CPU+CUDA acceleration, readable xlsx names/columns, zone size/frequency/period stats, output to `results/spontaneous/` | #1 wave vs hotspots, #4 spontaneous side | 1 | [x] |
 | C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [x] committed (`325e09f`) |
 | D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [x] tuned (Session 66): thresholds fixed; flow now UNMASKED TV-L1 then CAT mask; FLOW.png 4 rows (quivers + µm/s speed, masked / full field). Committed `3d59aca` |
-| E | Further flow analysis: per-pair speed, radial outflow, divergence, coherence -> `flow_pairs` table | #5 locality argument | 4 | [ ] (speed in µm/s already drawn in FLOW.png, not stored). Flow speed-up done first (Session 68): 5 pairs in threads, ~44 s -> ~15 s, identical output |
+| E | Further flow analysis -> `flow_pairs` table | #5 locality argument | 4 | [x] Session 68: flow threaded (~44 s -> ~15 s, identical); scope changed to per-pair pattern source / sink / anisotropic (CAT-mask linear fit) in `flow_pairs` + new `*_STREAMLINES.png`. Radial outflow / divergence / coherence / centre location dropped by user (uncommitted) |
 | F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [~] skill `.claude/skills/neat-refactor/` created; files not refactored yet |
 
 Still open, outside this plan:
@@ -18,28 +18,40 @@ Still open, outside this plan:
 ---
 
 # Log of the project progress 2026-09-25 Fri (Session 68)
-Last working file: `functions/hotspot_flow.py`
-Last working line: 50 (`compute_flow_pairs` -> `ThreadPoolExecutor(N_THREADS_FLOW)` over the in-range pairs)
+Last working file: `functions/plot_results.py`
+Last working line: 375 (`_draw_angle_crosshair` -> 0/90/180/270° crosshair on anisotropic STREAMLINES panels)
 
-## List of modified files (UNCOMMITTED)
-- `functions/hotspot_flow.py` — `compute_flow_pairs()` runs the 5 `pair_flow()` calls in parallel threads (`N_THREADS_FLOW = len(FLOW_OFFSETS)`), same dicts in the same order.
-- Scratch: `output/test8/bench_flow_threads.py` (serial vs threaded), `output/test8/ana_test8.txt` + pipeline outputs, `output/test8/compare_test8.py` (vs `output/test5`). Older scratch in `output/test8/` (`cat_threshold/`, `zone_merge_parked/`, `zones_N/`, `diag_0003_flow.py`) untouched.
+## List of modified files
+Committed by user as `35dec17`:
+- `functions/hotspot_flow.py` — `compute_flow_pairs()` runs the 5 `pair_flow()` calls in parallel threads (`N_THREADS_FLOW`).
+
+UNCOMMITTED:
+- `functions/flow_pattern.py` (new) — `fit_flow_pattern()`: CAT-mask linear fit flow ~= A(p - centroid) + drift on 8x8 blocks; anisotropic if |drift| > spread (|trace A|/2 * RMS radius), else source (trace > 0) / sink (trace < 0); returns label, drift_um, spread_um (µm/frame), drift_angle_deg (0 = →, 90 = ↑). `block_mean()` shared with the plots.
+- `functions/plot_results.py` — new `plot_flow_streamlines()` (row 1 CAT-mask streamlines, row 2 full field; CAT titles `· source` / `· sink` / `· anisotropic 53°`; cyan 0/90/180/270° crosshair on anisotropic panels). FLOW.png (quiver) unchanged.
+- `classes/region_analyzer.py` — `compute_flow()` attaches `pair["pattern"]`.
+- `classes/results_exporter.py` — new `flow_pairs` table (pair_label, offsets, pattern, drift_um, spread_um, drift_angle_deg; UNIQUE per recording + pair) + `export_flow_pairs()` (deletes the recording's rows first, so non-significant re-runs clear stale rows).
+- `ach_domain_analysis.py` — exports `flow/*_STREAMLINES.png` + `flow_pairs` rows.
+- `functions/__init__.py` — registers `plot_flow_streamlines`, `fit_flow_pattern`.
+
+Scratch: `output/test8/` deleted (user OK). `output/test6/`: `flow_streamlines.py` (streamline + direction-colour diag), `flow_pattern_fit.py` (+ csv), `centre_refine.py` (+ `centre_refine/` PNGs; no longer runs), `compare_test6.py`, `ana_test6.txt` + pipeline outputs.
 
 ## Summary of current progress
-- Benchmark (0003 / 0012 / 0018): serial 43.9 / 43.6 / 45.0 s -> threaded 13.0 / 13.1 / 13.3 s (x3.3-3.4), u / v / keep bit-identical.
-- Pipeline run into `output/test8` (121.6 s total): flow step 14.0 / 14.7 / 15.8 s; all 15 PNGs, 6 MED/CAT tifs, stats block and `results.db` data identical to `output/test5` (only autoincrement ids differ).
+- Flow threads: ~44 s -> ~15 s per recording, bit-identical.
+- Tried and dropped (user): direction-colour row, streamlines replacing FLOW.png quivers, off-view / no-flow / global rules, full-field fit, source/sink centre markers (linear-fit centre 85-230 µm off; local-score centre biased to line ends on 0012's line source) -> centre removed from code + table.
+- Labels on 0003 / 0012 / 0018 match the eye: 0003 anisotropic x4 + sink; 0012 source -> sink x4; 0018 anisotropic, anisotropic, sink, anisotropic x2.
+- Verified (`output/test6` vs `output/test5`): FLOW / SPATIAL / reliability / spike PNGs, MED/CAT tifs, `experiments` identical; `flow_pairs` 15 rows match `flow_pattern_fit.csv`.
 
 ## Completed TODOs/Tasks (before new wrap-up)
-- ✅ Flow speed-up (threads), verified identical
+- ✅ Flow speed-up (threads), committed `35dec17`
+- ✅ STREAMLINES.png + source / sink / anisotropic label + `flow_pairs` table (TODO E, reduced scope)
 
 ## What should we do next? (TODOs)
-- [ ] Commit `functions/hotspot_flow.py`.
-- [ ] Phase 4 / TODO E: `flow_pairs` metrics table (speed µm/s, radial outflow, divergence, coherence) -- proposal first.
 - [ ] TODO F via `neat-refactor`: `functions/hotspot_flow.py`, `ach_domain_analysis.py`, `classes/spike_reliability.py`, `classes/region_analyzer.py`, `classes/abf_clip.py` (light).
 - [ ] Dataset bucket for Jeff: sort/mark the dataset used + separate results by objective.
+- [ ] Clean `output/test6` scratch (`centre_refine.py` broken, `flow_streamlines.py` superseded).
 
 ## Last Session Recap
-※ recap: Threaded the 5 TV-L1 flow pairs in `functions/hotspot_flow.py` (~44 s -> ~15 s per recording), verified identical to output/test5 on 0003/0012/0018. Pending: commit, Phase 4 flow metrics, TODO F refactors, Jeff dataset.
+※ recap: Threaded TV-L1 flow (~3x faster), added STREAMLINES.png with per-pair source/sink/anisotropic labels + angle crosshair and a `flow_pairs` table (centre markers dropped). Pending: TODO F refactors, Jeff dataset, test6 scratch cleanup.
 
 ---
 

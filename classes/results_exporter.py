@@ -2,7 +2,7 @@
 Results exporter for saving analysis outputs.
 
 Exports analysis results to:
-- SQLite database (metadata, critical-frame cluster measurements)
+- SQLite database (metadata, critical-frame cluster measurements; flow_pairs = per-pair flow pattern)
 - TIFF files (spike-centered median stack, categorized frames for ImageJ overlay)
 - PNG figures (spatiotemporal summary plot)
 
@@ -44,7 +44,8 @@ class ResultsExporter:
         ├── spatial/
         │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_SPATIAL.png
         └── flow/
-            └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_FLOW.png
+            ├── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_FLOW.png
+            └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_STREAMLINES.png
 
     spatial/, flow/ and reliability/ are created on demand by export_figure() — export_all() only creates
     median/ and categorized/.
@@ -173,6 +174,23 @@ class ResultsExporter:
                 "intensity_max": "REAL",
             },
         )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS flow_pairs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                exp_date TEXT NOT NULL,
+                abf_serial TEXT NOT NULL,
+                img_serial TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                pair_label TEXT NOT NULL,
+                offset_from INTEGER,
+                offset_to INTEGER,
+                pattern TEXT,             -- source / sink / anisotropic (CAT-mask linear fit)
+                drift_um REAL,            -- µm/frame
+                spread_um REAL,           -- µm/frame
+                drift_angle_deg REAL,     -- 0 = right, 90 = up
+                UNIQUE(exp_date, abf_serial, img_serial, pair_label)
+            )
+        """)
         conn.commit()
         conn.close()
 
@@ -292,6 +310,32 @@ class ResultsExporter:
         )
 
         return dirs
+
+    def export_flow_pairs(self, exp_date: str, abf_serial: str, img_serial: str, flow_pairs: list[dict]) -> None:
+        """Replace this recording's flow_pairs rows with one row per pair (none if flow_pairs is empty)."""
+        keys = (exp_date, abf_serial, img_serial)
+        timestamp = datetime.now(UTC).isoformat()
+        rows = []
+        for pair in flow_pairs:
+            pattern = pair.get("pattern", {})
+            rows.append((
+                *keys, timestamp, pair["label"], pair["offset_from"], pair["offset_to"],
+                pattern.get("label"), pattern.get("drift_um"), pattern.get("spread_um"), pattern.get("drift_angle_deg"),
+            ))
+
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("DELETE FROM flow_pairs WHERE exp_date = ? AND abf_serial = ? AND img_serial = ?", keys)
+        conn.executemany(
+            """
+            INSERT INTO flow_pairs (
+                exp_date, abf_serial, img_serial, timestamp, pair_label, offset_from, offset_to,
+                pattern, drift_um, spread_um, drift_angle_deg
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.commit()
+        conn.close()
 
     def export_figure(self, category: str, figure: "Figure", filename: str) -> Path:
         """

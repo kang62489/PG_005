@@ -4,7 +4,8 @@ Region analysis of one spike-aligned median segment (categorized + raw-intensity
   Step 1. Detect : critical frame = earliest of spike / spike+1 with a density-gated hotspot
   Step 2. Area   : per-frame hotspot area -> decay-tau fit (lasting time)
   Step 3. Report : per-cluster centroid + enclosing radius, spike and spike+1 cluster sizes
-  Step 4. Flow   : TV-L1 flow + CAT keep mask, spike-1->spike ... spike+3->spike+4 (compute_flow())
+  Step 4. Flow   : TV-L1 flow + CAT keep mask, spike-1->spike ... spike+3->spike+4, + source / sink /
+                   anisotropic pattern per pair (compute_flow())
 
 Example:
     >>> analyzer = RegionAnalyzer(cat_stack, med_stack, spike_frame_idx, obj="10X")
@@ -21,6 +22,7 @@ from skimage.measure import label as skimage_label
 
 # Local imports
 from classes.spatial_categorization import CATEGORY_BRIGHT
+from functions.flow_pattern import fit_flow_pattern
 from functions.hotspot_flow import compute_flow_pairs
 
 # ===========================================================================
@@ -223,8 +225,11 @@ class RegionAnalyzer:
     # -----------------------------------------------------------------------
 
     def compute_flow(self, cat_stack: np.ndarray, med_stack: np.ndarray) -> list[dict]:
-        """TV-L1 flow pairs + CAT keep masks around the spike (see functions/hotspot_flow.py); stored as flow_pairs."""
+        """TV-L1 flow pairs + CAT keep masks around the spike (see functions/hotspot_flow.py), each with a
+        "pattern" dict (source / sink / anisotropic, functions/flow_pattern.py); stored as flow_pairs."""
         self.flow_pairs = compute_flow_pairs(med_stack, cat_stack, self.spike_frame_idx)
+        for pair in self.flow_pairs:
+            pair["pattern"] = fit_flow_pattern(pair["u"], pair["v"], pair["keep_mask"], self.um_per_pixel)
         return self.flow_pairs
 
     # -----------------------------------------------------------------------
