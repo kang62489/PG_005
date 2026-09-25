@@ -31,6 +31,7 @@ from functions.hotspot_flow import compute_flow_pairs
 #
 # ===========================================================================
 
+# --- Shared: objective scale -----------------------------------------------
 PIXEL_SCALE = {  # pixel/µm per objective
     "10X": 0.75,
     "40X": 3.0,
@@ -61,7 +62,8 @@ class RegionAnalyzer:
     """
 
     def __init__(self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, obj: str = "10X") -> None:
-        """
+        """Run steps 1-3 on one segment (flow is on request: compute_flow()).
+
         Args:
             cat_stack: (frames, H, W) categorized frames (CATEGORY_BRIGHT = bright).
             med_stack: (frames, H, W) raw-intensity median frames, same shape.
@@ -84,7 +86,7 @@ class RegionAnalyzer:
         window_px = compute_window_px(obj)
         density_thresh = compute_density_thresh(obj)
 
-        # ----- Step 1. Detect: critical frame -----
+        # --- Step 1. Detect: critical frame ---
         (
             self.critical_frame_idx,
             self.significant,
@@ -93,7 +95,7 @@ class RegionAnalyzer:
             self.n_raw_clusters,
         ) = self._detect_critical_frame(cat_stack, med_stack, spike_frame_idx, eps_px, window_px, density_thresh)
 
-        # ----- Step 2. Area: hotspot area trace -> decay fit -----
+        # --- Step 2. Area: hotspot area trace -> decay fit ---
         self.hotspot_area_um2 = self._compute_hotspot_area_trace(cat_stack, eps_px, window_px, density_thresh)
         peak_search_end = min(self.spike_frame_idx + 2, len(self.hotspot_area_um2))
         self.decay_peak_frame_idx = self.spike_frame_idx + int(
@@ -103,7 +105,7 @@ class RegionAnalyzer:
             self.hotspot_area_um2, self.decay_peak_frame_idx
         )
 
-        # ----- Step 3. Report: critical-frame clusters + spike / spike+1 cluster sizes -----
+        # --- Step 3. Report: critical-frame clusters + spike / spike+1 cluster sizes ---
         self.clusters = self._build_clusters()
         (
             self.spike_frame_label_frame,
@@ -112,9 +114,11 @@ class RegionAnalyzer:
             self.spike_plus1_frame_clusters,
         ) = self._report_frame_clusters(cat_stack, med_stack, spike_frame_idx, eps_px, window_px, density_thresh)
 
-    # -----------------------------------------------------------------------
-    # Step 1. Detect
-    # -----------------------------------------------------------------------
+    # =======================================================================
+    #
+    #   STEP 1 -- DETECT
+    #
+    # =======================================================================
 
     def _detect_critical_frame(
         self,
@@ -136,9 +140,11 @@ class RegionAnalyzer:
         )
         return critical_frame_idx, significant, label_frame, centroids, n_raw
 
-    # -----------------------------------------------------------------------
-    # Step 2. Area
-    # -----------------------------------------------------------------------
+    # =======================================================================
+    #
+    #   STEP 2 -- AREA
+    #
+    # =======================================================================
 
     def _compute_hotspot_area_trace(
         self, cat_stack: np.ndarray, eps_px: int, window_px: int, density_thresh: float
@@ -155,9 +161,11 @@ class RegionAnalyzer:
             hotspot_area_um2[idx] = self._area_to_um2(kept_px)
         return hotspot_area_um2
 
-    # -----------------------------------------------------------------------
-    # Step 3. Report
-    # -----------------------------------------------------------------------
+    # =======================================================================
+    #
+    #   STEP 3 -- REPORT
+    #
+    # =======================================================================
 
     def _build_clusters(self) -> list[dict]:
         """Critical-frame clusters as {centroid, R_lat_px, R_lat_um} (R = enclosing radius, display only)."""
@@ -220,9 +228,11 @@ class RegionAnalyzer:
             })
         return label_frame, clusters
 
-    # -----------------------------------------------------------------------
-    # Step 4. Flow
-    # -----------------------------------------------------------------------
+    # =======================================================================
+    #
+    #   STEP 4 -- FLOW
+    #
+    # =======================================================================
 
     def compute_flow(self, cat_stack: np.ndarray, med_stack: np.ndarray) -> list[dict]:
         """TV-L1 flow pairs + CAT keep masks around the spike (see functions/hotspot_flow.py), each with a
@@ -232,14 +242,18 @@ class RegionAnalyzer:
             pair["pattern"] = fit_flow_pattern(pair["u"], pair["v"], pair["keep_mask"], self.um_per_pixel)
         return self.flow_pairs
 
-    # -----------------------------------------------------------------------
-    # Unit conversion + result accessors
-    # -----------------------------------------------------------------------
+    # =======================================================================
+    #
+    #   UNITS + RESULTS
+    #
+    # =======================================================================
 
     def _px_to_um(self, pixels: float) -> float:
+        """Length in px -> µm."""
         return pixels * self.um_per_pixel
 
     def _area_to_um2(self, area_px: float) -> float:
+        """Area in px -> µm²."""
         return area_px * (self.um_per_pixel ** 2)
 
     def get_results(self) -> dict:

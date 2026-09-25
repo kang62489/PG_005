@@ -1,22 +1,16 @@
-"""Static, headless matplotlib export figures for spike-aligned region analysis.
+"""
+Headless matplotlib export figures (plain Figure objects, no PySide6; the GUI canvas is classes/mpl_canvas.py).
 
-No PySide6 dependency — these build plain Figure objects for fig.savefig()/
-ResultsExporter.export_figure(), not interactive GUI windows. See classes/mpl_canvas.py
-for the PySide6-coupled canvas widget used by the live GUI.
+  Step 1. Spatial     : hotspot-area trace + spike-4..spike+4 CAT panels + Vm overlay  (-> spatial/)
+  Step 2. Flow        : TV-L1 quivers + speed (*_FLOW.png), streamlines + pattern (*_STREAMLINES.png)  (-> flow/)
+  Step 3. Reliability : per-segment detection montage + Vm success vs failure  (-> reliability/)
+  Step 4. Spikes      : full-length Vm with picked / skipped / collapsed spikes  (-> spikes/)
+  Step 5. Prototypes  : kymographs / wave persistence used only by prototype_*.py
+  Step 6. Spontaneous : zone overlay / single-zone maps + per-sensor zone stats  (-> spontaneous/)
 
-Export figures:
-- plot_spatiotemporal_summary (-> spatial/): density-gated hotspot-area trace showing
-  why the critical frame was picked, + cluster shading on the spike and spike+1 panels.
-- plot_flow_panels (-> flow/, *_FLOW.png): TV-L1 flow arrows + speed (µm/s), in the CAT mask
-  and over the full field, spike-1->spike through spike+3->spike+4.
-- plot_flow_streamlines (-> flow/, *_STREAMLINES.png): the same flow as streamlines, in the CAT
-  mask and over the full field; CAT-row titles show the pair's source / sink / anisotropic type.
-- plot_segment_reliability_montage (-> reliability/, *_RELIABILITY.png): one panel per raw
-  segment showing its own density-gated detection result, for reviewing reliability by eye.
-- plot_vm_success_vs_failure (-> reliability/, *_VM_SUCCESS_FAIL.png): peak-aligned Vm of
-  detected vs failed segments, ±50 ms, with AP threshold dots.
-- plot_spike_detection_summary (-> spikes/, *_spike_analysis.png): full-length Vm trace with
-  picked/skipped/collapsed spikes marked, replacing AbfClip's old per-recording CSV exports.
+Example:
+    >>> fig = plot_flow_panels(med_stack, flow_pairs, title_info, frame_duration_ms)
+    >>> fig.savefig(out_dir / f"{stem}_FLOW.png")
 """
 
 ## Modules
@@ -31,9 +25,10 @@ import matplotlib as mpl
 import numpy as np
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
-from matplotlib.patches import Circle, Rectangle
+from matplotlib.patches import Rectangle
 from scipy.ndimage import maximum_filter
 
+# Local imports
 from classes.region_analyzer import (
     MIN_DECAY_FIT_R2,
     PIXEL_SCALE,
@@ -43,6 +38,13 @@ from classes.region_analyzer import (
 from functions.ap_threshold import baseline_vm, find_ap_threshold
 from functions.flow_pattern import FLOW_PATTERN_BLOCK, block_mean
 
+# ===========================================================================
+#
+#   CONFIG
+#
+# ===========================================================================
+
+# --- Step 1: spatial -------------------------------------------------------
 # Cluster fill/outline colors, cycled by cluster index (red, green, blue, orange, purple)
 CLUSTER_RGBA = [
     (0.91, 0.30, 0.24, 0.45),
@@ -52,7 +54,29 @@ CLUSTER_RGBA = [
     (0.61, 0.35, 0.71, 0.45),
 ]
 
-# ── Static export figures ───────────────────────────────────────────────────
+# --- Step 2: flow ----------------------------------------------------------
+FLOW_QUIVER_STEP = 24         # px between drawn arrows
+FLOW_AUTO_ARROW_FRAC = 0.9    # auto scale: each panel's p95 arrow is this fraction of FLOW_QUIVER_STEP
+FLOW_STREAM_DENSITY = 2.5     # matplotlib streamplot density
+
+# --- Step 3: reliability ---------------------------------------------------
+MONTAGE_NCOLS = 8                                     # panels per montage row
+MONTAGE_MAX_ROWS = 4                                  # rows per montage page
+MONTAGE_PAGE_SIZE = MONTAGE_NCOLS * MONTAGE_MAX_ROWS  # segments per PNG, before starting a new one
+VM_WINDOW_MS = 50                                     # ± ms around each trace's own peak
+
+# --- Step 6: spontaneous ---------------------------------------------------
+# Fixed color per sensor (color follows the entity, never its rank); validated all-pairs
+# with the dataviz palette validator. Unknown sensors fall back to neutral gray.
+SENSOR_COLORS = {"GACh3.0": "#2a78d6", "iAChSnFR": "#eb6834", "rACh1h": "#1baf7a"}
+_INK_PRIMARY, _INK_SECONDARY, _INK_GRID, _SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+
+
+# ===========================================================================
+#
+#   SHARED -- SCALE BAR
+#
+# ===========================================================================
 
 
 def _add_scale_bar(
@@ -63,15 +87,9 @@ def _add_scale_bar(
     font_size: int | None = None,
     bar_height: int | None = None,
 ) -> None:
-    """Add a scale bar to the axes
+    """Lime scale bar (~20% of the image width, rounded to a nice µm value) in the bottom-right corner.
 
-    Args:
-        pixel_size_um: Pixel size in microns
-        ax: Matplotlib axes
-        img_width: Image width in pixels
-        img_height: Image height in pixels
-        font_size: Font size for label (default: auto-scaled based on image size)
-        bar_height: Height of scale bar in pixels (default: auto-scaled based on image size)
+    font_size / bar_height default to values auto-scaled from the image size (px).
     """
     # Calculate a nice scale bar length (aim for ~20% of image width)
     image_width_um = img_width * pixel_size_um
@@ -114,6 +132,13 @@ def _add_scale_bar(
     )
 
 
+# ===========================================================================
+#
+#   STEP 1 -- SPATIAL  (-> spatial/)
+#
+# ===========================================================================
+
+
 def plot_spatiotemporal_summary(
     categorizer: "SpatialCategorizer",
     region_analyzer: RegionAnalyzer,
@@ -122,27 +147,13 @@ def plot_spatiotemporal_summary(
     vm_segments: list[tuple[np.ndarray, np.ndarray]],
     frame_duration_ms: float,
 ) -> Figure:
-    """Static export figure: density-gated hotspot-area signal trace (row 1) +
-    spike/spike+1 frame panels (row 2) + overlapped electrophysiology traces per
-    segment (row 3).
-
-    Shows why the critical frame was picked (hotspot area vs the spike/spike+1
-    candidates) and what was found on each of those two frames independently --
-    cluster shading is drawn on both the spike and spike+1 panels.
-    Row 3 shows the actual detected Vm spike waveform
-    for every picked segment in this recording, overlaid, to check shape/timing
-    consistency across trials -- independent of the image data above it.
+    """3 rows: density-gated hotspot-area trace (why the critical frame was picked) +
+    spike-4..spike+4 CAT panels (cluster shading on spike and spike+1) + overlaid Vm of every segment.
 
     Args:
-        categorizer: fitted SpatialCategorizer (source_frames + categorized_frames)
-        region_analyzer: RegionAnalyzer built from the segment
-        spike_frame_idx: index of the spike frame within the segment
-        title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial"
-        vm_segments: per-segment (time_ms_relative_to_spike_frame, Vm) pairs, from AbfClip.get_vm_segments()
-        frame_duration_ms: milliseconds per frame (e.g. AbfClip.ts_imgs * 1000), for the row-2 frame gridlines
-
-    Returns:
-        Figure, ready for fig.savefig(...) or ResultsExporter.export_figure(...)
+        title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial".
+        vm_segments: per-segment (time_ms_relative_to_spike_frame, Vm) pairs, from AbfClip.get_vm_segments().
+        frame_duration_ms: ms per frame (e.g. AbfClip.ts_imgs * 1000), for the frame gridlines.
     """
     n_frames = len(categorizer.source_frames)
     hotspot_area_um2 = region_analyzer.hotspot_area_um2
@@ -155,8 +166,7 @@ def plot_spatiotemporal_summary(
     gs_panels = gs_outer[1].subgridspec(1, 9, wspace=0.08)
 
     # --- Row 0: density-gated hotspot area per frame trace ---
-    # Plotted in the same units the decay-tau fit below was actually fit on
-    # (hotspot_area_um2), not the raw B% trace -- see RegionAnalyzer._compute_hotspot_area_trace.
+    # Same units the decay-tau fit below was fit on (hotspot_area_um2) -- see RegionAnalyzer._compute_hotspot_area_trace.
     ax_bd = fig.add_subplot(gs_outer[0])
     ax_bd.plot(np.arange(n_frames) - spike_frame_idx, hotspot_area_um2, color="#3498db", linewidth=1.6,
                marker="o", markersize=3.5)
@@ -215,8 +225,7 @@ def plot_spatiotemporal_summary(
                 tag,
                 hotspot_area_line=hotspot_area_lines.get(frame_idx),
             )
-            # Both the spike frame and spike+1 frame get their own independent cluster
-            # shading now -- there's no single "max-area frame" winner to pick between.
+            # spike and spike+1 frames each get their own independent cluster shading
             if offset == 0:
                 _draw_cluster_shading(
                     ax_frame, region_analyzer.spike_frame_label_frame,
@@ -258,8 +267,120 @@ def plot_spatiotemporal_summary(
     return fig
 
 
-FLOW_QUIVER_STEP = 24     # px between drawn arrows
-FLOW_AUTO_ARROW_FRAC = 0.9  # auto scale: each panel's p95 arrow is this fraction of FLOW_QUIVER_STEP
+def _plot_frame_panel(
+    ax: mpl.axes.Axes,
+    categorizer: "SpatialCategorizer",
+    frame_idx: int,
+    offset: int,
+    um_per_pixel: float,
+    tag: str = "",
+    hotspot_area_line: str | None = None,
+    stats_lines: list[str] | None = None,
+) -> None:
+    """One frame's categorized image with a stats title.
+
+    Defaults to a hotspot area line (plot_spatiotemporal_summary); pass stats_lines
+    for a different title. No cluster overlay here -- callers add it (_draw_cluster_shading).
+    """
+    cat_frame = categorizer.categorized_frames[frame_idx]
+
+    # --- Image ---
+    cmap_cat = ListedColormap(["black", "white"])
+    ax.imshow(cat_frame, cmap=cmap_cat, vmin=0, vmax=1, interpolation="nearest")
+    # Pin view so cluster circles/overlays added later get clipped, not rescaled.
+    ax.set_xlim(0, cat_frame.shape[1])
+    ax.set_ylim(cat_frame.shape[0], 0)
+    ax.set_autoscale_on(False)
+
+    # --- Stats lines ---
+    if stats_lines is None:
+        stats_lines = []
+        if hotspot_area_line is not None:
+            stats_lines.append(hotspot_area_line)
+
+    # --- Title and decorations ---
+    frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
+    ax.set_title(
+        "\n".join([f"{frame_label}{tag}", *stats_lines]),
+        fontsize=10,
+        fontweight="bold" if offset == 0 else "normal",
+        color="red" if offset == 0 else "black",
+        pad=3,
+    )
+    ax.axis("off")
+    _add_scale_bar(um_per_pixel, ax, cat_frame.shape[1], cat_frame.shape[0], font_size=7)
+
+
+def _format_hotspot_area_line(um_per_pixel: float, label_frame: np.ndarray | None) -> str | None:
+    """'hotspots: <µm²> (<%>)' for the spike / spike+1 panel titles; None for other panels (no label_frame)."""
+    if label_frame is None:
+        return None
+    hotspot_px = np.count_nonzero(label_frame >= 0)
+    hotspot_um2 = hotspot_px * um_per_pixel ** 2
+    hotspot_pct = 100.0 * hotspot_px / label_frame.size
+    return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
+
+
+def _draw_cluster_shading(ax: mpl.axes.Axes, label_frame: np.ndarray, centroids: list[tuple[float, float]]) -> None:
+    """Translucent per-cluster fill (DBSCAN label map) + centroid cross and index label."""
+    height, width = label_frame.shape
+    overlay = np.zeros((height, width, 4), dtype=float)
+    for cluster_idx in range(len(centroids)):
+        r, g, b, a = CLUSTER_RGBA[cluster_idx % len(CLUSTER_RGBA)]
+        overlay[label_frame == cluster_idx] = (r, g, b, a)
+    ax.imshow(overlay, interpolation="nearest")
+
+    for cluster_idx, (row_c, col_c) in enumerate(centroids):
+        ax.plot(col_c, row_c, "x", color="black", markersize=16, markeredgewidth=4, zorder=10)
+        ax.plot(col_c, row_c, "x", color="white", markersize=14, markeredgewidth=2.5, zorder=11)
+        ax.text(col_c + 5, row_c - 5, str(cluster_idx), color="white", fontsize=9, fontweight="bold")
+
+
+def _draw_decay_fit(
+    ax: mpl.axes.Axes,
+    region_analyzer: "RegionAnalyzer",
+    spike_frame_idx: int,
+    n_frames: int,
+    frame_duration_ms: float,
+) -> None:
+    """Dashed exponential decay curve over the post-peak hotspot-area trace, with tau/R² in the label.
+
+    Draws only a "fit failed" note if fit_decay_tau() couldn't fit (see RegionAnalyzer.__init__).
+    """
+    peak_frame_idx = region_analyzer.decay_peak_frame_idx
+    tau = region_analyzer.decay_tau_frames
+    amplitude = region_analyzer.decay_fit_A
+    r_squared = region_analyzer.decay_fit_r2
+
+    if tau is None or amplitude is None:
+        ax.text(
+            0.99, 0.5, "decay fit: failed / insufficient post-peak data",
+            transform=ax.transAxes, ha="right", va="center", fontsize=9, color="#888888", style="italic",
+        )
+        return
+
+    t = np.arange(0, n_frames - peak_frame_idx, dtype=np.float64)
+    fitted = _decay_model(t, amplitude, tau)
+    tau_ms = tau * frame_duration_ms
+    r2_text = f"{r_squared:.2f}" if r_squared is not None else "n/a"
+    rejected = r_squared is None or r_squared < MIN_DECAY_FIT_R2
+    color = "#e67e22" if rejected else "#2ecc71"
+    label = f"decay fit: τ={tau_ms:.0f} ms (R²={r2_text})"
+    if rejected:
+        label += " [rejected, lasting time=None]"
+    ax.plot(
+        t + (peak_frame_idx - spike_frame_idx), fitted, "--", color=color, linewidth=1.8, zorder=4,
+        label=label,
+    )
+
+
+# ===========================================================================
+#
+#   STEP 2 -- FLOW  (-> flow/)
+#
+# ===========================================================================
+
+# --- 2a. quivers + speed (*_FLOW.png) --------------------------------------
 
 
 def _draw_flow_quivers(ax: mpl.axes.Axes, frame: np.ndarray, pair: dict, draw: np.ndarray,
@@ -284,20 +405,12 @@ def plot_flow_panels(
     title_info: dict,
     frame_duration_ms: float,
 ) -> Figure:
-    """One column per flow pair (RegionAnalyzer.compute_flow), four rows:
+    """One column per flow pair; rows: CAT-mask arrows, CAT-mask speed (µm/s), full-field arrows, full-field speed.
 
-      Row 1: MED "from" frame + red arrows inside the CAT mask
-      Row 2: flow speed (µm/s) inside the CAT mask
-      Row 3: MED "from" frame + red arrows over the full field
-      Row 4: flow speed (µm/s) over the full field
-
-    CAT mask = the pair's keep_mask (union of both frames' CAT-bright pixels); row-1 arrows sit at grid
-    points within FLOW_QUIVER_STEP of it (a dilation, so a coarse grid can't miss a thin hotspot).
-    Arrows are auto-scaled per panel; MED panels (rows 1, 3) share one gray range (1st-99th percentile
-    of med_stack); rows 2 and 4 share one color scale.
+    Row-1 arrows sit at grid points within FLOW_QUIVER_STEP of keep_mask (a dilation, so a coarse grid
+    can't miss a thin hotspot). Arrows auto-scale per panel; MED rows share one gray range, speed rows one color scale.
 
     Args:
-        med_stack: (frames, H, W) median stack the flow was computed on.
         flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask" (from compute_flow_pairs()).
         title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial".
         frame_duration_ms: imaging frame duration, converts px/frame -> µm/s.
@@ -346,7 +459,7 @@ def plot_flow_panels(
     return fig
 
 
-FLOW_STREAM_DENSITY = 2.5    # matplotlib streamplot density
+# --- 2b. streamlines + pattern (*_STREAMLINES.png) -------------------------
 
 
 def _draw_flow_streamlines(ax: mpl.axes.Axes, frame: np.ndarray, pair: dict, masked: bool,
@@ -399,19 +512,12 @@ def plot_flow_streamlines(
     flow_pairs: list[dict],
     title_info: dict,
 ) -> Figure:
-    """One column per flow pair (same flow as plot_flow_panels), two rows:
+    """One column per flow pair; rows: CAT-mask streamlines (title = CAT-fit pattern), full-field streamlines.
 
-      Row 1: MED "from" frame + red streamlines inside the CAT mask, title = CAT-fit pattern
-      Row 2: MED "from" frame + red streamlines over the full field
-
-    Streamlines run on FLOW_PATTERN_BLOCK x FLOW_PATTERN_BLOCK block-averaged u, v; row 1 keeps the blocks
-    touching the pair's keep_mask; its title carries the CAT-fit pattern (pair["pattern"],
-    functions/flow_pattern.py), and anisotropic panels get a 0/90/180/270° crosshair for reading the
-    drift angle. MED panels share one gray range (1st-99th percentile of med_stack).
+    Streamlines use FLOW_PATTERN_BLOCK block-averaged u, v; anisotropic panels get a 0/90/180/270° crosshair.
 
     Args:
-        med_stack: (frames, H, W) median stack the flow was computed on.
-        flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask" (from compute_flow_pairs()).
+        flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask", "pattern" (compute_flow_pairs + fit_flow_pattern).
         title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial".
     """
     n_panels = max(len(flow_pairs), 1)
@@ -441,9 +547,13 @@ def plot_flow_streamlines(
     return fig
 
 
-MONTAGE_NCOLS = 8
-MONTAGE_MAX_ROWS = 4
-MONTAGE_PAGE_SIZE = MONTAGE_NCOLS * MONTAGE_MAX_ROWS  # segments per PNG, before starting a new one
+# ===========================================================================
+#
+#   STEP 3 -- RELIABILITY  (-> reliability/)
+#
+# ===========================================================================
+
+# --- 3a. per-segment detection montage (*_RELIABILITY.png) -----------------
 
 
 def plot_segment_reliability_montage(
@@ -454,28 +564,15 @@ def plot_segment_reliability_montage(
     sigma_mult: float,
     obj: str,
 ) -> list[Figure]:
-    """Grid of per-segment density-gated detection panels, for reviewing reliability by eye.
+    """One panel per raw segment: bright mask + cluster shading, green (detected) / red border, winning frame.
 
-    One panel per raw (un-merged) segment: its winning frame's bright mask in gray, cluster
-    shading on top, a green (detected) or red (not detected) border, and which frame won
-    (spike vs spike+1). Reliability% (computed over all segments, not just the current page)
-    is reported in every page's suptitle.
-
-    Capped at MONTAGE_MAX_ROWS x MONTAGE_NCOLS (4x8 = 32) panels per figure -- a recording with
-    more segments than that gets multiple figures ("pages") instead of one increasingly-tall PNG.
+    Pages of MONTAGE_PAGE_SIZE (4x8) panels -> one Figure per page; every suptitle shows the overall reliability%.
 
     Args:
-        seg_results: per-segment dicts from SpikeReliabilityChecker.check(), each with
-            "detected", "frame_offset", "bright_mask", "label_frame", "centroids", "n_clusters".
-        rec_stem: recording name, for the title.
-        window_px: density window size used (see compute_window_px()), for the title.
-        density_thresh: density threshold used (see compute_density_thresh()), for the title.
-        sigma_mult: bright-pixel threshold's sigma multiplier (see BASELINE_SIGMA_MULT), for the title.
+        seg_results: dicts from SpikeReliabilityChecker.check() ("detected", "frame_offset", "bright_mask",
+            "label_frame", "centroids", "n_clusters").
+        window_px, density_thresh, sigma_mult: detection settings, for the title only.
         obj: objective ("10X" / "40X" / "60X"), for the per-panel scale bar.
-
-    Returns:
-        One Figure per page (single-element list when segments fit on one page), each ready
-        for fig.savefig(...) or ResultsExporter.export_figure(...).
     """
     n = len(seg_results)
     n_detected = sum(r["detected"] for r in seg_results)
@@ -535,7 +632,7 @@ def plot_segment_reliability_montage(
     return figures
 
 
-VM_WINDOW_MS = 50  # ± ms around each trace's own peak
+# --- 3b. Vm success vs failure (*_VM_SUCCESS_FAIL.png) ---------------------
 
 
 def _mean_sd(values: np.ndarray, signed: bool = False) -> str:
@@ -599,125 +696,11 @@ def plot_vm_success_vs_failure(
     return fig
 
 
-def _plot_frame_panel(
-    ax: mpl.axes.Axes,
-    categorizer: "SpatialCategorizer",
-    frame_idx: int,
-    offset: int,
-    um_per_pixel: float,
-    tag: str = "",
-    hotspot_area_line: str | None = None,
-    stats_lines: list[str] | None = None,
-) -> None:
-    """One frame's categorized image with a stats title.
-
-    Defaults to a hotspot area line (plot_spatiotemporal_summary); pass stats_lines
-    for a different title. No cluster overlay here -- callers add it (_draw_cluster_shading).
-    """
-    cat_frame = categorizer.categorized_frames[frame_idx]
-
-    # --- Image ---
-    cmap_cat = ListedColormap(["black", "white"])
-    ax.imshow(cat_frame, cmap=cmap_cat, vmin=0, vmax=1, interpolation="nearest")
-    # Pin view so cluster circles/overlays added later get clipped, not rescaled.
-    ax.set_xlim(0, cat_frame.shape[1])
-    ax.set_ylim(cat_frame.shape[0], 0)
-    ax.set_autoscale_on(False)
-
-    # --- Stats lines ---
-    if stats_lines is None:
-        stats_lines = []
-        if hotspot_area_line is not None:
-            stats_lines.append(hotspot_area_line)
-
-    # --- Title and decorations ---
-    frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
-    ax.set_title(
-        "\n".join([f"{frame_label}{tag}", *stats_lines]),
-        fontsize=10,
-        fontweight="bold" if offset == 0 else "normal",
-        color="red" if offset == 0 else "black",
-        pad=3,
-    )
-    ax.axis("off")
-    _add_scale_bar(um_per_pixel, ax, cat_frame.shape[1], cat_frame.shape[0], font_size=7)
-
-
-
-def _format_hotspot_area_line(um_per_pixel: float, label_frame: np.ndarray | None) -> str | None:
-    """Density-gated hotspot area line for the spike/spike+1 panel titles.
-
-    Only the spike and spike+1 panels have a density-gated label_frame to report on; other
-    panels (spike-4..spike-2, spike+2..spike+4) get no stats line at all -- there's no
-    B%-style fallback anymore, since that's exactly the raw-threshold metric this pipeline
-    moved away from.
-    """
-    if label_frame is None:
-        return None
-    hotspot_px = np.count_nonzero(label_frame >= 0)
-    hotspot_um2 = hotspot_px * um_per_pixel ** 2
-    hotspot_pct = 100.0 * hotspot_px / label_frame.size
-    return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
-
-
-def _draw_cluster_shading(ax: mpl.axes.Axes, label_frame: np.ndarray, centroids: list[tuple[float, float]]) -> None:
-    """Translucent per-cluster fill (DBSCAN's raw label map, no ring circles) +
-    centroid cross and index label.
-
-    Used on the spike frame's and spike+1 frame's own panels in
-    plot_spatiotemporal_summary (each with its own independent label_frame/centroids).
-    """
-    height, width = label_frame.shape
-    overlay = np.zeros((height, width, 4), dtype=float)
-    for cluster_idx in range(len(centroids)):
-        r, g, b, a = CLUSTER_RGBA[cluster_idx % len(CLUSTER_RGBA)]
-        overlay[label_frame == cluster_idx] = (r, g, b, a)
-    ax.imshow(overlay, interpolation="nearest")
-
-    for cluster_idx, (row_c, col_c) in enumerate(centroids):
-        ax.plot(col_c, row_c, "x", color="black", markersize=16, markeredgewidth=4, zorder=10)
-        ax.plot(col_c, row_c, "x", color="white", markersize=14, markeredgewidth=2.5, zorder=11)
-        ax.text(col_c + 5, row_c - 5, str(cluster_idx), color="white", fontsize=9, fontweight="bold")
-
-
-def _draw_decay_fit(
-    ax: mpl.axes.Axes,
-    region_analyzer: "RegionAnalyzer",
-    spike_frame_idx: int,
-    n_frames: int,
-    frame_duration_ms: float,
-) -> None:
-    """Dashed exponential decay curve over the post-peak B+D% trace, with tau/R² in the label.
-
-    Draws nothing but a "fit failed" note if fit_decay_tau() couldn't fit the
-    post-peak trace (too few post-peak frames, a flat/degenerate tail, or
-    curve_fit not converging -- see RegionAnalyzer.__init__).
-    """
-    peak_frame_idx = region_analyzer.decay_peak_frame_idx
-    tau = region_analyzer.decay_tau_frames
-    amplitude = region_analyzer.decay_fit_A
-    r_squared = region_analyzer.decay_fit_r2
-
-    if tau is None or amplitude is None:
-        ax.text(
-            0.99, 0.5, "decay fit: failed / insufficient post-peak data",
-            transform=ax.transAxes, ha="right", va="center", fontsize=9, color="#888888", style="italic",
-        )
-        return
-
-    t = np.arange(0, n_frames - peak_frame_idx, dtype=np.float64)
-    fitted = _decay_model(t, amplitude, tau)
-    tau_ms = tau * frame_duration_ms
-    r2_text = f"{r_squared:.2f}" if r_squared is not None else "n/a"
-    rejected = r_squared is None or r_squared < MIN_DECAY_FIT_R2
-    color = "#e67e22" if rejected else "#2ecc71"
-    label = f"decay fit: τ={tau_ms:.0f} ms (R²={r2_text})"
-    if rejected:
-        label += " [rejected, lasting time=None]"
-    ax.plot(
-        t + (peak_frame_idx - spike_frame_idx), fitted, "--", color=color, linewidth=1.8, zorder=4,
-        label=label,
-    )
+# ===========================================================================
+#
+#   STEP 4 -- SPIKES  (-> spikes/)
+#
+# ===========================================================================
 
 
 def plot_spike_detection_summary(
@@ -728,22 +711,12 @@ def plot_spike_detection_summary(
     collapsed: tuple[np.ndarray, np.ndarray],
     title: str,
 ) -> Figure:
-    """Full-length Vm trace with picked/skipped/collapsed spikes marked.
-
-    Replaces AbfClip's old *_Vm.csv/*_peaks.csv/*_collapsed_peaks.csv/*_segments.csv export --
-    one glance at this PNG shows the same information the CSVs held (which spikes were used vs
-    dropped, and why) without needing to open 4 separate files.
+    """Full-length Vm trace (s) with picked / skipped / collapsed spikes marked.
 
     Args:
-        rec_time: Full recording time axis (seconds).
-        vm: Full recording membrane-potential trace, same length as rec_time.
         picked: (times, values) of spikes kept for analysis.
         skipped: (times, values) of spikes dropped for insufficient baseline margin.
         collapsed: (times, values) of extra spikes sharing a frame with an earlier spike.
-        title: Figure title (e.g. "2025_06_11 0004").
-
-    Returns:
-        Figure with one axis: Vm line trace + 3 colored spike-category scatter overlays.
     """
     fig = Figure(figsize=(14, 5))
     ax = fig.add_subplot(111)
@@ -779,6 +752,15 @@ def plot_spike_detection_summary(
     fig.tight_layout()
 
     return fig
+
+
+# ===========================================================================
+#
+#   STEP 5 -- PROTOTYPES  (prototype_*.py only; not used by the pipeline or GUI)
+#
+# ===========================================================================
+
+# --- 5a. kymographs / wave persistence -------------------------------------
 
 
 def plot_full_stack_kymographs(profiles, um_per_pixel, spikes: np.ndarray, title) -> Figure:
@@ -887,281 +869,13 @@ def plot_med_kymographs(med: np.ndarray, um_per_pixel, frame_ms, title) -> Figur
     return fig
 
 
-def plot_directional_change(result, title) -> Figure:
-    """Show fixed-sector gains/losses in consecutive exported CAT frames."""
-    count = len(result["labels"])
-    offsets = result["offsets"]
-    fig = Figure(figsize=(19, 10), layout="constrained")
-    grid = fig.add_gridspec(3, len(offsets), height_ratios=(1.25, 1, 0.8))
-    cy, cx = result["center"]
-    radius = result["radius"]
-    angles = np.arange(count) * 2 * np.pi / count
-    cmap = ListedColormap(["#151b26", "#7e8796", "#26cc96", "#ed728a"])
-    limit = max(result["gain"].max(), result["loss"].max(), 1) * 1.12
-    net_limit = max(np.abs(result["net"]).max(), 1) * 1.12
-    for col, offset in enumerate(offsets):
-        ax = fig.add_subplot(grid[0, col])
-        ax.imshow(result["changes"][col], cmap=cmap, vmin=0, vmax=3, interpolation="nearest")
-        ax.add_patch(Circle((cx, cy), radius, fill=False, color="white", lw=1))
-        for angle in angles + np.pi / count:
-            ax.plot([cx, cx + radius * np.sin(angle)], [cy, cy - radius * np.cos(angle)],
-                    color="white", lw=0.6, alpha=0.7)
-        ax.plot(cx, cy, "+", color="yellow", ms=9)
-        ax.set_title(f"Frame {offset:+d} to {offset + 1:+d}\nChange inside circle: {result['coverage'][col]:.0%}")
-        ax.set_xticks([])
-        ax.set_yticks([])
-        polar = fig.add_subplot(grid[1, col], projection="polar")
-        polar.set_theta_zero_location("N")
-        polar.set_theta_direction(-1)
-        closed = np.r_[angles, angles[0]]
-        for key, color in (("gain", "#149d72"), ("loss", "#d34b69")):
-            polar.plot(closed, np.r_[result[key][col], result[key][col, 0]], color=color, label=key)
-        polar.set_xticks(angles, result["labels"])
-        polar.set_ylim(0, limit)
-        polar.tick_params(labelsize=8)
-        polar.set_title(f"Gain nonuniformity CV = {result['cv'][col]:.2f}", fontsize=10, pad=17)
-        if col == 0:
-            polar.legend(loc="lower left", bbox_to_anchor=(-0.3, -0.2), fontsize=8)
-        bar = fig.add_subplot(grid[2, col])
-        net = result["net"][col]
-        bar.bar(result["labels"], net, color=np.where(net >= 0, "#149d72", "#d34b69"))
-        bar.axhline(0, color="gray", lw=0.7)
-        bar.set_ylim(-net_limit, net_limit)
-        bar.set_title("Net = gain - loss", fontsize=10)
-        bar.tick_params(labelsize=8)
-        if col == 0:
-            bar.set_ylabel("Pixels / frame")
-    fig.suptitle(
-        f"{title} | {count} directions | CAT-bright median response\n"
-        "Green: newly bright | Pink: lost bright | Gray: retained bright | White circle: analyzed area\n"
-        "Fixed spike-frame centroid; N = image top. Polar units: pixels/frame (shared scale).\n"
-        "CV = SD/mean of gain per sector area; 0 = uniform. Descriptive, not an isotropy significance test.",
-        fontsize=12,
-    )
-    return fig
+# ===========================================================================
+#
+#   STEP 6 -- SPONTANEOUS  (-> spontaneous/)
+#
+# ===========================================================================
 
-
-# Exploratory direction-analysis exports. Keep GUI and existing analyses unchanged.
-def _direction_map(ax, old, new, center) -> None:
-    image = np.zeros((*old.shape, 3)) + 0.10
-    image[old & new] = (0.42, 0.42, 0.42)
-    image[new & ~old] = (1.0, 0.28, 0.25)
-    image[old & ~new] = (0.12, 0.65, 1.0)
-    ax.imshow(image)
-    ax.plot(center[1], center[0], marker="+", color="#77ff77", ms=13, mew=2)
-    for angle in np.arange(12) * np.pi / 6:
-        ax.plot([center[1], center[1] + 1500 * np.cos(angle)],
-                [center[0], center[0] - 1500 * np.sin(angle)], color="white", lw=0.5, alpha=0.18)
-    ax.set_xlim(0, old.shape[1] - 1)
-    ax.set_ylim(old.shape[0] - 1, 0)
-    ax.set_xticks([])
-    ax.set_yticks([])
-
-
-def plot_hotspot_change_maps(masks, pairs, title) -> Figure:
-    fig = Figure(figsize=(20, 10), layout="constrained")
-    for i, item in enumerate(pairs):
-        ax = fig.add_subplot(2, 4, i + 1)
-        _direction_map(ax, masks[i], masks[i + 1], item["center"])
-        ax.set_title(f"spike+{i} -> +{i + 1}\nGain {item['gain_total'] / 1000:.1f}k px | loss {item['loss_total'] / 1000:.1f}k px")
-        polar = fig.add_subplot(2, 4, i + 5, projection="polar")
-        theta = (np.arange(12) + 0.5) * np.pi / 6
-        polar.bar(theta - 0.11, item["gain"] / 1000, width=0.21, color="#ef534b", label="Gained")
-        polar.bar(theta + 0.11, item["loss"] / 1000, width=0.21, color="#2196db", label="Lost")
-        polar.set_xticks(np.arange(4) * np.pi / 2, ["E", "N", "W", "S"])
-        polar.set_title(f"Sector area (1000 pixels)\nGain R1={item['gain_r1']:.2f} | loss R1={item['loss_r1']:.2f}")
-        polar.legend(loc="lower right", bbox_to_anchor=(1.25, -0.15), fontsize=9)
-    fig.suptitle(title + "\nRed: gained | blue: lost | gray: retained | green cross: fixed initial-mask centroid"
-                 "\nAll accepted mask pixels; 12 angular sectors. R1: one-sided concentration, not a radial-flow score.", fontsize=16)
-    return fig
-
-
-def plot_hotspot_direction_heatmaps(results, title) -> Figure:
-    fig = Figure(figsize=(21, 14), layout="constrained")
-    axes = fig.subplots(3, 4)
-    keys = ("gain", "loss", "gain_normalized", "loss_normalized")
-    names = ("Gained area (1000 px)", "Lost area (1000 px)",
-             "Gain / old boundary length (px)", "Loss / old boundary length (px)")
-    for col, (key, name) in enumerate(zip(keys, names, strict=True)):
-        arrays = [np.array([pair[key] for pair in pairs]).T / (1000 if col < 2 else 1)
-                  for pairs in results.values()]
-        upper = max(float(np.nanmax(array)) for array in arrays)
-        for row, ((sigma, _), array) in enumerate(zip(results.items(), arrays, strict=True)):
-            ax = axes[row, col]
-            im = ax.imshow(array, origin="lower", aspect="auto", vmin=0, vmax=upper or 1,
-                           cmap="Reds" if col % 2 == 0 else "Blues")
-            label = f"sigma={sigma} px" if isinstance(sigma, (int, float)) else str(sigma)
-            ax.set_title(f"{label} | {name}")
-            ax.set_xticks(range(4), ["0 -> 1", "1 -> 2", "2 -> 3", "3 -> 4"])
-            ax.set_yticks(range(12), [f"{j * 30}-{(j + 1) * 30}" for j in range(12)])
-            ax.set_ylabel("Angle (degrees): E=0, N=90, W=180, S=270")
-            fig.colorbar(im, ax=ax, shrink=0.8)
-    fig.suptitle(title + "\nSame color scale down each column | blank: no measurable old boundary in sector"
-                 "\nArea / boundary length is a descriptive equivalent thickness, not tracked displacement or velocity.", fontsize=16)
-    return fig
-
-
-def plot_hotspot_model_comparison(masks, model_pairs, center, title) -> Figure:
-    fig = Figure(figsize=(28, 19), layout="constrained")
-    axes = fig.subplots(4, 6)
-    for row, models in enumerate(model_pairs):
-        _direction_map(axes[row, 0], masks[row], masks[row + 1], center)
-        axes[row, 0].set_title(f"Observed: spike+{row} -> +{row + 1}\nRed gain / blue loss")
-        for col, model in enumerate(models, 1):
-            ax = axes[row, col]
-            predicted, observed = model["prediction"], masks[row + 1]
-            rgb = np.zeros((*predicted.shape, 3)) + 0.1
-            rgb[predicted & observed] = (0.5, 0.5, 0.5)
-            rgb[predicted & ~observed] = (1.0, 0.55, 0.15)
-            rgb[observed & ~predicted] = (0.7, 0.3, 0.95)
-            ax.imshow(rgb)
-            ax.plot(center[1], center[0], "+", color="#77ff77", ms=10)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            flag = " | bound reached" if model["at_bound"] else ""
-            flag += " | fit incomplete" if not model["converged"] else ""
-            parameters = "Empty prediction" if model["name"] == "Disappearance" else (
-                f"Scale {model['scale']:.2f} | shift (x,y) = ({model['shift'][1]:.0f}, {-model['shift'][0]:.0f}) px"
-            )
-            ax.set_title(f"{model['name']} ({model['parameters']} parameters){flag}\n"
-                         f"Holdout error reduction: {model['reduction']:.0%} | IoU: {model['iou']:.2f}\n"
-                         + parameters, fontsize=10)
-    fig.suptitle(title + "\nModel panels: gray agreement | orange predicted-only | purple observed-only"
-                 "\nFit: alternating 128-px tiles; score: held-out tiles. Reduction relative to unchanged; negative = worse."
-                 "\nExploratory spatial holdout, not independent replication. Outside field assumed empty; clipped hotspots make fits provisional.", fontsize=16)
-    return fig
-
-
-def plot_hotspot_robustness(groups, title) -> Figure:
-    fig = Figure(figsize=(22, 14), layout="constrained")
-    axes = fig.subplots(3, 3)
-    row_names = ("R1: one-sided concentration", "R2: opposing-axis concentration", "Preferred direction (degrees)")
-    for col, (name, variants) in enumerate(groups.items()):
-        for row, suffix in enumerate(("r1", "r2", "angle")):
-            matrix = []
-            for pair in range(4):
-                for kind in ("gain", "loss"):
-                    values = [pairs[pair][f"{kind}_{suffix}"] for pairs in variants.values()]
-                    if suffix == "angle":
-                        values = [np.degrees(value) % 360 if pairs[pair][f"{kind}_r1"] >= 0.1 else np.nan
-                                  for value, pairs in zip(values, variants.values(), strict=True)]
-                    matrix.append(values)
-            ax = axes[row, col]
-            im = ax.imshow(matrix, aspect="auto", vmin=0, vmax=360 if suffix == "angle" else 1,
-                           cmap="twilight" if suffix == "angle" else "viridis")
-            ax.set_xticks(range(len(variants)), list(variants), rotation=35, ha="right")
-            ax.set_yticks(range(8), [f"{i} -> {i + 1} {kind}" for i in range(4) for kind in ("gain", "loss")])
-            ax.set_title(name + "\n" + row_names[row])
-            for iy, values in enumerate(matrix):
-                for ix, value in enumerate(values):
-                    if np.isfinite(value):
-                        ax.text(ix, iy, f"{value:.0f}" if suffix == "angle" else f"{value:.2f}",
-                                ha="center", va="center", color="white", fontsize=8,
-                                bbox={"facecolor": "black", "alpha": 0.25, "edgecolor": "none", "pad": 1})
-            fig.colorbar(im, ax=ax, shrink=0.7)
-    fig.suptitle(title + "\nAll variants use the same fixed reference center except the explicit center-shift columns."
-                 "\nAngles: E=0, N=90, W=180, S=270. Angle hidden when R1<0.1 (display rule, not a significance threshold)."
-                 "\nLow R1 does not prove uniformity; high R2 can reveal two opposing lobes.", fontsize=16)
-    return fig
-
-
-def plot_hotspot_quality(masks, pairs, cropped, counts, model_sets, title) -> Figure:
-    fig = Figure(figsize=(18, 12), layout="constrained")
-    axes = fig.subplots(2, 2)
-    axes[0, 0].plot(range(5), [mask.sum() / 1000 for mask in masks], "o-", label="Accepted area")
-    axes[0, 0].set(xlabel="Frame after spike", ylabel="Area (1000 pixels)", title="Hotspot extent and accepted cluster count")
-    for i, count in enumerate(counts):
-        axes[0, 0].annotate(f"{count} cluster(s)", (i, masks[i].sum() / 1000), xytext=(0, 10), textcoords="offset points", ha="center")
-    axes[0, 0].margins(y=0.25)
-    axes[0, 1].bar(range(4), [item["border_fraction"] * 100 for item in pairs], color="#cf873a")
-    axes[0, 1].set(xlabel="Earlier frame in pair", ylabel="Boundary pixels within 16 px of image edge (%)",
-                   title="Near the field-of-view edge: possible truncation")
-    for kind, color in (("gain", "#ef534b"), ("loss", "#2196db")):
-        axes[1, 0].plot(range(4), [p[f"{kind}_r1"] for p in pairs], "o-", color=color, label=f"{kind}: full image")
-        axes[1, 0].plot(range(4), [p[f"{kind}_r1"] for p in cropped], "s--", color=color, label=f"{kind}: omit outer 32 px")
-    axes[1, 0].set(xlabel="Earlier frame in pair", ylabel="R1", ylim=(0, 1), title="Border exclusion sensitivity (does not restore missing data)")
-    axes[1, 0].legend()
-    for sigma, models in model_sets.items():
-        axes[1, 1].plot(range(4), [pair[2]["reduction"] for pair in models], "o-", label=f"Centered scale, sigma={sigma}")
-    axes[1, 1].plot(range(4), [pair[4]["reduction"] for pair in model_sets[3]], "s--", color="black", label="Disappearance, sigma=3")
-    axes[1, 1].axhline(0, color="gray", ls="--")
-    axes[1, 1].set(xlabel="Earlier frame in pair", ylabel="Held-out error reduction vs unchanged", title="Does the centered-scale fit survive smoothing changes?")
-    axes[1, 1].legend()
-    for ax in axes.flat:
-        ax.grid(alpha=0.2)
-    fig.suptitle(title + "\nUnion of accepted clusters; count changes do not establish merging/splitting. No physical-flow claim.", fontsize=16)
-    return fig
-
-
-def plot_hotspot_event_consistency(events, median_pairs, total, title) -> tuple[Figure, Figure]:
-    heat = Figure(figsize=(21, 13), layout="constrained")
-    scatter = Figure(figsize=(21, 11), layout="constrained")
-    heat_axes, scatter_axes = heat.subplots(2, 4), scatter.subplots(2, 4)
-    for row, kind in enumerate(("gain", "loss")):
-        for pair in range(4):
-            ax = heat_axes[row, pair]
-            matrix = np.array([event[pair][kind] / max(event[pair][f"{kind}_total"], 1) for event in events])
-            empty = np.array([event[pair][f"{kind}_total"] == 0 for event in events])
-            matrix[empty] = np.nan
-            im = ax.imshow(matrix, aspect="auto", origin="upper", vmin=0, vmax=0.5,
-                           cmap="Reds" if kind == "gain" else "Blues")
-            ax.set_xticks([0, 3, 6, 9], ["0-30 E", "90-120 N", "180-210 W", "270-300 S"], rotation=35, ha="right")
-            ax.set_ylabel("Detected event (time order)")
-            ax.set_title(f"{kind}: spike+{pair} -> +{pair + 1}")
-            heat.colorbar(im, ax=ax, shrink=0.7, label="Fraction of this event's changed area")
-            ax = scatter_axes[row, pair]
-            x = [event[pair][f"{kind}_r1"] for event in events]
-            y = [event[pair][f"{kind}_r2"] for event in events]
-            ax.scatter(x, y, s=22, alpha=0.5, color="#ef534b" if row == 0 else "#2196db", label="Individual events")
-            ax.scatter(median_pairs[pair][f"{kind}_r1"], median_pairs[pair][f"{kind}_r2"],
-                       marker="*", s=220, color="gold", edgecolor="black", label="Median-stack mask")
-            ax.set(xlim=(0, 1), ylim=(0, 1), xlabel="R1: one-sided", ylabel="R2: opposing-axis",
-                   title=f"{kind}: {pair} -> {pair + 1} | n={np.sum(np.isfinite(x))}")
-            ax.grid(alpha=0.2)
-    scatter_axes[0, 0].legend(fontsize=8)
-    for fig in (heat, scatter):
-        fig.suptitle(title + f"\n{len(events)}/{total} events detected at spike or spike+1; sigma=3 px; same median-derived fixed center"
-                     "\nEmpty changes are missing, not zero concentration. Events are repeated observations within one recording, not biological replicates.", fontsize=16)
-    return heat, scatter
-
-
-
-def plot_hotspot_reference_centers(masks, centers, results, fits, title) -> Figure:
-    fig = Figure(figsize=(19, 13), layout="constrained")
-    axes = fig.subplots(2, 2)
-    ax = axes[0, 0]
-    ax.set_facecolor("#202020")
-    for i, mask in enumerate(masks):
-        ax.contour(mask.astype(float), levels=[0.5], colors=[str(0.3 + i * 0.15)], linewidths=0.6)
-    colors = ("#e64c3c", "#238bdf", "#34ad66")
-    for (name, center), color in zip(centers.items(), colors, strict=True):
-        ax.plot(center[1], center[0], "+", ms=15, mew=3, color=color, label=name)
-    ax.set(xlim=(0, masks[0].shape[1]), ylim=(masks[0].shape[0], 0), aspect="equal",
-           title="Three reference centers, each fixed for all four pairs")
-    ax.legend(loc="lower right", fontsize=9)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for (name, models), color in zip(fits.items(), colors, strict=True):
-        axes[0, 1].plot(range(4), [m["reduction"] for m in models], "o-", color=color, label=name)
-        axes[1, 0].plot(range(4), [m["iou"] for m in models], "o-", color=color, label=name)
-        values = [pairs["gain_r1"] if i == 0 else pairs["loss_r1"] for i, pairs in enumerate(results[name])]
-        axes[1, 1].plot(range(4), values, "o-", color=color, label=name)
-    axes[0, 1].axhline(0, color="gray", ls="--")
-    axes[0, 1].set(title="Centered-scale prediction: held-out error reduction", ylabel="Reduction vs unchanged")
-    axes[1, 0].set(title="Centered-scale prediction: full-image overlap", ylabel="Intersection / union", ylim=(0, 1))
-    axes[1, 1].set(title="Directional concentration of the dominant change", ylabel="R1 (gain for 0->1; loss thereafter)", ylim=(0, 1))
-    for ax in (axes[0, 1], axes[1, 0], axes[1, 1]):
-        ax.set_xticks(range(4), ["0 -> 1", "1 -> 2", "2 -> 3", "3 -> 4"])
-        ax.set_xlabel("Frame pair after spike")
-        ax.grid(alpha=0.2)
-        ax.legend(fontsize=9)
-    fig.suptitle(title + "\nSensitivity to the choice of a specific center | sigma=3 px"
-                 "\nInitial, maximum-area and final-mask centroids are geometric reference candidates, not identified release sites."
-                 "\nLater-derived centers are post hoc; these comparisons do not independently validate a source center.", fontsize=16)
-    return fig
-
-
-# ── Spontaneous zone maps (-> spontaneous/zone_maps/) ────────────────────────
+# --- 6a. zone maps (-> spontaneous/zone_maps/) -----------------------------
 
 
 def _tint_background(background: np.ndarray, color: str) -> np.ndarray:
@@ -1175,6 +889,7 @@ def _tint_background(background: np.ndarray, color: str) -> np.ndarray:
 
 
 def _label_zone(ax: mpl.axes.Axes, zone_id: int, centroid: tuple[float, float]) -> None:
+    """Zone id in a black circle at the zone centroid (row, col)."""
     cy, cx = centroid
     ax.text(cx, cy, str(zone_id), color="white", fontsize=9, fontweight="bold",
             ha="center", va="center", bbox={"boxstyle": "circle", "fc": "black", "alpha": 0.6})
@@ -1226,12 +941,7 @@ def plot_single_zone(zone_id: int, mask: np.ndarray, color: tuple, centroid: tup
     return fig
 
 
-# ── Spontaneous zone stats (-> spontaneous/spontaneous_stats.png) ───────────
-
-# Fixed color per sensor (color follows the entity, never its rank); validated all-pairs
-# with the dataviz palette validator. Unknown sensors fall back to neutral gray.
-SENSOR_COLORS = {"GACh3.0": "#2a78d6", "iAChSnFR": "#eb6834", "rACh1h": "#1baf7a"}
-_INK_PRIMARY, _INK_SECONDARY, _INK_GRID, _SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+# --- 6b. zone stats (-> spontaneous/spontaneous_stats.png) -----------------
 
 
 def plot_zone_stats(zones, title: str) -> Figure:

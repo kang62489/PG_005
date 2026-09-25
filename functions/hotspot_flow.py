@@ -1,10 +1,10 @@
 """
 Spike-aligned TV-L1 optical flow on the median stack, CAT mask applied after the flow (CPU, one thread per pair).
 
-  Step 1. Flow : skimage TV-L1 on the raw (unmasked) MED pair
-  Step 2. Mask : keep = union of both frames' CAT-bright pixels (plot_flow_panels draws arrows only there)
+  Step 1. Flow  : skimage TV-L1 on one raw (unmasked) MED pair + keep = union of both frames' CAT-bright pixels
+  Step 2. Pairs : every in-range FLOW_OFFSETS pair (spike-1->spike ... spike+3->spike+4), run in parallel threads
 
-Pairs: spike-1->spike, spike->spike+1, ..., spike+3->spike+4 (FLOW_OFFSETS).
+plot_flow_panels draws arrows only inside keep.
 
 Example:
     >>> pairs = compute_flow_pairs(med_stack, cat_stack, spike_frame_idx)
@@ -22,12 +22,22 @@ from skimage.registration import optical_flow_tvl1
 # Local imports
 from classes.spatial_categorization import CATEGORY_BRIGHT
 
+# ===========================================================================
+#
+#   CONFIG
+#
+# ===========================================================================
+
+# --- Step 2: pairs ---------------------------------------------------------
 FLOW_OFFSETS = [(-1, 0), (0, 1), (1, 2), (2, 3), (3, 4)]  # (from, to) frame offsets from the spike
 N_THREADS_FLOW = len(FLOW_OFFSETS)  # one thread per pair (~3.4x faster, identical output)
 
 
-def _offset_label(offset: int) -> str:
-    return "spike" if offset == 0 else f"spike{offset:+d}"
+# ===========================================================================
+#
+#   STEP 1 -- FLOW
+#
+# ===========================================================================
 
 
 def pair_flow(
@@ -37,6 +47,18 @@ def pair_flow(
     keep = (cat[idx_from] == CATEGORY_BRIGHT) | (cat[idx_to] == CATEGORY_BRIGHT)
     v, u = optical_flow_tvl1(med[idx_from], med[idx_to])
     return v, u, keep
+
+
+# ===========================================================================
+#
+#   STEP 2 -- PAIRS
+#
+# ===========================================================================
+
+
+def _offset_label(offset: int) -> str:
+    """Frame offset -> label: 0 -> 'spike', 2 -> 'spike+2', -1 -> 'spike-1'."""
+    return "spike" if offset == 0 else f"spike{offset:+d}"
 
 
 def compute_flow_pairs(med: np.ndarray, cat: np.ndarray, spike_frame_idx: int) -> list[dict]:

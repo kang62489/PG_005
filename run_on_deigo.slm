@@ -1,0 +1,27 @@
+#!/bin/bash
+#SBATCH --job-name=ach_domain
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=kang.chu@oist.jp
+#SBATCH --partition=compute
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=64
+#SBATCH --mem=64G
+#SBATCH --time=12:00:00
+#SBATCH --output=/flash/WickensU/kang/logs/ach_%j.out
+#SBATCH --error=/flash/WickensU/kang/logs/ach_%j.err
+
+# Spike-aligned pipeline -- CPU only (numba parallel median + threaded TV-L1), no GPU needed.
+# proc_tiffs / raw_abfs / results paths are read from the ana-list footer
+# (dir_proc_tiffs, dir_raw_abfs, dir_results) -> /flash/WickensU/kang/...
+# Create the log folder once before submitting: mkdir -p /flash/WickensU/kang/logs
+
+PROJECT=/home/k/kang-chu/PG_005
+ANA_LIST=$PROJECT/data/ana_20260922_000_deigo.txt
+
+export COLUMNS=200
+
+$PROJECT/.venv/bin/python $PROJECT/ach_domain_analysis.py \
+    --ana_list $ANA_LIST \
+    --db $PROJECT/data/rec_data.db \
+    --exp_db $PROJECT/data/exp_info.db

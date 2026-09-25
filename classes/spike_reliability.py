@@ -43,6 +43,7 @@ class SpikeReliabilityChecker:
     """
 
     def __init__(self, obj: str) -> None:
+        """Per-objective DBSCAN eps, density window and threshold (px)."""
         self.obj = obj
         self.eps_px = compute_eps_px(obj)
         self.window_px = compute_window_px(obj)
@@ -50,21 +51,17 @@ class SpikeReliabilityChecker:
         self.seg_results: list[dict] = []
         self.reliability_pct: float = 0.0
 
-    # -----------------------------------------------------------------------
-    # Step 1. Check
-    # -----------------------------------------------------------------------
+    # =======================================================================
+    #
+    #   STEP 1 -- CHECK
+    #
+    # =======================================================================
 
     def check(self, lst_segments: list[np.ndarray], spike_frame_idx: int) -> tuple[list[dict], float]:
-        """Per-segment density-gated hotspot detection.
+        """Density-gated hotspot detection on every raw segment (from load_img_segs()); also stored on self.
 
-        Args:
-            lst_segments: per-spike raw (detrended, unnormalized) segments, from load_img_segs().
-            spike_frame_idx: spike frame index within each segment (same for all segments).
-
-        Returns:
-            (seg_results, reliability_pct) -- one dict per segment with "detected", "frame_offset"
-            (0 = spike, 1 = spike+1), "bright_mask", "label_frame", "centroids", "n_clusters";
-            and the % of segments detected. Both are also stored on self.
+        Returns (seg_results, reliability_pct): one dict per segment with "detected", "frame_offset"
+        (0 = spike, 1 = spike+1), "bright_mask", "label_frame", "centroids", "n_clusters"; % detected.
         """
         seg_results: list[dict] = []
         for segment in lst_segments:
@@ -102,9 +99,11 @@ class SpikeReliabilityChecker:
         self.reliability_pct = reliability_pct
         return seg_results, reliability_pct
 
-    # -----------------------------------------------------------------------
-    # Step 2. Export (both need only self.seg_results -- run right after check())
-    # -----------------------------------------------------------------------
+    # =======================================================================
+    #
+    #   STEP 2 -- EXPORT  (both need only self.seg_results -- run right after check())
+    #
+    # =======================================================================
 
     def export_montage(
         self,

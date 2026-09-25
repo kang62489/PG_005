@@ -1,52 +1,49 @@
 """
-Spatial-aware intensity categorization for ACh imaging.
+Spatial-aware intensity categorization (background / bright) of a spike-aligned segment.
 
-This module provides a class-based interface for spatial categorization methods
-that consider both intensity AND spatial connectivity.
+  Step 1. Threshold : trimmed baseline (pre-spike) mean + BASELINE_SIGMA_MULT * std
+  Step 2. Group     : per frame, bright pixels -> connected / watershed / morphological regions
+  Step 3. Collect   : categorized frames + threshold via get_results() / get_export_data()
 
-Methods available:
-1. connected: Connected components analysis (fast, simple)
-2. watershed: Watershed segmentation (good for overlapping regions)
-3. morphological: Morphological cleanup (erosion/dilation)
+Example:
+    >>> categorizer = SpatialCategorizer.connected(min_region_size=30)
+    >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)  # 3D array (frames, H, W)
+    >>> results = categorizer.get_results()
+
+    >>> SpatialCategorizer.watershed(min_distance=5, min_region_size=20).fit(image_segment, spike_frame_idx)
+    >>> SpatialCategorizer.morphological(kernel_size=5).fit(image_segment, spike_frame_idx)
 """
 
+## Modules
+# Standard library imports
 from typing import ClassVar
 
+# Third-party imports
 import numpy as np
 from scipy import ndimage
 from scipy.ndimage import binary_dilation, binary_erosion, generate_binary_structure, label
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 
-# Constants
-NDIM_SINGLE_FRAME = 2
-CATEGORY_BRIGHT = 1
-BASELINE_SIGMA_MULT = 1.5
+# ===========================================================================
+#
+#   CONFIG
+#
+# ===========================================================================
+
+# --- Step 1: threshold -----------------------------------------------------
+BASELINE_SIGMA_MULT = 1.5         # threshold = trimmed baseline mean + this many stds
 BASELINE_TRIM_PCT = (0.1, 99.9)  # baseline pixels outside these percentiles are dropped before mean/std
+
+# --- Step 2: group ---------------------------------------------------------
+NDIM_SINGLE_FRAME = 2  # ndim of one 2D frame
+CATEGORY_BRIGHT = 1    # CAT pixel value for bright (background = 0)
 
 
 class SpatialCategorizer:
-    """
-    Spatial-aware intensity categorization for image segments.
+    """Threshold -> group -> collect bright regions for one segment (frames, H, W).
 
-    This class provides multiple methods for categorizing pixels into
-    background/bright while considering spatial connectivity.
-
-    Attributes:
-        method: Categorization method ('connected', 'watershed', 'morphological')
-        threshold_method: Auto-thresholding method ('baseline_n_sigma')
-        min_region_size: Minimum pixels per region
-
-    Example:
-        >>> categorizer = SpatialCategorizer.connected(min_region_size=30)
-        >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)  # 3D array (frames, H, W)
-        >>> results = categorizer.get_results()
-
-        >>> categorizer = SpatialCategorizer.watershed(min_distance=5, min_region_size=20)
-        >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)
-
-        >>> categorizer = SpatialCategorizer.morphological(kernel_size=5)
-        >>> categorizer.fit(image_segment, spike_frame_idx=spike_frame_idx)
+    Build with a factory: SpatialCategorizer.connected / .watershed / .morphological.
     """
 
     GROUPING_METHODS: ClassVar[list[str]] = ["connected", "watershed", "morphological"]
@@ -64,14 +61,7 @@ class SpatialCategorizer:
         # Morphological parameters
         kernel_size: int = 3,
     ) -> None:
-        """
-        Initialize the SpatialCategorizer.
-
-        Prefer using factory methods for clarity:
-            - SpatialCategorizer.connected(...)
-            - SpatialCategorizer.watershed(...)
-            - SpatialCategorizer.morphological(...)
-        """
+        """Validate the method names and store the parameters; prefer the factory methods."""
         if grouping_method not in self.GROUPING_METHODS:
             msg = f"Unknown grouping_method: {grouping_method}. Choose from {self.GROUPING_METHODS}"
             raise ValueError(msg)
@@ -100,16 +90,7 @@ class SpatialCategorizer:
         *,
         min_region_size: int = 20,
     ) -> "SpatialCategorizer":
-        """
-        Create a SpatialCategorizer using connected components method.
-
-        Args:
-            threshold_method: 'baseline_n_sigma'
-            min_region_size: Minimum pixels per region (smaller regions are removed)
-
-        Returns:
-            SpatialCategorizer instance
-        """
+        """Connected components; regions smaller than min_region_size (px) are dropped."""
         return cls(
             grouping_method="connected",
             threshold_method=threshold_method,
@@ -124,17 +105,7 @@ class SpatialCategorizer:
         min_region_size: int = 20,
         min_distance: int = 10,
     ) -> "SpatialCategorizer":
-        """
-        Create a SpatialCategorizer using watershed segmentation.
-
-        Args:
-            threshold_method: 'baseline_n_sigma'
-            min_region_size: Minimum pixels per region (smaller regions are removed)
-            min_distance: Minimum distance between peaks (larger = fewer regions)
-
-        Returns:
-            SpatialCategorizer instance
-        """
+        """Watershed; min_distance (px) between peaks (larger = fewer regions), small regions dropped."""
         return cls(
             grouping_method="watershed",
             threshold_method=threshold_method,
@@ -149,16 +120,7 @@ class SpatialCategorizer:
         *,
         kernel_size: int = 3,
     ) -> "SpatialCategorizer":
-        """
-        Create a SpatialCategorizer using morphological cleanup.
-
-        Args:
-            threshold_method: 'baseline_n_sigma'
-            kernel_size: Size of erosion/dilation kernel (larger = more aggressive cleanup)
-
-        Returns:
-            SpatialCategorizer instance
-        """
+        """Morphological open + close; larger kernel_size = more aggressive cleanup."""
         return cls(
             grouping_method="morphological",
             threshold_method=threshold_method,
@@ -166,23 +128,11 @@ class SpatialCategorizer:
         )
 
     def fit(self, image_segment: np.ndarray, spike_frame_idx: int) -> "SpatialCategorizer":
-        """
-        Fit the categorizer to an image segment.
-
-        Args:
-            image_segment: 3D array (frames, height, width) or 2D array (single frame)
-            spike_frame_idx: Index of the spike frame within image_segment. Frames
-                before this index are treated as the baseline window used to set
-                threshold_used (trimmed baseline mean + BASELINE_SIGMA_MULT * std).
-
-        Returns:
-            self (for method chaining)
-        """
+        """Threshold from frames before spike_frame_idx, then categorize every frame; returns self."""
         self.source_frames = [image_segment[i] for i in range(image_segment.shape[0])]
 
         self._calculate_global_threshold(spike_frame_idx)
 
-        # Process each frame
         self.categorized_frames = []
         self.frame_regions = []
 
@@ -193,51 +143,41 @@ class SpatialCategorizer:
 
         return self
 
+    # =======================================================================
+    #
+    #   STEP 1 -- THRESHOLD
+    #
+    # =======================================================================
+
     def _calculate_global_threshold(self, spike_frame_idx: int) -> None:
         """Calculate the bright threshold from the baseline (pre-spike) frames."""
         self.threshold_used = self.compute_baseline_threshold(self.source_frames[:spike_frame_idx])
 
     @staticmethod
     def compute_baseline_threshold(baseline_frames: list[np.ndarray]) -> float:
-        """Bright threshold (mean + BASELINE_SIGMA_MULT * std) from a set of baseline (pre-spike) frames.
+        """Bright threshold: mean + BASELINE_SIGMA_MULT * std of the baseline pixels.
 
-        Baseline pixels outside the BASELINE_TRIM_PCT percentiles are dropped first.
-
-        Pulled out of _calculate_global_threshold so a caller that already has a segment's
-        baseline frames on hand (e.g. a per-segment reliability check) can compute the same
-        threshold without fitting a full SpatialCategorizer instance first.
-
-        Args:
-            baseline_frames: pre-spike frames, e.g. image_segment[:spike_frame_idx].
-
-        Returns:
-            Bright-pixel threshold: trimmed baseline mean + BASELINE_SIGMA_MULT * trimmed baseline std.
+        Pixels outside the BASELINE_TRIM_PCT percentiles are dropped first.
         """
         baseline_pixels = np.concatenate([np.asarray(f, dtype=np.float64).ravel() for f in baseline_frames])
         lo, hi = np.percentile(baseline_pixels, BASELINE_TRIM_PCT)
         kept = baseline_pixels[(baseline_pixels >= lo) & (baseline_pixels <= hi)]
         return float(kept.mean() + BASELINE_SIGMA_MULT * kept.std())
 
+    # =======================================================================
+    #
+    #   STEP 2 -- GROUP
+    #
+    # =======================================================================
+
     def categorize_frame(self, frame: np.ndarray, frame_idx: int, threshold: float) -> np.ndarray:
-        """Categorize a single frame using an already-known threshold.
-
-        Unlike fit(), this doesn't run the full per-frame loop over every frame in a
-        segment -- useful when only 1-2 specific frames (e.g. spike/spike+1 for a
-        reliability check) actually need categorizing, not the whole segment.
-
-        Args:
-            frame: 2D array to categorize.
-            frame_idx: index of this frame (bookkeeping only, see _dispatch_frame).
-            threshold: bright-pixel threshold, e.g. from compute_baseline_threshold().
-
-        Returns:
-            Categorized frame (0=background, 1=bright).
-        """
+        """Categorize one frame (0 = background, 1 = bright) with a known threshold, without fit()."""
         self.threshold_used = threshold
         categorized, _ = self._dispatch_frame(frame, frame_idx)
         return categorized
 
     def _dispatch_frame(self, frame: np.ndarray, frame_idx: int) -> tuple[np.ndarray, dict]:
+        """Run the configured grouping method on one frame -> (categorized, stats)."""
         thresh_bright = self.threshold_used
 
         if self.grouping_method == "connected":
@@ -248,6 +188,8 @@ class SpatialCategorizer:
             return self._apply_morphological(frame, frame_idx, thresh_bright)
         msg = f"Unknown grouping_method: {self.grouping_method}"
         raise ValueError(msg)
+
+    # --- 2a. connected -----------------------------------------------------
 
     def _apply_connected(self, frame: np.ndarray, frame_idx: int, thresh_bright: float) -> tuple[np.ndarray, dict]:
         """Connected components analysis."""
@@ -266,6 +208,8 @@ class SpatialCategorizer:
             categorized[region_mask] = CATEGORY_BRIGHT
 
         return categorized, {"frame_idx": frame_idx, "threshold": self.threshold_used}
+
+    # --- 2b. watershed -----------------------------------------------------
 
     def _apply_watershed(self, frame: np.ndarray, frame_idx: int, thresh_bright: float) -> tuple[np.ndarray, dict]:
         """Watershed segmentation."""
@@ -296,6 +240,8 @@ class SpatialCategorizer:
 
         return categorized, {"frame_idx": frame_idx, "threshold": self.threshold_used}
 
+    # --- 2c. morphological -------------------------------------------------
+
     def _apply_morphological(self, frame: np.ndarray, frame_idx: int, thresh_bright: float) -> tuple[np.ndarray, dict]:
         """Morphological cleanup."""
         bright_mask = frame > thresh_bright
@@ -315,13 +261,14 @@ class SpatialCategorizer:
 
         return categorized, {"frame_idx": frame_idx, "threshold": self.threshold_used}
 
-    def get_results(self) -> dict:
-        """
-        Get all results as a dictionary.
+    # =======================================================================
+    #
+    #   STEP 3 -- COLLECT
+    #
+    # =======================================================================
 
-        Returns:
-            dict with source_frames, categorized_frames, frame_regions, threshold_used, method, threshold_method
-        """
+    def get_results(self) -> dict:
+        """source_frames, categorized_frames, frame_regions, threshold_used, grouping_method, threshold_method."""
         return {
             "source_frames": self.source_frames,
             "categorized_frames": self.categorized_frames,
@@ -332,7 +279,7 @@ class SpatialCategorizer:
         }
 
     def get_export_data(self) -> dict:
-        """Get categorizer data for export."""
+        """threshold_method + categorized_frames for export."""
         return {
             "threshold_method": self.threshold_method,
             "categorized_frames": self.categorized_frames,

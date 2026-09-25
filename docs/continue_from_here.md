@@ -9,7 +9,7 @@ All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
 | C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [x] committed (`325e09f`) |
 | D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [x] tuned (Session 66): thresholds fixed; flow now UNMASKED TV-L1 then CAT mask; FLOW.png 4 rows (quivers + µm/s speed, masked / full field). Committed `3d59aca` |
 | E | Further flow analysis -> `flow_pairs` table | #5 locality argument | 4 | [x] Session 68: flow threaded (~44 s -> ~15 s, identical); scope changed to per-pair pattern source / sink / anisotropic (CAT-mask linear fit) in `flow_pairs` + new `*_STREAMLINES.png`. Radial outflow / divergence / coherence / centre location dropped by user (uncommitted) |
-| F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [~] skill `.claude/skills/neat-refactor/` created; files not refactored yet |
+| F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [x] Session 69: all 7 files refactored (`hotspot_flow`, `spatial_categorization`, `plot_results`, `ach_domain_analysis`, `spike_reliability`, `region_analyzer`, `abf_clip`), each verified byte-identical in `output/test7/` (uncommitted -- user commits) |
 
 Still open, outside this plan:
 - [ ] Sort and mark the dataset used, separate results by objective, put it in the bucket for Jeff (old #6, merged with old #2 on 2026-09-25)
@@ -46,9 +46,9 @@ Scratch: `output/test8/` deleted (user OK). `output/test6/`: `flow_streamlines.p
 - ✅ STREAMLINES.png + source / sink / anisotropic label + `flow_pairs` table (TODO E, reduced scope)
 
 ## What should we do next? (TODOs)
-- [ ] TODO F via `neat-refactor`: `functions/hotspot_flow.py`, `ach_domain_analysis.py`, `classes/spike_reliability.py`, `classes/region_analyzer.py`, `classes/abf_clip.py` (light).
+- [x] TODO F via `neat-refactor` (done Session 69, all identical): `functions/hotspot_flow.py`, `classes/spatial_categorization.py`, `functions/plot_results.py`, `ach_domain_analysis.py`, `classes/spike_reliability.py`, `classes/region_analyzer.py`, `classes/abf_clip.py` (light).
 - [ ] Dataset bucket for Jeff: sort/mark the dataset used + separate results by objective.
-- [ ] Clean `output/test6` scratch (`centre_refine.py` broken, `flow_streamlines.py` superseded).
+- [x] Clean `output/test6` scratch (`centre_refine.py` + `centre_refine/`, `flow_streamlines.py` + `*_FLOW_STREAM_DIR.png` deleted, Session 69).
 
 ## Last Session Recap
 ※ recap: Threaded TV-L1 flow (~3x faster), added STREAMLINES.png with per-pair source/sink/anisotropic labels + angle crosshair and a `flow_pairs` table (centre markers dropped). Pending: TODO F refactors, Jeff dataset, test6 scratch cleanup.

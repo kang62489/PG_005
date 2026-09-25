@@ -1,0 +1,31 @@
+#!/bin/bash
+#SBATCH --job-name=sp_zones
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=kang.chu@oist.jp
+#SBATCH --partition=gpu-v100
+#SBATCH --gres=gpu:1
+#SBATCH --nodelist=saion-gpu21
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=16G
+#SBATCH --time=12:00:00
+#SBATCH --output=/work/WickensU/kang/logs/spont_%j.out
+#SBATCH --error=/work/WickensU/kang/logs/spont_%j.err
+
+# Spontaneous zone analysis -- CUDA kernels (zone_kernels, fit_hist) on the V100, CPU fallback otherwise.
+# proc_tiffs path is read from the proc-list footer (dir_proc_tiffs) -> must point to /work/WickensU/kang/proc_tiffs
+# Outputs go to $RESULTS_DIR/spontaneous/.
+# Create the log folder once before submitting: mkdir -p /work/WickensU/kang/logs
+
+PROJECT=/home/k/kang-chu/PG_005
+PROC_LIST=$PROJECT/data/proc_20260922_000_saion.txt
+RESULTS_DIR=/work/WickensU/kang/results
+
+export COLUMNS=200
+
+$PROJECT/.venv/bin/python $PROJECT/spontaneous_analysis.py \
+    --proc_list $PROC_LIST \
+    --results_dir $RESULTS_DIR \
+    --db $PROJECT/data/rec_data.db \
+    --exp_db $PROJECT/data/exp_info.db

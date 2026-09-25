@@ -1,6 +1,6 @@
 """
 ach_domain_analysis.py  --  Spike-aligned image analysis pipeline.
-===================================================================
+
 For every ana-list entry (processed TIFF + paired ABF, OBJ looked up in rec_data.db):
 
   Step 1. Clip        : spikes in the ABF -> one image/Vm segment per spike
@@ -21,6 +21,8 @@ Usage:
                              [--detrend BIEXP] [--use_gauss]
                              [--db data/rec_data.db] [--exp_db data/exp_info.db]
 """
+
+## Modules
 # Standard library imports
 import argparse
 import os
@@ -36,7 +38,7 @@ from numba import config as numba_config
 from rich.console import Console
 from tabulate import tabulate
 
-# Local application imports
+# Local imports
 from classes import (
     AbfClip,
     RegionAnalyzer,
@@ -60,8 +62,20 @@ from functions import (
 
 console = Console()
 
+# ===========================================================================
+#
+#   CONFIG
+#
+# ===========================================================================
 
-# ── Ana list parsing ──────────────────────────────────────────────────────────
+_STATS_BLOCK_MARKER = "=" * 80 + "\nRegion Analysis Statistics"  # start of the stats block write_stats_report() overwrites
+
+
+# ===========================================================================
+#
+#   ANA LIST -- PARSE
+#
+# ===========================================================================
 
 
 def parse_ana_list(
@@ -69,18 +83,10 @@ def parse_ana_list(
     detrend_mode: str = "BIEXP",
     use_als: bool = True,
 ) -> tuple[pl.DataFrame, Path, str, str]:
-    """Parse an ana list file and filter rows by existence flags.
+    """Parse an ana list and keep rows whose als_exist (or gauss_exist) and abf_exist are YES.
 
-    Args:
-        ana_list_path: Path to the ana list file (ana_*.txt).
-        detrend_mode:  Which detrend variant to load — "BIEXP".
-        use_als:       If True, load *_ALS.tif; otherwise load *_GAUSS.tif.
-
-    Returns:
-        (entries, results_dir, detrend_mode, normalization). entries keeps every
-        original ana-list column plus proc_tiff_path/raw_abf_path, restricted to
-        rows passing the gauss_exist/als_exist and abf_exist guards. Resolving OBJ
-        from rec_data.db is left to the caller (see lookup_rec_from_db).
+    Returns (entries, results_dir, detrend_mode, normalization); entries = ana-list columns +
+    proc_tiff_path / raw_abf_path (*_ALS.tif if use_als else *_GAUSS.tif). OBJ is looked up by the caller.
     """
     table, io_dirs = list_parser(ana_list_path)
 
@@ -114,12 +120,15 @@ def parse_ana_list(
     return entries, results_dir, detrend_mode, normalization
 
 
-def _format_neuron_line(label: str, pairs: list[str], ratio: str) -> str:
-    """Format one neuron's recording list, wrapping one (filename, detected) pair per line.
+# ===========================================================================
+#
+#   STATS REPORT  (appended to the ana list after a run)
+#
+# ===========================================================================
 
-    A single-recording neuron stays on one line; multi-recording neurons get
-    each pair on its own line, indented to align under the opening bracket.
-    """
+
+def _format_neuron_line(label: str, pairs: list[str], ratio: str) -> str:
+    """One neuron's recording list; multi-recording neurons get one (filename, detected) pair per aligned line."""
     prefix = f"{label} ["
     if len(pairs) <= 1:
         body = pairs[0] if pairs else ""
@@ -132,26 +141,16 @@ def _format_neuron_line(label: str, pairs: list[str], ratio: str) -> str:
     return "\n".join(lines)
 
 
-_STATS_BLOCK_MARKER = "=" * 80 + "\nRegion Analysis Statistics"
-
-
 def _strip_existing_report(text: str) -> str:
-    """Drop a previously written Region Analysis Statistics block, if present.
-
-    Lets write_stats_report() overwrite the block on re-run instead of stacking
-    a duplicate copy every time the same ana list is processed again.
-    """
+    """Drop a previously written stats block, so a re-run overwrites it instead of stacking a copy."""
     idx = text.find(_STATS_BLOCK_MARKER)
     return text[:idx].rstrip() if idx != -1 else text.rstrip()
 
 
 def build_stats_report(db_path: Path, run_keys: set[tuple[str, str]] | None = None) -> str:
-    """Format the region-analysis summary block appended to the ana list after a run.
+    """Region-analysis stats block text; "" if results.db has no rows yet.
 
-    run_keys: optional set of (exp_date, img_serial) pairs to restrict stats to
-    the current ana-list run rather than the full accumulated DB.
-
-    Returns "" if results.db has no rows yet (nothing to report).
+    run_keys: (exp_date, img_serial) pairs restricting the stats to this run (None = whole DB).
     """
     stats = compute_region_stats(db_path, run_keys)
     if stats.is_empty():
@@ -222,12 +221,9 @@ def build_stats_report(db_path: Path, run_keys: set[tuple[str, str]] | None = No
 def write_stats_report(
     ana_list_path: Path, results_db_path: Path, run_keys: set[tuple[str, str]] | None = None
 ) -> bool:
-    """Write (or overwrite, on re-run) the region-analysis stats block in an ana list.
+    """Write (or overwrite) the stats block in the ana list; False if results.db has no rows yet.
 
-    run_keys: optional set of (exp_date, img_serial) pairs to restrict stats to
-    the current ana-list run rather than the full accumulated DB.
-
-    Returns False if results_db_path has no rows yet (nothing written).
+    run_keys: (exp_date, img_serial) pairs restricting the stats to this run (None = whole DB).
     """
     report = build_stats_report(results_db_path, run_keys)
     if not report:
@@ -275,7 +271,7 @@ def analyze_entry(
     entry_t0 = time.time()
     i, total = progress
 
-    # ----- STEP 1. Clip: spikes in the ABF -> one image/Vm segment per spike -----
+    # --- Step 1. Clip: spikes in the ABF -> one image/Vm segment per spike ---
     match = df_checked_tiff.filter(pl.col("Filename") == row["raw_tiff_name"])
     if match.is_empty():
         console.log(f"[yellow]Skipped {row['raw_tiff_name']}: not found in rec_data.db[/yellow]")
@@ -296,7 +292,7 @@ def analyze_entry(
         normalization=normalization,
     )
     if not clip.lst_img_frame_ranges:  # every spike skipped (too closely spaced for a baseline window)
-        console.log("[yellow]No valid segments — skipping z-score step.[/yellow]")
+        console.log("[yellow]No valid segments — skipping this entry.[/yellow]")
         _log_skip(ana_list_path, f"{proc_tiff_path.name}: no valid segments "
                                  "(spikes too closely spaced for any baseline window)")
         return []
@@ -313,7 +309,7 @@ def analyze_entry(
     def export_stem(file_type: str) -> str:
         return ResultsExporter.build_export_stem(export_data["exp_date"], export_data["img_serial"], *name_args, file_type)
 
-    # ----- STEP 2. Reliability: per-segment hotspot check + montage + success/failure Vm -----
+    # --- Step 2. Reliability: per-segment hotspot check + montage + success/failure Vm ---
     if emitter:
         emitter({"type": "step", "msg": "Loading raw segments..."})
     lst_segments = load_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)  # detrended, unnormalized
@@ -334,7 +330,7 @@ def analyze_entry(
     reliability_checker.export_montage(exporter, proc_tiff_path.stem, export_data, *name_args)
     reliability_checker.export_vm_groups(exporter, proc_tiff_path.stem, clip.get_vm_segments(), export_data, *name_args)
 
-    # ----- STEP 3. Median: detected segments only (all segments if none detected) -----
+    # --- Step 3. Median: detected segments only (all segments if none detected) ---
     segments_for_median = [
         seg for seg, r in zip(lst_segments, seg_results, strict=True) if r["detected"]
     ] or lst_segments
@@ -342,7 +338,7 @@ def analyze_entry(
     del lst_segments
     console.log(f"[green]Median shape: {median_segment.shape}, intensity range: [{intensity_range[0]:.2f}, {intensity_range[1]:.2f}][/green]")
 
-    # ----- STEP 4. Categorize: bright / background per frame -----
+    # --- Step 4. Categorize: bright / background per frame ---
     if emitter:
         emitter({"type": "step", "msg": "Categorizing spike frame..."})
     categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
@@ -352,7 +348,7 @@ def analyze_entry(
         f"  ({time.time() - entry_t0:.1f}s)[/green]"
     )
 
-    # ----- STEP 5. Region + Flow -----
+    # --- Step 5. Region + Flow ---
     # --- 5a. critical-frame clusters, spike / spike+1 sizes, decay ---
     cat_stack = np.array(categorizer.categorized_frames)
     region_analyzer = RegionAnalyzer(cat_stack, median_segment, spike_frame_idx, obj=obj)
@@ -403,7 +399,7 @@ def analyze_entry(
         region_analyzer.compute_flow(cat_stack, median_segment)
         console.log(f"[green]Flow: {len(region_analyzer.flow_pairs)} pair(s)  ({time.time() - entry_t0:.1f}s)[/green]")
 
-    # ----- STEP 6. Export: DB row + MED/CAT TIFFs now, figures on a background thread -----
+    # --- Step 6. Export: DB row + MED/CAT TIFFs now, figures on a background thread ---
     if emitter:
         emitter({"type": "step", "msg": "Exporting results..."})
     dirs = exporter.export_all(
@@ -527,7 +523,11 @@ def run(
     console.log(f"\n[bold green]All done!  (total: {time.time() - run_t0:.1f}s)[/bold green]")
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ===========================================================================
+#
+#   ENTRY POINT
+#
+# ===========================================================================
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Spike-aligned image analysis pipeline")
@@ -539,4 +539,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run(args.ana_list, args.detrend, not args.use_gauss, args.db, args.exp_db)
-
