@@ -8,12 +8,38 @@ All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
 | B | Merge `../PG_010/sp_ach_zones.py` into PG_005 as classes/functions: 10X only, sensor-aware (iAChSnFR / GACh3.0 / rACh1h), numba CPU+CUDA acceleration, readable xlsx names/columns, zone size/frequency/period stats, output to `results/spontaneous/` | #1 wave vs hotspots, #4 spontaneous side | 1 | [x] |
 | C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [x] committed (`325e09f`) |
 | D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [x] tuned (Session 66): thresholds fixed; flow now UNMASKED TV-L1 then CAT mask; FLOW.png 4 rows (quivers + µm/s speed, masked / full field). Committed `3d59aca` |
-| E | Further flow analysis: per-pair speed, radial outflow, divergence, coherence -> `flow_pairs` table | #5 locality argument | 4 | [ ] (speed in µm/s already drawn in FLOW.png, not stored) |
+| E | Further flow analysis: per-pair speed, radial outflow, divergence, coherence -> `flow_pairs` table | #5 locality argument | 4 | [ ] (speed in µm/s already drawn in FLOW.png, not stored). Flow speed-up done first (Session 68): 5 pairs in threads, ~44 s -> ~15 s, identical output |
 | F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [~] skill `.claude/skills/neat-refactor/` created; files not refactored yet |
 
 Still open, outside this plan:
 - [ ] Sort and mark the dataset used, separate results by objective, put it in the bucket for Jeff (old #6, merged with old #2 on 2026-09-25)
 - ~~Compare the median with its segments (old #3)~~ -- dropped 2026-09-25
+
+---
+
+# Log of the project progress 2026-09-25 Fri (Session 68)
+Last working file: `functions/hotspot_flow.py`
+Last working line: 50 (`compute_flow_pairs` -> `ThreadPoolExecutor(N_THREADS_FLOW)` over the in-range pairs)
+
+## List of modified files (UNCOMMITTED)
+- `functions/hotspot_flow.py` — `compute_flow_pairs()` runs the 5 `pair_flow()` calls in parallel threads (`N_THREADS_FLOW = len(FLOW_OFFSETS)`), same dicts in the same order.
+- Scratch: `output/test8/bench_flow_threads.py` (serial vs threaded), `output/test8/ana_test8.txt` + pipeline outputs, `output/test8/compare_test8.py` (vs `output/test5`). Older scratch in `output/test8/` (`cat_threshold/`, `zone_merge_parked/`, `zones_N/`, `diag_0003_flow.py`) untouched.
+
+## Summary of current progress
+- Benchmark (0003 / 0012 / 0018): serial 43.9 / 43.6 / 45.0 s -> threaded 13.0 / 13.1 / 13.3 s (x3.3-3.4), u / v / keep bit-identical.
+- Pipeline run into `output/test8` (121.6 s total): flow step 14.0 / 14.7 / 15.8 s; all 15 PNGs, 6 MED/CAT tifs, stats block and `results.db` data identical to `output/test5` (only autoincrement ids differ).
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Flow speed-up (threads), verified identical
+
+## What should we do next? (TODOs)
+- [ ] Commit `functions/hotspot_flow.py`.
+- [ ] Phase 4 / TODO E: `flow_pairs` metrics table (speed µm/s, radial outflow, divergence, coherence) -- proposal first.
+- [ ] TODO F via `neat-refactor`: `functions/hotspot_flow.py`, `ach_domain_analysis.py`, `classes/spike_reliability.py`, `classes/region_analyzer.py`, `classes/abf_clip.py` (light).
+- [ ] Dataset bucket for Jeff: sort/mark the dataset used + separate results by objective.
+
+## Last Session Recap
+※ recap: Threaded the 5 TV-L1 flow pairs in `functions/hotspot_flow.py` (~44 s -> ~15 s per recording), verified identical to output/test5 on 0003/0012/0018. Pending: commit, Phase 4 flow metrics, TODO F refactors, Jeff dataset.
 
 ---
 

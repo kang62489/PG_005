@@ -1,5 +1,5 @@
 """
-Spike-aligned TV-L1 optical flow on the median stack, CAT mask applied after the flow (CPU only).
+Spike-aligned TV-L1 optical flow on the median stack, CAT mask applied after the flow (CPU, one thread per pair).
 
   Step 1. Flow : skimage TV-L1 on the raw (unmasked) MED pair
   Step 2. Mask : keep = union of both frames' CAT-bright pixels (plot_flow_panels draws arrows only there)
@@ -12,6 +12,9 @@ Example:
 """
 
 ## Modules
+# Standard library imports
+from concurrent.futures import ThreadPoolExecutor
+
 # Third-party imports
 import numpy as np
 from skimage.registration import optical_flow_tvl1
@@ -20,6 +23,7 @@ from skimage.registration import optical_flow_tvl1
 from classes.spatial_categorization import CATEGORY_BRIGHT
 
 FLOW_OFFSETS = [(-1, 0), (0, 1), (1, 2), (2, 3), (3, 4)]  # (from, to) frame offsets from the spike
+N_THREADS_FLOW = len(FLOW_OFFSETS)  # one thread per pair (~3.4x faster, identical output)
 
 
 def _offset_label(offset: int) -> str:
@@ -41,12 +45,16 @@ def compute_flow_pairs(med: np.ndarray, cat: np.ndarray, spike_frame_idx: int) -
     cat = np.asarray(cat)
     n_frames = med.shape[0]
 
+    in_range = [
+        (offset_from, offset_to, spike_frame_idx + offset_from, spike_frame_idx + offset_to)
+        for offset_from, offset_to in FLOW_OFFSETS
+        if spike_frame_idx + offset_from >= 0 and spike_frame_idx + offset_to < n_frames
+    ]
+    with ThreadPoolExecutor(N_THREADS_FLOW) as pool:
+        flows = list(pool.map(lambda p: pair_flow(med, cat, p[2], p[3]), in_range))
+
     pairs = []
-    for offset_from, offset_to in FLOW_OFFSETS:
-        idx_from, idx_to = spike_frame_idx + offset_from, spike_frame_idx + offset_to
-        if idx_from < 0 or idx_to >= n_frames:
-            continue
-        v, u, keep = pair_flow(med, cat, idx_from, idx_to)
+    for (offset_from, offset_to, idx_from, idx_to), (v, u, keep) in zip(in_range, flows, strict=True):
         pairs.append({
             "label": f"{_offset_label(offset_from)} -> {_offset_label(offset_to)}",
             "offset_from": offset_from,
