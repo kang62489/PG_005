@@ -16,12 +16,13 @@ Example:
 ## Modules
 # Third-party imports
 import numpy as np
-from scipy.ndimage import distance_transform_edt, uniform_filter
+from scipy.ndimage import uniform_filter
 from scipy.optimize import curve_fit
 from skimage.measure import label as skimage_label
 
 # Local imports
 from classes.spatial_categorization import CATEGORY_BRIGHT
+from functions.cluster_kernels import within_distance
 from functions.flow_pattern import fit_flow_pattern
 from functions.hotspot_flow import compute_flow_pairs
 
@@ -401,7 +402,7 @@ def _run_cluster_seeker(
         return label_frame, [], 0
 
     # Every pixel within eps_px of a bright pixel -> bright pixels whose eps zones overlap share a component.
-    within_eps_of_bright = distance_transform_edt(~bright_mask) <= eps_px
+    within_eps_of_bright = within_distance(bright_mask, eps_px)  # == distance_transform_edt(~bright_mask) <= eps_px
     component_map = skimage_label(within_eps_of_bright, connectivity=2)
     n_raw_components = int(component_map.max())
 

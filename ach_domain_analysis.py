@@ -9,6 +9,7 @@ For every ana-list entry (processed TIFF + paired ABF, OBJ looked up in rec_data
   Step 4. Categorize  : bright / background per frame
   Step 5. Region+Flow : critical-frame clusters, hotspot area decay, TV-L1 flow (+ CAT keep mask)
   Step 6. Export      : results.db rows (experiments + flow_pairs), MED/CAT TIFFs, SPATIAL.png + FLOW.png + STREAMLINES.png
+                        (all PNGs built + saved on a background thread)
 
 Ana list format (column names declared on the 'Picked:' line):
   [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
@@ -449,6 +450,7 @@ def analyze_entry(
         }
 
         def export_result_figures() -> None:
+            """SPATIAL / FLOW / STREAMLINES PNGs (runs on the figure thread)."""
             spatial_fig = plot_spatiotemporal_summary(
                 categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
             )

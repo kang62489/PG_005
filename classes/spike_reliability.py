@@ -1,7 +1,7 @@
 """
 Per-segment reliability check -- does each raw spike segment show its own hotspot?
 
-  Step 1. Check  : categorize spike / spike+1 of every raw segment -> density-gated detection
+  Step 1. Check  : categorize spike / spike+1 of every raw segment -> density-gated detection (segments in threads)
   Step 2. Export : per-segment detection montage (RELIABILITY.png)
                    + success vs failure Vm with AP thresholds (VM_SUCCESS_FAIL.png)
 
@@ -15,6 +15,9 @@ Example:
 """
 
 ## Modules
+# Standard library imports
+from concurrent.futures import ThreadPoolExecutor
+
 # Third-party imports
 import numpy as np
 
@@ -29,6 +32,15 @@ from classes.region_analyzer import (
 from classes.results_exporter import ResultsExporter
 from classes.spatial_categorization import BASELINE_SIGMA_MULT, SpatialCategorizer
 from functions.plot_results import plot_segment_reliability_montage, plot_vm_success_vs_failure
+
+# ===========================================================================
+#
+#   CONFIG
+#
+# ===========================================================================
+
+# --- Step 1: check ---------------------------------------------------------
+N_THREADS_RELIABILITY = 8  # segments checked in parallel threads; each peaks at ~250 MB
 
 
 class SpikeReliabilityChecker:
@@ -63,33 +75,8 @@ class SpikeReliabilityChecker:
         Returns (seg_results, reliability_pct): one dict per segment with "detected", "frame_offset"
         (0 = spike, 1 = spike+1), "bright_mask", "label_frame", "centroids", "n_clusters"; % detected.
         """
-        seg_results: list[dict] = []
-        for segment in lst_segments:
-            # 1a. baseline threshold from this segment's own pre-spike frames
-            threshold = SpatialCategorizer.compute_baseline_threshold(segment[:spike_frame_idx])
-            categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
-
-            # 1b. categorize the two candidate frames (spike, spike+1)
-            candidates = []
-            for idx in (spike_frame_idx, spike_frame_idx + 1):
-                if idx >= segment.shape[0]:
-                    continue
-                cat_frame = categorizer.categorize_frame(segment[idx], idx, threshold)
-                candidates.append((idx, cat_frame, segment[idx]))
-
-            # 1c. earliest frame passing the density gate wins
-            detected, frame_idx, label_frame, centroids, _ = detect_hotspot(
-                candidates, self.eps_px, self.window_px, self.density_thresh
-            )
-            winning_cat_frame = next(cat_frame for idx, cat_frame, _ in candidates if idx == frame_idx)
-            seg_results.append({
-                "detected": detected,
-                "frame_offset": frame_idx - spike_frame_idx,
-                "bright_mask": winning_cat_frame == CATEGORY_BRIGHT,
-                "label_frame": label_frame,
-                "centroids": centroids,
-                "n_clusters": len(centroids),
-            })
+        with ThreadPoolExecutor(N_THREADS_RELIABILITY) as pool:
+            seg_results = list(pool.map(lambda seg: self._check_segment(seg, spike_frame_idx), lst_segments))
 
         n_total = len(seg_results)
         n_detected = sum(r["detected"] for r in seg_results)
@@ -98,6 +85,34 @@ class SpikeReliabilityChecker:
         self.seg_results = seg_results
         self.reliability_pct = reliability_pct
         return seg_results, reliability_pct
+
+    def _check_segment(self, segment: np.ndarray, spike_frame_idx: int) -> dict:
+        """One segment's result dict (see check()); independent of other segments, so safe to run in threads."""
+        # 1a. baseline threshold from this segment's own pre-spike frames
+        threshold = SpatialCategorizer.compute_baseline_threshold(segment[:spike_frame_idx])
+        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
+
+        # 1b. categorize the two candidate frames (spike, spike+1)
+        candidates = []
+        for idx in (spike_frame_idx, spike_frame_idx + 1):
+            if idx >= segment.shape[0]:
+                continue
+            cat_frame = categorizer.categorize_frame(segment[idx], idx, threshold)
+            candidates.append((idx, cat_frame, segment[idx]))
+
+        # 1c. earliest frame passing the density gate wins
+        detected, frame_idx, label_frame, centroids, _ = detect_hotspot(
+            candidates, self.eps_px, self.window_px, self.density_thresh
+        )
+        winning_cat_frame = next(cat_frame for idx, cat_frame, _ in candidates if idx == frame_idx)
+        return {
+            "detected": detected,
+            "frame_offset": frame_idx - spike_frame_idx,
+            "bright_mask": winning_cat_frame == CATEGORY_BRIGHT,
+            "label_frame": label_frame,
+            "centroids": centroids,
+            "n_clusters": len(centroids),
+        }
 
     # =======================================================================
     #

@@ -21,9 +21,12 @@ from typing import ClassVar
 # Third-party imports
 import numpy as np
 from scipy import ndimage
-from scipy.ndimage import binary_dilation, binary_erosion, generate_binary_structure, label
+from scipy.ndimage import label
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
+
+# Local imports
+from functions.cluster_kernels import binary_open_close_square
 
 # ===========================================================================
 #
@@ -243,18 +246,12 @@ class SpatialCategorizer:
     # --- 2c. morphological -------------------------------------------------
 
     def _apply_morphological(self, frame: np.ndarray, frame_idx: int, thresh_bright: float) -> tuple[np.ndarray, dict]:
-        """Morphological cleanup."""
+        """Morphological cleanup: opening then closing with a (2k+1) x (2k+1) square (k = kernel_size, min 1).
+
+        Same result as scipy binary_erosion/dilation with iterate_structure(full 3x3, kernel_size), via numba.
+        """
         bright_mask = frame > thresh_bright
-
-        struct = generate_binary_structure(2, 2)
-        if self.kernel_size > 1:
-            struct = ndimage.iterate_structure(struct, self.kernel_size)
-
-        # Opening then closing
-        bright_cleaned = binary_erosion(bright_mask, structure=struct)
-        bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
-        bright_cleaned = binary_dilation(bright_cleaned, structure=struct)
-        bright_cleaned = binary_erosion(bright_cleaned, structure=struct)
+        bright_cleaned = binary_open_close_square(bright_mask, max(self.kernel_size, 1))
 
         categorized = np.zeros_like(frame, dtype=int)
         categorized[bright_cleaned] = CATEGORY_BRIGHT

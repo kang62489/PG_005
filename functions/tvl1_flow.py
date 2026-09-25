@@ -6,9 +6,8 @@ Numba port of skimage.registration.optical_flow_tvl1 (CPU, prange over rows) -- 
   Step 3. Solve   : num_iter x (data-term step + 2 dual projection steps per flow component)
   Step 4. Resize  : nearest-neighbour upscale of the flow to the next level (values rescaled)
 
-Mirrors skimage 0.26 _tvl1 step by step in float32, including its early-stop check (flow after the
-first data step of a warp vs. flow at its end). Output matches skimage to float rounding.
-The numba kernels must not run from several threads at once (workqueue threading layer) -- call serially.
+Mirrors skimage 0.26 _tvl1 in float32 (incl. its early-stop check) -> bit-identical flow.
+Parallel numba kernels: call from one thread at a time (workqueue threading layer).
 
 Example:
     >>> v, u = optical_flow_tvl1_numba(med[idx_from], med[idx_to])   # same (v, u) order as skimage
@@ -27,15 +26,38 @@ from skimage.transform import pyramid_reduce
 #
 # ===========================================================================
 
-ATTACHMENT = 15.0
-TIGHTNESS = 0.3
-NUM_WARP = 5
-NUM_ITER = 10
-TOL = 1e-4
-PYRAMID_DOWNSCALE = 2
-PYRAMID_NLEVEL = 10
-PYRAMID_MIN_SIZE = 16
-REG_NUM_ITER = 2  # dual projection steps per component (fixed in skimage)
+# --- Step 1: pyramid -------------------------------------------------------
+PYRAMID_DOWNSCALE = 2  # size ratio between pyramid levels
+PYRAMID_NLEVEL = 10    # max number of levels
+PYRAMID_MIN_SIZE = 16  # px: smallest allowed level side
+
+# --- Step 3: solve ---------------------------------------------------------
+ATTACHMENT = 15.0      # data-term weight (lambda); smaller -> smoother flow
+TIGHTNESS = 0.3        # coupling between data and regularization terms (theta)
+NUM_WARP = 5           # warps of the moving frame per level
+NUM_ITER = 10          # fixed-point iterations per warp
+TOL = 1e-4             # early stop: mean squared flow change per pixel
+REG_NUM_ITER = 2       # dual projection steps per component (fixed in skimage)
+
+
+# ===========================================================================
+#
+#   STEP 1 -- PYRAMID
+#
+# ===========================================================================
+
+
+def _get_pyramid(img: np.ndarray) -> list[np.ndarray]:
+    """Coarse-to-fine image pyramid (coarsest first), same calls as skimage _get_pyramid."""
+    pyramid = [img]
+    size = min(img.shape)
+    count = 1
+    while count < PYRAMID_NLEVEL and size > PYRAMID_DOWNSCALE * PYRAMID_MIN_SIZE:
+        reduced = pyramid_reduce(pyramid[-1], PYRAMID_DOWNSCALE, channel_axis=None)
+        pyramid.append(reduced)
+        size = min(reduced.shape)
+        count += 1
+    return pyramid[::-1]
 
 
 # ===========================================================================
@@ -202,26 +224,13 @@ def _tvl1_level(ref: np.ndarray, moving: np.ndarray, flow: np.ndarray) -> np.nda
 
 # ===========================================================================
 #
-#   STEP 1 + 4 -- PYRAMID / RESIZE  (same calls as skimage _optical_flow_utils)
+#   STEP 4 -- RESIZE  (+ coarse-to-fine driver)
 #
 # ===========================================================================
 
 
-def _get_pyramid(img: np.ndarray) -> list[np.ndarray]:
-    """Coarse-to-fine image pyramid (coarsest first)."""
-    pyramid = [img]
-    size = min(img.shape)
-    count = 1
-    while count < PYRAMID_NLEVEL and size > PYRAMID_DOWNSCALE * PYRAMID_MIN_SIZE:
-        reduced = pyramid_reduce(pyramid[-1], PYRAMID_DOWNSCALE, channel_axis=None)
-        pyramid.append(reduced)
-        size = min(reduced.shape)
-        count += 1
-    return pyramid[::-1]
-
-
 def _resize_flow(flow: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
-    """Nearest-neighbour upscale of (2, h, w) flow to shape, values multiplied by the scale factor."""
+    """Nearest-neighbour upscale of (2, h, w) flow to shape, values multiplied by the scale factor (as skimage)."""
     scale = [n / o for n, o in zip(shape, flow.shape[1:], strict=True)]
     scale_factor = np.array(scale, dtype=flow.dtype)[:, np.newaxis, np.newaxis]
     return scale_factor * ndi.zoom(flow, [1, *scale], order=0, mode="nearest", prefilter=False)
