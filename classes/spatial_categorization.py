@@ -22,6 +22,7 @@ from skimage.segmentation import watershed
 NDIM_SINGLE_FRAME = 2
 CATEGORY_BRIGHT = 1
 BASELINE_SIGMA_MULT = 1.5
+BASELINE_TRIM_PCT = (0.1, 99.9)  # baseline pixels outside these percentiles are dropped before mean/std
 
 
 class SpatialCategorizer:
@@ -172,7 +173,7 @@ class SpatialCategorizer:
             image_segment: 3D array (frames, height, width) or 2D array (single frame)
             spike_frame_idx: Index of the spike frame within image_segment. Frames
                 before this index are treated as the baseline window used to set
-                threshold_used (baseline mean + 2*std).
+                threshold_used (trimmed baseline mean + BASELINE_SIGMA_MULT * std).
 
         Returns:
             self (for method chaining)
@@ -198,7 +199,9 @@ class SpatialCategorizer:
 
     @staticmethod
     def compute_baseline_threshold(baseline_frames: list[np.ndarray]) -> float:
-        """Bright threshold (mean + 2*std) from a set of baseline (pre-spike) frames.
+        """Bright threshold (mean + BASELINE_SIGMA_MULT * std) from a set of baseline (pre-spike) frames.
+
+        Baseline pixels outside the BASELINE_TRIM_PCT percentiles are dropped first.
 
         Pulled out of _calculate_global_threshold so a caller that already has a segment's
         baseline frames on hand (e.g. a per-segment reliability check) can compute the same
@@ -208,10 +211,12 @@ class SpatialCategorizer:
             baseline_frames: pre-spike frames, e.g. image_segment[:spike_frame_idx].
 
         Returns:
-            Bright-pixel threshold: baseline mean + BASELINE_SIGMA_MULT * baseline std.
+            Bright-pixel threshold: trimmed baseline mean + BASELINE_SIGMA_MULT * trimmed baseline std.
         """
-        baseline_pixels = np.concatenate([np.asarray(f).flatten() for f in baseline_frames])
-        return float(baseline_pixels.mean() + BASELINE_SIGMA_MULT * baseline_pixels.std())
+        baseline_pixels = np.concatenate([np.asarray(f, dtype=np.float64).ravel() for f in baseline_frames])
+        lo, hi = np.percentile(baseline_pixels, BASELINE_TRIM_PCT)
+        kept = baseline_pixels[(baseline_pixels >= lo) & (baseline_pixels <= hi)]
+        return float(kept.mean() + BASELINE_SIGMA_MULT * kept.std())
 
     def categorize_frame(self, frame: np.ndarray, frame_idx: int, threshold: float) -> np.ndarray:
         """Categorize a single frame using an already-known threshold.

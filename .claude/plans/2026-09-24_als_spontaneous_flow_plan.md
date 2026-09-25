@@ -121,12 +121,13 @@ results/spontaneous/
 - **Add to `plot_results.py`**: `plot_flow_panels(...)`, ported from the prototype. It exports to the new `flow/` folder as `{stem}_FLOW.png` (replaces `latency/`).
 - **DB:** stop writing `peak_latency_ms`. The column stays so old DBs don't break, following the existing `_ensure_columns` pattern. Remove it from `compute_region_stats` / `build_stats_report`.
 - **Verify:** the 6 recordings of `ana_20260915_000.txt` with ALS. `FLOW.png` must match `output/test5/optical_flow/*_FLOW_PREMASKED.png`. MED/CAT/area results must be unchanged vs. before Phase 3.
+- **Session 66 update (2026-09-25):** pre-masking dropped. Now TV-L1 runs on the **raw MED pair**, then the CAT mask (the union of both frames) is applied in the plot. `FLOW.png` has 4 rows: quivers + speed (µm/s) inside the CAT mask, then quivers + speed over the full field. Arrows are red and auto-scaled, every panel has a scale bar, and there is one gray range and one speed range per figure. Thresholds were also fixed: spontaneous uses 512 bins with a smoothed-peak center and a left fit at k 1.5; CAT uses a p0.1–p99.9 trim + mean + 1.5·std. Verified in `output/test5`.
 
 ---
 
 ## Phase 4: Flow metrics ("further analysis")
 
-Recommended per-pair metrics, computed only inside the pre-mask:
+Recommended per-pair metrics, computed only inside the CAT mask (`keep_mask`). Since Session 66, this is applied to the **unmasked** TV-L1 flow:
 
 | Metric | Meaning | Supports |
 |---|---|---|

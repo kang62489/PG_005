@@ -6,15 +6,100 @@ All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
 |---|------|---------------------|-------|--------|
 | A | Default the pipeline (CLI + GUI) to ALS | new | 0 | [x] |
 | B | Merge `../PG_010/sp_ach_zones.py` into PG_005 as classes/functions: 10X only, sensor-aware (iAChSnFR / GACh3.0 / rACh1h), numba CPU+CUDA acceleration, readable xlsx names/columns, zone size/frequency/period stats, output to `results/spontaneous/` | #1 wave vs hotspots, #4 spontaneous side | 1 | [x] |
-| C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [x] (uncommitted) |
-| D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [~] code done + verified identical, uncommitted -- user wants to re-check what it really fixed |
-| E | Further flow analysis: per-pair speed, radial outflow, divergence, coherence -> `flow_pairs` table | #5 locality argument | 4 | [ ] |
+| C | SpikeReliabilityChecker: merge `prototype_reliability_group_analysis.py` -- success/failure Vm (±50 ms) PNGs in `reliability/`, with AP threshold voltages marked | #4 induced side, spike zoom-in | 2 | [x] committed (`325e09f`) |
+| D | RegionAnalyzer: remove ring peak-latency analysis, merge `prototype_flow_analysis.py` (pre-masked TV-L1 flow), `flow/` replaces `latency/` | #5 locality argument | 3 | [x] tuned (Session 66): thresholds fixed; flow now UNMASKED TV-L1 then CAT mask; FLOW.png 4 rows (quivers + µm/s speed, masked / full field). Uncommitted |
+| E | Further flow analysis: per-pair speed, radial outflow, divergence, coherence -> `flow_pairs` table | #5 locality argument | 4 | [ ] (speed in µm/s already drawn in FLOW.png, not stored) |
 | F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [ ] |
 
 Still open, outside this plan:
 - [ ] Separate results by objective (old #2)
 - [ ] Compare the median with its segments (old #3)
 - [ ] Sort and mark the dataset used, put it in the bucket for Jeff (old #6)
+
+---
+
+# Log of the project progress 2026-09-25 Fri (Session 66)
+Last working file: `functions/plot_results.py`
+Last working line: 309 (`plot_flow_panels` -> shared `intensity_range` = p1-p99 of MED for rows 1 and 3)
+
+## List of modified files (all UNCOMMITTED -- user will commit)
+- `functions/fit_hist.py` — spontaneous threshold: `ZONE_HIST_BINS = 512`, new `smoothed_peak()` (Savitzky-Golay derivative = 0, window `ZONE_SMOOTH_FRAC = 0.05` of range), `fit_left_gaussian(center=)`; `find_background_threshold()` = smoothed peak + 1.5 * left-fit sigma (seed `ZONE_SIGMA_SEED` kept). `fit_hist_sigma()` (img_proc z-scoring) unchanged.
+- `classes/spatial_categorization.py` — `compute_baseline_threshold()`: baseline pixels trimmed to `BASELINE_TRIM_PCT = (0.1, 99.9)`, then mean + 1.5*std (float64). Docstrings "2*std" fixed.
+- `functions/hotspot_flow.py` — `premasked_flow()` now runs TV-L1 on the RAW MED pair; `keep_mask` = union of both frames' CAT (applied after, in the plot).
+- `functions/plot_results.py` — `plot_flow_panels(med, flow_pairs, title_info, frame_duration_ms)`: 4 rows (1 quivers in CAT mask, 2 speed µm/s in mask, 3 quivers full field, 4 speed full field); red auto-scaled arrows (p95 = 0.9 * 24 px), scale bars, shared gray range, shared speed color scale; `PIXEL_SCALE` imported for µm/px (10X/40X/60X). New `_draw_flow_quivers()`. `FLOW_QUIVER_SCALE` -> `FLOW_AUTO_ARROW_FRAC`. Reliability montage + zone maps (`plot_zone_overlay`, `plot_single_zone`) got scale bars (`obj` / `um_per_px` args).
+- `ach_domain_analysis.py` — `plot_flow_panels()` call: no `cat_stack`, + `frame_duration_ms`.
+- `classes/spike_reliability.py` — passes `self.obj` to the montage.
+- `spontaneous_analysis.py` — zone maps: one RGB TIFF stack `zone_maps/{stem}_ZONE_MAPS.tif` (page 1 all zones, then one page per zone; single series), no PNG subfolders.
+
+Scratch (output/, not code): `output/test1` (spontaneous threshold test + fitting PNGs), `output/test2/{1.5,2}_sigma` (CAT trim; `AVG/`, `AVG_run/` = mean-instead-of-median), `output/test3` (unmasked flow tests; `1.5_sigma_CATMASK_AUTO_clean` = adopted look), `output/test5` (verification of the pipeline edits, `compare_test5.py`). Deleted: `output/test6`, `output/test7`, `output/test2/{2.5,3}_sigma`, `output/test2/and_mask`.
+
+## Summary of current progress
+- **Thresholds decided + implemented:** spontaneous = 512 bins / smoothed-peak center / left fit / k 1.5 (0003 0.19113, 0012 0.18630); CAT = p0.1-p99.9 trim + mean + 1.5*std (trim changes thresholds <= 0.6 %). N = 1.5 kept (2 / 2.5 / 3 cut 0003 to 57 / 35 / 25 of 82). MED kept (not AVG).
+- **Verified (output/test5):** zone masks + ZONES.npz identical to test1; reliability 75/82, 5/5, 8/8 and MED/CAT tifs identical to test2/1.5_sigma; FLOW arrows match test3 clean.
+- **Findings:** AND of detected-segment CATs is empty for 0003 (max count 27/75) -> dropped. AVG shows a bright bottom blob in 0003 already at spike-1 -> dirty baselines in some segments (median hides it). Unmasked TV-L1 mostly measures brightness change (0012 arrows converge on the bright line; 0018 16-68 px/frame).
+- **Units:** speed = |flow| px/frame * (1/PIXEL_SCALE) µm/px * fps -> 10X @ 20 fps: 1 px/frame = 26.7 µm/s.
+- GPU: skimage TV-L1 is CPU only (no cv2/cupy/torch installed); flow ~45-55 s per recording.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Compared spontaneous vs CAT thresholding; chose and implemented both
+- ✅ Docstring fix (mean + 2*std -> BASELINE_SIGMA_MULT)
+- ✅ Flow: unmasked TV-L1 -> CAT mask, auto arrow scale, µm/s speed rows, scale bars, red arrows, unified gray range
+- ✅ Scale bars on reliability montage + zone maps; zone maps as one TIFF stack
+- ✅ Verification run in output/test5
+
+## What should we do next? (TODOs)
+- [ ] **Commit today's edits** (user) -- 7 pipeline files listed above.
+- [ ] Flow speed-up: 5 TV-L1 pairs in parallel threads first (measure; must be identical to serial). GPU = own numba-cuda TV-L1, big job.
+- [ ] Phase 4 / TODO E flow metrics -> `flow_pairs` table (speed µm/s, radial outflow, divergence, coherence), on the unmasked-then-masked flow.
+- [ ] Cleanup: rename `premasked_flow` (flow is unmasked now) + remove unused `mask_frame()` in `functions/hotspot_flow.py` (update `functions/__init__.py` registry).
+- [ ] Cleanup: fix or delete `output/test3/run_test3.py` (imports removed `FLOW_QUIVER_SCALE`).
+- [ ] Cleanup: stale per-recording zone-map PNG folders (e.g. `output/test5/spontaneous/zone_maps/{stem}/`).
+
+## Last Session Recap
+※ recap: Compared and fixed thresholds (spontaneous 512-bin smoothed-peak fit; CAT p0.1-p99.9 trim, k 1.5), switched flow to unmasked TV-L1 + CAT mask with µm/s speed rows, scale bars, zone-map TIFF stack; verified in output/test5. Pending: commit, flow speed-up, Phase 4 metrics, cleanups.
+
+---
+
+# Log of the project progress 2026-09-25 Fri (Session 65)
+Last working file: `classes/spatial_categorization.py` (no code edited this session)
+Last working line: 200 (`compute_baseline_threshold` -> back to mean + 1.5*std; docstring still says 2*std)
+
+## List of modified files
+No pipeline code edited. Git history this session:
+- `2d3b791` "backup before revert" -- snapshot of all Session 64 work (incl. the threshold unification).
+- User reverted `classes/spatial_categorization.py`, `functions/fit_hist.py`, `prototype_flow_analysis.py` to their `1ae47b7` state.
+- `325e09f` "Adopted phase 3 but need tuning" -- Phase 2 + Phase 3 kept, threshold unification dropped. Working tree clean.
+
+Scratch (output/, not code):
+- `output/test6/ana_after.txt` -- copy of `output/test7/phase3/ana_after.txt`, `dir_results` -> `output/test6`.
+- `output/test6/compare_test7.py` -- compares results.db (all tables, `timestamp` skipped) + pixel-compares all PNGs vs test7.
+- `output/test6/` -- full 6-recording pipeline run (415.6 s).
+
+## Summary of current progress
+- **Session 64's threshold unification is UNDONE.** Current thresholds:
+  - CAT (median + per-segment reliability): baseline **mean + 1.5*std** (`spatial_categorization.compute_baseline_threshold`).
+  - Spontaneous zones: `fit_hist.find_background_threshold` = **tallest-bin** peak, **1000 bins**, `ZONE_SIGMA_SEED = 0.0016`, k = 1.5 (`sp_zone_analyzer.CROSSOVER_RATIO`).
+- **Post-revert run == Phase 3 reference (`output/test7/phase3/after`):** 12 MED/CAT TIFFs byte-identical, results.db `experiments` 6x35 identical, all 34 PNGs pixel-identical, stats block identical.
+- **0003 reliability back to 75/82 (91.5 %)** -- the 82/82 regression came from the unified CAT threshold.
+- Per-recording CAT thresholds: 0002 0.1026 / 0003 0.0992 / 0017 0.0923 / 0018 0.1310 / 0012 0.1212 / 0013 0.1074.
+- Known issue carried over: tallest-bin zone threshold jumps with bin count (0012) -- the reason the unification was attempted.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Confirmed real state after the revert (Phases 2 + 3 kept, threshold change dropped)
+- ✅ Re-verified Phase 3 output is identical to `output/test7/phase3/after`
+- ✅ 0003 reliability regression gone (75/82)
+- ✅ Committed (`325e09f`)
+
+## What should we do next? (TODOs)
+- [ ] **Check and fix ALL thresholding methods** -- spontaneous analysis, per-segment CAT, median CAT, optical flow (pre-mask). **Pre-spike (baseline) frames are dirty** -> mean + 1.5*std baselines are contaminated; decide one robust method and re-verify 0003 reliability does not jump (82/82 trap).
+- [ ] Small fixes:
+  - `spatial_categorization.py` docstrings say "mean + 2*std" but `BASELINE_SIGMA_MULT = 1.5`.
+  - Reliability montage title shows the constant, not the k actually used.
+  - Flow step is slow (50-100 s per recording; 6-rec run 415.6 s).
+- Still open (not selected this time): flow interpretation (pre-mask edge pinning, 0003 sub-pixel flow, spike-1->spike = brightening), Phase 4 / TODO E, zone merge rules, formal spontaneous re-run, GUI smoke test.
+
+## Last Session Recap
+※ recap: Confirmed the revert kept Phases 2+3 and dropped the threshold unification; re-ran 6 recordings into output/test6, identical to test7 (0003 back to 75/82), committed 325e09f. Pending: fix all thresholds (dirty pre-spike frames), small fixes.
 
 ---
 

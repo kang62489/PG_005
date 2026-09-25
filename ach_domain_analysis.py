@@ -445,7 +445,7 @@ def analyze_entry(
         spatial_fig = plot_spatiotemporal_summary(
             categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
         )
-        flow_fig = plot_flow_panels(median_segment, cat_stack, region_analyzer.flow_pairs, title_info)
+        flow_fig = plot_flow_panels(median_segment, region_analyzer.flow_pairs, title_info, frame_duration_ms)
         figures = [
             ("spatial", spatial_fig, f"{export_stem('SPATIAL')}.png"),
             ("flow", flow_fig, f"{export_stem('FLOW')}.png"),

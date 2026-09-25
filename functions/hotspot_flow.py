@@ -1,8 +1,8 @@
 """
-Spike-aligned TV-L1 optical flow on the median stack, pre-masked to the hotspot (CPU only).
+Spike-aligned TV-L1 optical flow on the median stack, CAT mask applied after the flow (CPU only).
 
-  Step 1. Mask : keep = union of both frames' CAT-bright pixels; outside floored to each frame's own min
-  Step 2. Flow : skimage TV-L1 on the masked pair (masking first keeps background out of the estimate)
+  Step 1. Flow : skimage TV-L1 on the raw (unmasked) MED pair
+  Step 2. Mask : keep = union of both frames' CAT-bright pixels (plot_flow_panels draws arrows only there)
 
 Pairs: spike-1->spike, spike->spike+1, ..., spike+3->spike+4 (FLOW_OFFSETS).
 
@@ -34,11 +34,9 @@ def mask_frame(frame: np.ndarray, keep: np.ndarray) -> np.ndarray:
 def premasked_flow(
     med: np.ndarray, cat: np.ndarray, idx_from: int, idx_to: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """(v, u, keep): TV-L1 flow of the pre-masked frame pair; keep = the union mask used."""
+    """(v, u, keep): TV-L1 flow of the raw frame pair; keep = union of both frames' CAT-bright pixels."""
     keep = (cat[idx_from] == CATEGORY_BRIGHT) | (cat[idx_to] == CATEGORY_BRIGHT)
-    frame_from = mask_frame(med[idx_from], keep)
-    frame_to = mask_frame(med[idx_to], keep)
-    v, u = optical_flow_tvl1(frame_from, frame_to)
+    v, u = optical_flow_tvl1(med[idx_from], med[idx_to])
     return v, u, keep
 
 

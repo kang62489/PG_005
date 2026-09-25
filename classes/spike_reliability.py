@@ -122,7 +122,7 @@ class SpikeReliabilityChecker:
         More than MONTAGE_PAGE_SIZE segments split into RELIABILITY_P1.png, _P2.png, ...
         """
         figures = plot_segment_reliability_montage(
-            self.seg_results, rec_stem, self.window_px, self.density_thresh, BASELINE_SIGMA_MULT
+            self.seg_results, rec_stem, self.window_px, self.density_thresh, BASELINE_SIGMA_MULT, self.obj
         )
         n_pages = len(figures)
         for page_idx, fig in enumerate(figures):

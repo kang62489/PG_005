@@ -3,7 +3,8 @@ spontaneous_analysis.py  --  Spontaneous ACh hotspot -> zone analysis (10X, *_BI
 
   Step 1. Select  : proc list -> recordings with an ALS tiff; OBJ / SENSOR from rec_data.db, 10X only
   Step 2. Analyze : per recording, SpontaneousZoneAnalyzer detect -> group -> map
-  Step 3. Export  : per recording {stem}_ZONES.xlsx / _ZONE_MASK.tif / _ZONES.npz + zone-map PNGs
+  Step 3. Export  : per recording {stem}_ZONES.xlsx / _ZONE_MASK.tif / _ZONES.npz
+                    + zone_maps/{stem}_ZONE_MAPS.tif (RGB stack: all zones, then one page per zone)
   Step 4. Summary : spontaneous_summary.xlsx (one row per recording + pooled zone table)
                     + spontaneous_stats.png (zone area / frequency per sensor)
 
@@ -26,6 +27,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import tifffile
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from rich.console import Console
 
 # Local imports
@@ -88,35 +90,41 @@ def select_recordings(proc_list_path: Path, db_path: Path, exp_db_path: Path, al
 
 # ===========================================================================
 #
-#   STEP 3 -- EXPORT: zone-map PNGs
+#   STEP 3 -- EXPORT: zone-map TIFF stack
 #
 # ===========================================================================
 
+def _figure_to_rgb(fig) -> np.ndarray:
+    """Render a Figure at MAP_DPI -> (H, W, 3) uint8 RGB array."""
+    fig.set_dpi(MAP_DPI)
+    canvas = FigureCanvasAgg(fig)
+    canvas.draw()
+    return np.asarray(canvas.buffer_rgba())[..., :3].copy()
+
+
 def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, background: np.ndarray, bg_color: str,
-                     title_tag: str, out_dir: Path) -> int:
-    """Write 01_all_zones.png + one NN_zoneMM.png per zone; return zone count."""
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for stale_png in out_dir.glob("*.png"):
-        stale_png.unlink()
+                     title_tag: str, out_path: Path) -> int:
+    """Write one RGB TIFF stack: page 1 = all zones, then one page per zone; return zone count."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     zone_ids = sorted(analyzer.zone_masks)
     colors = zone_colors(zone_ids)
-    width = len(str(len(zone_ids) + 1))
-    zone_width = len(str(max(zone_ids, default=0)))
 
     n_by_source = analyzer.zone_stats["source"].str.split(" #").str[0].value_counts()
     overlay_title = (f"{len(zone_ids)} zones -- {n_by_source.get('trace_corr', 0)} trace-corr, "
                      f"{n_by_source.get('proximity', 0)} proximity, {n_by_source.get('isolated', 0)} isolated "
                      f"({title_tag})")
-    fig = plot_zone_overlay(analyzer.zone_masks, analyzer.zone_centroids, background, bg_color, overlay_title)
-    fig.savefig(out_dir / f"{1:0{width}d}_all_zones.png", dpi=MAP_DPI)
 
-    for i, zone_id in enumerate(zone_ids, start=2):
+    fig = plot_zone_overlay(analyzer.zone_masks, analyzer.zone_centroids, background, bg_color, overlay_title,
+                            analyzer.um_per_px)
+    pages = [_figure_to_rgb(fig)]
+    for zone_id in zone_ids:
         fig = plot_single_zone(zone_id, analyzer.zone_masks[zone_id], colors[zone_id],
                                analyzer.zone_centroids.get(zone_id), background, bg_color,
-                               f"zone {zone_id} ({title_tag})")
-        fig.savefig(out_dir / f"{i:0{width}d}_zone{zone_id:0{zone_width}d}.png", dpi=MAP_DPI)
+                               f"zone {zone_id} ({title_tag})", analyzer.um_per_px)
+        pages.append(_figure_to_rgb(fig))
 
+    tifffile.imwrite(out_path, np.stack(pages), photometric="rgb")  # one series: (pages, H, W, 3)
     return len(zone_ids)
 
 
@@ -166,12 +174,12 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         with timed(f"export background ({proj} projection)"):
             background = stack.max(axis=0) if proj == "max" else stack.mean(axis=0)
             del stack
-        map_dir = out_root / "zone_maps" / stem
-        with timed(f"export zone-map PNGs ({len(analyzer.zone_masks) + 1})"):
-            n_zones = export_zone_maps(analyzer, background, color, f"{stem}, {row['SENSOR']}, {proj} proj", map_dir)
+        map_path = out_root / "zone_maps" / f"{stem}_ZONE_MAPS.tif"
+        with timed(f"export zone-map TIFF ({len(analyzer.zone_masks) + 1} pages)"):
+            n_zones = export_zone_maps(analyzer, background, color, f"{stem}, {row['SENSOR']}, {proj} proj", map_path)
         for path in paths.values():
             console.log(f"[green]saved[/green] {path.resolve()}")
-        console.log(f"[green]saved[/green] {n_zones + 1} PNGs -> {map_dir.resolve()}")
+        console.log(f"[green]saved[/green] {n_zones + 1}-page zone-map TIFF -> {map_path.resolve()}")
 
         zone_stats = analyzer.zone_stats
         summary_rows.append({

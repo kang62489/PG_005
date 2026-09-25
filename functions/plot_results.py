@@ -34,10 +34,10 @@ from scipy.ndimage import maximum_filter
 
 from classes.region_analyzer import (
     MIN_DECAY_FIT_R2,
+    PIXEL_SCALE,
     RegionAnalyzer,
     _decay_model,
 )
-from classes.spatial_categorization import CATEGORY_BRIGHT
 from functions.ap_threshold import baseline_vm, find_ap_threshold
 
 # Cluster fill/outline colors, cycled by cluster index (red, green, blue, orange, purple)
@@ -256,51 +256,88 @@ def plot_spatiotemporal_summary(
 
 
 FLOW_QUIVER_STEP = 24     # px between drawn arrows
-FLOW_QUIVER_SCALE = 0.8   # arrow_length_px = magnitude / FLOW_QUIVER_SCALE
+FLOW_AUTO_ARROW_FRAC = 0.9  # auto scale: each panel's p95 arrow is this fraction of FLOW_QUIVER_STEP
+
+
+def _draw_flow_quivers(ax: mpl.axes.Axes, frame: np.ndarray, pair: dict, draw: np.ndarray,
+                       grid_y: np.ndarray, grid_x: np.ndarray, um_per_pixel: float,
+                       intensity_range: tuple[float, float]) -> None:
+    """MED frame (shared intensity_range) + red auto-scaled arrows at the grid points in `draw` + scale bar."""
+    ax.imshow(frame, cmap="gray", origin="upper", vmin=intensity_range[0], vmax=intensity_range[1])
+    if draw.any():
+        u_grid, v_grid = pair["u"][grid_y, grid_x][draw], pair["v"][grid_y, grid_x][draw]
+        scale = max(float(np.percentile(np.hypot(u_grid, v_grid), 95)), 1e-3) / (FLOW_AUTO_ARROW_FRAC * FLOW_QUIVER_STEP)
+        ax.quiver(
+            grid_x[draw], grid_y[draw], u_grid, v_grid,
+            color="red", angles="xy", scale_units="xy", scale=scale, width=0.003,
+            headwidth=2.5, headlength=3, headaxislength=2.5,
+        )
+    _add_scale_bar(um_per_pixel, ax, frame.shape[1], frame.shape[0])
 
 
 def plot_flow_panels(
     med_stack: np.ndarray,
-    cat_stack: np.ndarray,
     flow_pairs: list[dict],
     title_info: dict,
+    frame_duration_ms: float,
 ) -> Figure:
-    """One panel per pre-masked flow pair (RegionAnalyzer.compute_flow): MED "from" frame + red flow arrows.
+    """One column per flow pair (RegionAnalyzer.compute_flow), four rows:
 
-    Arrows are drawn only at grid points within FLOW_QUIVER_STEP of a CAT-bright pixel of the
-    "from" frame (a dilation, so a coarse grid can't miss a thin hotspot entirely).
+      Row 1: MED "from" frame + red arrows inside the CAT mask
+      Row 2: flow speed (µm/s) inside the CAT mask
+      Row 3: MED "from" frame + red arrows over the full field
+      Row 4: flow speed (µm/s) over the full field
+
+    CAT mask = the pair's keep_mask (union of both frames' CAT-bright pixels); row-1 arrows sit at grid
+    points within FLOW_QUIVER_STEP of it (a dilation, so a coarse grid can't miss a thin hotspot).
+    Arrows are auto-scaled per panel; MED panels (rows 1, 3) share one gray range (1st-99th percentile
+    of med_stack); rows 2 and 4 share one color scale.
 
     Args:
-        med_stack, cat_stack: (frames, H, W) median and categorized stacks the flow was computed on.
-        flow_pairs: dicts with "label", "idx_from", "u", "v" (from compute_flow_pairs()).
+        med_stack: (frames, H, W) median stack the flow was computed on.
+        flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask" (from compute_flow_pairs()).
         title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial".
+        frame_duration_ms: imaging frame duration, converts px/frame -> µm/s.
     """
     n_panels = max(len(flow_pairs), 1)
-    fig = Figure(figsize=(6 * n_panels, 6), dpi=110, layout="constrained")
+    fig = Figure(figsize=(6 * n_panels, 24), dpi=110, layout="constrained")
+    axes = fig.subplots(4, n_panels, squeeze=False)
     height, width = med_stack.shape[1], med_stack.shape[2]
     grid_y, grid_x = np.mgrid[0:height:FLOW_QUIVER_STEP, 0:width:FLOW_QUIVER_STEP]
+    um_per_pixel = 1.0 / PIXEL_SCALE[title_info["obj"]]
+    px_per_frame_to_um_per_s = um_per_pixel * 1000.0 / frame_duration_ms
+    intensity_range = tuple(float(x) for x in np.percentile(med_stack, [1, 99]))
 
-    for i, pair in enumerate(flow_pairs):
-        idx_from = pair["idx_from"]
-        ax = fig.add_subplot(1, n_panels, i + 1)
-        ax.imshow(med_stack[idx_from], cmap="gray", origin="upper")
+    speeds = [np.hypot(p["u"], p["v"]) * px_per_frame_to_um_per_s for p in flow_pairs]
+    vmax = float(np.percentile(np.concatenate([s.ravel() for s in speeds]), 99.5)) if speeds else 1.0
+    im = None
 
-        near_bright = maximum_filter(cat_stack[idx_from] == CATEGORY_BRIGHT, size=FLOW_QUIVER_STEP)
-        keep = near_bright[grid_y, grid_x]
-        if keep.any():
-            ax.quiver(
-                grid_x[keep], grid_y[keep], pair["u"][grid_y, grid_x][keep], pair["v"][grid_y, grid_x][keep],
-                color="red", angles="xy", scale_units="xy", scale=FLOW_QUIVER_SCALE, width=0.003,
-                headwidth=2.5, headlength=3, headaxislength=2.5,
-            )
-        ax.set_title(pair["label"], fontsize=10)
-        ax.set_xticks([])
-        ax.set_yticks([])
+    for i, (pair, speed) in enumerate(zip(flow_pairs, speeds, strict=True)):
+        frame = med_stack[pair["idx_from"]]
+        near_bright = maximum_filter(pair["keep_mask"], size=FLOW_QUIVER_STEP)[grid_y, grid_x]
+        all_points = np.ones_like(near_bright)
 
+        _draw_flow_quivers(axes[0, i], frame, pair, near_bright, grid_y, grid_x, um_per_pixel, intensity_range)
+        axes[0, i].set_title(f"{pair['label']}  (CAT mask)", fontsize=10)
+        im = axes[1, i].imshow(np.where(pair["keep_mask"], speed, np.nan), cmap="magma", vmin=0, vmax=vmax)
+        axes[1, i].set_title("flow speed (µm/s), CAT mask", fontsize=10)
+        _draw_flow_quivers(axes[2, i], frame, pair, all_points, grid_y, grid_x, um_per_pixel, intensity_range)
+        axes[2, i].set_title(f"{pair['label']}  (full field)", fontsize=10)
+        axes[3, i].imshow(speed, cmap="magma", vmin=0, vmax=vmax)
+        axes[3, i].set_title("flow speed (µm/s), full field", fontsize=10)
+        for row in (1, 3):
+            _add_scale_bar(um_per_pixel, axes[row, i], width, height)
+        for ax in axes[:, i]:
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    if im is not None:
+        for row in (1, 3):
+            fig.colorbar(im, ax=axes[row, :].tolist(), shrink=0.8, label="µm/s")
     fig.suptitle(
         f"Flow Analysis: {title_info['animal_id']} {title_info['slice']} {title_info['at']} "
         f"{title_info['obj']} TIFF_{title_info['tiff_serial']} ABF_{title_info['abf_serial']}"
-        "  (pre-masked, masked to CAT-bright)",
+        "  (unmasked TV-L1; rows 1-2 in CAT mask, rows 3-4 full field)",
         fontsize=13,
     )
     return fig
@@ -317,6 +354,7 @@ def plot_segment_reliability_montage(
     window_px: int,
     density_thresh: float,
     sigma_mult: float,
+    obj: str,
 ) -> list[Figure]:
     """Grid of per-segment density-gated detection panels, for reviewing reliability by eye.
 
@@ -335,6 +373,7 @@ def plot_segment_reliability_montage(
         window_px: density window size used (see compute_window_px()), for the title.
         density_thresh: density threshold used (see compute_density_thresh()), for the title.
         sigma_mult: bright-pixel threshold's sigma multiplier (see BASELINE_SIGMA_MULT), for the title.
+        obj: objective ("10X" / "40X" / "60X"), for the per-panel scale bar.
 
     Returns:
         One Figure per page (single-element list when segments fit on one page), each ready
@@ -370,6 +409,7 @@ def plot_segment_reliability_montage(
             for cluster_idx in range(result["n_clusters"]):
                 overlay[label_frame == cluster_idx] = CLUSTER_RGBA[cluster_idx % len(CLUSTER_RGBA)]
             ax.imshow(overlay, interpolation="nearest")
+            _add_scale_bar(1.0 / PIXEL_SCALE[obj], ax, label_frame.shape[1], label_frame.shape[0], font_size=5)
 
             color = "limegreen" if result["detected"] else "red"
             for spine in ax.spines.values():
@@ -1049,8 +1089,8 @@ def zone_colors(zone_ids: list[int]) -> dict[int, tuple]:
 
 
 def plot_zone_overlay(zone_masks: dict[int, np.ndarray], zone_centroids: dict[int, tuple[float, float]],
-                      background: np.ndarray, bg_color: str, title: str) -> Figure:
-    """All zones as translucent fills; largest painted first so small zones stay on top."""
+                      background: np.ndarray, bg_color: str, title: str, um_per_px: float) -> Figure:
+    """All zones as translucent fills (largest painted first so small zones stay on top) + scale bar."""
     from skimage.color import label2rgb
 
     bg_tinted = _tint_background(background, bg_color)
@@ -1067,20 +1107,22 @@ def plot_zone_overlay(zone_masks: dict[int, np.ndarray], zone_centroids: dict[in
     for zone_id in sorted(zone_masks):
         if zone_id in zone_centroids:
             _label_zone(ax, zone_id, zone_centroids[zone_id])
+    _add_scale_bar(um_per_px, ax, background.shape[1], background.shape[0])
     ax.set_title(title)
     ax.axis("off")
     return fig
 
 
 def plot_single_zone(zone_id: int, mask: np.ndarray, color: tuple, centroid: tuple[float, float] | None,
-                     background: np.ndarray, bg_color: str, title: str) -> Figure:
-    """One zone's outline over the background."""
+                     background: np.ndarray, bg_color: str, title: str, um_per_px: float) -> Figure:
+    """One zone's outline over the background + scale bar."""
     fig = Figure(figsize=(11, 11), layout="tight")
     ax = fig.add_subplot()
     ax.imshow(_tint_background(background, bg_color), cmap="gray" if bg_color == "gray" else None)
     ax.contour(mask.astype(float), levels=[0.5], colors=[color], linewidths=2.5)
     if centroid is not None:
         _label_zone(ax, zone_id, centroid)
+    _add_scale_bar(um_per_px, ax, background.shape[1], background.shape[0])
     ax.set_title(title)
     ax.axis("off")
     return fig
