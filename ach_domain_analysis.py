@@ -9,7 +9,8 @@ For every ana-list entry (processed TIFF + paired ABF, OBJ looked up in rec_data
   Step 4. Categorize  : bright / background per frame
   Step 5. Region+Flow : critical-frame clusters, hotspot area decay, TV-L1 flow (+ CAT keep mask)
   Step 6. Export      : results.db rows (experiments + flow_pairs), MED/CAT TIFFs, SPATIAL.png + FLOW.png + STREAMLINES.png
-                        (all PNGs built + saved on a background thread)
+                        (all PNGs built + saved on a background thread; flow figures shown in the striatum from the
+                        Striatum Boundary export, full FOV if a recording has no outline)
 
 Ana list format (column names declared on the 'Picked:' line):
   [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
@@ -21,6 +22,7 @@ Usage:
     python ach_domain_analysis.py --ana_list data/ana_list_20260601_000.txt
                              [--detrend BIEXP] [--use_gauss]
                              [--db data/rec_data.db] [--exp_db data/exp_info.db]
+                             [--stbd data/bd_20260601_000.json]
 """
 
 ## Modules
@@ -51,12 +53,15 @@ from classes import (
 )
 from classes.region_analyzer import PIXEL_SCALE
 from functions import (
+    bd_export_path,
     compute_region_stats,
     count_unique_cells,
     get_cell_recording_status,
     list_parser,
     load_img_segs,
+    load_st_bd,
     lookup_rec_from_db,
+    outline_mask,
     plot_flow_panels,
     plot_flow_streamlines,
     plot_spatiotemporal_summary,
@@ -259,6 +264,17 @@ def _log_skip(ana_list_path: Path, msg: str) -> None:
         f.write(f"[SKIPPED] {msg}\n")
 
 
+def striatum_of(stbd: dict[str, dict], raw_stem: str, shape: tuple[int, int]) -> np.ndarray | None:
+    """Striatum display mask from the bd export; None (flow figures show the full FOV) if no outline or another frame size."""
+    entry = stbd.get(raw_stem)
+    if entry is None or "striatum_outline_px" not in entry:
+        return None
+    if tuple(entry["image_shape"]) != shape:
+        console.log(f"[yellow]Striatum drawn on {entry['image_shape']}, MED is {list(shape)} -- flow figures full FOV[/yellow]")
+        return None
+    return outline_mask(entry["striatum_outline_px"], shape)
+
+
 def analyze_entry(
     row: dict,
     progress: tuple[int, int],
@@ -269,6 +285,7 @@ def analyze_entry(
     detrend_mode: str,
     normalization: str,
     ana_list_path: Path,
+    stbd: dict[str, dict],
     emitter=None,
 ) -> list[Callable[[], None]]:
     """Analyze one ana-list entry; returns the figure jobs (build + save PNG) for the background thread."""
@@ -449,6 +466,9 @@ def analyze_entry(
             "tiff_serial": export_data["img_serial"],
             "abf_serial": export_data["abf_serial"],
         }
+        # Display only: TV-L1 and the pattern fit never see the striatum mask.
+        striatum = striatum_of(stbd, Path(row["raw_tiff_name"]).stem, median_segment.shape[1:])
+        console.log(f"Flow figures: {'striatum mask' if striatum is not None else 'full FOV (no striatum outline)'}")
 
         def export_result_figures() -> None:
             """SPATIAL / FLOW / STREAMLINES PNGs (runs on the figure thread)."""
@@ -456,9 +476,11 @@ def analyze_entry(
                 categorizer, region_analyzer, spike_frame_idx, title_info, clip.get_vm_segments(), frame_duration_ms
             )
             exporter.export_figure("spatial", spatial_fig, f"{export_stem('SPATIAL')}.png")
-            flow_fig = plot_flow_panels(median_segment, region_analyzer.flow_pairs, title_info, frame_duration_ms)
+            flow_fig = plot_flow_panels(
+                median_segment, region_analyzer.flow_pairs, title_info, frame_duration_ms, spike_frame_idx, striatum
+            )
             exporter.export_figure("flow", flow_fig, f"{export_stem('FLOW')}.png")
-            stream_fig = plot_flow_streamlines(median_segment, region_analyzer.flow_pairs, title_info)
+            stream_fig = plot_flow_streamlines(median_segment, region_analyzer.flow_pairs, title_info, spike_frame_idx, striatum)
             exporter.export_figure("flow", stream_fig, f"{export_stem('STREAMLINES')}.png")
 
         jobs.append(export_result_figures)
@@ -477,9 +499,13 @@ def run(
     use_als: bool = True,
     db_path: Path = Path("data/rec_data.db"),
     exp_db_path: Path = Path("data/exp_info.db"),
+    stbd_path: Path | None = None,
     emitter=None,
 ) -> None:
-    """Run the full spike-aligned analysis pipeline for every entry in an ana list."""
+    """Run the full spike-aligned analysis pipeline for every entry in an ana list.
+
+    stbd_path: Striatum Boundary export for the flow figures; None -> bd_{date}_{serial}.json next to the ana list.
+    """
     run_t0 = time.time()
 
     # On a SLURM cluster (e.g. deigo), cgroups can cap this job to far fewer CPUs than the
@@ -505,6 +531,14 @@ def run(
     write_cell_summary_xlsx(df_cell_group, cell_summary_path)
     console.log(f"Saved cell summary -> {cell_summary_path.name}")
 
+    stbd_path = stbd_path or bd_export_path(ana_list_path)
+    if stbd_path.exists():
+        stbd = load_st_bd(stbd_path)["recordings"]
+        console.log(f"Striatum boundaries: {len(stbd)} recording(s) in {stbd_path.resolve()}")
+    else:
+        stbd = {}
+        console.log(f"[yellow]No striatum boundary file {stbd_path.resolve()} -- flow figures full FOV[/yellow]")
+
     animal_idx_lut = ResultsExporter.build_animal_idx_lut(df_checked_tiff)
     exporter = ResultsExporter(results_root=results_dir)
 
@@ -515,7 +549,7 @@ def run(
         # analyze_entry makes no matplotlib calls, so it overlaps the previous entry's figure thread.
         jobs = analyze_entry(
             row, (i, total), df_checked_tiff, animal_idx_lut, exporter,
-            results_dir, detrend_mode, normalization, ana_list_path, emitter,
+            results_dir, detrend_mode, normalization, ana_list_path, stbd, emitter,
         )
         # Previous entry's PNGs must finish first (matplotlib isn't thread-safe) -- 1 figure thread max.
         if figure_export_thread is not None:
@@ -547,6 +581,8 @@ if __name__ == "__main__":
     parser.add_argument("--use_gauss", action="store_true", help="Load *_GAUSS.tif instead of *_ALS.tif (default: ALS)")
     parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db (default: data/rec_data.db)")
     parser.add_argument("--exp_db", type=Path, default=Path("data/exp_info.db"), help="Path to exp_info.db (default: data/exp_info.db)")
+    parser.add_argument("--stbd", type=Path, default=None,
+                        help="Striatum Boundary export (default: bd_{date}_{serial}.json next to the ana list)")
     args = parser.parse_args()
 
-    run(args.ana_list, args.detrend, not args.use_gauss, args.db, args.exp_db)
+    run(args.ana_list, args.detrend, not args.use_gauss, args.db, args.exp_db, args.stbd)

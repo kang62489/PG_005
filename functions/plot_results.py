@@ -2,14 +2,15 @@
 Headless matplotlib export figures (plain Figure objects, no PySide6; the GUI canvas is classes/mpl_canvas.py).
 
   Step 1. Spatial     : hotspot-area trace + spike-4..spike+4 CAT panels + Vm overlay  (-> spatial/)
-  Step 2. Flow        : TV-L1 quivers + speed (*_FLOW.png), streamlines + pattern (*_STREAMLINES.png)  (-> flow/)
+  Step 2. Flow        : striatum / CAT-mask quivers + speed (*_FLOW.png), streamlines + pattern (*_STREAMLINES.png);
+                        MED shown as baseline z  (-> flow/)
   Step 3. Reliability : per-segment detection montage + Vm success vs failure  (-> reliability/)
   Step 4. Spikes      : full-length Vm with picked / skipped / collapsed spikes  (-> spikes/)
   Step 5. Prototypes  : kymographs / wave persistence used only by prototype_*.py
   Step 6. Spontaneous : zone overlay / single-zone maps + per-sensor zone stats  (-> spontaneous/)
 
 Example:
-    >>> fig = plot_flow_panels(med_stack, flow_pairs, title_info, frame_duration_ms)
+    >>> fig = plot_flow_panels(med_stack, flow_pairs, title_info, frame_duration_ms, spike_frame_idx, striatum)
     >>> fig.savefig(out_dir / f"{stem}_FLOW.png")
 """
 
@@ -36,6 +37,7 @@ from classes.region_analyzer import (
     RegionAnalyzer,
     _decay_model,
 )
+from classes.spatial_categorization import BASELINE_TRIM_PCT
 from functions.ap_threshold import baseline_vm, find_ap_threshold
 from functions.flow_pattern import FLOW_PATTERN_BLOCK, block_mean
 
@@ -59,6 +61,13 @@ CLUSTER_RGBA = [
 FLOW_QUIVER_STEP = 24         # px between drawn arrows
 FLOW_AUTO_ARROW_FRAC = 0.9    # auto scale: each panel's p95 arrow is this fraction of FLOW_QUIVER_STEP
 FLOW_STREAM_DENSITY = 2.5     # matplotlib streamplot density
+FLOW_TITLE_FS = 13            # panel title font size
+FLOW_SUPTITLE_FS = 16         # figure title font size
+FLOW_CBAR_LABEL_FS = 13       # speed colorbar label font size
+FLOW_CBAR_TICK_FS = 11        # speed colorbar tick font size
+FLOW_SCALE_BAR_FS = 12        # scale-bar text font size
+FLOW_CROSSHAIR_FS = 11        # 0/90/180/270° crosshair label font size
+FLOW_MED_Z_LOW = 1.0          # MED rows: gray range starts at baseline + this many sigmas (black)
 
 # --- Step 3: reliability ---------------------------------------------------
 MONTAGE_NCOLS = 8                                     # panels per montage row
@@ -381,14 +390,45 @@ def _draw_decay_fit(
 #
 # ===========================================================================
 
+# --- 2-shared. MED z display range -----------------------------------------
+
+
+def _med_z_display(med_stack: np.ndarray, flow_pairs: list[dict],
+                   spike_frame_idx: int) -> tuple[np.ndarray, tuple[float, float]]:
+    """MED as z (trimmed baseline mean / std of the pre-spike frames) + gray range (FLOW_MED_Z_LOW, upper).
+
+    upper = median over the flow pairs of each idx_from frame's max z inside its keep_mask; pairs with an
+    empty keep_mask are skipped (all empty -> max z over the idx_from frames).
+    """
+    baseline = med_stack[:spike_frame_idx].astype(np.float64).ravel()
+    lo, hi = np.percentile(baseline, BASELINE_TRIM_PCT)
+    kept = baseline[(baseline >= lo) & (baseline <= hi)]
+    z_stack = (med_stack - kept.mean()) / kept.std()
+
+    maxima = [float(z_stack[p["idx_from"]][p["keep_mask"]].max()) for p in flow_pairs if p["keep_mask"].any()]
+    if not maxima:
+        maxima = [float(z_stack[p["idx_from"]].max()) for p in flow_pairs] or [FLOW_MED_Z_LOW + 1.0]
+    upper = max(float(np.median(maxima)), FLOW_MED_Z_LOW + 1e-3)
+    return z_stack, (FLOW_MED_Z_LOW, upper)
+
+
+def _add_med_z_colorbar(fig: Figure, axes_row: list, z_range: tuple[float, float]) -> None:
+    """Gray colorbar for the MED z rows."""
+    sm = mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(*z_range), cmap="gray")
+    cbar = fig.colorbar(sm, ax=axes_row, shrink=0.8)
+    cbar.set_label("MED z (baseline σ)", fontsize=FLOW_CBAR_LABEL_FS)
+    cbar.ax.tick_params(labelsize=FLOW_CBAR_TICK_FS)
+
+
 # --- 2a. quivers + speed (*_FLOW.png) --------------------------------------
 
 
-def _draw_flow_quivers(ax: mpl.axes.Axes, frame: np.ndarray, pair: dict, draw: np.ndarray,
+def _draw_flow_quivers(ax: mpl.axes.Axes, background: np.ndarray, pair: dict, draw: np.ndarray,
                        grid_y: np.ndarray, grid_x: np.ndarray, um_per_pixel: float,
-                       intensity_range: tuple[float, float]) -> None:
-    """MED frame (shared intensity_range) + red auto-scaled arrows at the grid points in `draw` + scale bar."""
-    ax.imshow(frame, cmap="gray", origin="upper", vmin=intensity_range[0], vmax=intensity_range[1])
+                       value_range: tuple[float, float]) -> None:
+    """Gray background (MED frame or CAT mask, shown over value_range) + red auto-scaled arrows at the grid points
+    in `draw` + scale bar."""
+    ax.imshow(background, cmap="gray", origin="upper", vmin=value_range[0], vmax=value_range[1])
     if draw.any():
         u_grid, v_grid = pair["u"][grid_y, grid_x][draw], pair["v"][grid_y, grid_x][draw]
         scale = max(float(np.percentile(np.hypot(u_grid, v_grid), 95)), 1e-3) / (FLOW_AUTO_ARROW_FRAC * FLOW_QUIVER_STEP)
@@ -397,7 +437,7 @@ def _draw_flow_quivers(ax: mpl.axes.Axes, frame: np.ndarray, pair: dict, draw: n
             color="red", angles="xy", scale_units="xy", scale=scale, width=0.003,
             headwidth=2.5, headlength=3, headaxislength=2.5,
         )
-    _add_scale_bar(um_per_pixel, ax, frame.shape[1], frame.shape[0])
+    _add_scale_bar(um_per_pixel, ax, background.shape[1], background.shape[0], font_size=FLOW_SCALE_BAR_FS)
 
 
 def plot_flow_panels(
@@ -405,57 +445,64 @@ def plot_flow_panels(
     flow_pairs: list[dict],
     title_info: dict,
     frame_duration_ms: float,
+    spike_frame_idx: int,
+    striatum: np.ndarray | None = None,
 ) -> Figure:
-    """One column per flow pair; rows: CAT-mask arrows, CAT-mask speed (µm/s), full-field arrows, full-field speed.
+    """One column per flow pair; rows: striatum arrows on MED z, CAT-mask arrows on the CAT mask, striatum speed (µm/s).
 
-    Row-1 arrows sit at grid points within FLOW_QUIVER_STEP of keep_mask (a dilation, so a coarse grid
-    can't miss a thin hotspot). Arrows auto-scale per panel; MED rows share one gray range, speed rows one color scale.
+    striatum None (no outline, e.g. 40X / 60X) -> rows 1 and 3 cover the full FOV. Row 1 shows the MED as baseline z
+    (range from _med_z_display()). Row-2 arrows sit at grid points within FLOW_QUIVER_STEP of keep_mask (a dilation,
+    so a coarse grid can't miss a thin hotspot). Arrows auto-scale per panel; speed panels share one color scale.
 
     Args:
         flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask" (from compute_flow_pairs()).
         title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial".
         frame_duration_ms: imaging frame duration, converts px/frame -> µm/s.
+        spike_frame_idx: spike frame in med_stack; earlier frames are the z baseline.
+        striatum: (H, W) bool display mask for rows 1 and 3.
     """
     n_panels = max(len(flow_pairs), 1)
-    fig = Figure(figsize=(6 * n_panels, 24), dpi=110, layout="constrained")
-    axes = fig.subplots(4, n_panels, squeeze=False)
+    fig = Figure(figsize=(6 * n_panels, 18), dpi=110, layout="constrained")
+    axes = fig.subplots(3, n_panels, squeeze=False)
     height, width = med_stack.shape[1], med_stack.shape[2]
     grid_y, grid_x = np.mgrid[0:height:FLOW_QUIVER_STEP, 0:width:FLOW_QUIVER_STEP]
     um_per_pixel = 1.0 / PIXEL_SCALE[title_info["obj"]]
     px_per_frame_to_um_per_s = um_per_pixel * 1000.0 / frame_duration_ms
-    intensity_range = tuple(float(x) for x in np.percentile(med_stack, [1, 99]))
+    z_stack, z_range = _med_z_display(med_stack, flow_pairs, spike_frame_idx)
+    region = "striatum" if striatum is not None else "full FOV"
+    in_region = striatum[grid_y, grid_x] if striatum is not None else np.ones(grid_y.shape, dtype=bool)
 
     speeds = [np.hypot(p["u"], p["v"]) * px_per_frame_to_um_per_s for p in flow_pairs]
-    vmax = float(np.percentile(np.concatenate([s.ravel() for s in speeds]), 99.5)) if speeds else 1.0
+    if striatum is not None:
+        speeds = [np.where(striatum, s, np.nan) for s in speeds]
+    vmax = float(np.nanpercentile(np.concatenate([s.ravel() for s in speeds]), 99.5)) if speeds else 1.0
     im = None
 
     for i, (pair, speed) in enumerate(zip(flow_pairs, speeds, strict=True)):
-        frame = med_stack[pair["idx_from"]]
+        z_frame = z_stack[pair["idx_from"]]
         near_bright = maximum_filter(pair["keep_mask"], size=FLOW_QUIVER_STEP)[grid_y, grid_x]
-        all_points = np.ones_like(near_bright)
 
-        _draw_flow_quivers(axes[0, i], frame, pair, near_bright, grid_y, grid_x, um_per_pixel, intensity_range)
-        axes[0, i].set_title(f"{pair['label']}  (CAT mask)", fontsize=10)
-        im = axes[1, i].imshow(np.where(pair["keep_mask"], speed, np.nan), cmap="magma", vmin=0, vmax=vmax)
-        axes[1, i].set_title("flow speed (µm/s), CAT mask", fontsize=10)
-        _draw_flow_quivers(axes[2, i], frame, pair, all_points, grid_y, grid_x, um_per_pixel, intensity_range)
-        axes[2, i].set_title(f"{pair['label']}  (full field)", fontsize=10)
-        axes[3, i].imshow(speed, cmap="magma", vmin=0, vmax=vmax)
-        axes[3, i].set_title("flow speed (µm/s), full field", fontsize=10)
-        for row in (1, 3):
-            _add_scale_bar(um_per_pixel, axes[row, i], width, height)
+        _draw_flow_quivers(axes[0, i], z_frame, pair, in_region, grid_y, grid_x, um_per_pixel, z_range)
+        axes[0, i].set_title(f"{pair['label']}  ({region})", fontsize=FLOW_TITLE_FS)
+        _draw_flow_quivers(axes[1, i], pair["keep_mask"], pair, near_bright, grid_y, grid_x, um_per_pixel, (0, 1))
+        axes[1, i].set_title(f"{pair['label']}  (CAT mask)", fontsize=FLOW_TITLE_FS)
+        im = axes[2, i].imshow(speed, cmap="magma", vmin=0, vmax=vmax)
+        axes[2, i].set_title(f"flow speed (µm/s), {region}", fontsize=FLOW_TITLE_FS)
+        _add_scale_bar(um_per_pixel, axes[2, i], width, height, font_size=FLOW_SCALE_BAR_FS)
         for ax in axes[:, i]:
             ax.set_xticks([])
             ax.set_yticks([])
 
+    _add_med_z_colorbar(fig, axes[0, :].tolist(), z_range)
     if im is not None:
-        for row in (1, 3):
-            fig.colorbar(im, ax=axes[row, :].tolist(), shrink=0.8, label="µm/s")
+        cbar = fig.colorbar(im, ax=axes[2, :].tolist(), shrink=0.8)
+        cbar.set_label("µm/s", fontsize=FLOW_CBAR_LABEL_FS)
+        cbar.ax.tick_params(labelsize=FLOW_CBAR_TICK_FS)
     fig.suptitle(
         f"Flow Analysis: {title_info['animal_id']} {title_info['slice']} {title_info['at']} "
         f"{title_info['obj']} TIFF_{title_info['tiff_serial']} ABF_{title_info['abf_serial']}"
-        "  (unmasked TV-L1; rows 1-2 in CAT mask, rows 3-4 full field)",
-        fontsize=13,
+        f"  (unmasked TV-L1; rows 1 + 3 in {region}, row 2 on the CAT mask)",
+        fontsize=FLOW_SUPTITLE_FS,
     )
     return fig
 
@@ -463,15 +510,16 @@ def plot_flow_panels(
 # --- 2b. streamlines + pattern (*_STREAMLINES.png) -------------------------
 
 
-def _draw_flow_streamlines(ax: mpl.axes.Axes, frame: np.ndarray, pair: dict, masked: bool,
-                           um_per_pixel: float, intensity_range: tuple[float, float]) -> None:
-    """MED frame (shared intensity_range) + red streamlines (block-averaged flow; CAT blocks only if masked) + scale bar."""
-    height, width = frame.shape
-    ax.imshow(frame, cmap="gray", origin="upper", vmin=intensity_range[0], vmax=intensity_range[1])
+def _draw_flow_streamlines(ax: mpl.axes.Axes, background: np.ndarray, pair: dict, region: np.ndarray | None,
+                           um_per_pixel: float, value_range: tuple[float, float]) -> None:
+    """Gray background (MED frame or CAT mask, shown over value_range) + red streamlines (block-averaged flow;
+    only blocks touching `region`, all blocks if None) + scale bar."""
+    height, width = background.shape
+    ax.imshow(background, cmap="gray", origin="upper", vmin=value_range[0], vmax=value_range[1])
     u_small = block_mean(pair["u"])
     v_small = block_mean(pair["v"])
-    if masked:
-        keep_small = block_mean(pair["keep_mask"].astype(float)) > 0
+    if region is not None:
+        keep_small = block_mean(region.astype(float)) > 0
     else:
         keep_small = np.ones(u_small.shape, dtype=bool)
     if keep_small.any():
@@ -483,7 +531,7 @@ def _draw_flow_streamlines(ax: mpl.axes.Axes, frame: np.ndarray, pair: dict, mas
         )
     ax.set_xlim(0, width)
     ax.set_ylim(height, 0)
-    _add_scale_bar(um_per_pixel, ax, width, height)
+    _add_scale_bar(um_per_pixel, ax, width, height, font_size=FLOW_SCALE_BAR_FS)
 
 
 def _draw_angle_crosshair(ax: mpl.axes.Axes, width: int, height: int) -> None:
@@ -494,7 +542,8 @@ def _draw_angle_crosshair(ax: mpl.axes.Axes, width: int, height: int) -> None:
     ax.plot([cx, cx], [cy - arm, cy + arm], **style)
     bbox = {"boxstyle": "round,pad=0.15", "facecolor": "white", "alpha": 0.8, "edgecolor": "none"}
     for text, (x, y) in {"0°": (cx + arm, cy), "90°": (cx, cy - arm), "180°": (cx - arm, cy), "270°": (cx, cy + arm)}.items():
-        ax.text(x, y, text, ha="center", va="center", fontsize=9, color="teal", fontweight="bold", bbox=bbox, zorder=6)
+        ax.text(x, y, text, ha="center", va="center", fontsize=FLOW_CROSSHAIR_FS, color="teal", fontweight="bold",
+                bbox=bbox, zorder=6)
 
 
 def _pattern_title(pair: dict) -> str:
@@ -512,38 +561,47 @@ def plot_flow_streamlines(
     med_stack: np.ndarray,
     flow_pairs: list[dict],
     title_info: dict,
+    spike_frame_idx: int,
+    striatum: np.ndarray | None = None,
 ) -> Figure:
-    """One column per flow pair; rows: CAT-mask streamlines (title = CAT-fit pattern), full-field streamlines.
+    """One column per flow pair; rows: striatum streamlines on MED z, CAT-mask streamlines on the CAT mask
+    (title = CAT-fit pattern).
 
-    Streamlines use FLOW_PATTERN_BLOCK block-averaged u, v; anisotropic panels get a 0/90/180/270° crosshair.
+    striatum None (no outline, e.g. 40X / 60X) -> row 1 covers the full FOV. Row 1 shows the MED as baseline z
+    (range from _med_z_display()). Streamlines use FLOW_PATTERN_BLOCK block-averaged u, v; anisotropic row-2
+    panels get a 0/90/180/270° crosshair.
 
     Args:
         flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask", "pattern" (compute_flow_pairs + fit_flow_pattern).
         title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial".
+        spike_frame_idx: spike frame in med_stack; earlier frames are the z baseline.
+        striatum: (H, W) bool display mask for row 1.
     """
     n_panels = max(len(flow_pairs), 1)
     fig = Figure(figsize=(6 * n_panels, 12), dpi=110, layout="constrained")
     axes = fig.subplots(2, n_panels, squeeze=False)
     um_per_pixel = 1.0 / PIXEL_SCALE[title_info["obj"]]
-    intensity_range = tuple(float(x) for x in np.percentile(med_stack, [1, 99]))
+    z_stack, z_range = _med_z_display(med_stack, flow_pairs, spike_frame_idx)
+    region = "striatum" if striatum is not None else "full FOV"
 
     for i, pair in enumerate(flow_pairs):
-        frame = med_stack[pair["idx_from"]]
-        _draw_flow_streamlines(axes[0, i], frame, pair, True, um_per_pixel, intensity_range)
+        frame = z_stack[pair["idx_from"]]
+        _draw_flow_streamlines(axes[0, i], frame, pair, striatum, um_per_pixel, z_range)
+        axes[0, i].set_title(f"{pair['label']}  ({region})", fontsize=FLOW_TITLE_FS)
+        _draw_flow_streamlines(axes[1, i], pair["keep_mask"], pair, pair["keep_mask"], um_per_pixel, (0, 1))
         if pair.get("pattern", {}).get("label") == "anisotropic":
-            _draw_angle_crosshair(axes[0, i], frame.shape[1], frame.shape[0])
-        axes[0, i].set_title(f"{pair['label']}  (CAT mask){_pattern_title(pair)}", fontsize=10)
-        _draw_flow_streamlines(axes[1, i], frame, pair, False, um_per_pixel, intensity_range)
-        axes[1, i].set_title(f"{pair['label']}  (full field)", fontsize=10)
+            _draw_angle_crosshair(axes[1, i], frame.shape[1], frame.shape[0])
+        axes[1, i].set_title(f"{pair['label']}  (CAT mask){_pattern_title(pair)}", fontsize=FLOW_TITLE_FS)
         for ax in axes[:, i]:
             ax.set_xticks([])
             ax.set_yticks([])
 
+    _add_med_z_colorbar(fig, axes[0, :].tolist(), z_range)
     fig.suptitle(
         f"Flow Streamlines: {title_info['animal_id']} {title_info['slice']} {title_info['at']} "
         f"{title_info['obj']} TIFF_{title_info['tiff_serial']} ABF_{title_info['abf_serial']}"
-        "  (unmasked TV-L1; row 1 in CAT mask, row 2 full field)",
-        fontsize=13,
+        f"  (unmasked TV-L1; row 1 in {region}, row 2 on the CAT mask)",
+        fontsize=FLOW_SUPTITLE_FS,
     )
     return fig
 

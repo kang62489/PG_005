@@ -29,6 +29,13 @@ First run of the CURRENT code -> `output/test01/before/` (baseline for every lat
 - Run -> `output/test01/after_thr/`, compare against `before/` (reliability %, cluster areas, significant flag).
 
 ## Phase 4 -- Flow (items 10 + 11 + 12 + 9)
+- 4a (items 10 + 11) [x] done 2026-09-27, display only (data identical). `--stbd` (default bd_{tag}.json next to
+  the ana list), `striatum_of()` in ach_domain_analysis.py.
+  FLOW.png 3 rows: MED z + arrows (striatum / full FOV), CAT mask + arrows, speed (striatum / full FOV).
+  STREAMLINES.png 2 rows: MED z + streamlines (striatum / full FOV), CAT mask + streamlines + pattern label.
+  MED z display: trimmed baseline z, range z 1 -> median over pairs of the max z inside each keep_mask; gray colorbar.
+  Larger fonts (titles 13, suptitle 16, colorbar 13/11, scale bar 12).
+- 4b (item 12) next, then 4c (item 9).
 - Items 10 / 11: FLOW + STREAMLINES PNGs masked with the STRIATUM mask from `data/bd_{proc_list}.json`
   (`striatum_outline_px` -> `outline_mask()`, `functions/st_boundary.py:285`); no outline (40X / 60X) ->
   unmasked full FOV (user, Q6). DISPLAY ONLY:
