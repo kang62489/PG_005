@@ -122,6 +122,7 @@ Last working line: 149-151 (frame-page title: 2nd line `zones <id> (<source>)`, 
 - `classes/sp_zone_analyzer.py` — `save()` -> `footprints/` + `mask/` (zlib, default on), `savez_compressed`; hotspot band `MIN_HOTSPOT_FRAC` 0.01 / `MAX_HOTSPOT_FRAC` 0.8 (drop logs); `TH_SMALL_HOTSPOTS` removed; stores `bg_center` / `bg_sigma`; `CROSSOVER_RATIO` 1.5 -> 2.0
 - `functions/fit_hist.py` — `fit_background()` split out of `find_background_threshold()` (same value)
 - `functions/plot_results.py` — `plot_zone_overview()` / `plot_frame_zones()` replace `plot_zone_overlay()` / `plot_single_zone()` / `_tint_background()`
+  - 2026-09-26 (uncommitted): `plot_frame_zones()` -> generator `frame_zone_figures()` (one reused Figure, zone contours built once + toggled, hotspot contour on a cropped bbox). ZONE_MAPS export 74.0 s -> 47.9 s on 2025_06_11-0003 (345 pages), pixel-identical; bench in `output/test14/`
 - `functions/__init__.py` — exports updated
 - `run_on_saion.slm`, `PIPELINE_FLOW.md` — output-layout comments
 - Scratch (not tracked): `output/test9/` — `proc_test9.txt`, runs `before/ after_g/ after_g2/ after_h/ after_i*/ after_j/ after_sigma2/`, scripts `compare_g.py`, `hotspot_areas.py` (stale `TH_SMALL_HOTSPOTS` import), `check_i.py`, `zone_pages.py`, `max_z_spread.py`, `zone_overlap.py`, `merge_preview.py`

@@ -41,12 +41,12 @@ from functions import (
     bd_export_path,
     check_cuda,
     direction_labels,
+    frame_zone_figures,
     img_zscore_convert,
     list_parser,
     load_st_bd,
     lookup_rec_from_db,
     outline_mask,
-    plot_frame_zones,
     plot_zone_overview,
     zone_colors,
 )
@@ -179,8 +179,7 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
         analyzer.zone_centroids, colors, vmin, vmax, overview_title, analyzer.um_per_px, striatum_outline,
         axis_labels))
 
-    def frame_pages() -> Iterator[np.ndarray]:
-        yield first
+    def frame_inputs() -> Iterator[tuple]:
         for frame in frames:
             z_frame = img_zscore_convert(stack[frame - 1].astype(np.float32), center, sigma)
             rows = np.flatnonzero(det_frames == frame)
@@ -191,9 +190,13 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
             zones_text = ", ".join(f"{z} ({zone_source[z]})" for z in frame_zone_ids)
             title = (f"frame {frame} ({frame / analyzer.fps:.2f} s) | {thr_text} | max z = {det_max_z[rows].max():.2f}\n"
                      + textwrap.fill(f"zones {zones_text}", MAP_TITLE_WIDTH))
-            yield _figure_to_rgb(plot_frame_zones(z_frame, frame_zone_ids, analyzer.zone_masks,
-                                                  analyzer.zone_centroids, colors, hotspot_mask, vmin, vmax, title,
-                                                  analyzer.um_per_px))
+            yield z_frame, frame_zone_ids, hotspot_mask, title
+
+    def frame_pages() -> Iterator[np.ndarray]:
+        yield first
+        for fig in frame_zone_figures(frame_inputs(), max_proj.shape, analyzer.zone_masks, analyzer.zone_centroids,
+                                      colors, vmin, vmax, analyzer.um_per_px):
+            yield _figure_to_rgb(fig)  # one reused Figure: render before pulling the next page
 
     n_pages = 1 + frames.size
     tifffile.imwrite(out_path, frame_pages(), shape=(n_pages, *first.shape), dtype=np.uint8, photometric="rgb",

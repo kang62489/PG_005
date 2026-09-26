@@ -15,6 +15,7 @@ Example:
 
 ## Modules
 # Standard library imports
+from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -878,11 +879,11 @@ def plot_med_kymographs(med: np.ndarray, um_per_pixel, frame_ms, title) -> Figur
 # --- 6a. zone maps (-> spontaneous/{stem}_ZONE_MAPS.tif) -------------------
 
 
-def _label_zone(ax: mpl.axes.Axes, zone_id: int, centroid: tuple[float, float]) -> None:
+def _label_zone(ax: mpl.axes.Axes, zone_id: int, centroid: tuple[float, float]) -> mpl.text.Text:
     """Zone id in a black circle at the zone centroid (row, col)."""
     cy, cx = centroid
-    ax.text(cx, cy, str(zone_id), color="white", fontsize=9, fontweight="bold",
-            ha="center", va="center", bbox={"boxstyle": "circle", "fc": "black", "alpha": 0.6})
+    return ax.text(cx, cy, str(zone_id), color="white", fontsize=9, fontweight="bold",
+                   ha="center", va="center", bbox={"boxstyle": "circle", "fc": "black", "alpha": 0.6})
 
 
 def zone_colors(zone_ids: list[int]) -> dict[int, tuple]:
@@ -937,17 +938,38 @@ def plot_zone_overview(z_image: np.ndarray, zone_masks: dict[int, np.ndarray],
     return fig
 
 
-def plot_frame_zones(z_frame: np.ndarray, frame_zone_ids: list[int], zone_masks: dict[int, np.ndarray],
-                     zone_centroids: dict[int, tuple[float, float]], colors: dict[int, tuple],
-                     hotspot_mask: np.ndarray, vmin: float, vmax: float, title: str, um_per_px: float) -> Figure:
-    """One frame: contours of the zones hit in this frame + thin white outline of the frame's own hotspots."""
-    fig, ax = _z_page(z_frame, vmin, vmax, title, um_per_px)
-    for zone_id in frame_zone_ids:
-        ax.contour(zone_masks[zone_id].astype(float), levels=[0.5], colors=[colors[zone_id]], linewidths=2.5)
+def frame_zone_figures(pages, shape: tuple[int, int],
+                       zone_masks: dict[int, np.ndarray], zone_centroids: dict[int, tuple[float, float]],
+                       colors: dict[int, tuple], vmin: float, vmax: float, um_per_px: float) -> Iterator[Figure]:
+    """One frame per page: contours of the zones hit in this frame + thin white outline of the frame's own hotspots.
+
+    pages: (z_frame, frame_zone_ids, hotspot_mask, title) per frame. Yields the SAME Figure, updated per page --
+    render it before pulling the next one. Figure, colorbar and zone contours / labels are built once.
+    """
+    fig, ax = _z_page(np.zeros(shape, dtype=np.float32), vmin, vmax, "", um_per_px)
+    image = ax.images[0]
+    zone_artists = {}
+    for zone_id in sorted(zone_masks):
+        artists = [ax.contour(zone_masks[zone_id].astype(float), levels=[0.5], colors=[colors[zone_id]], linewidths=2.5)]
         if zone_id in zone_centroids:
-            _label_zone(ax, zone_id, zone_centroids[zone_id])
-    ax.contour(hotspot_mask.astype(float), levels=[0.5], colors="white", linewidths=1)
-    return fig
+            artists.append(_label_zone(ax, zone_id, zone_centroids[zone_id]))
+        for artist in artists:
+            artist.set_visible(False)
+        zone_artists[zone_id] = artists
+
+    for z_frame, frame_zone_ids, hotspot_mask, title in pages:
+        image.set_data(z_frame)
+        ax.set_title(title)
+        for zone_id, artists in zone_artists.items():
+            for artist in artists:
+                artist.set_visible(zone_id in frame_zone_ids)
+        rows, cols = np.nonzero(hotspot_mask)  # contour only the hotspots' bounding box (+1 px) -> same outline
+        r0, r1 = max(rows.min() - 1, 0), min(rows.max() + 2, shape[0])
+        c0, c1 = max(cols.min() - 1, 0), min(cols.max() + 2, shape[1])
+        hotspots = ax.contour(np.arange(c0, c1), np.arange(r0, r1), hotspot_mask[r0:r1, c0:c1].astype(float),
+                              levels=[0.5], colors="white", linewidths=1)
+        yield fig
+        hotspots.remove()
 
 
 # --- 6b. zone stats (not exported for now) ---------------------------------

@@ -34,9 +34,9 @@ if TYPE_CHECKING:
     from .list_parser import list_parser
     from .load_img_segs import load_img_segs
     from .plot_results import (
+        frame_zone_figures,
         plot_flow_panels,
         plot_flow_streamlines,
-        plot_frame_zones,
         plot_segment_reliability_montage,
         plot_spatiotemporal_summary,
         plot_spike_detection_summary,
@@ -103,7 +103,7 @@ __all__ = [
     "perpendicular_of",
     "plot_flow_panels",
     "plot_flow_streamlines",
-    "plot_frame_zones",
+    "frame_zone_figures",
     "plot_segment_reliability_montage",
     "plot_spatiotemporal_summary",
     "plot_spike_detection_summary",
@@ -157,7 +157,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "plot_vm_success_vs_failure": (".plot_results",                       "plot_vm_success_vs_failure"),
     "plot_zone_overview":  (".plot_results",                              "plot_zone_overview"),
     "plot_zone_stats":     (".plot_results",                              "plot_zone_stats"),
-    "plot_frame_zones":    (".plot_results",                              "plot_frame_zones"),
+    "frame_zone_figures":  (".plot_results",                              "frame_zone_figures"),
     "zone_colors":         (".plot_results",                              "zone_colors"),
     "lookup_rec_from_db":  (".database_ops",                           "lookup_rec_from_db"),
     "populate_animal_id_values": (".database_ops",                     "populate_animal_id_values"),
