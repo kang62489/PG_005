@@ -67,6 +67,7 @@ MIN_GROUP_CORR = 0.95         # trace-corr grouping: every pair in a group has r
 # --- Step 3: map -----------------------------------------------------------
 FRAME_RATE_HZ = 20            # imaging rate, converts frames -> seconds for zone event stats
 HIGH_FREQ_FLAG_HZ = 1.0       # zones above this are flagged (e.g. manually induced hotspots), not removed
+MIN_EVENTS_FOR_FREQ = 3       # summary freq / period stats use only zones with at least this many events
 
 
 class SpontaneousZoneAnalyzer:
@@ -159,8 +160,7 @@ class SpontaneousZoneAnalyzer:
             self.zones = build_zones(self.trace_corr_groups, self.proximity_groups, self.isolated_tracks)
             self.zone_masks = build_zone_masks(self.zones, self.detections, self.footprints, self.height, self.width)
             self.zone_centroids = zone_centroids(self.zones, self.detections)
-            self.zone_stats = zone_stats_table(self.zones, self.zone_masks, self.detections,
-                                               self.n_frames, self.fps, self.um_per_px)
+            self.zone_stats = zone_stats_table(self.zones, self.zone_masks, self.detections, self.fps, self.um_per_px)
         console.log(f"  {len(self.zone_masks)} zones")
 
     # -----------------------------------------------------------------------
@@ -515,22 +515,22 @@ def zone_centroids(zones: pd.DataFrame, detections: pd.DataFrame) -> dict[int, t
     return centroids
 
 
-def zone_event_stats(frames: np.ndarray, n_frames: int, fps: float) -> tuple[int, float, float]:
+def zone_event_stats(frames: np.ndarray, fps: float) -> tuple[int, float, float]:
     """(n_events, mean_period_s, mean_freq_hz); an event is a run of consecutive frames.
 
-    Period = mean start-to-start interval, or the whole recording if only 1 event.
+    Period = mean start-to-start interval; NaN if only 1 event (< 1 event per recording, no interval).
     """
     frames = np.unique(frames)
-    if len(frames) == 0:
-        return 0, np.nan, np.nan
+    starts = frames[np.r_[True, np.diff(frames) > 1]] if len(frames) else frames
+    if len(starts) < 2:
+        return len(starts), np.nan, np.nan
 
-    starts = frames[np.r_[True, np.diff(frames) > 1]]
-    period_s = np.diff(starts).mean() / fps if len(starts) > 1 else n_frames / fps
+    period_s = np.diff(starts).mean() / fps
     return len(starts), float(period_s), float(1 / period_s)
 
 
 def zone_stats_table(zones: pd.DataFrame, zone_masks: dict[int, np.ndarray], detections: pd.DataFrame,
-                     n_frames: int, fps: float, um_per_px: float) -> pd.DataFrame:
+                     fps: float, um_per_px: float) -> pd.DataFrame:
     """One row per zone: size (px, um^2) and event frequency/period."""
     columns = ["zone_id", "source", "n_tracks", "area_px", "area_um2", "n_events", "mean_period_s", "mean_freq_hz",
                "high_freq_flag"]
@@ -544,7 +544,7 @@ def zone_stats_table(zones: pd.DataFrame, zone_masks: dict[int, np.ndarray], det
 
     frames_by_label = detections.groupby("joint_label")["frame"].apply(np.array)
     event_stats = zones["joint_labels"].apply(lambda labels: zone_event_stats(
-        np.concatenate([frames_by_label.get(label, np.array([], dtype=int)) for label in labels]), n_frames, fps))
+        np.concatenate([frames_by_label.get(label, np.array([], dtype=int)) for label in labels]), fps))
     stats[["n_events", "mean_period_s", "mean_freq_hz"]] = pd.DataFrame(event_stats.tolist(), index=stats.index)
     stats["high_freq_flag"] = stats["mean_freq_hz"] > HIGH_FREQ_FLAG_HZ
 

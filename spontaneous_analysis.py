@@ -33,7 +33,7 @@ from rich.console import Console
 
 # Local imports
 from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO, timed
+from classes.sp_zone_analyzer import CROSSOVER_RATIO, MIN_EVENTS_FOR_FREQ, timed
 from functions import (
     check_cuda,
     img_zscore_convert,
@@ -211,6 +211,8 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
                     f"-> {map_path.resolve()}")
 
         zone_stats = analyzer.zone_stats
+        freq = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_freq_hz"]
+        period = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_period_s"]
         summary_rows.append({
             "recording": stem,
             "sensor": row["SENSOR"],
@@ -222,8 +224,13 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             "n_proximity": int(zone_stats["source"].str.startswith("proximity").sum()),
             "n_isolated": int(zone_stats["source"].str.startswith("isolated").sum()),
             "median_area_um2": float(zone_stats["area_um2"].median()),
-            "median_freq_hz": float(zone_stats["mean_freq_hz"].median()),
-            "median_period_s": float(zone_stats["mean_period_s"].median()),
+            "n_low_freq_zones": int((zone_stats["n_events"] == 1).sum()),  # < 1 event per recording
+            "n_freq_zones": len(freq),  # zones with >= MIN_EVENTS_FOR_FREQ events, used below
+            "median_freq_hz": float(freq.median()),
+            "freq_q1_hz": float(freq.quantile(0.25)),
+            "freq_q3_hz": float(freq.quantile(0.75)),
+            "freq_cv": float(freq.std() / freq.mean()),
+            "median_period_s": float(period.median()),
             "n_high_freq_zones": int(zone_stats["high_freq_flag"].sum()),
         })
         pooled_zones.append(zone_stats.assign(recording=stem, sensor=row["SENSOR"]))

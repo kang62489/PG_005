@@ -16,17 +16,18 @@ Still open, outside this plan:
 - ~~Compare the median with its segments (old #3)~~ -- dropped 2026-09-25
 
 # Spontaneous refinement TODOs (2026-09-26)
-Plan: `.claude/plans/2026-09-26_spontaneous_refine_plan.md` -- phase by phase, user checks after each phase. G, H, I done (uncommitted).
-Test set: `output/test9/` (5 recordings listed in the plan); run the current code first -> `output/test9/before/`.
+Plan: `.claude/plans/2026-09-26_spontaneous_refine_plan.md` -- phase by phase, user checks after each phase. G-J done + 2σ threshold, committed `6a4c265`.
+Test set: `output/test9/proc_test9.txt` (4 recordings, see below); baseline -> `output/test9/before/`.
 
 | # | TODO | Phase | Status |
 |---|------|-------|--------|
 | G | Output layout: `_ZONE_MASK.tif` -> `mask/` + `--save_mask` toggle (default off) + zlib (was 1.26 GB = 1200×1024×1024 uint8 uncompressed); `_ZONES.npz` -> `footprints/`; xlsx + ZONE_MAPS directly in `spontaneous/`; stop exporting `spontaneous_stats.png` | 1 | [x] 2026-09-26 accepted: mask saved by DEFAULT (zlib, ~2 MB; `--no_mask` skips), npz -> `savez_compressed` (~0.5-1.3 MB); all contents identical to `output/test9/before/` (`compare_g.py`) |
 | H | Drop per-frame hotspots > 80 % of the frame (838,861 px) after fragment merge, before grouping; log only (no summary column). Also explore user's idea: quantile clip of hotspot areas (0.001, 0.999) vs speckles / over-exposed first frames -- scratch plots first | 2 | [x] 2026-09-26 accepted: keep merged hotspots 1 %-80 % of frame (10,486-838,861 px); `TH_SMALL_HOTSPOTS` removed; no quantile clip (scratch `hotspot_areas.py`). Frame-1 giants dropped in 0009 / 0011 |
-| I | ZONE_MAPS redesign: z-score with one shared min/max; page 1 = max proj (all frames) + all zones; then one page per detection frame with its zone contours + white outline of the actual hotspot; titles show `thr = peak + nσ` and max z of the frame's hotspots (no "meanproj"); remove `--proj` / `--color` (approved) | 3 | [x] 2026-09-26 accepted: `fit_background()` split out; gray z range = `MAP_Z_MIN` 1.0 -> median of detections' max z (min/max was stretched by bright specks); titles `thr = c + k × σ = thr`, `max z`; pages streamed to TIFF. Open (don't touch yet): 0011 zone 1 all in first 9.5 s; 0003 frame-1 ring hotspot (26 %) |
+| I | ZONE_MAPS redesign: z-score with one shared min/max; page 1 = max proj (all frames) + all zones; then one page per detection frame with its zone contours + white outline of the actual hotspot; titles show `thr = peak + nσ` and max z of the frame's hotspots (no "meanproj"); remove `--proj` / `--color` (approved) | 3 | [x] 2026-09-26 accepted: `fit_background()` split out; gray z range = `MAP_Z_MIN` 1.0 -> median of detections' max z (min/max was stretched by bright specks); titles `thr = c + k × σ = thr`, `max z`; pages streamed to TIFF. (0011 early zone / 0003 frame-1 hotspot: user said not a problem, dropped) |
 | J | Close/overlapping zones: explore centroid distance / IoU / overlap coefficient in scratch first, user picks rule, then `merge_close_zones()` Step 3b | 4 | [x] 2026-09-26 user chose NO MERGE for now: zones are unions of footprints, big zones contain small ones (oc ~1, IoU 0.06-0.2); any oc rule chains a recording into 1-3 zones (`zone_overlap.py`, `merge_preview.py`). Idea for later: "core" zone masks. Frame-page titles now also list zone source names |
 | - | Threshold sigma 1.5 -> 2.0 (`CROSSOVER_RATIO`, CLI `--sigma` default) -- user 2026-09-26; test run `output/test9/after_sigma2/`: zones 0009 4->0, 0003 34->26, 0011 12->6, 0012 19->12. Saion re-run postponed by user | - | [x] |
-| K | GUI button -> popup with raw TIFF preview; user draws striatum / cortex boundary with the mouse -> later coverage + direction per region. Popup design to be discussed AFTER G-J are fixed | after 4 | [ ] |
+| - | 1-event zones -> NaN freq / period (was 1/60 Hz floor); summary `n_low_freq_zones`, `n_freq_zones`, median / IQR / CV from >= 3-event zones (`MIN_EVENTS_FOR_FREQ`) -- Session 73, test run `output/test9/after_freq/` | - | [x] uncommitted |
+| K | GUI button -> popup with raw TIFF preview; user draws striatum / cortex boundary with the mouse -> later coverage + direction per region. Popup design to be discussed AFTER G-J are fixed -- user posts design PNG next session | after 4 | [ ] |
 
 Test set changed by user (2026-09-26): `2024_10_11-0009`, `2025_06_11-0003`, `2025_11_27-0011`, `2025_12_15-0012` -> `output/test9/proc_test9.txt`; baseline run done -> `output/test9/before/spontaneous/`.
 
@@ -34,6 +35,77 @@ Spike-aligned follow-ups from the 2026-09-26 results check (not started):
 - [ ] 60X decay fit fails on 43/62 significant recordings (median R² 0.4) -- look at a few SPATIAL.png.
 - [ ] 23 no-peak entries in the deigo run -- spontaneous-only recordings? drop from the ana list if so.
 - [ ] Copy back `data/ana_20260922_000_deigo.txt` from deigo (has the `[SKIPPED]` / stats block).
+
+---
+
+# Log of the project progress 2026-09-26 Sat (Session 73)
+Last working file: `spontaneous_analysis.py`
+Last working line: 225-236 (summary row: `n_low_freq_zones`, `n_freq_zones`, `median_freq_hz`, `freq_q1_hz`, `freq_q3_hz`, `freq_cv`, `median_period_s`)
+
+## List of modified files (UNCOMMITTED -- user commits)
+- `classes/sp_zone_analyzer.py` — `MIN_EVENTS_FOR_FREQ = 3` (line 70); `zone_event_stats()` (line 518): 1-event zones -> period / freq NaN (was whole recording = 1/60 Hz floor), unused `n_frames` arg removed from it and `zone_stats_table()`
+- `spontaneous_analysis.py` — summary: `n_low_freq_zones` (1 event = "< 1 per recording"), `n_freq_zones` (>= 3 events), median freq / period + `freq_q1_hz` / `freq_q3_hz` / `freq_cv` from >= 3-event zones only
+- `export_als_segments.py`, `export_zscore_segments.py` — deleted (`git rm`, staged; old diagnosis scripts, not imported anywhere)
+- Scratch: `output/test9/` cleaned (~6.6 GB freed); kept `proc_test9.txt`, `after_sigma2/` (old baseline), new `after_freq/` run, `count_1event.py`, `compare_freq.py`
+
+## Summary of current progress
+- 1-event zones = 16 / 44 in the test set (0003 6/26, 0011 5/6, 0012 5/12); count equals `n_isolated` in every recording.
+- 1/60 Hz floor pulled the medians down (0011 median = floor); freq-vs-period median mismatch comes from even-count medians.
+- `after_freq/` vs `after_sigma2/`: all xlsx sheets identical except 1-event period / freq -> NaN (`compare_freq.py`).
+- New summary: 0003 median 0.117 Hz (IQR 0.106-0.141, CV 0.26, 14 zones); 0011 0 measurable zones; 0012 0.103 Hz (IQR 0.085-0.198, CV 1.88 -- driven by zone 7, 2.2 Hz, likely one split event).
+- Paper-claim notes: "not in phase" needs an event-timing (synchrony) measure, not frequency spread; "covers striatum" needs the TODO K boundary; sensor comparison per recording, needs full-dataset run.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Clean `output/test9/` scratch runs
+- ✅ Remove unused `export_*.py` from the root
+- ✅ 1-event zones -> NaN freq / period, `n_low_freq_zones`, summary freq spread (>= 3 events)
+
+## What should we do next? (TODOs)
+- [ ] TODO K: user posts the GUI design PNG; then settle (1) button location (img-proc view vs new spontaneous view), (2) image shown (ALS max proj vs raw mean/frame), (3) polyline divider vs closed striatum polygon, (4) ROI save path (e.g. `spontaneous/roi/{stem}_ROI.json`) read by `spontaneous_analysis.py` for coverage.
+- [ ] Open question (user, end of Session 73): high-freq flagged zones (> 1 Hz) are currently INCLUDED in the summary freq stats (only `n_events >= 3` filters). Decide: exclude flagged zones, or first check whether 0012 zone 7 (2.2 Hz) is one event split by a gap frame.
+
+## Last Session Recap
+※ recap: Cleaned `output/test9/` and removed the unused `export_*.py`; 1-event zones now get NaN frequency and the summary reports median / IQR / CV from >= 3-event zones (verified vs `after_sigma2/`). Pending: commit, then TODO K GUI design from the user's PNG.
+
+---
+
+# Log of the project progress 2026-09-26 Sat (Session 72)
+Last working file: `spontaneous_analysis.py`
+Last working line: 149-151 (frame-page title: 2nd line `zones <id> (<source>)`, wrapped at `MAP_TITLE_WIDTH`)
+
+## List of modified files (all committed by user: `8133ff8` backup, `6a4c265` "fixed/improved almost all spontaneous_analysis.py")
+- `spontaneous_analysis.py` — new layout, `--no_mask`, stats PNG dropped, ZONE_MAPS redesign (streamed pages, z range `MAP_Z_MIN` 1.0 -> median detection max z, value titles + zone source names), `--proj` / `--color` removed, `--sigma` default = `CROSSOVER_RATIO`
+- `classes/sp_zone_analyzer.py` — `save()` -> `footprints/` + `mask/` (zlib, default on), `savez_compressed`; hotspot band `MIN_HOTSPOT_FRAC` 0.01 / `MAX_HOTSPOT_FRAC` 0.8 (drop logs); `TH_SMALL_HOTSPOTS` removed; stores `bg_center` / `bg_sigma`; `CROSSOVER_RATIO` 1.5 -> 2.0
+- `functions/fit_hist.py` — `fit_background()` split out of `find_background_threshold()` (same value)
+- `functions/plot_results.py` — `plot_zone_overview()` / `plot_frame_zones()` replace `plot_zone_overlay()` / `plot_single_zone()` / `_tint_background()`
+- `functions/__init__.py` — exports updated
+- `run_on_saion.slm`, `PIPELINE_FLOW.md` — output-layout comments
+- Scratch (not tracked): `output/test9/` — `proc_test9.txt`, runs `before/ after_g/ after_g2/ after_h/ after_i*/ after_j/ after_sigma2/`, scripts `compare_g.py`, `hotspot_areas.py` (stale `TH_SMALL_HOTSPOTS` import), `check_i.py`, `zone_pages.py`, `max_z_spread.py`, `zone_overlap.py`, `merge_preview.py`
+
+## Summary of current progress
+- Test set changed to `2024_10_11-0009`, `2025_06_11-0003`, `2025_11_27-0011`, `2025_12_15-0012`.
+- G: mask 1.26 GB -> ~2 MB (zlib), npz 20-65 MB -> 0.4-1.3 MB; contents byte-identical to baseline.
+- H: merged hotspots kept only if 1 %-80 % of frame; frame-1 over-exposed giants (100 % / 86 %) removed; quantile clip rejected (drops real hotspots).
+- I: ZONE_MAPS = max-proj overview + one page per detection frame; plain min/max range was stretched by bright specks (z 74 / 60) -> median of detection max z.
+- J: no merge — zones are footprint unions, big zones nest small ones; any overlap rule chains a recording into 1-3 zones.
+- Threshold 1.5σ -> 2σ (test zones: 0009 4->0, 0003 34->26, 0011 12->6, 0012 19->12).
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ TODO G, H, I, J (spontaneous refinement plan)
+- ✅ Group (source) names on frame pages
+- ✅ Threshold sigma 2.0
+
+## What should we do next? (TODOs)
+- [ ] TODO K: discuss the GUI popup design (raw TIFF preview + mouse-drawn striatum / cortex boundary -> coverage + direction).
+- [ ] Clean `output/test9/` scratch runs (`before/` alone holds ~4.8 GB of uncompressed masks).
+- [ ] 60X decay fit fails on 43/62 significant recordings (median R² 0.4) -- look at a few SPATIAL.png.
+- [ ] 23 no-peak entries in the deigo run -- spontaneous-only recordings? drop from the ana list if so.
+- [ ] Copy back `data/ana_20260922_000_deigo.txt` from deigo (has the `[SKIPPED]` / stats block).
+- [ ] Dataset bucket for Jeff: sort/mark the dataset used + separate results by objective.
+- (Postponed by user, not scheduled: saion re-run of spontaneous with the new code.)
+
+## Last Session Recap
+※ recap: Finished the spontaneous refinement (G-J): compressed mask/npz layout, 1-80 % hotspot band, z-scored per-frame ZONE_MAPS with source names, no zone merge, threshold 2σ; committed `6a4c265`. Pending: GUI ROI popup (K), test9 cleanup.
 
 ---
 
