@@ -39,7 +39,6 @@ BASELINE_SIGMA_MULT = 1.5         # threshold = trimmed baseline mean + this man
 BASELINE_TRIM_PCT = (0.1, 99.9)  # baseline pixels outside these percentiles are dropped before mean/std
 
 # --- Step 2: group ---------------------------------------------------------
-NDIM_SINGLE_FRAME = 2  # ndim of one 2D frame
 CATEGORY_BRIGHT = 1    # CAT pixel value for bright (background = 0)
 
 

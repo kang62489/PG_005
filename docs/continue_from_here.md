@@ -15,6 +15,77 @@ Still open, outside this plan:
 - [ ] Sort and mark the dataset used, separate results by objective, put it in the bucket for Jeff (old #6, merged with old #2 on 2026-09-25)
 - ~~Compare the median with its segments (old #3)~~ -- dropped 2026-09-25
 
+# Spontaneous refinement TODOs (2026-09-26)
+Plan: `.claude/plans/2026-09-26_spontaneous_refine_plan.md` -- phase by phase, user checks after each phase. NOTHING EDITED YET.
+Test set: `output/test9/` (5 recordings listed in the plan); run the current code first -> `output/test9/before/`.
+
+| # | TODO | Phase | Status |
+|---|------|-------|--------|
+| G | Output layout: `_ZONE_MASK.tif` -> `mask/` + `--save_mask` toggle (default off) + zlib (was 1.26 GB = 1200×1024×1024 uint8 uncompressed); `_ZONES.npz` -> `footprints/`; xlsx + ZONE_MAPS directly in `spontaneous/`; stop exporting `spontaneous_stats.png` | 1 | [ ] |
+| H | Drop per-frame hotspots > 80 % of the frame (838,861 px) after fragment merge, before grouping; log only (no summary column). Also explore user's idea: quantile clip of hotspot areas (0.001, 0.999) vs speckles / over-exposed first frames -- scratch plots first | 2 | [ ] |
+| I | ZONE_MAPS redesign: z-score with one shared min/max; page 1 = max proj (all frames) + all zones; then one page per detection frame with its zone contours + white outline of the actual hotspot; titles show `thr = peak + nσ` and max z of the frame's hotspots (no "meanproj"); remove `--proj` / `--color` (approved) | 3 | [ ] |
+| J | Close/overlapping zones: explore centroid distance / IoU / overlap coefficient in scratch first, user picks rule, then `merge_close_zones()` Step 3b | 4 | [ ] |
+
+Spike-aligned follow-ups from the 2026-09-26 results check (not started):
+- [ ] 60X decay fit fails on 43/62 significant recordings (median R² 0.4) -- look at a few SPATIAL.png.
+- [ ] 23 no-peak entries in the deigo run -- spontaneous-only recordings? drop from the ana list if so.
+- [ ] Copy back `data/ana_20260922_000_deigo.txt` from deigo (has the `[SKIPPED]` / stats block).
+
+---
+
+# Log of the project progress 2026-09-26 Sat (Session 71)
+Last working file: `.claude/plans/2026-09-26_spontaneous_refine_plan.md`
+Last working line: -- (plan written, no code edited)
+
+## Summary of current progress
+- Checked cluster results in `results/`:
+  - deigo (`results/logs/ach_44668799.out`, ran pre-acceleration code, 3.9 h): 201 entries -> 163 DB rows (10X 92 / 71 sig, 40X 9 / 9, 60X 62 / 62); 38 skipped = 23 no ABF peaks + 15 spikes too close for a baseline.
+  - flow_pairs 704 rows: mostly anisotropic; source only around the spike; sinks peak at spike+1 -> +2.
+  - saion (`results/logs/spont_4731852.out`, 1.7 h): 105 recordings, 2,971 zones. Oddities: 12 recordings with 0 zones (2025_11_27 / 12_14 / 12_18), whole-FOV zones (2025_11_27-0005/7/8/9), median freq vs median period mismatch (2025_11_27-0007, 2025_12_14-0020), 1/60 Hz floor, 2025_11_27-0026 threshold 0.095.
+- Wrote the spontaneous refinement plan (TODO G-J).
+
+## What should we do next? (TODOs)
+- [ ] Review the plan, then start Phase 1 (TODO G) -- first run the current code on the test set -> `output/test9/before/`.
+
+## Last Session Recap
+※ recap: Checked deigo/saion results (163 DB rows, 38 skips; 105 spontaneous recordings with whole-FOV / 0-zone oddities) and wrote the spontaneous refinement plan (mask layout + toggle, 80 % hotspot filter, ZONE_MAPS redesign, close-zone merge). Pending: TODO G-J, no code edited.
+
+---
+
+# Log of the project progress 2026-09-26 Sat (Session 70, backfill of commits `d12cf37` + `30fd9f7`)
+Last working file: `classes/spatial_categorization.py`
+Last working line: 42 (unused `NDIM_SINGLE_FRAME` removed)
+
+## List of modified files
+Committed by user (`d12cf37` "try speed up ach_domain_analysis with numba.jit", `30fd9f7` "complete acceleration", 2026-09-25):
+- `functions/tvl1_flow.py` (new) — `optical_flow_tvl1_numba()`: numba port of skimage 0.26 TV-L1 (prange over rows, float32, same early stop) -> bit-identical flow.
+- `functions/cluster_kernels.py` (new) — `binary_open_close_square()` (separable square open + close) and `within_distance()` (exact integer EDT <= radius); serial + nogil, so thread-safe.
+- `functions/hotspot_flow.py` — uses `optical_flow_tvl1_numba`; flow pairs now run one after another (numba is parallel inside), `N_THREADS_FLOW` / ThreadPoolExecutor removed.
+- `classes/spatial_categorization.py` — morphological cleanup via `binary_open_close_square` (replaces scipy erosion/dilation).
+- `classes/region_analyzer.py` — cluster seeker eps zone via `within_distance` (replaces `distance_transform_edt`).
+- `classes/spike_reliability.py` — per-segment check split into `_check_segment()`, run in `N_THREADS_RELIABILITY = 8` threads.
+- `classes/abf_clip.py` — `export_plot` flag; `_export_spike_plot` -> public `export_spike_plot()`.
+- `ach_domain_analysis.py` — all PNGs (spikes / reliability / spatial / flow) are built + saved as figure jobs on one background thread, which now overlaps the next entry's analysis.
+- `pyproject.toml`, `uv.lock` — CUDA 12 nvrtc / nvJitLink pins (Session 69 item, committed here).
+
+UNCOMMITTED:
+- `run_on_deigo.slm` / `run_on_saion.slm` — log file prefixes `ach_` / `spont_` -> `deigo_` / `saion_`.
+- `classes/spatial_categorization.py` — unused `NDIM_SINGLE_FRAME` removed (ruff OK).
+
+## Summary of current progress
+- `ach_domain_analysis.py` accelerated end to end with numba (TV-L1, morphology, EDT) + threaded reliability + overlapped figure thread. Still CPU-only -> deigo.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ numba acceleration of `ach_domain_analysis.py` (committed `d12cf37`, `30fd9f7`)
+- ✅ Remove unused `NDIM_SINGLE_FRAME`
+
+## What should we do next? (TODOs)
+- [ ] Copy and check the results from the clusters (saion `/work/WickensU/kang/results/spontaneous/`, deigo `/flash/WickensU/kang/results/` + `[SKIPPED]` lines / stats block in `data/ana_20260922_000_deigo.txt`). If the deigo run predates `30fd9f7`, re-run it with the accelerated code.
+- [ ] Dataset bucket for Jeff: sort/mark the dataset used + separate results by objective.
+
+## Last Session Recap
+※ recap: Backfilled the numba acceleration of ach_domain_analysis (numba TV-L1, morphology/EDT kernels, threaded reliability, background figure thread) and removed the unused NDIM_SINGLE_FRAME. Pending: check cluster results, Jeff dataset bucket.
+
 ---
 
 # Log of the project progress 2026-09-25 Fri (Session 69)

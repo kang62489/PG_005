@@ -8,8 +8,8 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
-#SBATCH --output=/flash/WickensU/kang/logs/ach_%j.out
-#SBATCH --error=/flash/WickensU/kang/logs/ach_%j.err
+#SBATCH --output=/flash/WickensU/kang/logs/deigo_%j.out
+#SBATCH --error=/flash/WickensU/kang/logs/deigo_%j.err
 
 # Spike-aligned pipeline -- CPU only (numba parallel median + threaded TV-L1), no GPU needed.
 # proc_tiffs / raw_abfs / results paths are read from the ana-list footer
