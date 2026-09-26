@@ -45,6 +45,7 @@ class ViewMain:
         self.btn_data_selector = QPushButton("Data\nSelector")
         self.btn_img_proc = QPushButton("Image\nProcessing")
         self.btn_als_correct = QPushButton("ALS\nCorrection")
+        self.btn_st_boundary = QPushButton("Striatum\nBoundary")
         self.btn_align_spike = QPushButton("Spike-aligned\nAnalysis")
 
         btn_w, btn_h = UISizes.BTN_SHELL_SIZE
@@ -53,6 +54,7 @@ class ViewMain:
             self.btn_data_selector,
             self.btn_img_proc,
             self.btn_als_correct,
+            self.btn_st_boundary,
             self.btn_align_spike,
         ):
             btn.setFixedSize(btn_w, btn_h)

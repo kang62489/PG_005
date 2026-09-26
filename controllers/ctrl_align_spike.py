@@ -89,14 +89,14 @@ class CtrlAlignSpike:
                     tiff_stem = Path(parts[0]).stem
                     abf_name = parts[-1]
                     dor, tiff_serial = tiff_stem.rsplit("-", 1)
-                    abf_serial = Path(abf_name).stem.rsplit("_", 1)[-1]
+                    unpaired = abf_name == "N/A"  # no paired ABF: shown as N/A, blocks the ana-list export
                     rows.append({
                         "DOR": dor,
                         "TIFF_SERIAL": tiff_serial,
                         "GAUSS_EXIST?": gauss_ready(proc_file_index, dor, tiff_serial, detrend),
                         "ALS_EXIST?": als_ready(proc_file_index, dor, tiff_serial, detrend),
-                        "ABF_SERIAL": abf_serial,
-                        "ABF_READY?": abf_ready(abf_files, abf_name),
+                        "ABF_SERIAL": "N/A" if unpaired else Path(abf_name).stem.rsplit("_", 1)[-1],
+                        "ABF_READY?": "N/A" if unpaired else abf_ready(abf_files, abf_name),
                     })
                 else:
                     in_picked = False
@@ -106,7 +106,7 @@ class CtrlAlignSpike:
             "GAUSS_EXIST?": pl.String, "ALS_EXIST?": pl.String,
             "ABF_SERIAL": pl.String, "ABF_READY?": pl.String,
         })
-        self.view.tv_proc_list.setModel(ModelFromDataFrame(df))
+        self.view.tv_proc_list.setModel(ModelFromDataFrame(df, missing_values=("No",), muted_values=("N/A",)))
 
         all_abf_ready = bool(rows) and (df["ABF_READY?"] == "YES").all()
         self.view.btn_confirm_analyzing_list.setEnabled(all_abf_ready)

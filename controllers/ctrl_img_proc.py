@@ -178,7 +178,7 @@ class CtrlImgProc:
             .alias("MODE")
         )
 
-        model_examined = ModelFromDataFrame(self.df_file_status)
+        model_examined = ModelFromDataFrame(self.df_file_status, missing_values=("MISSING",))
         model_examined.dataChanged.connect(self._on_proc_changed)
         self.view.tv_pick_list.setModel(model_examined)
         console.log("[green] File status updated.[/green]")

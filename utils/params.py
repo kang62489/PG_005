@@ -17,6 +17,7 @@ STYLES_DIR = BASE_DIR / "styles"
 MODELS_DIR = BASE_DIR / "data"
 EXP_DB_PATH = MODELS_DIR / "exp_info.db"
 REC_DB_PATH = MODELS_DIR / "rec_data.db"
+ST_BD_DRAFT_PATH = MODELS_DIR / "st_bd_draft.json"  # Striatum Boundary working draft (exported per proc list)
 LOG_DIR = BASE_DIR / "logs"
 RESULTS_DIR = BASE_DIR / "results"
 RAW_TIFFS_DIR = BASE_DIR / "raw_tiffs"
@@ -65,6 +66,7 @@ class UISizes:
     POPWIN_IMG_PROC_SIZE: tuple[int, int] = (950, 800)
     POPWIN_ALS_CORRECT_SIZE: tuple[int, int] = (1300, 800)
     POPWIN_ALIGN_SPIKE_SIZE: tuple[int, int] = (1300, 800)
+    POPWIN_ST_BOUNDARY_SIZE: tuple[int, int] = (1200, 820)
 
     # Dialog: Pick List
     TE_PICK_LIST_PREVIEW_HEIGHT: int = 350
@@ -99,3 +101,7 @@ class UISizes:
     BTN_RUN_ANALYSIS_HEIGHT: int = 45
     BTN_BROWSE_WIDTH: int = 60
     LE_PROCESSING_INFO_HEIGHT: int = 32
+
+    # Popout: Striatum Boundary
+    LW_ST_RECORDINGS_WIDTH: int = 260
+    BTN_ST_ACTION_SIZE: tuple[int, int] = (110, 45)

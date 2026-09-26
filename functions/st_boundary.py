@@ -1,0 +1,285 @@
+"""
+st_boundary.py  --  Striatum boundary / slice orientation helpers (headless, used by the Striatum Boundary popup).
+
+  Step 1. Orientation : dorsal direction + hemisphere (SLICE "3L" / "2R") -> medial direction
+  Step 2. Preview     : mean of the first N pages of a raw TIFF (anatomy visible, no full 2.5 GB load)
+  Step 3. Boundary    : clicked anchors -> Catmull-Rom curve -> ends snapped -> frame regions -> checks
+  Step 4. Storage     : data/st_bd_draft.json (working draft, one entry per recording stem)
+  Step 5. Export      : draft -> data/bd_{date}_{serial}.json (orientation vectors + striatum outline) per proc list
+
+Points are (x, y) = (column, row), origin top-left, same as the TIFF.
+
+Example:
+    curve = snap_ends(anchor_curve(anchors), (1024, 1024), earlier_lines)
+    labels, n_regions = label_regions([curve], (1024, 1024))
+    striatum = outline_mask(bd["recordings"][stem]["striatum_outline_px"], (1024, 1024))  # reading an export
+"""
+
+## Modules
+# Standard library imports
+import json
+import re
+from pathlib import Path
+
+# Third-party imports
+import numpy as np
+import tifffile
+from skimage.draw import line as draw_line
+from skimage.draw import polygon
+from skimage.measure import approximate_polygon, find_contours, label
+
+# ===========================================================================
+#
+#   CONFIG
+#
+# ===========================================================================
+
+# --- Step 1: orientation ---
+DIRECTIONS = ("up", "right", "down", "left")  # clockwise order on the image
+UNIT_VECTORS = {"up": (0, -1), "right": (1, 0), "down": (0, 1), "left": (-1, 0)}  # (x, y), y grows downwards
+
+# --- Step 2: preview ---
+PREVIEW_FRAMES = 50  # frames averaged from the start of the raw TIFF (~0.25 s to read)
+
+# --- Step 3: boundary ---
+POINTS_PER_SEGMENT = 20  # curve samples between two neighbouring anchors
+CATMULL_ROM_ALPHA = 0.5  # centripetal: no loops / overshoot with uneven anchor spacing
+SNAP_PX = 30  # a line end this close to the frame edge / another line is extended to touch it
+END_DIRECTION_POINTS = 5  # the end direction is taken over this many points
+MIN_REGION_FRAC = 0.01  # regions smaller than 1 % of the frame don't count (wiggle loops)
+MIN_CENTROID_FRAC = 0.05  # cross-check skipped if the centroids differ by < 5 % of the frame along ML
+
+# --- Step 5: export ---
+OUTLINE_TOLERANCE_PX = 0.5  # outline simplification: max deviation from the pixel border (px)
+
+
+# ===========================================================================
+#
+#   STEP 1 -- ORIENTATION: dorsal + hemisphere -> medial
+#
+# ===========================================================================
+
+def hemisphere_of(slice_label: str | None) -> str | None:
+    """'3L' -> 'L', '2R' -> 'R', anything else (e.g. '3', None) -> None."""
+    text = str(slice_label or "").strip().upper()
+    return text[-1] if text[-1:] in ("L", "R") else None
+
+
+def perpendicular_of(dorsal: str) -> tuple[str, str]:
+    """The two directions at 90° to dorsal (the possible medial choices)."""
+    i = DIRECTIONS.index(dorsal)
+    return DIRECTIONS[(i + 1) % 4], DIRECTIONS[(i - 1) % 4]
+
+
+def medial_from(dorsal: str, slice_label: str | None) -> str | None:
+    """L slice -> dorsal turned 90° clockwise, R slice -> counter-clockwise (dorsal up + L -> right)."""
+    hemisphere = hemisphere_of(slice_label)
+    if hemisphere is None:
+        return None
+    clockwise, counter_clockwise = perpendicular_of(dorsal)
+    return clockwise if hemisphere == "L" else counter_clockwise
+
+
+# ===========================================================================
+#
+#   STEP 2 -- PREVIEW: mean of the first pages of a raw TIFF
+#
+# ===========================================================================
+
+def raw_preview(raw_tiff_path: Path, n_frames: int = PREVIEW_FRAMES) -> np.ndarray:
+    """Mean of the first n_frames pages -> (H, W) float32."""
+    with tifffile.TiffFile(raw_tiff_path) as tif:
+        n = min(n_frames, len(tif.pages))
+        return np.mean([tif.pages[i].asarray() for i in range(n)], axis=0, dtype=np.float32)
+
+
+# ===========================================================================
+#
+#   STEP 3 -- BOUNDARY: anchors -> curve -> snapped line -> regions -> checks
+#
+# ===========================================================================
+
+# --- 3a. anchors -> curve ---
+
+def _cr_segment(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray) -> np.ndarray:
+    """Centripetal Catmull-Rom from p1 to p2 (Barry-Goldman form), POINTS_PER_SEGMENT samples, p2 excluded."""
+    t1 = np.linalg.norm(p1 - p0) ** CATMULL_ROM_ALPHA
+    t2 = t1 + np.linalg.norm(p2 - p1) ** CATMULL_ROM_ALPHA
+    t3 = t2 + np.linalg.norm(p3 - p2) ** CATMULL_ROM_ALPHA
+    t = np.linspace(t1, t2, POINTS_PER_SEGMENT, endpoint=False)[:, None]
+    a1 = ((t1 - t) * p0 + t * p1) / t1
+    a2 = ((t2 - t) * p1 + (t - t1) * p2) / (t2 - t1)
+    a3 = ((t3 - t) * p2 + (t - t2) * p3) / (t3 - t2)
+    b1 = ((t2 - t) * a1 + t * a2) / t2
+    b2 = ((t3 - t) * a2 + (t - t1) * a3) / (t3 - t1)
+    return ((t2 - t) * b1 + (t - t1) * b2) / (t2 - t1)
+
+
+def anchor_curve(anchors: np.ndarray) -> np.ndarray:
+    """Smooth curve through every anchor (M, 2); the end tangents follow the first / last anchor pair."""
+    keep = np.r_[True, np.any(np.diff(anchors, axis=0) != 0, axis=1)]  # a double-click repeats the last anchor
+    anchors = np.asarray(anchors, dtype=float)[keep]
+    if len(anchors) < 3:  # 1-2 anchors: the point / straight segment itself
+        return anchors
+    padded = np.vstack([2 * anchors[0] - anchors[1], anchors, 2 * anchors[-1] - anchors[-2]])  # phantom ends
+    segments = [_cr_segment(*padded[i : i + 4]) for i in range(len(anchors) - 1)]
+    return np.vstack([*segments, anchors[-1:]])
+
+
+# --- 3b. snap line ends ---
+
+def rasterize_lines(lines: list[np.ndarray], shape: tuple[int, int]) -> np.ndarray:
+    """Bool (H, W) mask of the line pixels (8-connected chains, so they block 4-connected regions)."""
+    height, width = shape
+    mask = np.zeros(shape, dtype=bool)
+    for line in lines:
+        pts = np.rint(line).astype(int)
+        pts[:, 0] = pts[:, 0].clip(0, width - 1)
+        pts[:, 1] = pts[:, 1].clip(0, height - 1)
+        for (x0, y0), (x1, y1) in zip(pts[:-1], pts[1:], strict=True):
+            rr, cc = draw_line(y0, x0, y1, x1)
+            mask[rr, cc] = True
+    return mask
+
+
+def _extend_end(end: np.ndarray, direction: np.ndarray, shape: tuple[int, int], others: np.ndarray) -> np.ndarray | None:
+    """Walk from end along direction for up to SNAP_PX px; the point where it leaves the frame or hits another line."""
+    height, width = shape
+    for step in range(1, SNAP_PX + 1):
+        x, y = end + direction * step
+        if not (0 <= x <= width - 1 and 0 <= y <= height - 1):
+            return np.array([x.clip(0, width - 1), y.clip(0, height - 1)])
+        if others[int(round(y)), int(round(x))]:
+            return np.array([x, y])
+    return None
+
+
+def snap_ends(line: np.ndarray, shape: tuple[int, int], other_lines: list[np.ndarray]) -> np.ndarray:
+    """Extend both ends of a line to the frame edge or another line, if within SNAP_PX."""
+    height, width = shape
+    line = line.copy()
+    line[:, 0] = line[:, 0].clip(0, width - 1)
+    line[:, 1] = line[:, 1].clip(0, height - 1)
+    if len(line) < 2:
+        return line
+    others = rasterize_lines(other_lines, shape)
+    k = min(END_DIRECTION_POINTS, len(line) - 1)
+    ends = []
+    for end, inner in ((line[0], line[k]), (line[-1], line[-1 - k])):
+        direction = end - inner
+        norm = np.hypot(*direction)
+        ends.append(None if norm == 0 else _extend_end(end, direction / norm, shape, others))
+    start, stop = ends
+    parts = [line]
+    if start is not None:
+        parts.insert(0, start[None])
+    if stop is not None:
+        parts.append(stop[None])
+    return np.vstack(parts)
+
+
+# --- 3c. regions + side check ---
+
+def label_regions(lines: list[np.ndarray], shape: tuple[int, int]) -> tuple[np.ndarray, int]:
+    """Regions the lines cut the frame into: (labels, 0 on line pixels; number of regions >= MIN_REGION_FRAC)."""
+    labels = label(~rasterize_lines(lines, shape), connectivity=1)
+    areas = np.bincount(labels.ravel())[1:]
+    return labels, int((areas >= MIN_REGION_FRAC * labels.size).sum())
+
+
+def region_at(labels: np.ndarray, seed: tuple[int, int] | None) -> np.ndarray | None:
+    """Bool mask of the region containing seed (x, y); None if no seed, on a line, or a too-small region."""
+    if seed is None:
+        return None
+    region = labels[seed[1], seed[0]]
+    if region == 0:
+        return None
+    mask = labels == region
+    return mask if mask.sum() >= MIN_REGION_FRAC * labels.size else None
+
+
+def lateral_check(striatum: np.ndarray, cortex: np.ndarray, medial: str) -> str | None:
+    """Cortex must lie lateral (opposite of medial) to the striatum; returns a warning text or None."""
+    lateral = np.array(UNIT_VECTORS[medial]) * -1
+    (sy, sx), (cy, cx) = (np.argwhere(striatum).mean(axis=0), np.argwhere(cortex).mean(axis=0))
+    offset = float(np.dot([cx - sx, cy - sy], lateral))
+    if abs(offset) < MIN_CENTROID_FRAC * max(striatum.shape):
+        return "cortex is neither clearly lateral nor medial to the striatum -- check skipped"
+    if offset < 0:
+        return "cortex lies MEDIAL to the striatum -- check dorsal / slice side"
+    return None
+
+
+# ===========================================================================
+#
+#   STEP 4 -- STORAGE: data/st_bd_draft.json
+#
+# ===========================================================================
+
+_XY_PAIR = re.compile(r"\[\s*(-?[\d.]+),\s*(-?[\d.]+)\s*\]")  # an indented [x, y] pair spread over 4 lines
+
+
+def load_st_bd(path: Path) -> dict[str, dict]:
+    """{stem: entry}; empty if the file does not exist yet."""
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def save_st_bd(path: Path, data: dict[str, dict]) -> None:
+    """Write sorted by key, [x, y] pairs on one line, via a temp file so a crash never leaves a half-written JSON."""
+    text = _XY_PAIR.sub(r"[\1, \2]", json.dumps(dict(sorted(data.items())), indent=2))
+    tmp_path = path.with_suffix(".json.tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)
+
+
+# ===========================================================================
+#
+#   STEP 5 -- EXPORT: draft entries -> data/bd_{date}_{serial}.json
+#
+# ===========================================================================
+
+def bd_export_path(proc_list_path: Path) -> Path:
+    """proc_20260922_000.txt (or ..._saion.txt) -> <same folder>/bd_20260922_000.json."""
+    match = re.search(r"\d{8}_\d{3}", proc_list_path.stem)
+    tag = match.group() if match else proc_list_path.stem.removeprefix("proc_")
+    return proc_list_path.with_name(f"bd_{tag}.json")
+
+
+def striatum_mask(entry: dict) -> np.ndarray | None:
+    """Rebuild the striatum mask of a draft entry: anchors -> snapped lines -> region at the striatum seed."""
+    if not entry.get("anchors_px") or not entry.get("striatum_seed_px"):
+        return None
+    shape = tuple(entry["image_shape"])
+    lines: list[np.ndarray] = []
+    for anchors in entry["anchors_px"]:
+        lines.append(snap_ends(anchor_curve(np.array(anchors)), shape, lines))
+    labels, _ = label_regions(lines, shape)
+    return region_at(labels, tuple(entry["striatum_seed_px"]))
+
+
+def mask_outline(mask: np.ndarray) -> np.ndarray:
+    """Outer border of a bool mask as a closed polygon (N, 2) x / y, simplified to OUTLINE_TOLERANCE_PX."""
+    contours = find_contours(np.pad(mask, 1).astype(float), 0.5)  # padding closes regions touching the frame edge
+    border = max(contours, key=len) - 1
+    return approximate_polygon(border, tolerance=OUTLINE_TOLERANCE_PX)[:, ::-1]
+
+
+def outline_mask(outline: list | np.ndarray, shape: tuple[int, int]) -> np.ndarray:
+    """Closed outline (N, 2) x / y -> bool mask; the reader's side of mask_outline()."""
+    outline = np.asarray(outline, dtype=float)
+    mask = np.zeros(shape, dtype=bool)
+    rr, cc = polygon(outline[:, 1], outline[:, 0], shape)
+    mask[rr, cc] = True
+    return mask
+
+
+def export_entry(entry: dict) -> dict:
+    """Draft entry -> exported entry: orientation labels + (x, y) unit vectors, and the striatum outline (10X)."""
+    out = {key: entry[key] for key in ("obj", "slice", "image_shape", "dorsal", "medial")}
+    out["dorsal_vec"] = list(UNIT_VECTORS[entry["dorsal"]])
+    out["medial_vec"] = list(UNIT_VECTORS[entry["medial"]])
+    mask = striatum_mask(entry)
+    if mask is not None:
+        out["striatum_area_px"] = int(mask.sum())
+        out["striatum_outline_px"] = np.round(mask_outline(mask), 1).tolist()
+    return out

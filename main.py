@@ -5,9 +5,17 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
 from rich.console import Console
 
 # Local application imports
-from controllers import CtrlAlignSpike, CtrlAlsCorrect, CtrlDataSelector, CtrlDorQuery, CtrlImgProc, CtrlMain
+from controllers import (
+    CtrlAlignSpike,
+    CtrlAlsCorrect,
+    CtrlDataSelector,
+    CtrlDorQuery,
+    CtrlImgProc,
+    CtrlMain,
+    CtrlStBoundary,
+)
 from utils import APP_STATUS_MESSAGE, UISizes
-from views import ViewAlignSpike, ViewAlsCorrect, ViewDataSelector, ViewDorQuery, ViewImgProc, ViewMain
+from views import ViewAlignSpike, ViewAlsCorrect, ViewDataSelector, ViewDorQuery, ViewImgProc, ViewMain, ViewStBoundary
 
 # Setup rich console
 console = Console()
@@ -78,6 +86,14 @@ class Main(QMainWindow):
         self.view_align_spike = ViewAlignSpike(self.popwin_align_spike)
         self.ctrl_align_spike = CtrlAlignSpike(self.view_align_spike)
 
+        # Striatum Boundary popout window
+        self.popwin_st_boundary = QWidget()
+        self.popwin_st_boundary.setWindowTitle("Striatum Boundary")
+        self.popwin_st_boundary.setFixedSize(*UISizes.POPWIN_ST_BOUNDARY_SIZE)
+
+        self.view_st_boundary = ViewStBoundary(self.popwin_st_boundary)
+        self.ctrl_st_boundary = CtrlStBoundary(self.view_st_boundary)
+
         # Hand every popout off to CtrlMain, which wires each popwins[key] to view_main's
         # matching btn_<key> — adding a new popout later is just one more dict entry here
         self.popwins = {
@@ -87,6 +103,7 @@ class Main(QMainWindow):
             "img_proc": self.popwin_img_proc,
             "als_correct": self.popwin_als_correct,
             "align_spike": self.popwin_align_spike,
+            "st_boundary": self.popwin_st_boundary,
         }
         self.ctrl_main = CtrlMain(self.view_main, self.popwins)
 
