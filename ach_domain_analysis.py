@@ -49,6 +49,7 @@ from classes import (
     SpatialCategorizer,
     SpikeReliabilityChecker,
 )
+from classes.region_analyzer import PIXEL_SCALE
 from functions import (
     compute_region_stats,
     count_unique_cells,
@@ -348,7 +349,7 @@ def analyze_entry(
     # --- Step 4. Categorize: bright / background per frame ---
     if emitter:
         emitter({"type": "step", "msg": "Categorizing spike frame..."})
-    categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
+    categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma", pixel_per_um=PIXEL_SCALE[obj])
     categorizer.fit(median_segment, spike_frame_idx=spike_frame_idx)
     console.log(
         f"[green]Categorized {len(categorizer.categorized_frames)} frame(s), threshold: {categorizer.threshold_used}"
@@ -499,9 +500,8 @@ def run(
     }
     console.log(f"Found {len(entries)} entries in {ana_list_path.name} -> {len(df_cell_group)} unique cells")
 
-    xlsx_dir = results_dir / "spikes"
-    xlsx_dir.mkdir(parents=True, exist_ok=True)
-    cell_summary_path = xlsx_dir / f"{ana_list_path.stem}_cells.xlsx"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    cell_summary_path = results_dir / f"{ana_list_path.stem}_cells.xlsx"
     write_cell_summary_xlsx(df_cell_group, cell_summary_path)
     console.log(f"Saved cell summary -> {cell_summary_path.name}")
 

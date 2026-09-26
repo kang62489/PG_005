@@ -37,10 +37,16 @@ class ResultsExporter:
     no per-date folder layer is needed):
         results/
         ├── results.db
+        ├── {ana_list}_cells.xlsx   (written by ach_domain_analysis.py)
         ├── median/
         │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_MED.tif
         ├── categorized/
-        │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_CAT.tif
+        │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_CAT.tif  (zlib)
+        ├── spikes/
+        │   └── ABF_{abf_stem}_spike_analysis.png   (written by AbfClip)
+        ├── reliability/
+        │   ├── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_RELIABILITY[_P{k}].png
+        │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_VM_SUCCESS_FAIL.png
         ├── spatial/
         │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_SPATIAL.png
         └── flow/
@@ -383,9 +389,9 @@ class ResultsExporter:
         detrend_mode: str,
         normalization: str,
     ) -> None:
-        """Save the categorized stack (0=bg, 1=bright) as a uint8 TIFF."""
+        """Save the categorized stack (0=bg, 1=bright) as a zlib-compressed uint8 TIFF."""
         stem = self.build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, detrend_mode, normalization, "CAT")
-        tifffile.imwrite(files_dir / f"{stem}.tif", np.array(categorized_frames, dtype=np.uint8))
+        tifffile.imwrite(files_dir / f"{stem}.tif", np.array(categorized_frames, dtype=np.uint8), compression="zlib")
 
     def _upsert_record(
         self,

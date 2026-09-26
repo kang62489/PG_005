@@ -37,6 +37,59 @@ Spike-aligned follow-ups from the 2026-09-26 results check (not started):
 - [ ] 23 no-peak entries in the deigo run -- spontaneous-only recordings? drop from the ana list if so.
 - [ ] Copy back `data/ana_20260922_000_deigo.txt` from deigo (has the `[SKIPPED]` / stats block).
 
+# ach_domain_analysis refinement TODOs (2026-09-27)
+Plan: `.claude/plans/2026-09-27_ach_domain_refine_plan.md` -- phase by phase, user checks after each phase.
+Test set: `2025_06_11-0003`, `2025_11_27-0018`, `2025_12_15-0012` -> `output/test01/ana_test01.txt`; baseline -> `output/test01/before/`.
+
+| # | TODO (user item) | Phase | Status |
+|---|------------------|-------|--------|
+| L | Clean `output/`, scratch restarts at `test01` (1) | 1 | [x] 2026-09-27 |
+| M | `{ana_list}_cells.xlsx` -> `results/` (6); CAT TIFF zlib (5); data-identical to `before/` | 2 | [ ] next -- user re-confirms go-ahead first |
+| N | `BASELINE_SIGMA_MULT` 1.5 -> 2.0, shared with reliability (2); remove objects < 2700 µm², px per objective (3) | 3 | [ ] |
+| O | FLOW / STREAMLINES PNGs masked by striatum (full FOV if no outline), display only (10, 11); per-recording aniso % vs src/sink % over the 5 pairs + per-objective table (12); drift -> `V 43° M` DV / ML format (9) | 4 | [ ] |
+| P | ABF CH2 (`data[1]`) pulse trains -> recording label `estim_induced` / `spontaneous` (7) | 5 | [ ] |
+| Q | Area comparison: estim-induced vs patched spontaneous MED hotspots vs natural spontaneous zones (zone centroid min distance to MED centroid >= 150 px) (8) | 6 | [ ] plan mode first |
+
+---
+
+# Log of the project progress 2026-09-27 Sun (Session 75)
+Last working file: `.claude/plans/2026-09-27_ach_domain_refine_plan.md`
+Last working line: -- (plan written, no code edited)
+
+## List of modified files
+- `.claude/plans/2026-09-27_ach_domain_refine_plan.md` (new) -- 6-phase plan for the user's items 1-12
+- `docs/continue_from_here.md` -- this log + TODO table L-Q
+- `output/` emptied (user ran it; the tool's delete was blocked as a protected path)
+- No `.py` file edited.
+
+## Summary of current progress
+- Reviewed `ach_domain_analysis.py` (already neat + numba-accelerated); open issues were result quality, not structure.
+- Settled with the user:
+  - Q1: sigma 2.0 applies to reliability AND final CAT (shared `BASELINE_SIGMA_MULT`).
+  - Q2: 2700 µm² converted per objective (10X ~1,519 px, 40X ~24,300 px, 60X ~54,675 px).
+  - Q3: CH2 = `abf_dataset[1]`; 0 = Vm, 3 = TTL.
+  - Q4a: stim / spontaneous is a recording property only; MED unchanged. Q4b: min centroid distance < 150 px -> patched neuron's zone.
+  - Q5: angle format `V 43° M` (nearest pole + tilt <= 45° toward the adjacent pole).
+  - Q6: no striatum outline (40X / 60X) -> full FOV.
+  - Q8: striatum mask is DISPLAY only; TV-L1 stays unmasked, pattern label fit stays on the CAT keep mask (`region_analyzer.py:243`).
+  - Q9: FOV-crop control dropped.
+- `run_on_saion.slm` (spontaneous) was still running on saion at wrap-up.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ Plan for items 1-12
+- ✅ `output/` cleaned (TODO L)
+
+## What should we do next? (TODOs)
+- [ ] Re-confirm with the user, then Phase 2 (TODO M): build `output/test01/ana_test01.txt` (look up 0018's paired ABF), run the current code -> `output/test01/before/`, move `_cells.xlsx` + zlib CAT, run -> `output/test01/after_layout/`, check data identical.
+- Carried over (user did not confirm at wrap-up -- ask):
+  - [ ] Check the saion spontaneous results (coverage spread, freq stats with 2-event zones).
+  - [ ] Reset `data/st_bd_draft.json` to `{}` unless boundaries will be edited.
+  - [ ] 60X decay fit fails 43/62; 23 no-peak entries in the deigo run.
+  - [ ] Copy back `data/ana_20260922_000_deigo.txt`; dataset bucket for Jeff.
+
+## Last Session Recap
+※ recap: Planned the ach_domain_analysis refinement (items 1-12: layout/zlib, sigma 2 + 2700 µm² filter, striatum-masked flow display, pattern ratio, DV/ML angle, CH2 stim label, area comparison) and cleaned `output/`; no code edited. Next: user re-confirms, then Phase 2.
+
 ---
 
 # Log of the project progress 2026-09-26 Sat (Session 74)

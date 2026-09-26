@@ -24,6 +24,7 @@ import numpy as np
 # Local imports
 from classes.region_analyzer import (
     CATEGORY_BRIGHT,
+    PIXEL_SCALE,
     compute_density_thresh,
     compute_eps_px,
     compute_window_px,
@@ -90,7 +91,7 @@ class SpikeReliabilityChecker:
         """One segment's result dict (see check()); independent of other segments, so safe to run in threads."""
         # 1a. baseline threshold from this segment's own pre-spike frames
         threshold = SpatialCategorizer.compute_baseline_threshold(segment[:spike_frame_idx])
-        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma")
+        categorizer = SpatialCategorizer.morphological(threshold_method="baseline_n_sigma", pixel_per_um=PIXEL_SCALE[self.obj])
 
         # 1b. categorize the two candidate frames (spike, spike+1)
         candidates = []

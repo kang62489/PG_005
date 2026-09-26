@@ -3,6 +3,7 @@ Spatial-aware intensity categorization (background / bright) of a spike-aligned 
 
   Step 1. Threshold : trimmed baseline (pre-spike) mean + BASELINE_SIGMA_MULT * std
   Step 2. Group     : per frame, bright pixels -> connected / watershed / morphological regions
+                      (morphological: objects < MIN_OBJECT_UM2 dropped when pixel_per_um is given)
   Step 3. Collect   : categorized frames + threshold via get_results() / get_export_data()
 
 Example:
@@ -35,11 +36,12 @@ from functions.cluster_kernels import binary_open_close_square
 # ===========================================================================
 
 # --- Step 1: threshold -----------------------------------------------------
-BASELINE_SIGMA_MULT = 1.5         # threshold = trimmed baseline mean + this many stds
+BASELINE_SIGMA_MULT = 2.0         # threshold = trimmed baseline mean + this many stds
 BASELINE_TRIM_PCT = (0.1, 99.9)  # baseline pixels outside these percentiles are dropped before mean/std
 
 # --- Step 2: group ---------------------------------------------------------
 CATEGORY_BRIGHT = 1    # CAT pixel value for bright (background = 0)
+MIN_OBJECT_UM2 = 2700.0  # µm²: morphological bright objects smaller than this are dropped (8-connected)
 
 
 class SpatialCategorizer:
@@ -62,6 +64,7 @@ class SpatialCategorizer:
         min_distance: int = 10,
         # Morphological parameters
         kernel_size: int = 3,
+        pixel_per_um: float | None = None,
     ) -> None:
         """Validate the method names and store the parameters; prefer the factory methods."""
         if grouping_method not in self.GROUPING_METHODS:
@@ -78,6 +81,7 @@ class SpatialCategorizer:
         # Method-specific parameters
         self.min_distance = min_distance  # watershed
         self.kernel_size = kernel_size  # morphological
+        self.pixel_per_um = pixel_per_um  # morphological; None = no MIN_OBJECT_UM2 filter
 
         # Results (populated after fit)
         self.source_frames: list[np.ndarray] = []
@@ -121,12 +125,17 @@ class SpatialCategorizer:
         threshold_method: str = "baseline_n_sigma",
         *,
         kernel_size: int = 3,
+        pixel_per_um: float | None = None,
     ) -> "SpatialCategorizer":
-        """Morphological open + close; larger kernel_size = more aggressive cleanup."""
+        """Morphological open + close; larger kernel_size = more aggressive cleanup.
+
+        With pixel_per_um (objective scale), objects smaller than MIN_OBJECT_UM2 are dropped afterwards.
+        """
         return cls(
             grouping_method="morphological",
             threshold_method=threshold_method,
             kernel_size=kernel_size,
+            pixel_per_um=pixel_per_um,
         )
 
     def fit(self, image_segment: np.ndarray, spike_frame_idx: int) -> "SpatialCategorizer":
@@ -251,6 +260,13 @@ class SpatialCategorizer:
         """
         bright_mask = frame > thresh_bright
         bright_cleaned = binary_open_close_square(bright_mask, max(self.kernel_size, 1))
+
+        if self.pixel_per_um is not None:
+            labeled, _ = label(bright_cleaned, structure=np.ones((3, 3), dtype=bool))
+            object_um2 = np.bincount(labeled.ravel()) / self.pixel_per_um ** 2
+            keep = object_um2 >= MIN_OBJECT_UM2
+            keep[0] = False  # background label
+            bright_cleaned = keep[labeled]
 
         categorized = np.zeros_like(frame, dtype=int)
         categorized[bright_cleaned] = CATEGORY_BRIGHT
