@@ -534,25 +534,38 @@ def _draw_flow_streamlines(ax: mpl.axes.Axes, background: np.ndarray, pair: dict
     _add_scale_bar(um_per_pixel, ax, width, height, font_size=FLOW_SCALE_BAR_FS)
 
 
-def _draw_angle_crosshair(ax: mpl.axes.Axes, width: int, height: int) -> None:
-    """Dashed crosshair at the frame centre with 0° (→) / 90° (↑) / 180° (←) / 270° (↓) arm labels, for reading drift angles."""
+def _crosshair_labels(orientation: dict | None) -> dict[str, str]:
+    """Arm label per image side: D / V / M / L from the bd entry's "dorsal" / "medial", else 0° / 90° / 180° / 270°."""
+    if orientation is None:
+        return {"right": "0°", "up": "90°", "left": "180°", "down": "270°"}
+    opposite = {"up": "down", "down": "up", "left": "right", "right": "left"}
+    dorsal, medial = orientation["dorsal"], orientation["medial"]
+    return {dorsal: "D", opposite[dorsal]: "V", medial: "M", opposite[medial]: "L"}
+
+
+def _draw_angle_crosshair(ax: mpl.axes.Axes, width: int, height: int, arm_labels: dict[str, str]) -> None:
+    """Dashed crosshair at the frame centre with a label at each arm end (arm_labels: image side -> text)."""
     cx, cy, arm = width / 2, height / 2, 0.3 * min(width, height)
     style = {"color": "cyan", "linewidth": 1.5, "linestyle": "--", "zorder": 5}
     ax.plot([cx - arm, cx + arm], [cy, cy], **style)
     ax.plot([cx, cx], [cy - arm, cy + arm], **style)
     bbox = {"boxstyle": "round,pad=0.15", "facecolor": "white", "alpha": 0.8, "edgecolor": "none"}
-    for text, (x, y) in {"0°": (cx + arm, cy), "90°": (cx, cy - arm), "180°": (cx - arm, cy), "270°": (cx, cy + arm)}.items():
-        ax.text(x, y, text, ha="center", va="center", fontsize=FLOW_CROSSHAIR_FS, color="teal", fontweight="bold",
-                bbox=bbox, zorder=6)
+    ends = {"right": (cx + arm, cy), "up": (cx, cy - arm), "left": (cx - arm, cy), "down": (cx, cy + arm)}
+    for side, (x, y) in ends.items():
+        ax.text(x, y, arm_labels[side], ha="center", va="center", fontsize=FLOW_CROSSHAIR_FS, color="teal",
+                fontweight="bold", bbox=bbox, zorder=6)
 
 
 def _pattern_title(pair: dict) -> str:
-    """' · source' / ' · sink' / ' · anisotropic 53°'; '' if unfitted."""
+    """' · source' / ' · sink' / ' · anisotropic L 25° D' (DV / ML, else ' · anisotropic 295°'); '' if unfitted."""
     pattern = pair.get("pattern", {})
     label = pattern.get("label")
     if label is None:
         return ""
     if label == "anisotropic":
+        if "dv_ml" in pair:
+            pole, tilt, toward = pair["dv_ml"]
+            return f" · anisotropic {pole} {tilt:.0f}° {toward}" if toward else f" · anisotropic {pole}"
         return f" · anisotropic {pattern['drift_angle_deg']:.0f}°"
     return f" · {label}"
 
@@ -563,19 +576,22 @@ def plot_flow_streamlines(
     title_info: dict,
     spike_frame_idx: int,
     striatum: np.ndarray | None = None,
+    orientation: dict | None = None,
 ) -> Figure:
     """One column per flow pair; rows: striatum streamlines on MED z, CAT-mask streamlines on the CAT mask
     (title = CAT-fit pattern).
 
     striatum None (no outline, e.g. 40X / 60X) -> row 1 covers the full FOV. Row 1 shows the MED as baseline z
     (range from _med_z_display()). Streamlines use FLOW_PATTERN_BLOCK block-averaged u, v; anisotropic row-2
-    panels get a 0/90/180/270° crosshair.
+    panels get a D / V / M / L crosshair (0/90/180/270° without orientation).
 
     Args:
-        flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask", "pattern" (compute_flow_pairs + fit_flow_pattern).
+        flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask", "pattern" (compute_flow_pairs + fit_flow_pattern),
+            optional "dv_ml" (pole, tilt_deg, toward) for the title.
         title_info: dict with keys "animal_id", "slice", "at", "obj", "tiff_serial", "abf_serial".
         spike_frame_idx: spike frame in med_stack; earlier frames are the z baseline.
         striatum: (H, W) bool display mask for row 1.
+        orientation: bd entry with "dorsal" / "medial" image sides (e.g. "right" / "up").
     """
     n_panels = max(len(flow_pairs), 1)
     fig = Figure(figsize=(6 * n_panels, 12), dpi=110, layout="constrained")
@@ -583,6 +599,7 @@ def plot_flow_streamlines(
     um_per_pixel = 1.0 / PIXEL_SCALE[title_info["obj"]]
     z_stack, z_range = _med_z_display(med_stack, flow_pairs, spike_frame_idx)
     region = "striatum" if striatum is not None else "full FOV"
+    arm_labels = _crosshair_labels(orientation)
 
     for i, pair in enumerate(flow_pairs):
         frame = z_stack[pair["idx_from"]]
@@ -590,7 +607,7 @@ def plot_flow_streamlines(
         axes[0, i].set_title(f"{pair['label']}  ({region})", fontsize=FLOW_TITLE_FS)
         _draw_flow_streamlines(axes[1, i], pair["keep_mask"], pair, pair["keep_mask"], um_per_pixel, (0, 1))
         if pair.get("pattern", {}).get("label") == "anisotropic":
-            _draw_angle_crosshair(axes[1, i], frame.shape[1], frame.shape[0])
+            _draw_angle_crosshair(axes[1, i], frame.shape[1], frame.shape[0], arm_labels)
         axes[1, i].set_title(f"{pair['label']}  (CAT mask){_pattern_title(pair)}", fontsize=FLOW_TITLE_FS)
         for ax in axes[:, i]:
             ax.set_xticks([])

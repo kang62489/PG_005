@@ -1,11 +1,11 @@
 """
-append_stats.py  --  Write region-analysis statistics into an ana list from an existing results.db.
-======================================================================================================
+append_stats.py  --  Write region-analysis statistics into {results_dir}/{ana_list}_cells.xlsx from an existing results.db.
+==========================================================================================================================
 For when ach_domain_analysis.py's run() was interrupted partway through but results.db
 already has rows from the entries that did complete -- recomputes and writes the
-same statistics block run() writes at the end of a full run, without re-running
-the pipeline. Safe to re-run: it overwrites its own previous block instead of
-stacking duplicates.
+same statistics sheets run() writes at the end of a full run, without re-running
+the pipeline. Safe to re-run: it replaces its own sheets (the Cells sheet and any
+Skipped sheet from the run are kept).
 
 results.db's location is read from the ana list's own footer (dir_results), same
 as run() -- no separate path needs to be passed in.
@@ -32,14 +32,15 @@ def append_stats(ana_list_path: Path) -> None:
         for name in entries["raw_tiff_name"].to_list()
     }
 
-    if write_stats_report(ana_list_path, results_db_path, run_keys):
-        console.log(f"[green]Updated region analysis statistics -> {ana_list_path.name}[/green]")
+    stats_path = write_stats_report(ana_list_path, results_db_path, run_keys)
+    if stats_path is not None:
+        console.log(f"[green]Saved region analysis statistics -> {stats_path.resolve()}[/green]")
     else:
         console.log(f"[yellow]No rows in {results_db_path} -- nothing to write[/yellow]")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Write region-analysis stats from an existing results.db into an ana list.")
+    parser = argparse.ArgumentParser(description="Write region-analysis stats from an existing results.db into the cells xlsx.")
     parser.add_argument("--ana_list", required=True, type=Path, help="Path to ana list file (ana_*.txt)")
     args = parser.parse_args()
 

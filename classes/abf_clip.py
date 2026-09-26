@@ -1,7 +1,8 @@
 """
 Spike detection in the paired ABF and clipping into per-spike image / Vm segments.
 
-  Step 1. Load   : read the ABF; recording window = TTL (channel 3) rising -> falling edge
+  Step 1. Load   : read the ABF; recording window = TTL (channel 3) rising -> falling edge;
+                   current pulses on channel 1 inside the window -> hotspot_origin estim_induced / spontaneous
   Step 2. Detect : find_peaks on Vm -> spike times / values
   Step 3. Window : collapse same-frame spikes, set_interval_frames = KEEP_FRACTION_QUANTILE margin -> pick / skip
   Step 4. Clip   : image frame range + ABF sample range per picked spike
@@ -37,6 +38,10 @@ console = Console()
 #
 # ===========================================================================
 
+# --- Step 1: load ----------------------------------------------------------
+STIM_CHANNEL = 1        # ABF channel of the injected current (pA); 0 = Vm, 3 = TTL frame window
+STIM_PULSE_PA = 200.0   # pA above the channel median (absorbs a DC holding current) -> a stim pulse
+
 # --- Step 3: window --------------------------------------------------------
 MAX_SET_INTERVAL_FRAMES = 10   # frames: hard cap on set_interval_frames (baseline + post-spike margin per segment)
 KEEP_FRACTION_QUANTILE = 0.2   # set_interval_frames = this quantile of all margins -> >= 80% of spikes kept
@@ -46,6 +51,7 @@ class AbfClip:
     """Load -> detect -> window -> clip -> export for one TIFF + ABF pair (all run in __init__).
 
     Results after construction:
+        hotspot_origin                                                (step 1)
         peak_indices, num_found_spikes                                (step 2)
         set_interval_frames, df_picked_spikes, df_skipped_spikes,
         df_collapsed_peaks                                            (step 3)
@@ -127,6 +133,7 @@ class AbfClip:
 
         self.Vm: np.ndarray = self.abf_dataset[0][self.abf_idx_tstart : self.abf_idx_tend]
         self.rec_time: np.ndarray = self.abf_time[self.abf_idx_tstart : self.abf_idx_tend]
+        self.hotspot_origin = self._detect_hotspot_origin()
 
         self.peak_indices, _properties = find_peaks(
             self.Vm, distance=spike_min_distance, prominence=spike_min_prominence
@@ -137,11 +144,21 @@ class AbfClip:
         console.log(f"Start index: {self.abf_idx_tstart}, Start time: {self.abf_time[self.abf_idx_tstart]}")
         console.log(f"End index: {self.abf_idx_tend}, End time: {self.abf_time[self.abf_idx_tend]}")
         console.log(f"Found {self.num_found_spikes} peaks")
+        console.log(f"Hotspot origin: {self.hotspot_origin}")
 
         self.df_Vm = pl.DataFrame({"Time": self.rec_time, "Vm": self.Vm})
         self.peak_times = self.rec_time[self.peak_indices]
         self.peak_values = self.Vm[self.peak_indices]
         self.df_peaks = pl.DataFrame({"Time": self.peak_times, "Peaks": self.peak_values})
+
+    def _detect_hotspot_origin(self) -> str | None:
+        """'estim_induced' if STIM_CHANNEL has a pulse > STIM_PULSE_PA above its median inside the TTL window,
+        else 'spontaneous'; None if the ABF has no STIM_CHANNEL."""
+        if self.abf_dataset.shape[0] <= STIM_CHANNEL:
+            return None
+        current = self.abf_dataset[STIM_CHANNEL][self.abf_idx_tstart : self.abf_idx_tend]
+        has_pulse = bool(np.any(current - np.median(current) > STIM_PULSE_PA))
+        return "estim_induced" if has_pulse else "spontaneous"
 
     # =======================================================================
     #
@@ -370,7 +387,7 @@ class AbfClip:
         console.log(f"[green]Saved spike detection plot -> {stem}.png[/green]")
 
     def get_export_data(self) -> dict:
-        """exp_date, file paths, serials and spike counts for ResultsExporter."""
+        """exp_date, file paths, serials, spike counts and hotspot_origin for ResultsExporter."""
         return {
             "exp_date": self.exp_date,
             "tiff_full_path": self.proc_tiff_path,
@@ -379,6 +396,7 @@ class AbfClip:
             "img_serial": self.img_serial,
             "num_found_spikes": self.num_found_spikes,
             "n_spikes_analyzed": len(self.df_picked_spikes),
+            "hotspot_origin": self.hotspot_origin,
         }
 
     def _segment_vm_slices(self) -> list[tuple[np.ndarray, np.ndarray]]:

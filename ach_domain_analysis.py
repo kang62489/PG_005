@@ -7,10 +7,13 @@ For every ana-list entry (processed TIFF + paired ABF, OBJ looked up in rec_data
   Step 2. Reliability : per-segment hotspot check -> RELIABILITY.png + VM_SUCCESS_FAIL.png
   Step 3. Median      : spike-centered median of the detected segments
   Step 4. Categorize  : bright / background per frame
-  Step 5. Region+Flow : critical-frame clusters, hotspot area decay, TV-L1 flow (+ CAT keep mask)
+  Step 5. Region+Flow : critical-frame clusters, hotspot area decay, TV-L1 flow (+ CAT keep mask),
+                        anisotropic drift -> DV / ML (e.g. 'L 25° D') from the Striatum Boundary export
   Step 6. Export      : results.db rows (experiments + flow_pairs), MED/CAT TIFFs, SPATIAL.png + FLOW.png + STREAMLINES.png
                         (all PNGs built + saved on a background thread; flow figures shown in the striatum from the
                         Striatum Boundary export, full FOV if a recording has no outline)
+  After all entries  : stats sheets (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped) added to
+                        {results_dir}/{ana_list}_cells.xlsx -- the ana list itself is never written to
 
 Ana list format (column names declared on the 'Picked:' line):
   [raw_tiff_name, gauss_exist, als_exist, paired_abf, abf_exist]
@@ -41,7 +44,6 @@ import numpy as np
 import polars as pl
 from numba import config as numba_config
 from rich.console import Console
-from tabulate import tabulate
 
 # Local imports
 from classes import (
@@ -54,8 +56,10 @@ from classes import (
 from classes.region_analyzer import PIXEL_SCALE
 from functions import (
     bd_export_path,
+    compute_flow_pattern_stats,
     compute_region_stats,
     count_unique_cells,
+    dv_ml_direction,
     get_cell_recording_status,
     list_parser,
     load_img_segs,
@@ -67,17 +71,10 @@ from functions import (
     plot_spatiotemporal_summary,
     spike_centered_median,
     write_cell_summary_xlsx,
+    write_stats_xlsx,
 )
 
 console = Console()
-
-# ===========================================================================
-#
-#   CONFIG
-#
-# ===========================================================================
-
-_STATS_BLOCK_MARKER = "=" * 80 + "\nRegion Analysis Statistics"  # start of the stats block write_stats_report() overwrites
 
 
 # ===========================================================================
@@ -131,117 +128,82 @@ def parse_ana_list(
 
 # ===========================================================================
 #
-#   STATS REPORT  (appended to the ana list after a run)
+#   STATS REPORT  (extra sheets in {results_dir}/{ana_list}_cells.xlsx after a run)
 #
 # ===========================================================================
 
 
-def _format_neuron_line(label: str, pairs: list[str], ratio: str) -> str:
-    """One neuron's recording list; multi-recording neurons get one (filename, detected) pair per aligned line."""
-    prefix = f"{label} ["
-    if len(pairs) <= 1:
-        body = pairs[0] if pairs else ""
-        return f"{prefix}{body}] {ratio}"
+def build_stats_tables(
+    ana_list_name: str, db_path: Path, run_keys: set[tuple[str, str]] | None = None
+) -> dict[str, list[dict]] | None:
+    """Region-analysis stats as {sheet name: rows}; None if results.db has no rows yet.
 
-    indent = " " * len(prefix)
-    lines = [f"{prefix}{pairs[0]},"]
-    lines += [f"{indent}{p}," for p in pairs[1:-1]]
-    lines.append(f"{indent}{pairs[-1]}] {ratio}")
-    return "\n".join(lines)
-
-
-def _strip_existing_report(text: str) -> str:
-    """Drop a previously written stats block, so a re-run overwrites it instead of stacking a copy."""
-    idx = text.find(_STATS_BLOCK_MARKER)
-    return text[:idx].rstrip() if idx != -1 else text.rstrip()
-
-
-def build_stats_report(db_path: Path, run_keys: set[tuple[str, str]] | None = None) -> str:
-    """Region-analysis stats block text; "" if results.db has no rows yet.
-
-    run_keys: (exp_date, img_serial) pairs restricting the stats to this run (None = whole DB).
+    Sheets: Summary, Spatial, Temporal, Flow pattern, Neurons. run_keys: (exp_date, img_serial) pairs
+    restricting the stats to this run (None = whole DB).
     """
     stats = compute_region_stats(db_path, run_keys)
     if stats.is_empty():
-        return ""
-
-    n_detected = stats["n_detected"][0]
-    n_total = stats["n_total"][0]
-
-    def _fmt(val: float | None, decimals: int = 2) -> str:
-        return f"{val:.{decimals}f}" if val is not None else "N/A"
+        return None
 
     rows_by_metric = {r["metric"]: r for r in stats.to_dicts()}
-    area_metrics = ["spike_frame_hotspot_um2", "spike_plus1_frame_hotspot_um2"]
-    temporal_metrics = ["lasting_time_ms"]
-
-    area_rows = [
+    spatial = [
         {
-            "Metric": r["metric"],
-            "Mean": _fmt(r["mean"]),
-            "Std": _fmt(r["std"]),
-            "CV%": _fmt(r["cv_pct"], 1),
-            "Median": _fmt(r["median"]),
-            "IQR(Q1-Q3)": f"{_fmt(r['iqr_q1'], 1)}-{_fmt(r['iqr_q3'], 1)}" if r["iqr_q1"] is not None else "N/A",
-            "GeoMean": _fmt(r["geomean"]),
-            "GeoStd*": _fmt(r["geostd_factor"]),
+            "metric": r["metric"], "mean": r["mean"], "std": r["std"], "cv_pct": r["cv_pct"], "median": r["median"],
+            "iqr_q1": r["iqr_q1"], "iqr_q3": r["iqr_q3"], "geomean": r["geomean"], "geostd_factor": r["geostd_factor"],
             "n": r["n_detected"],
         }
-        for metric in area_metrics
+        for metric in ("spike_frame_hotspot_um2", "spike_plus1_frame_hotspot_um2")
         if (r := rows_by_metric.get(metric)) is not None
     ]
-    temporal_rows = [
+    temporal = [
+        {"metric": r["metric"], "mean": r["mean"], "std": r["std"], "n": r["n_detected"]}
+        for metric in ("lasting_time_ms",)
+        if (r := rows_by_metric.get(metric)) is not None
+    ]
+
+    flow = []
+    for r in compute_flow_pattern_stats(db_path, run_keys).to_dicts():
+        n_pairs = r["n_aniso"] + r["n_srcsink"]
+        major = "anisotropic" if r["n_aniso"] > r["n_srcsink"] else "source/sink" if r["n_srcsink"] > r["n_aniso"] else "tie"
+        flow.append({
+            "OBJ": r["objective"], "n_recordings": r["n_recordings"],
+            "n_aniso_pairs": r["n_aniso"], "aniso_pct": 100 * r["n_aniso"] / n_pairs,
+            "n_srcsink_pairs": r["n_srcsink"], "srcsink_pct": 100 * r["n_srcsink"] / n_pairs,
+            "major": major,
+        })
+
+    neurons = [
         {
-            "Metric": r["metric"],
-            "Mean": _fmt(r["mean"]),
-            "Std": _fmt(r["std"]),
-            "n": r["n_detected"],
+            "cell": f"{r['ANIMAL_ID']}_S{r['SLICE']}{ResultsExporter.derive_site_code(r['AT'])}",
+            "med_filename": r["med_filename"], "detected": r["detected"],
         }
-        for metric in temporal_metrics
-        if (r := rows_by_metric.get(metric)) is not None
+        for r in get_cell_recording_status(db_path, run_keys).iter_rows(named=True)
     ]
-    area_table = tabulate(area_rows, headers="keys", tablefmt="pretty") if area_rows else ""
-    temporal_table = tabulate(temporal_rows, headers="keys", tablefmt="pretty") if temporal_rows else ""
-    table = (
-        "Spatial (skewed — Median/IQR/GeoMean shown):\n" + area_table
-        + "\n\nTemporal:\n" + temporal_table
-    )
-
-    recordings = get_cell_recording_status(db_path, run_keys)
-    neuron_lines = []
-    for (animal_id, slice_val, at), group in recordings.group_by(["ANIMAL_ID", "SLICE", "AT"], maintain_order=True):
-        site_code = ResultsExporter.derive_site_code(at)
-        label = f"{animal_id}_S{slice_val}{site_code}"
-        pairs = [f"({r['med_filename']}, {r['detected']})" for r in group.iter_rows(named=True)]
-        ratio = f"{int(group['detected'].sum())}/{group.height}"
-        neuron_lines.append(_format_neuron_line(label, pairs, ratio))
-
-    return (
-        "\n\n" + "=" * 80 + "\n"
-        f"Region Analysis Statistics — generated {datetime.now(UTC).isoformat(timespec='seconds')}\n"
-        + "=" * 80 + "\n"
-        f"Neurons detected ACh release: {n_detected}/{n_total}\n\n"
-        f"{table}\n\n"
-        "Per-Neuron Recording List (filename, detected) [detected/total]:\n"
-        + "\n".join(neuron_lines) + "\n"
-    )
+    summary = [{
+        "generated": datetime.now(UTC).isoformat(timespec="seconds"), "ana_list": ana_list_name,
+        "neurons_detected": stats["n_detected"][0], "neurons_total": stats["n_total"][0],
+    }]
+    return {"Summary": summary, "Spatial": spatial, "Temporal": temporal, "Flow pattern": flow, "Neurons": neurons}
 
 
 def write_stats_report(
-    ana_list_path: Path, results_db_path: Path, run_keys: set[tuple[str, str]] | None = None
-) -> bool:
-    """Write (or overwrite) the stats block in the ana list; False if results.db has no rows yet.
+    ana_list_path: Path,
+    results_db_path: Path,
+    run_keys: set[tuple[str, str]] | None = None,
+    skipped: list[dict] | None = None,
+) -> Path | None:
+    """Write (or overwrite) the stats sheets in {results_dir}/{ana_list}_cells.xlsx; None if results.db has no rows.
 
-    run_keys: (exp_date, img_serial) pairs restricting the stats to this run (None = whole DB).
+    skipped: {"file", "reason"} rows for a Skipped sheet (None keeps any existing Skipped sheet as it is).
     """
-    report = build_stats_report(results_db_path, run_keys)
-    if not report:
-        return False
-
-    original = ana_list_path.read_text(encoding="utf-8")
-    kept = _strip_existing_report(original)
-    ana_list_path.write_text(kept + report, encoding="utf-8")
-    return True
+    tables = build_stats_tables(ana_list_path.name, results_db_path, run_keys)
+    if tables is None:
+        return None
+    if skipped is not None:
+        tables["Skipped"] = skipped
+    xlsx_path = results_db_path.parent / f"{ana_list_path.stem}_cells.xlsx"
+    write_stats_xlsx(tables, xlsx_path)
+    return xlsx_path
 
 
 # ===========================================================================
@@ -258,10 +220,9 @@ def _run_figure_jobs(jobs: list[Callable[[], None]]) -> None:
         job()
 
 
-def _log_skip(ana_list_path: Path, msg: str) -> None:
-    """Append a '[SKIPPED] ...' line to the ana list."""
-    with ana_list_path.open("a", encoding="utf-8") as f:
-        f.write(f"[SKIPPED] {msg}\n")
+def _log_skip(skipped: list[dict], file_name: str, reason: str) -> None:
+    """Record a skipped / not-significant entry for the Skipped sheet of the stats xlsx."""
+    skipped.append({"file": file_name, "reason": reason})
 
 
 def striatum_of(stbd: dict[str, dict], raw_stem: str, shape: tuple[int, int]) -> np.ndarray | None:
@@ -284,11 +245,14 @@ def analyze_entry(
     results_dir: Path,
     detrend_mode: str,
     normalization: str,
-    ana_list_path: Path,
+    skipped: list[dict],
     stbd: dict[str, dict],
     emitter=None,
 ) -> list[Callable[[], None]]:
-    """Analyze one ana-list entry; returns the figure jobs (build + save PNG) for the background thread."""
+    """Analyze one ana-list entry; returns the figure jobs (build + save PNG) for the background thread.
+
+    Skipped / not-significant entries are appended to `skipped` ({"file", "reason"}) for the stats xlsx.
+    """
     entry_t0 = time.time()
     i, total = progress
 
@@ -316,8 +280,7 @@ def analyze_entry(
     jobs: list[Callable[[], None]] = [clip.export_spike_plot]
     if not clip.lst_img_frame_ranges:  # every spike skipped (too closely spaced for a baseline window)
         console.log("[yellow]No valid segments — skipping this entry.[/yellow]")
-        _log_skip(ana_list_path, f"{proc_tiff_path.name}: no valid segments "
-                                 "(spikes too closely spaced for any baseline window)")
+        _log_skip(skipped, proc_tiff_path.name, "no valid segments (spikes too closely spaced for any baseline window)")
         return jobs
 
     # Filename / DB metadata, needed from step 2 on
@@ -414,8 +377,8 @@ def analyze_entry(
         lasting_time_ms = None
         if not final_significant:
             console.log("[yellow]No ACh detection — skipping MED/CAT TIFFs, flow/lasting time export[/yellow]")
-        _log_skip(ana_list_path, f"{proc_tiff_path.name}: no significant ACh detection "
-                                 f"(reliability {reliability_pct:.1f}% -- {n_detected}/{n_total} segments detected)")
+        _log_skip(skipped, proc_tiff_path.name, "no significant ACh detection "
+                                                f"(reliability {reliability_pct:.1f}% -- {n_detected}/{n_total} segments detected)")
 
     # --- 5b. TV-L1 flow (significant recordings only) ---
     if final_significant:
@@ -423,6 +386,17 @@ def analyze_entry(
             emitter({"type": "step", "msg": "Computing hotspot flow..."})
         region_analyzer.compute_flow(cat_stack, median_segment)
         console.log(f"[green]Flow: {len(region_analyzer.flow_pairs)} pair(s)  ({time.time() - entry_t0:.1f}s)[/green]")
+
+        # --- 5c. anisotropic drift -> DV / ML (orientation from the Striatum Boundary export) ---
+        orientation = stbd.get(Path(row["raw_tiff_name"]).stem)
+        for pair in region_analyzer.flow_pairs:
+            pattern = pair.get("pattern", {})
+            if orientation is not None and pattern.get("label") == "anisotropic":
+                pair["dv_ml"] = dv_ml_direction(
+                    pattern["drift_angle_deg"], orientation["dorsal_vec"], orientation["medial_vec"]
+                )
+        if orientation is None:
+            console.log("[yellow]No orientation in the striatum boundary file -- DV / ML direction NULL[/yellow]")
 
     # --- Step 6. Export: DB row + MED/CAT TIFFs now, figures on a background thread ---
     if emitter:
@@ -449,6 +423,7 @@ def analyze_entry(
         region_data=region_results,
         lasting_time_ms=lasting_time_ms,
         significant=final_significant,
+        hotspot_origin=export_data["hotspot_origin"],
         reliability_pct=reliability_pct,
         n_segments_detected=n_detected,
         n_segments_total=n_total,
@@ -480,7 +455,9 @@ def analyze_entry(
                 median_segment, region_analyzer.flow_pairs, title_info, frame_duration_ms, spike_frame_idx, striatum
             )
             exporter.export_figure("flow", flow_fig, f"{export_stem('FLOW')}.png")
-            stream_fig = plot_flow_streamlines(median_segment, region_analyzer.flow_pairs, title_info, spike_frame_idx, striatum)
+            stream_fig = plot_flow_streamlines(
+                median_segment, region_analyzer.flow_pairs, title_info, spike_frame_idx, striatum, orientation
+            )
             exporter.export_figure("flow", stream_fig, f"{export_stem('STREAMLINES')}.png")
 
         jobs.append(export_result_figures)
@@ -544,12 +521,13 @@ def run(
 
     total = len(entries)
     figure_export_thread: threading.Thread | None = None
+    skipped: list[dict] = []
 
     for i, row in enumerate(entries.iter_rows(named=True), 1):
         # analyze_entry makes no matplotlib calls, so it overlaps the previous entry's figure thread.
         jobs = analyze_entry(
             row, (i, total), df_checked_tiff, animal_idx_lut, exporter,
-            results_dir, detrend_mode, normalization, ana_list_path, stbd, emitter,
+            results_dir, detrend_mode, normalization, skipped, stbd, emitter,
         )
         # Previous entry's PNGs must finish first (matplotlib isn't thread-safe) -- 1 figure thread max.
         if figure_export_thread is not None:
@@ -562,8 +540,9 @@ def run(
     if figure_export_thread is not None:
         figure_export_thread.join()
 
-    if write_stats_report(ana_list_path, exporter.db_path, run_keys):
-        console.log(f"[green]Updated region analysis statistics -> {ana_list_path.name}[/green]")
+    stats_path = write_stats_report(ana_list_path, exporter.db_path, run_keys, skipped)
+    if stats_path is not None:
+        console.log(f"[green]Saved region analysis statistics -> {stats_path.resolve()}[/green]")
 
     console.log(f"\n[bold green]All done!  (total: {time.time() - run_t0:.1f}s)[/bold green]")
 

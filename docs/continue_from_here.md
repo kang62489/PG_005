@@ -39,16 +39,59 @@ Spike-aligned follow-ups from the 2026-09-26 results check (not started):
 
 # ach_domain_analysis refinement TODOs (2026-09-27)
 Plan: `.claude/plans/2026-09-27_ach_domain_refine_plan.md` -- phase by phase, user checks after each phase.
-Test set: `2025_06_11-0003`, `2025_11_27-0018`, `2025_12_15-0012` -> `output/test01/ana_test01.txt`; baseline -> `output/test01/before/`.
+Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-0018` (40X), `2025_12_15-0012` (10X)
+-> `output/test01/ana_test01_*.txt` (`2025_11_27-0018` dropped: no proc TIFF, no PAIRED_ABF). Runs pass `--stbd data/bd_20260922_000.json`.
 
 | # | TODO (user item) | Phase | Status |
 |---|------------------|-------|--------|
 | L | Clean `output/`, scratch restarts at `test01` (1) | 1 | [x] 2026-09-27 |
-| M | `{ana_list}_cells.xlsx` -> `results/` (6); CAT TIFF zlib (5); data-identical to `before/` | 2 | [ ] next -- user re-confirms go-ahead first |
-| N | `BASELINE_SIGMA_MULT` 1.5 -> 2.0, shared with reliability (2); remove objects < 2700 µm², px per objective (3) | 3 | [ ] |
-| O | FLOW / STREAMLINES PNGs masked by striatum (full FOV if no outline), display only (10, 11); per-recording aniso % vs src/sink % over the 5 pairs + per-objective table (12); drift -> `V 43° M` DV / ML format (9) | 4 | [ ] |
-| P | ABF CH2 (`data[1]`) pulse trains -> recording label `estim_induced` / `spontaneous` (7) | 5 | [ ] |
-| Q | Area comparison: estim-induced vs patched spontaneous MED hotspots vs natural spontaneous zones (zone centroid min distance to MED centroid >= 150 px) (8) | 6 | [ ] plan mode first |
+| M | `{ana_list}_cells.xlsx` -> `results/` (6); CAT TIFF zlib (5); data-identical to `before/` | 2 | [x] 2026-09-27 identical; CAT 17.8 MB -> 118 KB |
+| N | `BASELINE_SIGMA_MULT` 1.5 -> 2.0, shared with reliability (2); remove objects < 2700 µm², px per objective (3) | 3 | [x] 2026-09-27 user: keep. Reliability 60X 92->19 %, 10X 92->45 %, 40X 100->80 %; all still significant |
+| O | Striatum-masked FLOW (3 rows) / STREAMLINES (2 rows) + MED z display (10, 11); aniso % / src-sink % + per-objective table (12); DV / ML direction `L 25° D` in DB + STREAMLINES title / D-V-M-L crosshair (9) | 4 | [x] 2026-09-27 |
+| P | ABF CH2 (`data[1]`, pA) pulse > 200 pA above median -> `experiments.hotspot_origin` `estim_induced` / `spontaneous` (7); DC hold = spontaneous | 5 | [x] 2026-09-27 |
+| - | Stats out of the ana list -> sheets in `{ana_list}_cells.xlsx` (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped); ana list never written | extra | [x] 2026-09-27 |
+| Q | Area comparison: estim-induced vs patched spontaneous MED hotspots vs natural spontaneous zones (zone centroid min distance to MED centroid >= 150 px) (8) | 6 | [ ] next -- plan mode first |
+| R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | [ ] |
+
+---
+
+# Log of the project progress 2026-09-27 Sun (Session 76)
+Last working file: `ach_domain_analysis.py`
+Last working line: 180-205 (`build_stats_tables()` / `write_stats_report()` -- stats sheets into `{ana_list}_cells.xlsx`)
+
+## List of modified files (Phase 3 files committed by user in `31ed1cf`; the rest uncommitted)
+- `ach_domain_analysis.py` -- xlsx path, `--stbd` + `striatum_of()`, Step 5c DV / ML, `hotspot_origin`, stats -> xlsx (`build_stats_tables`, `_log_skip` -> Skipped list)
+- `classes/spatial_categorization.py` -- `BASELINE_SIGMA_MULT` 2.0, `MIN_OBJECT_UM2` 2700 filter (`pixel_per_um`) (committed `31ed1cf`)
+- `classes/spike_reliability.py` -- passes `PIXEL_SCALE[obj]` (committed `31ed1cf`)
+- `classes/results_exporter.py` -- zlib CAT; experiments `n_flow_labelled` / `flow_aniso_pct` / `flow_srcsink_pct` / `hotspot_origin`; flow_pairs `dv_ml_*`; `_ensure_columns(table=)`
+- `classes/abf_clip.py` -- `_detect_hotspot_origin()` (CH2 > 200 pA above median) (<- neat-refactor check pending)
+- `functions/plot_results.py` -- FLOW 3 rows / STREAMLINES 2 rows, striatum mask, MED z display + colorbar, DV / ML title + crosshair, larger fonts
+- `functions/database_ops.py` -- `compute_flow_pattern_stats()`
+- `functions/st_boundary.py` -- `dv_ml_direction()`
+- `functions/xlsx_writer.py` -- `write_stats_xlsx()` (<- neat-refactor check pending)
+- `functions/__init__.py` -- new exports
+- `append_stats.py` -- writes the xlsx sheets (<- neat-refactor check pending)
+- `data/st_bd_draft.json` -- reset to `{}` (leftover 2)
+- `.claude/plans/2026-09-27_ach_domain_refine_plan.md` -- Phases 2-5 + extra marked done
+
+## Summary of current progress
+- Phases 2, 3, 4a-c, 5 of the ach_domain refinement plan done and verified on 4 recordings (every step compared against the previous run; only intended outputs changed).
+- User decisions: keep the reliability drop from sigma 2 + 2700 µm²; FLOW = MED z + arrows (striatum) / CAT + arrows / speed; STREAMLINES = MED z (striatum) / CAT + pattern; MED z range = z 1 -> median of per-pair hotspot max z; flow stats = pooled pair counts + major type only; source / sink stay combined; 100 pA DC hold = spontaneous; no pulse-count column.
+- Stats no longer written into the ana list -- extra sheets in `{ana_list}_cells.xlsx`.
+- `results/results.db` is a 0-byte leftover from a scratch lookup (formal DB is `results/results_20260922/results.db`); user: leave it.
+- Latest test output: `output/test01/after_xlsx/`.
+
+## Completed TODOs/Tasks
+- ✅ M, N, O, P (Phases 2-5) + stats -> xlsx
+- ✅ Leftover 2: `data/st_bd_draft.json` reset to `{}`; leftovers 1, 3 dropped by user
+
+## What should we do next? (TODOs)
+- [ ] Q -- Phase 6 area comparison (plan mode first): uses `hotspot_origin` + spontaneous zone outputs
+- [ ] R -- Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py`
+- [ ] Copy back `data/ana_20260922_000_deigo.txt`; dataset bucket for Jeff (pending)
+
+## Last Session Recap
+※ recap: Finished ach_domain phases 2-5 (xlsx/zlib layout, sigma 2 + 2700 µm² filter, striatum-masked flow figures, pattern ratio, DV/ML direction, estim/spontaneous label) and moved stats into `_cells.xlsx`; Phase 4-5 + xlsx changes uncommitted. Next: Phase 6 area comparison, neat-refactor check.
 
 ---
 

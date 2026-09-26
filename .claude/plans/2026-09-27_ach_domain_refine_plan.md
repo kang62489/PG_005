@@ -35,7 +35,13 @@ First run of the CURRENT code -> `output/test01/before/` (baseline for every lat
   STREAMLINES.png 2 rows: MED z + streamlines (striatum / full FOV), CAT mask + streamlines + pattern label.
   MED z display: trimmed baseline z, range z 1 -> median over pairs of the max z inside each keep_mask; gray colorbar.
   Larger fonts (titles 13, suptitle 16, colorbar 13/11, scale bar 12).
-- 4b (item 12) next, then 4c (item 9).
+- 4b (item 12) [x] done 2026-09-27. experiments: n_flow_labelled, flow_aniso_pct, flow_srcsink_pct (written in
+  export_flow_pairs). Stats block: "Flow pattern" table = pooled labelled pairs per objective + major type
+  (user: pooled counts only, no per-recording mean; source/sink stay combined).
+- 4c (item 9) [x] done 2026-09-27. `dv_ml_direction()` in functions/st_boundary.py; flow_pairs columns
+  dv_ml_pole / dv_ml_tilt_deg / dv_ml_toward, anisotropic pairs only (NULL for source / sink / None / no orientation).
+  STREAMLINES row 2: title 'anisotropic L 25° D' + crosshair arms D / V / M / L (degrees if no orientation).
+  Phase 4 complete -> Phase 5 next.
 - Items 10 / 11: FLOW + STREAMLINES PNGs masked with the STRIATUM mask from `data/bd_{proc_list}.json`
   (`striatum_outline_px` -> `outline_mask()`, `functions/st_boundary.py:285`); no outline (40X / 60X) ->
   unmasked full FOV (user, Q6). DISPLAY ONLY:
@@ -54,12 +60,24 @@ First run of the CURRENT code -> `output/test01/before/` (baseline for every lat
   tilt (<= 45°) toward the adjacent pole, e.g. `V 43° M`, `M 10° D` (user OK). `flow_pairs` columns
   `dv_ml_pole`, `dv_ml_tilt_deg`, `dv_ml_toward` (None when no orientation / label None).
 
-## Phase 5 -- Stim-induced vs spontaneous label (item 7)
+## Phase 5 -- Stim-induced vs spontaneous label (item 7)  [x] done 2026-09-27
+- CH2 = abf.data[1] "Sec_01" (pA). Pulse = > STIM_PULSE_PA (200 pA) above the in-window median -> estim_induced.
+  experiments.hotspot_origin only (user: no pulse count). DC holding (e.g. 100 pA, 2025_11_13-0018) -> spontaneous.
+  Test: 2025_12_15-0012 (STIM "1000pA 20p 6ms") estim_induced, other 3 spontaneous; all other outputs identical.
 - `AbfClip`: read CH2 = `abf_dataset[1]` (0 = Vm, 3 = TTL frame cut); detect pulse trains inside the TTL window.
 - Per RECORDING property (user, Q4a): trains present -> `estim_induced`, else `spontaneous`. Does NOT change
   how the MED is built. Store as an `experiments` column (e.g. `hotspot_origin`).
 
-## Phase 6 -- Area comparison (item 8), plan-mode details first
+## Extra (user, 2026-09-27) -- stats out of the ana list  [x] done
+- The ana list is never written to anymore. Stats -> extra sheets in {results_dir}/{ana_list}_cells.xlsx:
+  Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped (numbers as numbers; [SKIPPED] lines -> Skipped).
+  write_stats_xlsx() in functions/xlsx_writer.py; append_stats.py writes the same sheets (keeps Cells + Skipped).
+
+## Status 2026-09-27 wrap-up (Session 76)
+- Done: Phases 1-5 + stats -> xlsx. Next: Phase 6 (plan mode), then neat-refactor check of abf_clip.py,
+  xlsx_writer.py, append_stats.py. Test runs: output/test01/ (latest after_xlsx/), always `--stbd data/bd_20260922_000.json`.
+
+## Phase 6 -- Area comparison (item 8), plan-mode details first  [ ] next
 - Claim: a single spike of a single neuron can release a large hotspot -> a local striatal area can be
   modulated by one neuron.
 - Groups: MED hotspot area (spike / spike+1 µm²) of `estim_induced` vs `spontaneous` recordings, vs natural

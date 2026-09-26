@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from .ap_threshold import find_ap_threshold
     from .check_cuda import check_cuda
     from .database_ops import (
+        compute_flow_pattern_stats,
         compute_region_stats,
         count_unique_cells,
         get_cell_recording_status,
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         bd_export_path,
         direction_labels,
         draft_from_export,
+        dv_ml_direction,
         export_entry,
         label_regions,
         lateral_check,
@@ -66,7 +68,7 @@ if TYPE_CHECKING:
     from .tau_estimate import sample_tau
     from .test_cuda import test_cuda
     from .xlsx_reader import get_picked_pairs
-    from .xlsx_writer import write_cell_summary_xlsx
+    from .xlsx_writer import write_cell_summary_xlsx, write_stats_xlsx
 
 __all__ = [
     "abf_ready",
@@ -78,6 +80,7 @@ __all__ = [
     "build_proc_file_index",
     "check_cuda",
     "compute_flow_pairs",
+    "compute_flow_pattern_stats",
     "compute_region_stats",
     "count_unique_cells",
     "find_ap_threshold",
@@ -120,6 +123,7 @@ __all__ = [
     "bd_export_path",
     "direction_labels",
     "draft_from_export",
+    "dv_ml_direction",
     "export_entry",
     "outline_mask",
     "snap_ends",
@@ -127,6 +131,7 @@ __all__ = [
     "spike_centered_median",
     "test_cuda",
     "write_cell_summary_xlsx",
+    "write_stats_xlsx",
     "zone_colors",
 ]
 
@@ -163,6 +168,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "populate_animal_id_values": (".database_ops",                     "populate_animal_id_values"),
     "count_unique_cells":  (".database_ops",                           "count_unique_cells"),
     "compute_region_stats": (".database_ops",                          "compute_region_stats"),
+    "compute_flow_pattern_stats": (".database_ops",                    "compute_flow_pattern_stats"),
     "get_excluded_recordings": (".database_ops",                       "get_excluded_recordings"),
     "get_cell_recording_status": (".database_ops",                     "get_cell_recording_status"),
     "fit_hist_sigma":      (".fit_hist",                                   "fit_hist_sigma"),
@@ -179,6 +185,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "bd_export_path":     (".st_boundary",                               "bd_export_path"),
     "direction_labels":   (".st_boundary",                               "direction_labels"),
     "draft_from_export":  (".st_boundary",                               "draft_from_export"),
+    "dv_ml_direction":    (".st_boundary",                               "dv_ml_direction"),
     "export_entry":       (".st_boundary",                               "export_entry"),
     "outline_mask":       (".st_boundary",                               "outline_mask"),
     "snap_ends":           (".st_boundary",                               "snap_ends"),
@@ -188,6 +195,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "sample_tau":          (".tau_estimate",                              "sample_tau"),
     "get_picked_pairs":    (".xlsx_reader",                               "get_picked_pairs"),
     "write_cell_summary_xlsx": (".xlsx_writer",                           "write_cell_summary_xlsx"),
+    "write_stats_xlsx":    (".xlsx_writer",                               "write_stats_xlsx"),
     "check_cuda":          (".check_cuda",                                "check_cuda"),
     "test_cuda":           (".test_cuda",                                 "test_cuda"),
 }

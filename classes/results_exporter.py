@@ -2,7 +2,7 @@
 Results exporter for saving analysis outputs.
 
 Exports analysis results to:
-- SQLite database (metadata, critical-frame cluster measurements; flow_pairs = per-pair flow pattern)
+- SQLite database (metadata, critical-frame cluster measurements; flow_pairs = per-pair flow pattern + DV / ML direction)
 - TIFF files (spike-centered median stack, categorized frames for ImageJ overlay)
 - PNG figures (spatiotemporal summary plot)
 
@@ -37,7 +37,7 @@ class ResultsExporter:
     no per-date folder layer is needed):
         results/
         ├── results.db
-        ├── {ana_list}_cells.xlsx   (written by ach_domain_analysis.py)
+        ├── {ana_list}_cells.xlsx   (written by ach_domain_analysis.py: Cells + stats sheets)
         ├── median/
         │   └── {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_MED.tif
         ├── categorized/
@@ -178,6 +178,10 @@ class ResultsExporter:
                 "lasting_time_ms": "REAL",
                 "intensity_min": "REAL",
                 "intensity_max": "REAL",
+                "n_flow_labelled": "INTEGER",  # flow pairs with a pattern label (None pairs left out)
+                "flow_aniso_pct": "REAL",      # 100 * anisotropic / n_flow_labelled (NULL if 0)
+                "flow_srcsink_pct": "REAL",    # 100 * (source + sink) / n_flow_labelled (NULL if 0)
+                "hotspot_origin": "TEXT",      # estim_induced (current pulses on ABF CH2) / spontaneous
             },
         )
         conn.execute("""
@@ -197,16 +201,25 @@ class ResultsExporter:
                 UNIQUE(exp_date, abf_serial, img_serial, pair_label)
             )
         """)
+        self._ensure_columns(
+            conn,
+            {
+                "dv_ml_pole": "TEXT",       # nearest anatomical pole of the drift: D / V / M / L (anisotropic only)
+                "dv_ml_tilt_deg": "REAL",   # 0-45° away from that pole
+                "dv_ml_toward": "TEXT",     # adjacent pole it tilts toward (NULL if tilt 0), e.g. 'L 25° D'
+            },
+            table="flow_pairs",
+        )
         conn.commit()
         conn.close()
 
     @staticmethod
-    def _ensure_columns(conn: sqlite3.Connection, columns: dict[str, str]) -> None:
-        """Add missing columns to an existing experiments table."""
-        existing = {row[1] for row in conn.execute("PRAGMA table_info(experiments)").fetchall()}
+    def _ensure_columns(conn: sqlite3.Connection, columns: dict[str, str], table: str = "experiments") -> None:
+        """Add missing columns to an existing table."""
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         for column_name, column_type in columns.items():
             if column_name not in existing:
-                conn.execute(f"ALTER TABLE experiments ADD COLUMN {column_name} {column_type}")
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_name} {column_type}")
 
     def export_all(
         self,
@@ -242,6 +255,7 @@ class ResultsExporter:
         region_data: dict,
         lasting_time_ms: float | None,
         significant: bool = True,
+        hotspot_origin: str | None = None,
     ) -> dict[str, Path]:
         """
         Export all results and update database.
@@ -272,6 +286,7 @@ class ResultsExporter:
             region_data: Critical-frame cluster dict from RegionAnalyzer.get_results()
             lasting_time_ms: Decay time constant, from RegionAnalyzer.get_lasting_time_ms()
             significant: When False, skips MED/CAT TIFF writes (no ACh detected).
+            hotspot_origin: "estim_induced" / "spontaneous" from AbfClip (None if the ABF has no CH2)
 
         Returns:
             dict with keys "median", "categorized" → Path to each subfolder
@@ -313,12 +328,17 @@ class ResultsExporter:
             at=at,
             lasting_time_ms=lasting_time_ms,
             med_filename=f"{med_stem}.tif",
+            hotspot_origin=hotspot_origin,
         )
 
         return dirs
 
     def export_flow_pairs(self, exp_date: str, abf_serial: str, img_serial: str, flow_pairs: list[dict]) -> None:
-        """Replace this recording's flow_pairs rows with one row per pair (none if flow_pairs is empty)."""
+        """Replace this recording's flow_pairs rows with one row per pair (none if flow_pairs is empty),
+        and set its experiments pattern ratio (n_flow_labelled, flow_aniso_pct, flow_srcsink_pct).
+
+        A pair's optional "dv_ml" (pole, tilt_deg, toward) fills the dv_ml_* columns (NULL if absent).
+        """
         keys = (exp_date, abf_serial, img_serial)
         timestamp = datetime.now(UTC).isoformat()
         rows = []
@@ -327,7 +347,13 @@ class ResultsExporter:
             rows.append((
                 *keys, timestamp, pair["label"], pair["offset_from"], pair["offset_to"],
                 pattern.get("label"), pattern.get("drift_um"), pattern.get("spread_um"), pattern.get("drift_angle_deg"),
+                *pair.get("dv_ml", (None, None, None)),
             ))
+
+        labels = [pair.get("pattern", {}).get("label") for pair in flow_pairs]
+        n_labelled = sum(label is not None for label in labels)
+        aniso_pct = 100.0 * labels.count("anisotropic") / n_labelled if n_labelled else None
+        srcsink_pct = 100.0 * (labels.count("source") + labels.count("sink")) / n_labelled if n_labelled else None
 
         conn = sqlite3.connect(self.db_path)
         conn.execute("DELETE FROM flow_pairs WHERE exp_date = ? AND abf_serial = ? AND img_serial = ?", keys)
@@ -335,10 +361,17 @@ class ResultsExporter:
             """
             INSERT INTO flow_pairs (
                 exp_date, abf_serial, img_serial, timestamp, pair_label, offset_from, offset_to,
-                pattern, drift_um, spread_um, drift_angle_deg
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pattern, drift_um, spread_um, drift_angle_deg, dv_ml_pole, dv_ml_tilt_deg, dv_ml_toward
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
+        )
+        conn.execute(
+            """
+            UPDATE experiments SET n_flow_labelled = ?, flow_aniso_pct = ?, flow_srcsink_pct = ?
+            WHERE exp_date = ? AND abf_serial = ? AND img_serial = ?
+            """,
+            (n_labelled, aniso_pct, srcsink_pct, *keys),
         )
         conn.commit()
         conn.close()
@@ -414,6 +447,7 @@ class ResultsExporter:
         at: str,
         lasting_time_ms: float | None,
         med_filename: str,
+        hotspot_origin: str | None,
     ) -> None:
         """Insert or update experiment record in SQLite."""
         clusters = region_data["clusters"]
@@ -453,8 +487,8 @@ class ResultsExporter:
                 decay_peak_offset, decay_fit_r2, lasting_time_ms,
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um,
-                intensity_min, intensity_max
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                intensity_min, intensity_max, hotspot_origin
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -491,6 +525,7 @@ class ResultsExporter:
                 r_lat_um,
                 intensity_range[0],
                 intensity_range[1],
+                hotspot_origin,
             ),
         )
         conn.commit()

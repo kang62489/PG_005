@@ -1,7 +1,8 @@
 """
 st_boundary.py  --  Striatum boundary / slice orientation helpers (headless, used by the Striatum Boundary popup).
 
-  Step 1. Orientation : dorsal direction + hemisphere (SLICE "3L" / "2R") -> medial direction
+  Step 1. Orientation : dorsal direction + hemisphere (SLICE "3L" / "2R") -> medial direction;
+                        image angle -> DV / ML pole + tilt (flow drift)
   Step 2. Preview     : mean of the first N pages of a raw TIFF (anatomy visible, no full 2.5 GB load)
   Step 3. Boundary    : clicked anchors -> Catmull-Rom curve -> ends snapped -> frame regions -> checks
   Step 4. Storage     : data/st_bd_draft.json (working draft, one entry per recording stem)
@@ -94,6 +95,27 @@ def direction_labels(dorsal: str, medial: str) -> tuple[str, str]:
     opposite = {d: DIRECTIONS[(i + 2) % 4] for i, d in enumerate(DIRECTIONS)}
     name = {dorsal: "dorsal", opposite[dorsal]: "ventral", medial: "medial", opposite[medial]: "lateral"}
     return f"← {name['left']}  ·  {name['right']} →", f"← {name['down']}  ·  {name['up']} →"
+
+
+def dv_ml_direction(angle_deg: float, dorsal_vec: list, medial_vec: list) -> tuple[str, float, str | None]:
+    """Image angle (0 = right, 90 = up) -> (nearest pole, tilt <= 45°, adjacent pole it tilts toward).
+
+    Poles D / V / M / L come from the export's (x, y) unit vectors (y grows downwards).
+    E.g. dorsal right + medial up, 295° -> ('L', 25.3, 'D') = 'L 25° D'; toward is None when tilt is 0.
+    """
+    def image_angle(vec: list) -> float:
+        return float(np.degrees(np.arctan2(-vec[1], vec[0])) % 360)
+
+    d_angle, m_angle = image_angle(dorsal_vec), image_angle(medial_vec)
+    poles = {"D": d_angle, "V": (d_angle + 180) % 360, "M": m_angle, "L": (m_angle + 180) % 360}
+    signed = {p: (angle_deg - a + 180) % 360 - 180 for p, a in poles.items()}  # -180..180, + = counter-clockwise
+    pole = min(signed, key=lambda p: abs(signed[p]))
+    tilt = abs(signed[pole])
+    if tilt == 0:
+        return pole, 0.0, None
+    toward = next(p for p in poles if p != pole and abs((poles[p] - poles[pole] + 180) % 360 - 180) == 90
+                  and ((poles[p] - poles[pole]) % 360 == 90) == (signed[pole] > 0))
+    return pole, tilt, toward
 
 
 # ===========================================================================

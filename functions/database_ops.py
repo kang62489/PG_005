@@ -295,6 +295,36 @@ def compute_region_stats(
     })
 
 
+def compute_flow_pattern_stats(
+    results_db_path: Path, run_keys: set[tuple[str, str]] | None = None
+) -> pl.DataFrame:
+    """Pooled flow-pair pattern counts per objective (pairs without a label are left out).
+
+    flow_pairs rows exist only for significant recordings. Returns one row per objective with columns:
+    objective, n_recordings, n_aniso, n_srcsink.
+    """
+    schema = {"objective": pl.Utf8, "n_recordings": pl.UInt32, "n_aniso": pl.UInt32, "n_srcsink": pl.UInt32}
+    keys = ["exp_date", "abf_serial", "img_serial"]
+    conn = sqlite3.connect(results_db_path)
+    try:
+        pairs = pl.read_database(
+            query="SELECT exp_date, abf_serial, img_serial, pattern FROM flow_pairs WHERE pattern IS NOT NULL",
+            connection=conn,
+        )
+    finally:
+        conn.close()
+    experiments = _filter_by_run_keys(_read_experiments(results_db_path), run_keys)
+    if pairs.is_empty() or experiments.is_empty():
+        return pl.DataFrame(schema=schema)
+
+    df = pairs.join(experiments.select([*keys, "objective"]), on=keys, how="inner")
+    return df.group_by("objective").agg(
+        pl.struct(keys).n_unique().alias("n_recordings"),
+        (pl.col("pattern") == "anisotropic").sum().alias("n_aniso"),
+        pl.col("pattern").is_in(["source", "sink"]).sum().alias("n_srcsink"),
+    ).sort("objective")
+
+
 def count_unique_cells(ref_df: pl.DataFrame) -> pl.DataFrame:
     """Reduce ref_df rows to one row per unique cell, listing each cell's filenames.
 
