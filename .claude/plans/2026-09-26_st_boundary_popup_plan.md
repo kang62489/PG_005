@@ -20,6 +20,8 @@ Consumers (coverage in `spontaneous_analysis.py`, anatomical direction in flow a
 | Q9 | 10X can be confirmed only with a boundary (>= 2 regions + striatum picked) |
 | Q10 | Draft renamed `data/st_bd_draft.json` (autosave per Confirm). Export button (enabled at Unchecked 0) -> `bd_{date}_{serial}.json` next to the proc list (`proc_20260922_000[_saion].txt` -> `bd_20260922_000.json`): per recording `dorsal` / `medial` + `dorsal_vec` / `medial_vec` (x, y), 10X also `striatum_area_px` + `striatum_outline_px` (closed polygon, `outline_mask()` rebuilds the mask, IoU >= 0.9999). Exported recordings are removed from the draft |
 | Q11 | "Finish line" button ends a line (double-click no longer finishes; a fast double-click = one anchor) |
+| Q12 | Re-edit: exports also keep `anchors_px` / `striatum_seed_px` / `cortex_seed_px`; "Load bd file" puts entries back into the draft as Confirmed (draft entries win). Old exports without anchors: `outline_to_anchors()` rebuilds them from the outline (runs off the frame edge + their edge points, `approximate_polygon` 2 px) and the seed = deepest striatum pixel; on bd_20260922_000.json all 105 rebuild with IoU >= 0.991 (median 0.9995, median 12 anchors) |
+| - | Region floor `MIN_REGION_FRAC` 1 % -> `MIN_REGION_PX` 100 px (a 2,840 px corner piece could not be picked) |
 
 ---
 

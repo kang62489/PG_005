@@ -1,7 +1,7 @@
 """
 view_st_boundary.py  --  Striatum Boundary popup layout.
 
-  Block 1. Left   : Load Processing List + Unchecked / Confirmed recording lists + Export
+  Block 1. Left   : Load Processing List / bd file + Unchecked / Confirmed recording lists + Export
   Block 2. Centre : Dorsal combo + medial label + Confirm, raw TIFF preview canvas
   Block 3. Right  : Finish line / Undo / Clear for the 10X boundary lines
 """
@@ -42,6 +42,9 @@ class ViewStBoundary:
 
         self.btn_load_proc_list = QPushButton("Load Processing List")
         self.lo_block_1.addWidget(self.btn_load_proc_list)
+
+        self.btn_load_bd = QPushButton("Load bd file (re-edit an export)")
+        self.lo_block_1.addWidget(self.btn_load_bd)
 
         self.lbl_unchecked = QLabel("Unchecked (0)")
         self.lw_unchecked = QListWidget()

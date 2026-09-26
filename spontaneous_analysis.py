@@ -3,8 +3,10 @@ spontaneous_analysis.py  --  Spontaneous ACh hotspot -> zone analysis (10X, *_BI
 
   Step 1. Select  : proc list -> recordings with an ALS tiff; OBJ / SENSOR from rec_data.db, 10X only
   Step 2. Analyze : per recording, SpontaneousZoneAnalyzer detect -> group -> map
+          Coverage: union of all zones inside the striatum / striatum area (striatum outline from the
+                    Striatum Boundary export bd_{date}_{serial}.json; NaN if the recording has none)
   Step 3. Export  : per recording {stem}_ZONES.xlsx + {stem}_ZONE_MAPS.tif (z-scored RGB stack: max projection
-                    + all zones, then one page per detection frame) + footprints/{stem}_ZONES.npz
+                    + all zones + striatum outline, then one page per detection frame) + footprints/{stem}_ZONES.npz
                     + mask/{stem}_ZONE_MASK.tif (off with --no_mask)
   Step 4. Summary : spontaneous_summary.xlsx (one row per recording + pooled zone table)
 
@@ -13,6 +15,7 @@ All outputs go to {results_dir}/spontaneous/.
 Usage:
     python spontaneous_analysis.py --proc_list data/proc_20260924_000.txt
         [--results_dir results] [--sigma 2.0] [--no_mask] [--all_obj] [--debug]
+        [--stbd data/bd_20260924_000.json]  (default: bd_{date}_{serial}.json next to the proc list)
 """
 
 ## Modules
@@ -35,10 +38,14 @@ from rich.console import Console
 from classes import SpontaneousZoneAnalyzer
 from classes.sp_zone_analyzer import CROSSOVER_RATIO, MIN_EVENTS_FOR_FREQ, timed
 from functions import (
+    bd_export_path,
     check_cuda,
+    direction_labels,
     img_zscore_convert,
     list_parser,
+    load_st_bd,
     lookup_rec_from_db,
+    outline_mask,
     plot_frame_zones,
     plot_zone_overview,
     zone_colors,
@@ -93,6 +100,39 @@ def select_recordings(proc_list_path: Path, db_path: Path, exp_db_path: Path, al
 
 # ===========================================================================
 #
+#   STEP 2b -- COVERAGE: union of all zones inside the striatum / striatum area
+#
+# ===========================================================================
+
+def striatum_of(stbd: dict[str, dict], raw_stem: str, shape: tuple[int, int]) -> np.ndarray | None:
+    """Striatum mask of one recording from the bd export; None (+ warning) if missing or a different frame size."""
+    entry = stbd.get(raw_stem)
+    if entry is None or "striatum_outline_px" not in entry:
+        console.log(f"[yellow]No striatum outline for {raw_stem} -- coverage NaN[/yellow]")
+        return None
+    if tuple(entry["image_shape"]) != shape:
+        console.log(f"[yellow]Striatum drawn on {entry['image_shape']}, zones are {list(shape)} -- coverage NaN[/yellow]")
+        return None
+    return outline_mask(entry["striatum_outline_px"], shape)
+
+
+def zone_coverage(zone_masks: dict[int, np.ndarray], striatum: np.ndarray | None, um_per_px: float) -> dict:
+    """Summary columns: striatum area, area of the zone union inside it (um^2), and their ratio (0-1)."""
+    if striatum is None:
+        return {"striatum_area_um2": np.nan, "zone_area_in_striatum_um2": np.nan, "striatum_coverage": np.nan}
+    union = np.zeros_like(striatum)
+    for mask in zone_masks.values():
+        union |= mask
+    striatum_px, covered_px = int(striatum.sum()), int((union & striatum).sum())
+    return {
+        "striatum_area_um2": striatum_px * um_per_px**2,
+        "zone_area_in_striatum_um2": covered_px * um_per_px**2,
+        "striatum_coverage": covered_px / striatum_px,
+    }
+
+
+# ===========================================================================
+#
 #   STEP 3 -- EXPORT: zone-map TIFF stack
 #
 # ===========================================================================
@@ -105,7 +145,8 @@ def _figure_to_rgb(fig) -> np.ndarray:
     return np.asarray(canvas.buffer_rgba())[..., :3].copy()
 
 
-def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path: Path) -> int:
+def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path: Path,
+                     striatum_outline: np.ndarray | None = None, axis_labels: tuple[str, str] | None = None) -> int:
     """Write one RGB TIFF stack: page 1 = max projection + all zones, then one page per detection frame.
 
     Every page is z-scored against the fitted background and shares one gray range: z = MAP_Z_MIN
@@ -135,7 +176,8 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
                       f"{thr_text}")
     first = _figure_to_rgb(plot_zone_overview(
         img_zscore_convert(max_proj.astype(np.float32), center, sigma), analyzer.zone_masks,
-        analyzer.zone_centroids, colors, vmin, vmax, overview_title, analyzer.um_per_px))
+        analyzer.zone_centroids, colors, vmin, vmax, overview_title, analyzer.um_per_px, striatum_outline,
+        axis_labels))
 
     def frame_pages() -> Iterator[np.ndarray]:
         yield first
@@ -166,8 +208,12 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
 # ===========================================================================
 
 def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = CROSSOVER_RATIO, save_mask: bool = True,
-        all_obj: bool = False, debug: bool = False, cuda_available: bool = False, db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db")) -> None:
-    """Run the spontaneous zone analysis for every selected recording in a proc list."""
+        all_obj: bool = False, debug: bool = False, cuda_available: bool = False, db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db"),
+        stbd_path: Path | None = None) -> None:
+    """Run the spontaneous zone analysis for every selected recording in a proc list.
+
+    stbd_path: Striatum Boundary export; None -> bd_{date}_{serial}.json next to the proc list.
+    """
     run_t0 = time.time()
     out_root = results_dir / "spontaneous"
     out_root.mkdir(parents=True, exist_ok=True)
@@ -178,6 +224,13 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
     console.rule("[bold]Step 1 - Select")
     recordings = select_recordings(proc_list_path, db_path, exp_db_path, all_obj)
     console.log(f"{len(recordings)} recording(s) selected from {proc_list_path.name}")
+    stbd_path = stbd_path or bd_export_path(proc_list_path)
+    if stbd_path.exists():
+        stbd = load_st_bd(stbd_path)["recordings"]
+        console.log(f"striatum boundaries: {len(stbd)} recording(s) in {stbd_path.resolve()}")
+    else:
+        stbd = {}
+        console.log(f"[yellow]No striatum boundary file {stbd_path.resolve()} -- coverage NaN for all[/yellow]")
 
     summary_rows: list[dict] = []
     pooled_zones: list[pd.DataFrame] = []
@@ -196,6 +249,14 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             analyzer = SpontaneousZoneAnalyzer(stack, obj=row["OBJ"], sigma_ratio=sigma, cuda_available=cuda_available)
             del stack  # the analyzer keeps its float16 copy
         analyzer.run()
+        raw_stem = Path(row["raw_tiff_name"]).stem
+        striatum = striatum_of(stbd, raw_stem, (analyzer.height, analyzer.width))
+        striatum_outline = np.array(stbd[raw_stem]["striatum_outline_px"]) if striatum is not None else None
+        axis_labels = direction_labels(stbd[raw_stem]["dorsal"], stbd[raw_stem]["medial"]) if raw_stem in stbd else None
+        coverage = zone_coverage(analyzer.zone_masks, striatum, analyzer.um_per_px)
+        if striatum is not None:
+            console.log(f"  coverage {coverage['striatum_coverage']:.3f} ({len(analyzer.zone_masks)} zones, "
+                        f"striatum {striatum.mean():.2f} of FOV)")
 
         # -------------------------------------------------------------------
         # Step 3. Export
@@ -204,7 +265,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             paths = analyzer.save(out_root, stem, save_mask=save_mask, debug=debug)
         map_path = out_root / f"{stem}_ZONE_MAPS.tif"
         with timed("export zone-map TIFF"):
-            n_pages = export_zone_maps(analyzer, f"{stem}, {row['SENSOR']}", map_path)
+            n_pages = export_zone_maps(analyzer, f"{stem}, {row['SENSOR']}", map_path, striatum_outline, axis_labels)
         for path in paths.values():
             console.log(f"[green]saved[/green] {path.resolve()}")
         console.log(f"[green]saved[/green] {n_pages}-page zone-map TIFF ({map_path.stat().st_size / 1e6:.1f} MB) "
@@ -231,7 +292,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             "freq_q3_hz": float(freq.quantile(0.75)),
             "freq_cv": float(freq.std() / freq.mean()),
             "median_period_s": float(period.median()),
-            "n_high_freq_zones": int(zone_stats["high_freq_flag"].sum()),
+            **coverage,
         })
         pooled_zones.append(zone_stats.assign(recording=stem, sensor=row["SENSOR"]))
         console.log(f"[bold magenta]{'entry total':<40} {time.time() - entry_t0:6.1f}s[/bold magenta]")
@@ -263,9 +324,11 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="Also save the raw per-frame detections CSV")
     parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db")
     parser.add_argument("--exp_db", type=Path, default=Path("data/exp_info.db"), help="Path to exp_info.db")
+    parser.add_argument("--stbd", type=Path, default=None,
+                        help="Striatum Boundary export (default: bd_{date}_{serial}.json next to the proc list)")
     args = parser.parse_args()
 
     _cuda_available, _cuda_msg = check_cuda()  # must run before anything imports numba
     console.log(_cuda_msg)
     run(args.proc_list, args.results_dir, args.sigma, not args.no_mask, args.all_obj,
-        args.debug, _cuda_available, args.db, args.exp_db)
+        args.debug, _cuda_available, args.db, args.exp_db, args.stbd)

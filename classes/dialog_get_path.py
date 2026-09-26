@@ -38,3 +38,10 @@ class DialogGetFile(QFileDialog):
         if self.exec():
             return self.selectedFiles()[0]
         return ""
+
+    def get_bd_file(self):
+        self.setNameFilter("Striatum Boundary export (bd_*.json)")
+        self.setDirectory(self._init_dir)
+        if self.exec():
+            return self.selectedFiles()[0]
+        return ""

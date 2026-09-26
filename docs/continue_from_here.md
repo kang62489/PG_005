@@ -26,15 +26,59 @@ Test set: `output/test9/proc_test9.txt` (4 recordings, see below); baseline -> `
 | I | ZONE_MAPS redesign: z-score with one shared min/max; page 1 = max proj (all frames) + all zones; then one page per detection frame with its zone contours + white outline of the actual hotspot; titles show `thr = peak + nσ` and max z of the frame's hotspots (no "meanproj"); remove `--proj` / `--color` (approved) | 3 | [x] 2026-09-26 accepted: `fit_background()` split out; gray z range = `MAP_Z_MIN` 1.0 -> median of detections' max z (min/max was stretched by bright specks); titles `thr = c + k × σ = thr`, `max z`; pages streamed to TIFF. (0011 early zone / 0003 frame-1 hotspot: user said not a problem, dropped) |
 | J | Close/overlapping zones: explore centroid distance / IoU / overlap coefficient in scratch first, user picks rule, then `merge_close_zones()` Step 3b | 4 | [x] 2026-09-26 user chose NO MERGE for now: zones are unions of footprints, big zones contain small ones (oc ~1, IoU 0.06-0.2); any oc rule chains a recording into 1-3 zones (`zone_overlap.py`, `merge_preview.py`). Idea for later: "core" zone masks. Frame-page titles now also list zone source names |
 | - | Threshold sigma 1.5 -> 2.0 (`CROSSOVER_RATIO`, CLI `--sigma` default) -- user 2026-09-26; test run `output/test9/after_sigma2/`: zones 0009 4->0, 0003 34->26, 0011 12->6, 0012 19->12. Saion re-run postponed by user | - | [x] |
-| - | 1-event zones -> NaN freq / period (was 1/60 Hz floor); summary `n_low_freq_zones`, `n_freq_zones`, median / IQR / CV from >= 3-event zones (`MIN_EVENTS_FOR_FREQ`) -- Session 73, test run `output/test9/after_freq/` | - | [x] uncommitted |
-| K | GUI button -> popup with raw TIFF preview; user draws striatum / cortex boundary with the mouse -> later coverage + direction per region. Popup design to be discussed AFTER G-J are fixed -- user posts design PNG next session | after 4 | [ ] |
+| - | 1-event zones -> NaN freq / period (was 1/60 Hz floor); summary `n_low_freq_zones`, `n_freq_zones`, median / IQR / CV -- Session 73. Session 74: `MIN_EVENTS_FOR_FREQ` 3 -> 2 (only 1-event zones out of freq stats) | - | [x] |
+| - | High-frequency flag removed (Session 74, user): no `HIGH_FREQ_FLAG_HZ` / `high_freq_flag` / `n_high_freq_zones`; every zone is used in freq stats (>= 2 events) and coverage | - | [x] |
+| K | Striatum Boundary popup (plan `.claude/plans/2026-09-26_st_boundary_popup_plan.md`) + spontaneous coverage (plan `.claude/plans/2026-09-26_spontaneous_coverage_plan.md`) | - | [x] popup done + `data/bd_20260922_000.json` exported (201 rec, 105 outlines); coverage + ZONE_MAPS outline / direction labels done. Left: flow direction in DV / ML |
 
-Test set changed by user (2026-09-26): `2024_10_11-0009`, `2025_06_11-0003`, `2025_11_27-0011`, `2025_12_15-0012` -> `output/test9/proc_test9.txt`; baseline run done -> `output/test9/before/spontaneous/`.
+Test set (2026-09-26): `2024_10_11-0009`, `2025_06_11-0003`, `2025_11_27-0011`, `2025_12_15-0012` -> `output/test9/proc_test9.txt` (only the list is kept; spontaneous tests pass `--stbd data/bd_20260922_000.json`).
 
 Spike-aligned follow-ups from the 2026-09-26 results check (not started):
 - [ ] 60X decay fit fails on 43/62 significant recordings (median R² 0.4) -- look at a few SPATIAL.png.
 - [ ] 23 no-peak entries in the deigo run -- spontaneous-only recordings? drop from the ana list if so.
 - [ ] Copy back `data/ana_20260922_000_deigo.txt` from deigo (has the `[SKIPPED]` / stats block).
+
+---
+
+# Log of the project progress 2026-09-26 Sat (Session 74)
+Last working file: `controllers/ctrl_st_boundary.py`
+Last working line: 488-510 (`on_load_bd` / `_convert_bd` -- Load bd file in a worker thread, moved after Export by the neat-refactor)
+
+## List of modified files (UNCOMMITTED except the popup base `89cd1db` -- user commits)
+- `functions/st_boundary.py` (new in `89cd1db`, extended) — orientation (`medial_from`, `direction_labels`), raw preview, anchor Catmull-Rom curve + `snap_ends` + regions (`MIN_REGION_PX = 100`), draft storage, export (`bd_export_path`, `export_entry` incl. anchors / seeds), re-edit (`draft_from_export`, `outline_to_anchors`, fast `_deepest_point` seed)
+- `controllers/ctrl_st_boundary.py`, `views/view_st_boundary.py` — popup: Unchecked / Confirmed lists, dorsal combo, anchor tool (click / drag / Finish line / Undo / Clear), right-click striatum, Shift+right-click cortex check, Confirm -> `data/st_bd_draft.json`, Export -> `bd_{date}_{serial}.json`, Load bd file (worker thread)
+- `classes/dialog_get_path.py` — `get_bd_file()`
+- `classes/model_from_dataframe.py`, `controllers/ctrl_align_spike.py`, `controllers/ctrl_img_proc.py` — bold red missing rows / gray `N/A` unpaired ABF (committed `89cd1db`)
+- `classes/sp_zone_analyzer.py` — `MIN_EVENTS_FOR_FREQ = 2`, high-freq flag removed
+- `spontaneous_analysis.py` — STEP 2b coverage (`striatum_of`, `zone_coverage`), `--stbd` (default `bd_{date}_{serial}.json` next to the proc list), summary `striatum_area_um2` / `zone_area_in_striatum_um2` / `striatum_coverage`, outline + direction labels on ZONE_MAPS page 1
+- `functions/plot_results.py` — `plot_zone_overview(..., striatum_outline, axis_labels)`
+- `functions/__init__.py` — registry
+- `data/bd_20260922_000.json` (new, final product), `data/st_bd_draft.json` (holds 201 entries from the real-GUI Load-bd test)
+- Plans: `.claude/plans/2026-09-26_st_boundary_popup_plan.md`, `.claude/plans/2026-09-26_spontaneous_coverage_plan.md`
+- Scratch: `output/` cleaned (~12 GB); kept `output/test9/proc_test9.txt`, `output/test12/` (checks), `output/test13/` (neat-refactor before / after)
+
+## Summary of current progress
+- Striatum boundary: 201 recordings oriented (dorsal set by hand, medial from SLICE L / R), 105 10X striatum outlines; export 521 KB; outline -> mask IoU >= 0.9999.
+- Re-edit: old exports without anchors rebuild all 105 lines (IoU min 0.991, median 0.9995, ~12 anchors); full file loads in 0.7 s (was a 38 s GUI freeze).
+- Coverage = union of ALL zones ∩ striatum / striatum (union, not sum: 0003 sum would be 2.42). Test set: 0009 0.000, 0003 0.643, 0011 0.559, 0012 0.604; hand-check identical to 6 decimals.
+- Freq rules: 1-event zones out of freq stats but in coverage; no high-frequency exclusion (19 / 2,971 old-run zones at 6.67-10 Hz look like split events -- left in, per user).
+- Neat-refactor of touched files: behavior identical (19 checks, `output/test13/compare.py`).
+
+## Completed TODOs/Tasks (before new wrap-up)
+- ✅ TODO K popup (design -> anchor tool -> export / re-edit) and `bd_20260922_000.json`
+- ✅ Coverage in `spontaneous_analysis.py` + outline / direction labels on ZONE_MAPS page 1
+- ✅ Frequency rules (>= 2 events, no high-freq flag)
+- ✅ Neat-refactor, `output/` cleanup
+
+## Before the saion run (user)
+- Commit + push; `git pull` on saion; `data/bd_20260922_000.json` must be in `$PROJECT/data/` next to `proc_20260922_000_saion.txt` (found automatically, no `--stbd`); then `sbatch run_on_saion.slm`.
+
+## What should we do next? (TODOs)
+- [ ] Check the saion results: no coverage NaN warnings expected for the 105 10X recordings; look at the coverage spread and at the freq stats now that 2-event zones count.
+- [ ] Reset `data/st_bd_draft.json` to `{}` (201 entries from the Load-bd test) unless the boundaries are going to be edited.
+- [ ] Flow direction in DV / ML: use `dorsal_vec` / `medial_vec` from `data/bd_20260922_000.json` in the spike-aligned flow analysis (rest of TODO K).
+
+## Last Session Recap
+※ recap: Built the Striatum Boundary popup (anchor tool, export / re-edit of `bd_20260922_000.json`), added striatum coverage + outline / direction labels to spontaneous ZONE_MAPS, simplified freq rules, neat-refactored. Pending: commit, saion run, result check, flow direction in DV / ML.
 
 ---
 

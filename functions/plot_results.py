@@ -905,13 +905,32 @@ def _z_page(z_image: np.ndarray, vmin: float, vmax: float, title: str, um_per_px
 
 def plot_zone_overview(z_image: np.ndarray, zone_masks: dict[int, np.ndarray],
                        zone_centroids: dict[int, tuple[float, float]], colors: dict[int, tuple], vmin: float,
-                       vmax: float, title: str, um_per_px: float) -> Figure:
-    """All zones as translucent fills (largest painted first so small zones stay on top) over the z image."""
+                       vmax: float, title: str, um_per_px: float, striatum_outline: np.ndarray | None = None,
+                       axis_labels: tuple[str, str] | None = None) -> Figure:
+    """All zones as translucent fills (largest painted first so small zones stay on top) over the z image.
+
+    striatum_outline: closed (N, 2) x / y polygon from the Striatum Boundary export, drawn white dashed.
+    axis_labels: (x, y) anatomical direction labels; shown without ticks or frame.
+    """
     fig, ax = _z_page(z_image, vmin, vmax, title, um_per_px)
     fill = np.zeros((*z_image.shape, 4))
     for zone_id in sorted(zone_masks, key=lambda z: zone_masks[z].sum(), reverse=True):
         fill[zone_masks[zone_id]] = (*colors[zone_id][:3], 0.5)
     ax.imshow(fill)
+    if striatum_outline is not None:
+        limits = ax.get_xlim(), ax.get_ylim()
+        closed = np.vstack([striatum_outline, striatum_outline[:1]])
+        ax.plot(closed[:, 0], closed[:, 1], color="white", ls="--", lw=1.5)
+        ax.set_xlim(limits[0])
+        ax.set_ylim(limits[1])  # the outline sits on the pixel border; keep the image extent
+    if axis_labels is not None:
+        ax.axis("on")  # axis("off") would hide the labels too
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.set_xlabel(axis_labels[0], fontsize=12)
+        ax.set_ylabel(axis_labels[1], fontsize=12)
     for zone_id in sorted(zone_masks):
         if zone_id in zone_centroids:
             _label_zone(ax, zone_id, zone_centroids[zone_id])

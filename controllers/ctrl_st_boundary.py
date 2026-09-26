@@ -6,6 +6,7 @@ ctrl_st_boundary.py  --  Striatum Boundary popup: slice orientation for every re
   Step 3. Boundary    : 10X only -- anchor clicks -> Catmull-Rom lines -> regions -> striatum / cortex picks
   Step 4. Confirm     : write data/st_bd_draft.json, move to Confirmed, select the next unchecked recording
   Step 5. Export      : Unchecked empty -> data/bd_{date}_{serial}.json, exported entries leave the draft
+  Step 6. Re-edit     : Load bd file -> entries back into the draft as Confirmed (in a worker thread)
 """
 
 ## Modules
@@ -49,6 +50,8 @@ class CtrlStBoundary:
         self._preview_stem: str | None = None  # stem whose preview is loaded (None while loading)
         self._pending_stem: str | None = None
         self._worker: BackgroundWorker | None = None
+        self._bd_worker: BackgroundWorker | None = None
+        self._bd_result: tuple[dict, int, int, int] | None = None  # (draft, added, rebuilt, kept) from _convert_bd
 
         # 10X boundary drawing state of the current recording
         self._anchors: list[np.ndarray] = []  # clicked anchors of each finished line, (M, 2) x / y
@@ -64,6 +67,7 @@ class CtrlStBoundary:
 
     def connect_signals(self) -> None:
         self.view.btn_load_proc_list.clicked.connect(self.on_load_proc_list)
+        self.view.btn_load_bd.clicked.connect(self.on_load_bd)
         self.view.lw_unchecked.currentRowChanged.connect(lambda _row: self.on_pick(self.view.lw_unchecked))
         self.view.lw_confirmed.currentRowChanged.connect(lambda _row: self.on_pick(self.view.lw_confirmed))
         self.view.cb_dorsal.currentTextChanged.connect(lambda _text: self.on_orientation_changed())
@@ -204,7 +208,7 @@ class CtrlStBoundary:
         dorsal = self.view.cb_dorsal.currentText()
         return medial_from(dorsal, self._recordings[self._current]["slice"]) or self.view.cb_medial.currentText()
 
-    # ── 10X boundary: strokes -> lines -> regions ───────────────────────────────
+    # ── 10X boundary: anchors -> lines -> regions ───────────────────────────────
 
     def _is_ready(self) -> bool:
         """The current recording's preview is on screen."""
@@ -263,6 +267,7 @@ class CtrlStBoundary:
         self._render(fast=True)
 
     def on_mouse_release(self, event) -> None:
+        """End of an anchor drag: regions and tints follow."""
         if event.button != 1 or self._drag is None:
             return
         self._drag = None
@@ -290,6 +295,7 @@ class CtrlStBoundary:
         self._render()
 
     def on_clear(self) -> None:
+        """Remove every line and both region picks of the current recording."""
         self._anchors, self._draft, self._striatum_seed, self._cortex_seed = [], None, None, None
         self._rebuild_lines()
         self._update_regions()
@@ -325,10 +331,14 @@ class CtrlStBoundary:
     def _boundary_status(self, striatum: np.ndarray | None, cortex: np.ndarray | None) -> tuple[str, str | None]:
         """(status line, warning or None) for the canvas title."""
         from functions import lateral_check
+        from functions.st_boundary import MIN_REGION_PX
 
         if self._draft is not None:
             return f"line: {len(self._draft)} anchor(s) -- click to add, drag to move, 'Finish line' to end", None
         if self._n_regions < 2:
+            areas = np.bincount(self._labels.ravel())[1:]
+            if len(areas) >= 2:  # split, but the smaller piece(s) are below the region floor
+                return (f"a piece is only {int(areas.min())} px (< {MIN_REGION_PX} px) -- move or undo the line"), None
             return "Click anchors along the boundary, then 'Finish line'; lines must split the frame", None
         if striatum is None:
             return f"{self._n_regions} regions -- right-click the striatum (Shift + right-click: cortex, optional)", None
@@ -472,6 +482,47 @@ class CtrlStBoundary:
         self._recordings, self._current, self._preview_stem = {}, None, None
         self._refresh_lists(None)
         self._show_message(f"Exported {out_path.name}\n({len(self._st_bd)} recording(s) left in the draft)")
+
+    # ── Load bd file -> draft (re-edit an export) ───────────────────────────────
+
+    def on_load_bd(self) -> None:
+        """Exported entries -> draft (recordings already in the draft are kept); then Confirm / Export as usual."""
+        path_str = DialogGetFile(title="Select a Striatum Boundary export", init_dir=str(MODELS_DIR)).get_bd_file()
+        if not path_str:
+            return
+        self.view.btn_load_bd.setEnabled(False)
+        self._show_message(f"Loading {Path(path_str).name} ...")
+        self._bd_worker = BackgroundWorker(self._convert_bd, Path(path_str))  # keeps the window responsive
+        self._bd_worker.work_done.connect(lambda: self._on_bd_loaded(Path(path_str)))
+        self._bd_worker.start()
+
+    def _convert_bd(self, bd_path: Path) -> None:
+        """Worker thread: bd entries not yet in the draft -> draft entries, written to the draft file."""
+        from functions import draft_from_export, load_st_bd, save_st_bd
+
+        bd = load_st_bd(bd_path)
+        draft = load_st_bd(ST_BD_DRAFT_PATH)
+        added = {stem: entry for stem, entry in bd["recordings"].items() if stem not in draft}
+        for stem, entry in added.items():
+            draft[stem] = {**draft_from_export(entry), "saved": bd["exported"]}
+        save_st_bd(ST_BD_DRAFT_PATH, draft)
+        n_rebuilt = sum("striatum_outline_px" in entry and not entry.get("anchors_px") for entry in added.values())
+        self._bd_result = (draft, len(added), n_rebuilt, len(bd["recordings"]) - len(added))
+
+    def _on_bd_loaded(self, bd_path: Path) -> None:
+        """Back on the GUI thread: log, take the new draft, refresh the lists."""
+        draft, n_added, n_rebuilt, n_kept = self._bd_result
+        console.log(f"[green]Loaded {n_added} recording(s) from '{bd_path.name}' into the draft "
+                    f"({n_rebuilt} with anchors rebuilt from the outline, {n_kept} kept from the draft) "
+                    f"-> {ST_BD_DRAFT_PATH.resolve()}[/green]")
+        self.view.btn_load_bd.setEnabled(True)
+        self._st_bd = draft
+        if self._recordings:
+            unchecked = self._unchecked_stems()
+            self._refresh_lists(self._current or (unchecked[0] if unchecked else None))
+        else:
+            self._show_message(f"Loaded {n_added} recording(s) from {bd_path.name}\n"
+                               "Now load the matching proc list to edit them")
 
     # ── Raw TIFF preview ────────────────────────────────────────────────────────
 
