@@ -875,17 +875,7 @@ def plot_med_kymographs(med: np.ndarray, um_per_pixel, frame_ms, title) -> Figur
 #
 # ===========================================================================
 
-# --- 6a. zone maps (-> spontaneous/zone_maps/) -----------------------------
-
-
-def _tint_background(background: np.ndarray, color: str) -> np.ndarray:
-    """Normalize to [0, 1]; if not gray, put it in one RGB channel."""
-    bg_norm = (background - background.min()) / (background.max() - background.min())
-    if color == "gray":
-        return bg_norm
-    bg_rgb = np.zeros((*bg_norm.shape, 3), dtype=bg_norm.dtype)
-    bg_rgb[..., {"red": 0, "green": 1, "blue": 2}[color]] = bg_norm
-    return bg_rgb
+# --- 6a. zone maps (-> spontaneous/{stem}_ZONE_MAPS.tif) -------------------
 
 
 def _label_zone(ax: mpl.axes.Axes, zone_id: int, centroid: tuple[float, float]) -> None:
@@ -901,47 +891,47 @@ def zone_colors(zone_ids: list[int]) -> dict[int, tuple]:
     return {z: palette[i % len(palette)] for i, z in enumerate(sorted(zone_ids))}
 
 
-def plot_zone_overlay(zone_masks: dict[int, np.ndarray], zone_centroids: dict[int, tuple[float, float]],
-                      background: np.ndarray, bg_color: str, title: str, um_per_px: float) -> Figure:
-    """All zones as translucent fills (largest painted first so small zones stay on top) + scale bar."""
-    from skimage.color import label2rgb
-
-    bg_tinted = _tint_background(background, bg_color)
-    zone_label_map = np.zeros(background.shape, dtype=np.int32)
-    for zone_id in sorted(zone_masks, key=lambda z: zone_masks[z].sum(), reverse=True):
-        zone_label_map[zone_masks[zone_id]] = zone_id
-
-    overlay = label2rgb(zone_label_map, image=bg_tinted, bg_label=0, alpha=0.5,
-                        colors=mpl.colormaps["tab20"].colors, saturation=1)
-
+def _z_page(z_image: np.ndarray, vmin: float, vmax: float, title: str, um_per_px: float) -> tuple[Figure, mpl.axes.Axes]:
+    """Gray z-score image on the shared (vmin, vmax) scale + 'z' colorbar + scale bar."""
     fig = Figure(figsize=(11, 11), layout="tight")
     ax = fig.add_subplot()
-    ax.imshow(overlay)
+    image = ax.imshow(z_image, cmap="gray", vmin=vmin, vmax=vmax)
+    fig.colorbar(image, ax=ax, shrink=0.8, label="z")
+    _add_scale_bar(um_per_px, ax, z_image.shape[1], z_image.shape[0])
+    ax.set_title(title)
+    ax.axis("off")
+    return fig, ax
+
+
+def plot_zone_overview(z_image: np.ndarray, zone_masks: dict[int, np.ndarray],
+                       zone_centroids: dict[int, tuple[float, float]], colors: dict[int, tuple], vmin: float,
+                       vmax: float, title: str, um_per_px: float) -> Figure:
+    """All zones as translucent fills (largest painted first so small zones stay on top) over the z image."""
+    fig, ax = _z_page(z_image, vmin, vmax, title, um_per_px)
+    fill = np.zeros((*z_image.shape, 4))
+    for zone_id in sorted(zone_masks, key=lambda z: zone_masks[z].sum(), reverse=True):
+        fill[zone_masks[zone_id]] = (*colors[zone_id][:3], 0.5)
+    ax.imshow(fill)
     for zone_id in sorted(zone_masks):
         if zone_id in zone_centroids:
             _label_zone(ax, zone_id, zone_centroids[zone_id])
-    _add_scale_bar(um_per_px, ax, background.shape[1], background.shape[0])
-    ax.set_title(title)
-    ax.axis("off")
     return fig
 
 
-def plot_single_zone(zone_id: int, mask: np.ndarray, color: tuple, centroid: tuple[float, float] | None,
-                     background: np.ndarray, bg_color: str, title: str, um_per_px: float) -> Figure:
-    """One zone's outline over the background + scale bar."""
-    fig = Figure(figsize=(11, 11), layout="tight")
-    ax = fig.add_subplot()
-    ax.imshow(_tint_background(background, bg_color), cmap="gray" if bg_color == "gray" else None)
-    ax.contour(mask.astype(float), levels=[0.5], colors=[color], linewidths=2.5)
-    if centroid is not None:
-        _label_zone(ax, zone_id, centroid)
-    _add_scale_bar(um_per_px, ax, background.shape[1], background.shape[0])
-    ax.set_title(title)
-    ax.axis("off")
+def plot_frame_zones(z_frame: np.ndarray, frame_zone_ids: list[int], zone_masks: dict[int, np.ndarray],
+                     zone_centroids: dict[int, tuple[float, float]], colors: dict[int, tuple],
+                     hotspot_mask: np.ndarray, vmin: float, vmax: float, title: str, um_per_px: float) -> Figure:
+    """One frame: contours of the zones hit in this frame + thin white outline of the frame's own hotspots."""
+    fig, ax = _z_page(z_frame, vmin, vmax, title, um_per_px)
+    for zone_id in frame_zone_ids:
+        ax.contour(zone_masks[zone_id].astype(float), levels=[0.5], colors=[colors[zone_id]], linewidths=2.5)
+        if zone_id in zone_centroids:
+            _label_zone(ax, zone_id, zone_centroids[zone_id])
+    ax.contour(hotspot_mask.astype(float), levels=[0.5], colors="white", linewidths=1)
     return fig
 
 
-# --- 6b. zone stats (-> spontaneous/spontaneous_stats.png) -----------------
+# --- 6b. zone stats (not exported for now) ---------------------------------
 
 
 def plot_zone_stats(zones, title: str) -> Figure:

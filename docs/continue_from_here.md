@@ -16,15 +16,19 @@ Still open, outside this plan:
 - ~~Compare the median with its segments (old #3)~~ -- dropped 2026-09-25
 
 # Spontaneous refinement TODOs (2026-09-26)
-Plan: `.claude/plans/2026-09-26_spontaneous_refine_plan.md` -- phase by phase, user checks after each phase. NOTHING EDITED YET.
+Plan: `.claude/plans/2026-09-26_spontaneous_refine_plan.md` -- phase by phase, user checks after each phase. G, H, I done (uncommitted).
 Test set: `output/test9/` (5 recordings listed in the plan); run the current code first -> `output/test9/before/`.
 
 | # | TODO | Phase | Status |
 |---|------|-------|--------|
-| G | Output layout: `_ZONE_MASK.tif` -> `mask/` + `--save_mask` toggle (default off) + zlib (was 1.26 GB = 1200×1024×1024 uint8 uncompressed); `_ZONES.npz` -> `footprints/`; xlsx + ZONE_MAPS directly in `spontaneous/`; stop exporting `spontaneous_stats.png` | 1 | [ ] |
-| H | Drop per-frame hotspots > 80 % of the frame (838,861 px) after fragment merge, before grouping; log only (no summary column). Also explore user's idea: quantile clip of hotspot areas (0.001, 0.999) vs speckles / over-exposed first frames -- scratch plots first | 2 | [ ] |
-| I | ZONE_MAPS redesign: z-score with one shared min/max; page 1 = max proj (all frames) + all zones; then one page per detection frame with its zone contours + white outline of the actual hotspot; titles show `thr = peak + nσ` and max z of the frame's hotspots (no "meanproj"); remove `--proj` / `--color` (approved) | 3 | [ ] |
-| J | Close/overlapping zones: explore centroid distance / IoU / overlap coefficient in scratch first, user picks rule, then `merge_close_zones()` Step 3b | 4 | [ ] |
+| G | Output layout: `_ZONE_MASK.tif` -> `mask/` + `--save_mask` toggle (default off) + zlib (was 1.26 GB = 1200×1024×1024 uint8 uncompressed); `_ZONES.npz` -> `footprints/`; xlsx + ZONE_MAPS directly in `spontaneous/`; stop exporting `spontaneous_stats.png` | 1 | [x] 2026-09-26 accepted: mask saved by DEFAULT (zlib, ~2 MB; `--no_mask` skips), npz -> `savez_compressed` (~0.5-1.3 MB); all contents identical to `output/test9/before/` (`compare_g.py`) |
+| H | Drop per-frame hotspots > 80 % of the frame (838,861 px) after fragment merge, before grouping; log only (no summary column). Also explore user's idea: quantile clip of hotspot areas (0.001, 0.999) vs speckles / over-exposed first frames -- scratch plots first | 2 | [x] 2026-09-26 accepted: keep merged hotspots 1 %-80 % of frame (10,486-838,861 px); `TH_SMALL_HOTSPOTS` removed; no quantile clip (scratch `hotspot_areas.py`). Frame-1 giants dropped in 0009 / 0011 |
+| I | ZONE_MAPS redesign: z-score with one shared min/max; page 1 = max proj (all frames) + all zones; then one page per detection frame with its zone contours + white outline of the actual hotspot; titles show `thr = peak + nσ` and max z of the frame's hotspots (no "meanproj"); remove `--proj` / `--color` (approved) | 3 | [x] 2026-09-26 accepted: `fit_background()` split out; gray z range = `MAP_Z_MIN` 1.0 -> median of detections' max z (min/max was stretched by bright specks); titles `thr = c + k × σ = thr`, `max z`; pages streamed to TIFF. Open (don't touch yet): 0011 zone 1 all in first 9.5 s; 0003 frame-1 ring hotspot (26 %) |
+| J | Close/overlapping zones: explore centroid distance / IoU / overlap coefficient in scratch first, user picks rule, then `merge_close_zones()` Step 3b | 4 | [x] 2026-09-26 user chose NO MERGE for now: zones are unions of footprints, big zones contain small ones (oc ~1, IoU 0.06-0.2); any oc rule chains a recording into 1-3 zones (`zone_overlap.py`, `merge_preview.py`). Idea for later: "core" zone masks. Frame-page titles now also list zone source names |
+| - | Threshold sigma 1.5 -> 2.0 (`CROSSOVER_RATIO`, CLI `--sigma` default) -- user 2026-09-26; test run `output/test9/after_sigma2/`: zones 0009 4->0, 0003 34->26, 0011 12->6, 0012 19->12. Saion re-run postponed by user | - | [x] |
+| K | GUI button -> popup with raw TIFF preview; user draws striatum / cortex boundary with the mouse -> later coverage + direction per region. Popup design to be discussed AFTER G-J are fixed | after 4 | [ ] |
+
+Test set changed by user (2026-09-26): `2024_10_11-0009`, `2025_06_11-0003`, `2025_11_27-0011`, `2025_12_15-0012` -> `output/test9/proc_test9.txt`; baseline run done -> `output/test9/before/spontaneous/`.
 
 Spike-aligned follow-ups from the 2026-09-26 results check (not started):
 - [ ] 60X decay fit fails on 43/62 significant recordings (median R² 0.4) -- look at a few SPATIAL.png.

@@ -3,23 +3,24 @@ spontaneous_analysis.py  --  Spontaneous ACh hotspot -> zone analysis (10X, *_BI
 
   Step 1. Select  : proc list -> recordings with an ALS tiff; OBJ / SENSOR from rec_data.db, 10X only
   Step 2. Analyze : per recording, SpontaneousZoneAnalyzer detect -> group -> map
-  Step 3. Export  : per recording {stem}_ZONES.xlsx / _ZONE_MASK.tif / _ZONES.npz
-                    + zone_maps/{stem}_ZONE_MAPS.tif (RGB stack: all zones, then one page per zone)
+  Step 3. Export  : per recording {stem}_ZONES.xlsx + {stem}_ZONE_MAPS.tif (z-scored RGB stack: max projection
+                    + all zones, then one page per detection frame) + footprints/{stem}_ZONES.npz
+                    + mask/{stem}_ZONE_MASK.tif (off with --no_mask)
   Step 4. Summary : spontaneous_summary.xlsx (one row per recording + pooled zone table)
-                    + spontaneous_stats.png (zone area / frequency per sensor)
 
 All outputs go to {results_dir}/spontaneous/.
 
 Usage:
     python spontaneous_analysis.py --proc_list data/proc_20260924_000.txt
-        [--results_dir results] [--sigma 1.5] [--proj mean|max] [--color gray|red|green|blue]
-        [--all_obj] [--debug]
+        [--results_dir results] [--sigma 2.0] [--no_mask] [--all_obj] [--debug]
 """
 
 ## Modules
 # Standard library imports
 import argparse
+import textwrap
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 # Third-party imports
@@ -32,14 +33,14 @@ from rich.console import Console
 
 # Local imports
 from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import timed
+from classes.sp_zone_analyzer import CROSSOVER_RATIO, timed
 from functions import (
     check_cuda,
+    img_zscore_convert,
     list_parser,
     lookup_rec_from_db,
-    plot_single_zone,
-    plot_zone_overlay,
-    plot_zone_stats,
+    plot_frame_zones,
+    plot_zone_overview,
     zone_colors,
 )
 
@@ -55,6 +56,8 @@ console = Console()
 TARGET_OBJ = "10X"
 PROC_SUFFIX = "_BIEXP_ALS.tif"
 MAP_DPI = 120
+MAP_Z_MIN = 1.0  # zone-map gray range starts at background peak + this many sigmas (black)
+MAP_TITLE_WIDTH = 100  # characters per title line before the zone list wraps
 
 
 # ===========================================================================
@@ -102,30 +105,58 @@ def _figure_to_rgb(fig) -> np.ndarray:
     return np.asarray(canvas.buffer_rgba())[..., :3].copy()
 
 
-def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, background: np.ndarray, bg_color: str,
-                     title_tag: str, out_path: Path) -> int:
-    """Write one RGB TIFF stack: page 1 = all zones, then one page per zone; return zone count."""
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path: Path) -> int:
+    """Write one RGB TIFF stack: page 1 = max projection + all zones, then one page per detection frame.
+
+    Every page is z-scored against the fitted background and shares one gray range: z = MAP_Z_MIN
+    -> median of the detections' max z, so single bright specks can't stretch it. Returns page count.
+    """
+    stack = analyzer.stack_f16
+    center, sigma, thr = analyzer.bg_center, analyzer.bg_sigma, analyzer.threshold
+    det = analyzer.detections
+    det_frames = det["frame"].to_numpy() if not det.empty else np.array([], dtype=int)
+    frames = np.unique(det_frames)  # 1-based
+
+    max_proj = stack.max(axis=0)
+    det_raw_max = np.array([stack[f - 1][fp[:, 0], fp[:, 1]].max() for f, fp in zip(det_frames, analyzer.footprints,
+                                                                                    strict=True)], dtype=np.float32)
+    det_max_z = img_zscore_convert(det_raw_max, center, sigma)  # max z inside each detection
+    vmin = MAP_Z_MIN
+    vmax = float(np.median(det_max_z)) if det_max_z.size else float((max_proj.max() - center) / sigma)
+    thr_text = f"thr = {center:.3f} + {analyzer.sigma_ratio} × {sigma:.3f} = {thr:.3f}"
 
     zone_ids = sorted(analyzer.zone_masks)
     colors = zone_colors(zone_ids)
-
+    label_to_zone = {label: row.zone_id for row in analyzer.zones.itertuples() for label in row.joint_labels}
+    zone_source = dict(zip(analyzer.zones["zone_id"], analyzer.zones["source"], strict=True))
     n_by_source = analyzer.zone_stats["source"].str.split(" #").str[0].value_counts()
-    overlay_title = (f"{len(zone_ids)} zones -- {n_by_source.get('trace_corr', 0)} trace-corr, "
-                     f"{n_by_source.get('proximity', 0)} proximity, {n_by_source.get('isolated', 0)} isolated "
-                     f"({title_tag})")
+    overview_title = (f"{title_tag} | {len(zone_ids)} zones -- {n_by_source.get('trace_corr', 0)} trace-corr, "
+                      f"{n_by_source.get('proximity', 0)} proximity, {n_by_source.get('isolated', 0)} isolated\n"
+                      f"{thr_text}")
+    first = _figure_to_rgb(plot_zone_overview(
+        img_zscore_convert(max_proj.astype(np.float32), center, sigma), analyzer.zone_masks,
+        analyzer.zone_centroids, colors, vmin, vmax, overview_title, analyzer.um_per_px))
 
-    fig = plot_zone_overlay(analyzer.zone_masks, analyzer.zone_centroids, background, bg_color, overlay_title,
-                            analyzer.um_per_px)
-    pages = [_figure_to_rgb(fig)]
-    for zone_id in zone_ids:
-        fig = plot_single_zone(zone_id, analyzer.zone_masks[zone_id], colors[zone_id],
-                               analyzer.zone_centroids.get(zone_id), background, bg_color,
-                               f"zone {zone_id} ({title_tag})", analyzer.um_per_px)
-        pages.append(_figure_to_rgb(fig))
+    def frame_pages() -> Iterator[np.ndarray]:
+        yield first
+        for frame in frames:
+            z_frame = img_zscore_convert(stack[frame - 1].astype(np.float32), center, sigma)
+            rows = np.flatnonzero(det_frames == frame)
+            hotspot_mask = np.zeros(z_frame.shape, dtype=bool)
+            for i in rows:
+                hotspot_mask[analyzer.footprints[i][:, 0], analyzer.footprints[i][:, 1]] = True
+            frame_zone_ids = sorted({label_to_zone[label] for label in det["joint_label"].iloc[rows]})
+            zones_text = ", ".join(f"{z} ({zone_source[z]})" for z in frame_zone_ids)
+            title = (f"frame {frame} ({frame / analyzer.fps:.2f} s) | {thr_text} | max z = {det_max_z[rows].max():.2f}\n"
+                     + textwrap.fill(f"zones {zones_text}", MAP_TITLE_WIDTH))
+            yield _figure_to_rgb(plot_frame_zones(z_frame, frame_zone_ids, analyzer.zone_masks,
+                                                  analyzer.zone_centroids, colors, hotspot_mask, vmin, vmax, title,
+                                                  analyzer.um_per_px))
 
-    tifffile.imwrite(out_path, np.stack(pages), photometric="rgb", compression="zlib")  # one series: (pages, H, W, 3)
-    return len(zone_ids)
+    n_pages = 1 + frames.size
+    tifffile.imwrite(out_path, frame_pages(), shape=(n_pages, *first.shape), dtype=np.uint8, photometric="rgb",
+                     compression="zlib")  # pages streamed one at a time: one series (pages, H, W, 3)
+    return n_pages
 
 
 # ===========================================================================
@@ -134,9 +165,8 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, background: np.ndarray, 
 #
 # ===========================================================================
 
-def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = 1.5, proj: str = "mean",
-        color: str = "gray", all_obj: bool = False, debug: bool = False, cuda_available: bool = False,
-        db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db")) -> None:
+def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = CROSSOVER_RATIO, save_mask: bool = True,
+        all_obj: bool = False, debug: bool = False, cuda_available: bool = False, db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db")) -> None:
     """Run the spontaneous zone analysis for every selected recording in a proc list."""
     run_t0 = time.time()
     out_root = results_dir / "spontaneous"
@@ -164,22 +194,21 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         with timed("load   read tiff + float16 copy"):
             stack = tifffile.imread(proc_tiff_path)
             analyzer = SpontaneousZoneAnalyzer(stack, obj=row["OBJ"], sigma_ratio=sigma, cuda_available=cuda_available)
+            del stack  # the analyzer keeps its float16 copy
         analyzer.run()
 
         # -------------------------------------------------------------------
         # Step 3. Export
         # -------------------------------------------------------------------
-        with timed("export xlsx / mask tif / npz"):
-            paths = analyzer.save(out_root, stem, debug=debug)
-        with timed(f"export background ({proj} projection)"):
-            background = stack.max(axis=0) if proj == "max" else stack.mean(axis=0)
-            del stack
-        map_path = out_root / "zone_maps" / f"{stem}_ZONE_MAPS.tif"
-        with timed(f"export zone-map TIFF ({len(analyzer.zone_masks) + 1} pages)"):
-            n_zones = export_zone_maps(analyzer, background, color, f"{stem}, {row['SENSOR']}, {proj} proj", map_path)
+        with timed("export xlsx / npz" + (" / mask tif" if save_mask else "")):
+            paths = analyzer.save(out_root, stem, save_mask=save_mask, debug=debug)
+        map_path = out_root / f"{stem}_ZONE_MAPS.tif"
+        with timed("export zone-map TIFF"):
+            n_pages = export_zone_maps(analyzer, f"{stem}, {row['SENSOR']}", map_path)
         for path in paths.values():
             console.log(f"[green]saved[/green] {path.resolve()}")
-        console.log(f"[green]saved[/green] {n_zones + 1}-page zone-map TIFF -> {map_path.resolve()}")
+        console.log(f"[green]saved[/green] {n_pages}-page zone-map TIFF ({map_path.stat().st_size / 1e6:.1f} MB) "
+                    f"-> {map_path.resolve()}")
 
         zone_stats = analyzer.zone_stats
         summary_rows.append({
@@ -213,11 +242,6 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             pooled.to_excel(writer, sheet_name="zones", index=False)
         console.log(f"[green]saved[/green] {summary_path.resolve()}")
 
-        stats_path = out_root / "spontaneous_stats.png"
-        fig = plot_zone_stats(pooled, f"Spontaneous ACh zones -- {len(summary_rows)} recording(s), {len(pooled)} zones")
-        fig.savefig(stats_path, dpi=150, bbox_inches="tight")
-        console.log(f"[green]saved[/green] {stats_path.resolve()}")
-
     console.rule(f"[dim]Total time: {time.time() - run_t0:.1f}s")
 
 
@@ -225,9 +249,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Spontaneous ACh hotspot -> zone analysis")
     parser.add_argument("--proc_list", required=True, type=Path, help="Proc list (proc_*.txt) naming the recordings")
     parser.add_argument("--results_dir", type=Path, default=Path("results"), help="Outputs go to <results_dir>/spontaneous/")
-    parser.add_argument("--sigma", type=float, default=1.5, help="Threshold = background peak + this many sigmas")
-    parser.add_argument("--proj", choices=["mean", "max"], default="mean", help="Zone-map background projection")
-    parser.add_argument("--color", choices=["gray", "red", "green", "blue"], default="gray", help="Background tint")
+    parser.add_argument("--sigma", type=float, default=CROSSOVER_RATIO,
+                        help="Threshold = background peak + this many sigmas")
+    parser.add_argument("--no_mask", action="store_true", help="Skip saving the per-frame hotspot mask (mask/)")
     parser.add_argument("--all_obj", action="store_true", help=f"Also analyze non-{TARGET_OBJ} recordings (testing only)")
     parser.add_argument("--debug", action="store_true", help="Also save the raw per-frame detections CSV")
     parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db")
@@ -236,5 +260,5 @@ if __name__ == "__main__":
 
     _cuda_available, _cuda_msg = check_cuda()  # must run before anything imports numba
     console.log(_cuda_msg)
-    run(args.proc_list, args.results_dir, args.sigma, args.proj, args.color, args.all_obj, args.debug,
-        _cuda_available, args.db, args.exp_db)
+    run(args.proc_list, args.results_dir, args.sigma, not args.no_mask, args.all_obj,
+        args.debug, _cuda_available, args.db, args.exp_db)

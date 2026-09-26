@@ -5,6 +5,7 @@ fit_hist.py  --  Pixel-value histogram + left-side Gaussian fit (CPU Numba JIT +
                       float16 stacks: exact per-code counts -> percentiles + rebinning, no sort
   Step 2. Left fit  : fit a Gaussian to the peak + left side only (right side holds real signal)
   Step 3. Consumers : fit_hist_sigma()            -> background mean/sigma for img_proc z-scoring
+                      fit_background()            -> smoothed peak + sigma for spontaneous zones (z-scored maps)
                       find_background_threshold() -> smoothed peak + k*sigma hotspot threshold for spontaneous zones
 """
 
@@ -285,9 +286,8 @@ def smoothed_peak(counts: np.ndarray, centers: np.ndarray) -> float:
     return float(centers[i] + bin_w * deriv[i] / (deriv[i] - deriv[i + 1]))  # interpolated zero
 
 
-def find_background_threshold(stack: np.ndarray, sigma_ratio: float, n_bins: int = ZONE_HIST_BINS,
-                              cuda_available: bool = False) -> float:
-    """Hotspot threshold = smoothed peak + sigma_ratio * sigma, over the 0.1-99.9 percentile range.
+def fit_background(stack: np.ndarray, n_bins: int = ZONE_HIST_BINS, cuda_available: bool = False) -> tuple[float, float]:
+    """Background (center, sigma) over the 0.1-99.9 percentile range.
 
     Center from smoothed_peak(); sigma from a Gaussian fitted left of that center (center pinned).
     float16 stacks take the code-count path (no sort, no float32 copy); others use np.percentile.
@@ -301,8 +301,14 @@ def find_background_threshold(stack: np.ndarray, sigma_ratio: float, n_bins: int
         lo, hi = np.percentile(values, ZONE_HIST_RANGE_PCT)
         counts, centers = histogram_counts(values, n_bins, float(lo), float(hi), cuda_available, drop_outside=True)
 
-    center, sigma = fit_left_gaussian(counts, centers, fix_mean=True, sigma_seed=ZONE_SIGMA_SEED,
-                                      center=smoothed_peak(counts, centers))
+    return fit_left_gaussian(counts, centers, fix_mean=True, sigma_seed=ZONE_SIGMA_SEED,
+                             center=smoothed_peak(counts, centers))
+
+
+def find_background_threshold(stack: np.ndarray, sigma_ratio: float, n_bins: int = ZONE_HIST_BINS,
+                              cuda_available: bool = False) -> float:
+    """Hotspot threshold = smoothed background peak + sigma_ratio * sigma (see fit_background)."""
+    center, sigma = fit_background(stack, n_bins, cuda_available)
     return float(center + sigma_ratio * sigma)
 
 

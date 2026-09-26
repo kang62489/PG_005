@@ -6,15 +6,16 @@ Executed phase by phase -- user checks after each phase (assembly-line style). N
 
 Test set (scratch, foreground runs): `output/test9/proc_test9.txt` = subset of `data/proc_20260922_000.txt`:
 
-| Recording | Why |
-|---|---|
-| `2025_06_11-0003` | normal GACh3.0, 44 zones -- regression reference |
-| `2025_11_27-0009` | 1 zone = 1.86e6 µm² (whole FOV) -> giant-hotspot filter |
-| `2025_11_27-0007` | 2 zones, median 3.34 Hz vs 30 s period -> artifact check |
-| `2025_11_27-0026` | threshold 0.095 (others ~0.18), 103 zones, 99 proximity |
-| `2026_01_08-0037` | normal, 44 zones, 437 detections -> page-count / timing check for new maps |
+Test set picked by user (2026-09-26):
 
-Before any edit: run the current code on the test set -> `output/test9/before/` (baseline for comparisons).
+| Recording | Sensor | Baseline (`before/`) |
+|---|---|---|
+| `2024_10_11-0009` | iAChSnFR | thr 0.164, 109 det, 17 zones (0 tc / 14 prox / 3 iso) |
+| `2025_06_11-0003` | GACh3.0 | thr 0.191, 733 det, 43 zones (28 / 10 / 5) |
+| `2025_11_27-0011` | GACh3.0 | thr 0.179, 97 det, 22 zones (4 / 17 / 1) |
+| `2025_12_15-0012` | GACh3.0 | thr 0.186, 177 det, 24 zones (11 / 8 / 5) |
+
+Baseline done: `output/test9/before/spontaneous/` (current code, 90 s total).
 
 ---
 

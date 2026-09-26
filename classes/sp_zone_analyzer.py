@@ -31,7 +31,7 @@ from skimage.measure import find_contours, regionprops
 
 # Local imports
 from classes.region_analyzer import PIXEL_SCALE
-from functions.fit_hist import find_background_threshold
+from functions.fit_hist import fit_background
 from functions.zone_kernels import footprint_traces, zone_mask
 
 console = Console()
@@ -53,13 +53,14 @@ def timed(label: str) -> Iterator[None]:
 
 # --- Step 1: detect --------------------------------------------------------
 # (histogram bins / percentile range / fit live in functions/fit_hist.py -- shared with img_proc)
-CROSSOVER_RATIO = 1.5         # threshold = background peak + this many fitted sigmas
+CROSSOVER_RATIO = 2.0         # threshold = background peak + this many fitted sigmas
 TH_SMALL_OBJ = 4000           # px: drop per-frame blobs smaller than this (noise speckle)
 CLOSE_RADIUS = 3              # px: morphological closing to fill small notches in a blob's shape
 
 # --- Step 2: group ---------------------------------------------------------
-TH_SMALL_HOTSPOTS = 3000      # px: drop merged hotspots smaller than this
-CONNECT_RADIUS = 75           # px: merge same-frame fragments whose boundaries are this close
+MIN_HOTSPOT_FRAC = 0.01       # frame fraction: drop smaller merged hotspots (1 % of 1024 x 1024 = 10,486 px)
+MAX_HOTSPOT_FRAC = 0.8        # frame fraction: drop larger merged hotspots (over-exposed first frames)
+CONNECT_RADIUS = 75          # px: merge same-frame fragments whose boundaries are this close
 MAX_CENTROID_DEVIATION = 115  # px: max centroid distance for frame-to-frame chaining and proximity grouping
 MIN_GROUP_CORR = 0.95         # trace-corr grouping: every pair in a group has r >= this
 
@@ -72,7 +73,7 @@ class SpontaneousZoneAnalyzer:
     """Detect -> group -> map spontaneous hotspots into zones for one stack.
 
     Results after run():
-        threshold, mask                                    (step 1)
+        bg_center, bg_sigma, threshold, mask               (step 1)
         detections, footprints, trace_corr_groups,
         proximity_groups, isolated_tracks                  (step 2)
         zones, zone_masks, zone_centroids, zone_stats      (step 3)
@@ -101,8 +102,8 @@ class SpontaneousZoneAnalyzer:
     def detect(self) -> None:
         """Background threshold -> cleaned per-frame hotspot mask."""
         with timed("detect 1a threshold (histogram + fit)"):
-            self.threshold = find_background_threshold(self.stack_f16, self.sigma_ratio,
-                                                       cuda_available=self.cuda_available)
+            self.bg_center, self.bg_sigma = fit_background(self.stack_f16, cuda_available=self.cuda_available)
+            self.threshold = float(self.bg_center + self.sigma_ratio * self.bg_sigma)
         console.log(f"  threshold (peak + {self.sigma_ratio} sigma) = {self.threshold:.5f}")
 
         with timed("detect 1b mask (open/close/fill/size)"):
@@ -115,9 +116,17 @@ class SpontaneousZoneAnalyzer:
     def group(self) -> None:
         """Per-frame hotspots -> chained tracks -> trace-corr groups, proximity groups, isolated tracks."""
         # 2a. per-frame hotspots
+        frame_px = self.height * self.width
+        min_area, max_area = MIN_HOTSPOT_FRAC * frame_px, MAX_HOTSPOT_FRAC * frame_px
         with timed("group  2a connect hotspots"):
-            detections, self.footprints = spatiotemporally_connect_hotspots(
-                self.mask, TH_SMALL_HOTSPOTS, CONNECT_RADIUS)
+            detections, self.footprints, dropped = spatiotemporally_connect_hotspots(
+                self.mask, min_area, max_area, CONNECT_RADIUS)
+        small = [frame for frame, area in dropped if area < min_area]
+        giant = [frame for frame, area in dropped if area > max_area]
+        console.log(f"  {len(small)} small hotspot(s) dropped (< {MIN_HOTSPOT_FRAC:.0%} of frame = {min_area:.0f} px)")
+        if giant:
+            console.log(f"  [yellow]{len(giant)} giant hotspot(s) dropped (> {MAX_HOTSPOT_FRAC:.0%} of frame) "
+                        f"in frames {giant}[/yellow]")
         if detections.empty:
             console.log("[yellow]group: no hotspots above threshold -- 0 zones[/yellow]")
             self.detections = detections
@@ -158,13 +167,12 @@ class SpontaneousZoneAnalyzer:
     # Save
     # -----------------------------------------------------------------------
 
-    def save(self, out_dir: Path, stem: str, debug: bool = False) -> dict[str, Path]:
-        """Write {stem}_ZONES.xlsx, {stem}_ZONE_MASK.tif, {stem}_ZONES.npz (+ raw detections if debug)."""
-        out_dir.mkdir(parents=True, exist_ok=True)
+    def save(self, out_dir: Path, stem: str, save_mask: bool = True, debug: bool = False) -> dict[str, Path]:
+        """Write {stem}_ZONES.xlsx, footprints/{stem}_ZONES.npz (+ mask/{stem}_ZONE_MASK.tif, raw detections)."""
+        (out_dir / "footprints").mkdir(parents=True, exist_ok=True)
         paths = {
             "xlsx": out_dir / f"{stem}_ZONES.xlsx",
-            "mask": out_dir / f"{stem}_ZONE_MASK.tif",
-            "npz":  out_dir / f"{stem}_ZONES.npz",
+            "npz":  out_dir / "footprints" / f"{stem}_ZONES.npz",
         }
 
         with pd.ExcelWriter(paths["xlsx"]) as writer:
@@ -174,14 +182,17 @@ class SpontaneousZoneAnalyzer:
             self.isolated_tracks.rename(columns={"joint_label": "track_id", "frames": "active_frames"}).to_excel(
                 writer, sheet_name="isolated_tracks", index=False)
 
-        tifffile.imwrite(paths["mask"], self.mask.astype(np.uint8) * 255)
+        if save_mask:  # 1200 x 1024 x 1024 uint8 = 1.26 GB raw -> zlib
+            (out_dir / "mask").mkdir(exist_ok=True)
+            paths["mask"] = out_dir / "mask" / f"{stem}_ZONE_MASK.tif"
+            tifffile.imwrite(paths["mask"], self.mask.astype(np.uint8) * 255, compression="zlib")
 
         arrays: dict[str, np.ndarray] = {"background_threshold": np.array(self.threshold)}
         for zone_id, mask in self.zone_masks.items():
             arrays[f"zone{zone_id}_footprint"] = np.argwhere(mask)
             for k, contour in enumerate(find_contours(mask.astype(float), level=0.5)):
                 arrays[f"zone{zone_id}_contour{k}"] = contour
-        np.savez(paths["npz"], **arrays)
+        np.savez_compressed(paths["npz"], **arrays)
 
         if debug:
             paths["detections"] = out_dir / f"{stem}_DETECTIONS.csv"
@@ -190,7 +201,7 @@ class SpontaneousZoneAnalyzer:
         return paths
 
 
-# STEP 1 -- DETECT lives in functions/: fit_hist.find_background_threshold + zone_kernels.zone_mask
+# STEP 1 -- DETECT lives in functions/: fit_hist.fit_background + zone_kernels.zone_mask
 
 # ===========================================================================
 #
@@ -273,11 +284,15 @@ def merge_adjacent_hotspots(labeled_frame: np.ndarray, connect_radius: float) ->
     return remap[labeled_frame]
 
 
-def spatiotemporally_connect_hotspots(mask: np.ndarray, th_small_hotspots: int,
-                                      connect_radius: int) -> tuple[pd.DataFrame, list]:
-    """Per frame: label, merge fragments, keep big hotspots -> (detections table, footprints)."""
+def spatiotemporally_connect_hotspots(mask: np.ndarray, min_area: float, max_area: float,
+                                      connect_radius: int) -> tuple[pd.DataFrame, list, list[tuple[int, int]]]:
+    """Per frame: label, merge fragments, keep min_area <= area <= max_area.
+
+    Returns (detections table, footprints, dropped [(frame 1-based, area)]).
+    """
     hotspots_props = []
     footprints = []
+    dropped = []
     label_offset = 0
 
     for frame_id in range(mask.shape[0]):
@@ -289,7 +304,8 @@ def spatiotemporally_connect_hotspots(mask: np.ndarray, th_small_hotspots: int,
         for joint_label_at_frame_id in np.unique(labeled_frame[frame_mask]):
             footprint_mask = frame_mask & (labeled_frame == joint_label_at_frame_id)
             area = int(footprint_mask.sum())
-            if area < th_small_hotspots:
+            if not min_area <= area <= max_area:
+                dropped.append((frame_id + 1, area))
                 continue
 
             coords = np.argwhere(footprint_mask)
@@ -305,7 +321,7 @@ def spatiotemporally_connect_hotspots(mask: np.ndarray, th_small_hotspots: int,
         label_offset += n_frame_labels
 
     columns = ["frame", "joint_label", "centroid_y", "centroid_x", "area"]
-    return pd.DataFrame(hotspots_props, columns=columns), footprints
+    return pd.DataFrame(hotspots_props, columns=columns), footprints, dropped
 
 
 # --- 2b. Chain frame-adjacent hotspots into tracks -------------------------

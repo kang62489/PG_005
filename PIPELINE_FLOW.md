@@ -40,6 +40,6 @@ For the analysis-list run, the pipeline also saves `spikes/<analysis_list_name>_
 1. `SpontaneousZoneAnalyzer` estimates a background threshold from the stack's value histogram and detects hotspots in each frame.
 2. It connects detections across frames into tracks, then groups tracks by correlated traces or spatial proximity.
 3. It maps those groups into zones and calculates zone size and event statistics.
-4. Under `results/spontaneous/`, it saves per-recording `*_ZONES.xlsx`, `*_ZONE_MASK.tif`, and `*_ZONES.npz` files, plus zone-map PNGs. It also saves `spontaneous_summary.xlsx` and `spontaneous_stats.png` across recordings.
+4. Under `results/spontaneous/`, it saves per-recording `*_ZONES.xlsx` and `*_ZONE_MAPS.tif`, `footprints/*_ZONES.npz`, and `mask/*_ZONE_MASK.tif` (skipped with `--no_mask`). It also saves `spontaneous_summary.xlsx` across recordings.
 
 The main sequence is **raw TIFF → `img_proc.py` → `als_correct.py` → `ach_domain_analysis.py`**. `spontaneous_analysis.py` is a separate analysis route from the ALS-corrected TIFFs.

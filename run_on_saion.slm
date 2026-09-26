@@ -12,7 +12,7 @@
 
 # Spontaneous zone analysis -- CUDA kernels (zone_kernels, fit_hist) on the V100, CPU fallback otherwise.
 # proc_tiffs path is read from the proc-list footer (dir_proc_tiffs) -> must point to /work/WickensU/kang/proc_tiffs
-# Outputs go to $RESULTS_DIR/spontaneous/.
+# Outputs go to $RESULTS_DIR/spontaneous/ (xlsx + ZONE_MAPS.tif, footprints/*.npz, mask/*.tif; --no_mask skips the mask).
 # Create the log folder once before submitting: mkdir -p /work/WickensU/kang/logs
 
 PROJECT=/home/k/kang-chu/PG_005
