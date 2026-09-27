@@ -50,8 +50,42 @@ Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-
 | O | Striatum-masked FLOW (3 rows) / STREAMLINES (2 rows) + MED z display (10, 11); aniso % / src-sink % + per-objective table (12); DV / ML direction `L 25° D` in DB + STREAMLINES title / D-V-M-L crosshair (9) | 4 | [x] 2026-09-27 |
 | P | ABF CH2 (`data[1]`, pA) pulse > 200 pA above median -> `experiments.hotspot_origin` `estim_induced` / `spontaneous` (7); DC hold = spontaneous | 5 | [x] 2026-09-27 |
 | - | Stats out of the ana list -> sheets in `{ana_list}_cells.xlsx` (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped); ana list never written | extra | [x] 2026-09-27 |
-| Q | Area comparison (8): `area_comparison.py` -- MED larger spike/spike+1 size + centroid + origin; per-zone median per-frame size + centroid from `results/spontaneous/`; MED -> nearest zone < 50 px (150 px "natural zone" filter dropped) | 6 | [x] Session 78: + `matched_med`, `pct_zones_smaller`, Zone events sheet, Groups (A / B / C) + Mann-Whitney A-C / B-C / A-B; tested on `output/test01/phase6/`, neat-refactored. Left: formal run on deigo |
+| Q | Area comparison (8): `area_comparison.py` -- MED larger spike/spike+1 size + centroid + origin; per-zone median per-frame size + centroid from `results/spontaneous/`; MED -> nearest zone < 50 px (150 px "natural zone" filter dropped) | 6 | [x] Session 78: + `matched_med`, `pct_zones_smaller`, Zone events sheet, Groups (A / B / C) + Mann-Whitney A-C / B-C / A-B; tested on `output/test01/phase6/`, neat-refactored. Session 79: formal run done (`results/area_comparison.xlsx`, 0 % reliability filter added) |
 | R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | [ ] |
+
+---
+
+# Log of the project progress 2026-09-28 Mon (Session 79)
+Last working file: `area_comparison.py`
+Last working line: 224 (`run()` -- experiments filter: `has_region == 1 & n_segments_detected > 0`)
+
+## List of modified files
+- `area_comparison.py` -- filter adds `n_segments_detected > 0` (0 % reliability rows have no MED / CAT tif); ruff clean, neat-refactor check: no layout change needed
+- `RESULTS_GUIDE.md` (new, root) -- results guide for Jeff: claims first (What we see / Where to look / Still open), then key terms, how produced, quick facts, folder map, known issues
+- `RESULTS_GUIDE.pdf` (new, root) -- user's export for upload
+- `docs/knowledgebase/paper_claims.md` (new) -- the three paper claims + evidence + gaps
+- `docs/knowledgebase/tvl1_flow_and_streamlines.md` (new) -- TV-L1 step by step (3 × 3 L1 / TV walkthrough, "p = water along links"), flow-pattern fit, streamlines (matplotlib streamplot, 3 × 3 + source trace), quiver sampling vs 8 × 8 binning
+- `results/` (not tracked) -- saion (4734460) + deigo (45233657) results copied in; `results/area_comparison.xlsx` produced
+
+## Summary of current progress
+- Three claims confirmed with the user: (1) spontaneous zones cover the striatum but not in phase; (2) one spike of one neuron releases a hotspot >= natural spontaneous hotspots; (3) released ACh stays local, not a wave.
+- Logs: both `.err` empty; 35 zero-zone spontaneous recordings are truly silent (whole days 2025_12_14 / 2025_11_27 / 2025_12_18 / 2024_10_11); 36 vs 40 neurons = 4 cells with only "no valid segments".
+- Found: 8 DB rows `has_region = 1` with 0 % reliability and no MED / CAT (has_region ignores `final_significant`); real detections 67 (10X 41, 40X 9, 60X 17).
+- Area comparison (10X, σ 2.0 run): A estim n=26 median 74,364 µm²; B spont n=15 145,385; C zones n=776 45,228; p A-C 0.79, B-C 0.0001, A-B 0.11; MED > median 88 % of its recording's zones. Group A splits ~200,000 vs ~10,000 µm².
+- User is re-running deigo with `BASELINE_SIGMA_MULT = 1.5`; guide numbers are from the 2.0 run.
+- Guide uploaded to Jeff.
+
+## Completed TODOs/Tasks
+- ✅ Q formal run: deigo re-run copied back + `area_comparison.py` on `results/results.db`
+- ✅ Results guide for Jeff (navigation part of the "dataset bucket" TODO)
+- ✅ TV-L1 / streamline explanation saved to the knowledgebase
+
+## What should we do next? (TODOs)
+- [ ] Wait for Jeff's feedback on `RESULTS_GUIDE.md`
+- [ ] Further discussion on the results and writing the paragraphs; plan the paper figures (results are many images -- decide how to present them as figures)
+
+## Last Session Recap
+※ recap: Checked the saion / deigo results, fixed and ran `area_comparison.py` (0 % reliability filter), wrote `RESULTS_GUIDE.md` for Jeff plus knowledgebase notes on the paper claims and TV-L1 / streamlines. Pending: Jeff's feedback, then paper paragraphs and figures.
 
 ---
 

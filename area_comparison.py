@@ -217,7 +217,11 @@ def group_stats(areas: dict[str, np.ndarray]) -> tuple[list[dict], list[dict]]:
 
 def run(db_path: Path, spont_dir: Path) -> Path:
     """MED rows -> zone rows for the same recordings -> area_comparison.xlsx next to the DB."""
-    df = _read_experiments(db_path).filter((pl.col("has_region") == 1) & (pl.col("objective") == TARGET_OBJ))
+    df = _read_experiments(db_path).filter(
+        (pl.col("has_region") == 1)
+        & (pl.col("n_segments_detected") > 0)  # 0 % reliability -> not significant, no MED / CAT tif
+        & (pl.col("objective") == TARGET_OBJ)
+    )
     console.log(f"{df.height} {TARGET_OBJ} recording(s) with a MED hotspot in {db_path}")
     um2_per_px = (1.0 / PIXEL_SCALE[TARGET_OBJ]) ** 2
 
