@@ -35,7 +35,7 @@ Test set (2026-09-26): `2024_10_11-0009`, `2025_06_11-0003`, `2025_11_27-0011`, 
 Spike-aligned follow-ups from the 2026-09-26 results check (not started):
 - [ ] 60X decay fit fails on 43/62 significant recordings (median R² 0.4) -- look at a few SPATIAL.png.
 - [ ] 23 no-peak entries in the deigo run -- spontaneous-only recordings? drop from the ana list if so.
-- [ ] Copy back `data/ana_20260922_000_deigo.txt` from deigo (has the `[SKIPPED]` / stats block).
+- ~~Copy back `data/ana_20260922_000_deigo.txt` from deigo~~ -- dropped Session 78 (not needed).
 
 # ach_domain_analysis refinement TODOs (2026-09-27)
 Plan: `.claude/plans/2026-09-27_ach_domain_refine_plan.md` -- phase by phase, user checks after each phase.
@@ -50,8 +50,75 @@ Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-
 | O | Striatum-masked FLOW (3 rows) / STREAMLINES (2 rows) + MED z display (10, 11); aniso % / src-sink % + per-objective table (12); DV / ML direction `L 25° D` in DB + STREAMLINES title / D-V-M-L crosshair (9) | 4 | [x] 2026-09-27 |
 | P | ABF CH2 (`data[1]`, pA) pulse > 200 pA above median -> `experiments.hotspot_origin` `estim_induced` / `spontaneous` (7); DC hold = spontaneous | 5 | [x] 2026-09-27 |
 | - | Stats out of the ana list -> sheets in `{ana_list}_cells.xlsx` (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped); ana list never written | extra | [x] 2026-09-27 |
-| Q | Area comparison: estim-induced vs patched spontaneous MED hotspots vs natural spontaneous zones (zone centroid min distance to MED centroid >= 150 px) (8) | 6 | [ ] next -- plan mode first |
+| Q | Area comparison (8): `area_comparison.py` -- MED larger spike/spike+1 size + centroid + origin; per-zone median per-frame size + centroid from `results/spontaneous/`; MED -> nearest zone < 50 px (150 px "natural zone" filter dropped) | 6 | [x] Session 78: + `matched_med`, `pct_zones_smaller`, Zone events sheet, Groups (A / B / C) + Mann-Whitney A-C / B-C / A-B; tested on `output/test01/phase6/`, neat-refactored. Left: formal run on deigo |
 | R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | [ ] |
+
+---
+
+# Log of the project progress 2026-09-27 Sun (Session 78)
+Last working file: `area_comparison.py`
+Last working line: 240 (`run()` -- 3b. rank vs unmatched zones)
+
+## List of modified files
+- `area_comparison.py` (new, uncommitted) -- matched_med, n_unmatched_zones / pct_zones_smaller, Zone events sheet, Groups + Group tests sheets, neat-refactor
+- `.claude/plans/2026-09-27_ach_domain_refine_plan.md` -- Phase 6 Session 78 additions + formal-run note
+- `run_on_deigo.slm` -- `--stbd $PROJECT/data/bd_20260922_000.json` added + comment (area_comparison runs locally)
+- `output/` cleaned: only `output/test01/ana_test01.txt` (dir_results -> `output/test01/phase6`) + `output/test01/phase6/` (fresh current-code run + area_comparison.xlsx)
+
+## Summary of current progress
+- Claim stated with the user: one neuron's spike releases a hotspot >= natural spontaneous hotspots.
+- Groups: A estim_induced MED, B spontaneous MED, C unmatched zones; Mann-Whitney A-C, B-C, A-B (no Kruskal-Wallis, no Holm).
+- Per recording: 0003 and 0012 MEDs are larger than 100 % of their unmatched zones (25 / 11).
+- Zone events: 445 events / 38 zones; per-zone event median == Zones median (38/38).
+- Neat-refactor: all sheets identical before / after; ruff clean.
+- Deigo DB (results_20260922): 71 10X recordings with a MED hotspot, all with spontaneous zones.
+
+## Completed TODOs/Tasks
+- ✅ Q area comparison script (groups, rank, zone events) + neat-refactor
+
+## What should we do next? (TODOs)
+- [ ] User commits `area_comparison.py` + `run_on_deigo.slm` (+ plan / this file), `git pull` on deigo
+- [ ] Formal run on deigo: `git pull` -> `mv /flash/WickensU/kang/results /flash/WickensU/kang/results_20260922_old` -> `sbatch run_on_deigo.slm` (now with `--stbd data/bd_20260922_000.json`) -> copy `/flash/WickensU/kang/results` back -> `area_comparison.py --db <copied results.db>` LOCALLY (uses local `results/spontaneous/`)
+- [ ] Look at the formal Groups / Group tests + pct_zones_smaller; decide on a plot later
+- [ ] R -- Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py`
+- [ ] Dataset bucket for Jeff
+- ~~Copy back `data/ana_20260922_000_deigo.txt`~~ -- dropped Session 78: not needed (list_parser stops at the footer, git pull won't conflict; old numbers are in `results/results_20260922/results.db`)
+- [ ] Older: 60X decay fit fails (43/62, R² 0.4); 23 no-peak entries in the deigo run
+
+## Last Session Recap
+※ recap: Finished Phase 6 `area_comparison.py`: matched_med, per-recording pct_zones_smaller, Zone events sheet, A/B/C groups with Mann-Whitney; tested on test01/phase6 and neat-refactored (uncommitted). Next: commit, then the formal run on deigo.
+
+---
+
+# Log of the project progress 2026-09-27 Sun (Session 77)
+Last working file: `area_comparison.py`
+Last working line: 152 (`match_zone()` -- MED centroid -> nearest zone)
+
+## List of modified files (Session 76 work was committed by the user in `f9c745b`)
+- `area_comparison.py` (new, uncommitted) -- MED size / centroid / origin, zone median per-frame size / centroid, MED -> zone match, xlsx export
+- `.claude/plans/2026-09-27_ach_domain_refine_plan.md` -- Phase 6 rewritten to the final design
+- `output/test01/scratch_match_med_zone.py`, `output/test01/scratch_compare_xlsx.py` (scratch)
+- Test output: `output/test01/after_xlsx/area_comparison.xlsx` (+ `area_comparison_before.xlsx` for the identity check)
+
+## Summary of current progress
+- Phase 6 design settled with the user (simple version): no cross-filtering of zones by MED; just MED size + centroid vs per-zone median size + centroid of the same file, then MED -> nearest zone match.
+- Zone per-frame sizes are rebuilt from saved outputs (ZONES.xlsx active_frames + npz footprint + ZONE_MASK tif), no spontaneous re-run needed.
+- Match rule: nearest zone centroid < 50 px; "MED centroid inside footprint" rejected (overlapping unions -> 2-5 hits).
+- Test: 0003 (spontaneous) MED 172,345 µm² -> zone 1, 16 px, median 102,427 µm² (1.7x); 0012 (estim) MED 204,260 µm² -> zone 5, 13.5 px, median 60,436 µm² (3.4x).
+- Checks: MED area == DB; footprint area == zone_stats.area_um2; 1-frame zones median == footprint; CONFIG tidy-up identical output; ruff clean.
+
+## Completed TODOs/Tasks
+- ✅ Q core script + zone matching (test01)
+
+## What should we do next? (TODOs) -- derived, not yet confirmed by the user
+- [ ] User checks `output/test01/after_xlsx/area_comparison.xlsx` + `area_comparison.py`, then commits
+- [ ] Formal run: re-run `ach_domain_analysis.py` (current code -> `hotspot_origin`, sigma 2, 2700 µm²), then `area_comparison.py --db <new results.db>`
+- [ ] Decide the comparison output (plot / stats) -- user said no plot for now
+- [ ] R -- Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py`
+- [ ] Copy back `data/ana_20260922_000_deigo.txt`; dataset bucket for Jeff (pending)
+
+## Last Session Recap
+※ recap: Built `area_comparison.py` (Phase 6): MED larger-frame size / centroid / origin vs per-zone median per-frame size / centroid, plus MED -> nearest zone (< 50 px) match; tested on test01, uncommitted. Next: user review, ach_domain re-run for the formal run.
 
 ---
 

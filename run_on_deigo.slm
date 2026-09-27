@@ -15,6 +15,8 @@
 # proc_tiffs / raw_abfs / results paths are read from the ana-list footer
 # (dir_proc_tiffs, dir_raw_abfs, dir_results) -> /flash/WickensU/kang/...
 # Create the log folder once before submitting: mkdir -p /flash/WickensU/kang/logs
+# --stbd: striatum outlines for the FLOW / STREAMLINES mask + DV / ML flow direction.
+# area_comparison.py runs locally after copying results back (needs results/spontaneous/ from saion).
 
 PROJECT=/home/k/kang-chu/PG_005
 ANA_LIST=$PROJECT/data/ana_20260922_000_deigo.txt
@@ -24,4 +26,5 @@ export COLUMNS=200
 $PROJECT/.venv/bin/python $PROJECT/ach_domain_analysis.py \
     --ana_list $ANA_LIST \
     --db $PROJECT/data/rec_data.db \
-    --exp_db $PROJECT/data/exp_info.db
+    --exp_db $PROJECT/data/exp_info.db \
+    --stbd $PROJECT/data/bd_20260922_000.json

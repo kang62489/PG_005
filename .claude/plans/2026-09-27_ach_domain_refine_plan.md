@@ -77,12 +77,34 @@ First run of the CURRENT code -> `output/test01/before/` (baseline for every lat
 - Done: Phases 1-5 + stats -> xlsx. Next: Phase 6 (plan mode), then neat-refactor check of abf_clip.py,
   xlsx_writer.py, append_stats.py. Test runs: output/test01/ (latest after_xlsx/), always `--stbd data/bd_20260922_000.json`.
 
-## Phase 6 -- Area comparison (item 8), plan-mode details first  [ ] next
+## Phase 6 -- Area comparison (item 8)  [x] script done + tested (Sessions 77-78); formal run on deigo pending
 - Claim: a single spike of a single neuron can release a large hotspot -> a local striatal area can be
   modulated by one neuron.
-- Groups: MED hotspot area (spike / spike+1 µm²) of `estim_induced` vs `spontaneous` recordings, vs natural
-  spontaneous zone areas from `spontaneous_analysis` (10X only) for the same files.
-- Natural-zone filter (user, Q4b): per zone, MIN distance from its centroid (`zone_centroids`,
-  `sp_zone_analyzer.py:161`) to the MED hotspot centroid(s); < 150 px (~200 µm at 10X) -> patched neuron's
-  zone, excluded; else natural spontaneous. Check whether zone centroids are saved in `footprints/*.npz`
-  or the xlsx.
+- (Old idea -- 150 px filter of "natural" zones -- DROPPED by user, Session 77.)
+- Final design (user, Session 77), `area_comparison.py` (root, new, uncommitted):
+  1. MED: per 10X `has_region` recording, RegionAnalyzer on saved CAT + MED -> larger of spike / spike+1 frame
+     (total hotspot area) + centroid (mean of that frame's hotspot pixels) + `hotspot_origin` from the DB.
+  2. Zones: from `results/spontaneous/` saved outputs only (no re-run): zone -> active_frames (ZONES.xlsx
+     group sheets, 1-based), per frame `mask[frame] & footprint` -> median / mean area (µm²); centroid =
+     footprint mean.
+  3. Match: nearest zone centroid < `MATCH_MAX_DIST_PX` = 50 px -> matched_zone_id / match_dist_px /
+     zone_median_um2 (footprint-inside test rejected: big overlapping unions).
+  4. Export: `{db dir}/area_comparison.xlsx` sheets MED + Zones. No plot yet (user).
+- Test (output/test01/after_xlsx/): 0003 spontaneous MED 172,345 µm² -> zone 1 (16 px, median 102,427);
+  0012 estim MED 204,260 µm² -> zone 5 (13.5 px, median 60,436). MED area == DB, footprint area == zone_stats.
+- Session 78 additions (user-approved):
+  - Zones sheet: `matched_med` (True for the zone matched to that recording's MED).
+  - MED sheet: `n_unmatched_zones`, `pct_zones_smaller` (% of unmatched zones with median area < MED area).
+  - Zone events sheet: one row per (zone, active frame) -> area_um2 (raw natural event sizes).
+  - Groups sheet: A estim_induced MED / B spontaneous MED / C unmatched zones -> n, median, Q1, Q3.
+  - Group tests sheet: Mann-Whitney U, two-sided, raw p, for A vs C, B vs C, A vs B
+    (no Kruskal-Wallis, no Holm correction; user).
+  - Animal / slice / cell NOT copied into the sheets (readable from the recording name; user).
+  - Claim: one neuron's spike releases a hotspot >= natural spontaneous hotspots (A, B > C).
+- Test (fresh run, output/test01/phase6/): 0003 172,345 µm², 0012 204,260 µm², both larger than 100 % of
+  their unmatched zones (25 / 11); C = 36 zones, median 45,256 µm²; A vs C / B vs C p = 0.054 (n = 1 floor).
+  Neat-refactor done, output identical; ruff clean.
+- Pending: formal run on deigo -- `sbatch run_on_deigo.slm` (ach_domain_analysis.py, full ana list; `--stbd
+  data/bd_20260922_000.json` added to the slm, Session 78) -> copy /flash/WickensU/kang/results back ->
+  area_comparison.py --db <copied results.db> LOCALLY (local results/spontaneous/ has all zones). Expected up to ~71 10X recordings in A + B
+  (results_20260922: 71 with a MED hotspot, all with spontaneous zones).
