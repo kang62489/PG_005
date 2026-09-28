@@ -53,6 +53,7 @@ from classes import (
     SpatialCategorizer,
     SpikeReliabilityChecker,
 )
+from classes.abf_clip import MIN_SET_INTERVAL_FRAMES
 from classes.region_analyzer import PIXEL_SCALE
 from functions import (
     bd_export_path,
@@ -278,9 +279,10 @@ def analyze_entry(
         export_plot=False,
     )
     jobs: list[Callable[[], None]] = [clip.export_spike_plot]
-    if not clip.lst_img_frame_ranges:  # every spike skipped (too closely spaced for a baseline window)
+    if not clip.lst_img_frame_ranges:  # every spike skipped (no spike has a ±MIN_SET_INTERVAL_FRAMES margin)
         console.log("[yellow]No valid segments — skipping this entry.[/yellow]")
-        _log_skip(skipped, proc_tiff_path.name, "no valid segments (spikes too closely spaced for any baseline window)")
+        _log_skip(skipped, proc_tiff_path.name,
+                  f"no valid segments (no spike has a ±{MIN_SET_INTERVAL_FRAMES}-frame margin)")
         return jobs
 
     # Filename / DB metadata, needed from step 2 on

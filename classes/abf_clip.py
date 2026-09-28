@@ -43,6 +43,7 @@ STIM_CHANNEL = 1        # ABF channel of the injected current (pA); 0 = Vm, 3 = 
 STIM_PULSE_PA = 200.0   # pA above the channel median (absorbs a DC holding current) -> a stim pulse
 
 # --- Step 3: window --------------------------------------------------------
+MIN_SET_INTERVAL_FRAMES = 3    # frames: floor on set_interval_frames; spikes with a smaller margin are skipped
 MAX_SET_INTERVAL_FRAMES = 10   # frames: hard cap on set_interval_frames (baseline + post-spike margin per segment)
 KEEP_FRACTION_QUANTILE = 0.2   # set_interval_frames = this quantile of all margins -> >= 80% of spikes kept
 
@@ -229,7 +230,7 @@ class AbfClip:
 
         # --- 3b. free frames before / between / after spikes ---
         inter_spike_frames = (np.diff(self.spike_frame_indices) - 1).astype(int)
-        leading_interval_frames: int = self.spike_frame_indices[0] - 1
+        leading_interval_frames: int = self.spike_frame_indices[0]  # 0-based: frames 0 .. idx-1
         trailing_interval_frames: int = self.n_frames - self.spike_frame_indices[-1] - 1
         inter_spike_frames = np.insert(inter_spike_frames, 0, leading_interval_frames).astype(int)
         inter_spike_frames = np.append(inter_spike_frames, trailing_interval_frames).astype(int)
@@ -247,7 +248,7 @@ class AbfClip:
 
         all_min_series = pl.Series("Min_Available_Frames", all_min_available, dtype=pl.Int64)
         quantile_value = all_min_series.quantile(KEEP_FRACTION_QUANTILE, interpolation="lower")
-        self.set_interval_frames = min(int(quantile_value), MAX_SET_INTERVAL_FRAMES)
+        self.set_interval_frames = int(np.clip(int(quantile_value), MIN_SET_INTERVAL_FRAMES, MAX_SET_INTERVAL_FRAMES))
         console.log(
             f"[bold cyan]Min_Available_Frames — max: {all_min_series.max()}, "
             f"{KEEP_FRACTION_QUANTILE:.0%} quantile: {quantile_value} "
@@ -266,10 +267,9 @@ class AbfClip:
             peak_time = float(self.peak_times[orig_peak_idx])
             peak_value = float(self.peak_values[orig_peak_idx])
 
-            # set_interval_frames == 0 means every segment would be just the spike frame itself,
-            # with no baseline frames before it — unanalyzable downstream (SpatialCategorizer
-            # needs at least 1 baseline frame). Skip rather than crash.
-            if self.set_interval_frames < 1 or min_available_frames < self.set_interval_frames:
+            # set_interval_frames >= MIN_SET_INTERVAL_FRAMES, so a spike too close to its
+            # neighbour / the recording edge for that window is skipped here.
+            if min_available_frames < self.set_interval_frames:
                 lst_skipped_spikes.append(
                     {
                         "Spike_Frame_Index": frame_of_spike,

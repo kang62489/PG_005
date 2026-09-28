@@ -41,7 +41,7 @@ BASELINE_TRIM_PCT = (0.1, 99.9)  # baseline pixels outside these percentiles are
 
 # --- Step 2: group ---------------------------------------------------------
 CATEGORY_BRIGHT = 1    # CAT pixel value for bright (background = 0)
-MIN_OBJECT_UM2 = 2700.0  # µm²: morphological bright objects smaller than this are dropped (8-connected)
+MIN_OBJECT_UM2 = 900.0  # µm²: morphological bright objects smaller than this are dropped (8-connected)
 
 
 class SpatialCategorizer:
