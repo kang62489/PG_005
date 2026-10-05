@@ -1,7 +1,7 @@
 # Story-driven TODOs (2026-10-05, replaces all earlier open TODOs)
-Story logic: 1 Problem -> 2 Spontaneous zones -> 3 One CIN's spike makes a zone-sized hotspot -> 4 Broad / brief / cleared in place -> 5 Hidden, refreshed compartments made by one CIN.
+Story logic (Part A of `docs/paper_discussion_2026-10-02.md`): 1 Problem (ACh compartment definition) -> 2 Spontaneous zones = places of recurring hotspots = candidate compartments -> 3 One ChI **can** supply a compartment-sized area -> 4 Can one ChI spread ACh like a wave? (MED flow) -> 5 Answer to step 1: a new kind of division with a cellular basis.
 Earlier open items (Session 81 / 82 lists, R, Jeff bucket, 60X decay fit, 23 no-peak) dropped 2026-10-05.
-Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion_2026-10-02.md` "Step 1: Problem (final)"); **Steps 2 (spontaneous zones), 3 (one ChI) and 4 (one ChI wave-like spread? MED flow) in progress; step 5 (answer to step 1) drafted**. Open: where lasting time / "refreshed" goes.
+Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion_2026-10-02.md` "Step 1: Problem (final)"); **Steps 2 (spontaneous zones), 3 (one ChI) and 4 (one ChI wave-like spread? MED flow) in progress; step 5 (answer to step 1) drafted**. Lasting time / "refreshed" has no step yet (placement TODO dropped 2026-10-05).
 
 | # | TODO | Story step | Status |
 |---|------|------------|--------|
@@ -11,6 +11,7 @@ Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion
 | 4 | Come back and check the proximity distance: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`) is set by hand and used for both frame-to-frame chaining and the proximity grouping cut -- needs a justification or a data-driven choice | 2 | [ ] |
 | 5 | Centroid check for trace-corr zones: do hotspots grouped by trace correlation have close centroids? (expected yes -- traces come from overlapping footprints; would show trace-corr also means "same place") -- add to spontaneous pipeline | 2 | [ ] |
 | 6 | Check Aosaki 1995: exact CIN axon-arbor range and species before citing it in the step-3 bridge | 3 | [ ] |
+| 7 | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion | [ ] |
 
 ---
 
@@ -68,6 +69,41 @@ Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-
 | - | Stats out of the ana list -> sheets in `{ana_list}_cells.xlsx` (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped); ana list never written | extra | [x] 2026-09-27 |
 | Q | Area comparison (8): `area_comparison.py` -- MED larger spike/spike+1 size + centroid + origin; per-zone median per-frame size + centroid from `results/spontaneous/`; MED -> nearest zone < 50 px (150 px "natural zone" filter dropped) | 6 | [x] Session 78: + `matched_med`, `pct_zones_smaller`, Zone events sheet, Groups (A / B / C) + Mann-Whitney A-C / B-C / A-B; tested on `output/test01/phase6/`, neat-refactored. Session 79: formal run done (`results/area_comparison.xlsx`, 0 % reliability filter added) |
 | R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | dropped 2026-10-05 |
+
+---
+
+# Log of the project progress 2026-10-05 Mon 14:52:39 (Session 83)
+Last working file: `docs/paper_discussion_2026-10-02.md`
+Last working line: 17 (`# Part A — Story logic (current, 2026-10-05)`)
+
+## List of modified files
+- `docs/paper_discussion_2026-10-02.md` -- reorganised: Part A = story logic steps 1–5 + open TODOs + Discussion items; Part B = background (self-talk verbatim, old §1–6, superseded marks)
+- `docs/knowledgebase/paper_claims.md` -- new "Story logic (2026-10-05)" table above the old claims; Claim 1 marked "not in phase dropped"
+- `docs/continue_from_here.md` -- Story-driven TODO table (1–7), old open items dropped, this log
+- `D:\Work\Vault_0\A4_Publications\PB_001_Story logic.md` -- §1b step 1 final, §1c steps 2–5, §4 marked superseded
+- `D:\Work\Vault_0\A4_Publications\PB_001_Paper draft.md` -- Introduction replaced with the `paper_draft_260928_Kang.docx` text (verbatim, "norm  al" fixed); `[!todo]` callouts under Introduction and Results
+- `output/scratch_sync_intro.py` (scratch, not tracked)
+- No code, `results/` or DB changes. Step-1 docs were committed by the user mid-session.
+
+## Summary of current progress
+- Story rebuilt as logic only, step by step (no data until the logic is fixed):
+  1. **Problem (final):** ACh compartment = area whose ACh level is distinct from its surroundings in space and time; striosome / matrix = precedent only; "ACh level"; no "ACh drives DA release".
+  2. **Spontaneous zones:** hotspot = event, compartment = place where hotspots **recur**; release from ChIs safe in slices; modulation only as a possibility. Definition gets "repeatedly" when step 2 is final.
+  3. **One ChI:** bridge = unit of cholinergic **influence** → sufficient vs required → Aosaki arbor; attribution = MED back-check vs intrusion rate; claim "**can**".
+  4. **Wave-like spread:** MED flow tests whether one ChI spreads ACh like a wave (not relations between compartments); waves between compartments → Discussion.
+  5. **Answer to step 1:** a new kind of division with a cellular basis; opens questions (function, waves).
+- Lasting time / "refreshed" has no step yet (placement TODO dropped by user).
+
+## Completed TODOs/Tasks
+- ✅ Story logic steps 1–5 drafted (step 1 final)
+- ✅ Discussion doc cleaned up (Part A / Part B)
+- ✅ Vault Intro synced from the docx; Story logic + paper_claims updated
+
+## What should we do next? (TODOs)
+- See "Story-driven TODOs" table at the top (1b, 1c, 2, 3, 4, 5, 6, 7).
+
+## Last Session Recap
+※ recap: Rebuilt the paper story as five logic steps (step 1 final, 2–4 in progress, 5 drafted), cleaned `paper_discussion_2026-10-02.md`, synced Vault Intro from docx. Pending: attribution (1b/1c), zone size, proximity distance, trace-corr centroids, Aosaki, wave reading.
 
 ---
 

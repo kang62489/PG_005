@@ -1,6 +1,6 @@
-# Paper discussion notes — 2026-10-02
+# Paper discussion notes — PB_001
 
-Kang's self-talk on the paper story (PB_001), the agreed story flow, and checked discussion of each point.
+Story logic of the paper, built step by step (2026-10-05), plus the background discussion it grew from (2026-10-02 / 03).
 Discussion only: **no code or results were changed.**
 
 Sources used:
@@ -8,13 +8,174 @@ Sources used:
 - Paper drafts: `D:\Work\Vault_0\A4_Publications` (copy in `output/A4_Publications/`).
 - Literature: `D:\Work\Vault_0\A5_Converted_Notes` (Brimblecombe & Cragg 2017, Matityahu 2023 + SI, Hamid 2021).
 
-All "quick" numbers below are **descriptive back-of-envelope estimates**, not tested results.
+**Contents**
+- Part A — Story logic (current): overview, steps 1–5, open TODOs, Discussion items
+- Part B — Background notes (2026-10-02 / 03): Kang's self-talk, checked discussion, literature, numbers
 
 ---
 
+# Part A — Story logic (current, 2026-10-05)
+
+Rule: logic first, then pick the results that serve it. Each step is fixed before moving on.
+
+## Overview
+
+| Step | Question | Answer | Status |
+|---|---|---|---|
+| 1. Problem | If we image ACh itself, do we see compartments? | (sets the definition) | ✅ final |
+| 2. Spontaneous zones | Are there areas of recurring ACh release? | Yes: zones = candidate ACh compartments | 🟡 in progress |
+| 3. One ChI | Is a single ChI sufficient to supply a compartment? | One ChI **can** supply a compartment-sized area | 🟡 in progress |
+| 4. Wave-like spread | Can one ChI spread ACh like a wave? | No, if the hotspot fades in place | 🟡 in progress |
+| 5. Answer to step 1 | So, does ACh reveal divisions, and of what kind? | A new kind of division with a cellular basis | 📝 draft |
+
+---
+
+## Step 1: Problem (final, 2026-10-05)
+
+**Final wording:**
+
+> The striatum lacks anatomical divisions that match its functions. A precedent shows that chemistry can reveal such divisions: AChE staining first exposed striosome and matrix, which were later found to serve distinct functions. ACh itself modulates striatal circuits, tuning SPN excitability and gating synaptic plasticity, so areas with different ACh levels would be modulated differently. Yet AChE is a static marker, and whether the ACh level itself differs across the striatum is unknown. We therefore imaged ACh directly and defined an **ACh compartment** as an area whose ACh level is distinct from its surroundings in both space and time. Such compartments need not match striosome or matrix; like them, they may carry their own functions.
+
+➡️ *If we image ACh itself, do we see such areas?*
+
+> [!note] Pending update from step 2
+> Definition to become: an ACh compartment is an area that **repeatedly** reaches an ACh level distinct from its surroundings. Sync to all docs once step 2 is final.
+
+**Decisions:**
+- **Definition:** distinct in **both** space **and** time (not "or").
+- **"ACh level"**, not "signal": the sensors (GACh3.0, iAChSnFR) are intensity-based and track concentration. "Level" reads as concentration without claiming absolute µM; the uncalibrated part goes in Methods only.
+- **Striosome / matrix = precedent only** (chemistry → hidden functional units). Our compartments are **not** claimed to be striosome / matrix; their circuit details (limbic input, projection to DA neurons) are left out.
+- **No "ACh drives DA release":** the direction is debated (Matityahu 2023: reciprocal CIN ↔ DA-axon coupling, DA can inhibit CINs). Keep only SPN excitability and plasticity (citations needed).
+- **Novelty = static marker vs dynamic signal:** AChE = enzyme snapshot in fixed tissue; imaging = the transmitter itself, live, over time.
+- **Literature gap:** Brimblecombe & Cragg 2017, "unclear whether ACh itself" differs between striosome and matrix.
+
+---
+
+## Step 2: Spontaneous zones (in progress)
+
+**Draft logic:**
+1. We image spontaneous ACh in striatal slices.
+2. Some areas briefly rise above their surroundings: **hotspots**, each an event of ACh release by ChIs.
+3. Hotspots recur at the same places; we group them into **zones**.
+4. A zone is a place that repeatedly receives ACh from ChIs → matches the compartment definition → **candidate ACh compartments**.
+
+**Agreed:**
+- **Hotspot = event, compartment = place.** A hotspot is already distinct in space and time (that is why it is detected); recurrence is what makes a place.
+  - Hotspot: an area whose ACh level rises above its surroundings for a brief period.
+  - ACh compartment: an area where hotspots recur, i.e. a place that repeatedly reaches an ACh level distinct from its surroundings.
+- **"Recurring", not "frequent":** no rate threshold to defend; the exact criterion goes in Methods.
+- **Claim chain split:**
+  - hotspot = ACh release → step 2 (safe);
+  - release from ChIs → step 2 (safe in slices: ChIs are the principal striatal ACh source, outside cholinergic inputs are cut);
+  - ChIs **modulate** the area → step 5 / Discussion only, as a possibility (release ≠ modulation).
+
+**Results to show (Kang, tentative):**
+1. Example map of all zones in one recording — the recording with the highest coverage.
+2. Recurring frequency of zones.
+- Still considering: median zone area (may fit step 3 better, where size is compared).
+
+**TODOs:** 4 (proximity distance), 5 (trace-corr centroids) — see [Open TODOs](#open-todos).
+
+---
+
+## Step 3: Can one ChI supply a compartment? (in progress)
+
+**Bridge (agreed):**
+
+> Each compartment is a unit of cholinergic influence. Because these compartments may relate to neural functions, it matters what drives them: whether a single ChI is sufficient, or coordinated activity of several ChIs is required. A single ChI's axon arbor innervates a large area (Aosaki 1995), so one cell could, in principle, supply a whole compartment.
+
+**Draft logic:**
+1. We patch one ChI and record its spikes while imaging ACh.
+2. We align the imaging to its spikes → the hotspot that follows one spike.
+3. We check that the hotspot belongs to this cell: it appears at the same place after spikes more often than by chance.
+4. We compare its size with the hotspots of compartments, for evoked and spontaneous spikes separately.
+5. If comparable, one ChI **can** supply a compartment-sized area.
+
+**Agreed:**
+- **"Influence", not "modulation"** (release ≠ modulation). Matches the title "a broad domain of local influence".
+- **"Sufficient" vs "required"**, not "single ChI or network" (both may operate).
+- **Wording: "can"** = sufficiency, not ownership.
+- **Evoked / spontaneous and event vs place (temporarily OK):** existing `area_comparison.py` plan — evoked (A) and spontaneous (B) spike hotspots as separate groups, each compared with compartments (C); event vs event (C = each zone's median per-event hotspot size). Union-area option still open (TODO 2).
+- **Attribution = inside step 3**, three pieces:
+  - a. Current reliability: hotspot *anywhere* in the frame at spike / spike+1 → background only (not tied to location).
+  - b. Kang's MED back-check: a segment counts as a hit only if its hotspot falls where the MED hotspot is → "real" reliability.
+  - c. Jeff's intrusion rate: non-aligned frames, how often a hotspot appears at the same place by chance → chance level, evoked and spontaneous separately.
+  - **b > c** → the hotspot is locked to this cell's spikes.
+
+**TODOs:** 1b, 1c (attribution), 2 (zone size measure), 6 (Aosaki) — see [Open TODOs](#open-todos).
+
+---
+
+## Step 4: Can one ChI spread ACh like a wave? (in progress)
+
+**Draft logic:**
+1. Compartments are units of influence. We want to know whether they communicate; one candidate route is wave-like ACh transmission.
+2. First, the single-cell end: can one ChI spread ACh like a wave?
+3. We follow how the single-spike (MED) hotspot moves over time (flow analysis).
+4. If it fades in place, one ChI is **not** sufficient for wave-like spread. Waves between compartments, if they exist, would need coordinated firing of many ChIs (consistent with Matityahu 2023's coupling model).
+
+**Agreed:**
+- **Why the MED cannot show relations between compartments:** it keeps only release locked to the patched cell's spike (the median removes everything else), covers one cell and a ±10-frame window. It can show whether **one** ChI's release spreads like a wave.
+- **Mirrors step 3:** one ChI sufficient for a compartment-sized area (yes, can) / one ChI sufficient for wave-like spread (no, if it fades in place).
+- **Waves between compartments in the spontaneous movies → Discussion / future work.** Needs a wave definition first (Kang's reading of Matityahu 2023, Hamid 2021).
+- **Limits:** 20 Hz cannot resolve spread within the first 50 ms; the claim holds only within the field of view and the ±10-frame window.
+- **Wording:** "Within the field and time window observed, the single-spike hotspot showed no wave-like spread."
+- **Slices:** we *can* look for waves in slices, but not finding them is weak evidence (slices lose inputs and possibly the coupling that drives waves in vivo). Replaces the earlier "slices cannot test for waves".
+
+---
+
+## Step 5: Answer to step 1 (draft)
+
+**Role:** close the loop with the step-1 problem, not a summary of findings (the summary = Discussion paragraph 1, already in the docx). Rejected: a conclusion that restates steps 2–4; no step 5 at all.
+
+**Step 1 asked:** the striatum lacks divisions that match its functions. If we image ACh itself, do we see such areas?
+
+**Step 5 answers:**
+1. **Yes, and they are a new kind of division:** defined by recurring ACh release, not by a stain or a cell marker.
+2. **They have a cellular basis:** a single ChI can be enough to drive one, so a division can be traced to an identifiable cell (unlike a stain pattern).
+3. **They open new questions** (Discussion takes over):
+   - Do these divisions carry functions, like striosome and matrix?
+   - How do they relate to each other, e.g. waves?
+
+**Open:** lasting time / "refreshed in pulses" no longer fits any step — drop, step 5, or Discussion?
+
+---
+
+## Open TODOs
+
+Numbers match `docs/continue_from_here.md`.
+
+| # | TODO | Step |
+|---|---|---|
+| 1b | MED back-check reliability: hit only if the segment's hotspot falls where the MED hotspot is | 3 |
+| 1c | Intrusion rate on non-aligned frames, evoked / spontaneous separately; compare with 1b | 3 |
+| 2 | Zone size measure for the comparison: union area vs per-event median — pick one, justify | 3 |
+| 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 |
+| 4 | Proximity distance is hand-set: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`), used for frame-to-frame chaining and the proximity grouping cut — needs a justification or a data-driven choice | 2 |
+| 5 | Trace-corr zones = same place? Add a centroid check to the spontaneous pipeline (expected yes: traces come from overlapping footprints) | 2 |
+| 6 | Check Aosaki 1995: exact axon-arbor range and species before citing | 3 |
+| — | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion |
+
+---
+
+## Discussion items collected so far
+
+- **Waves between compartments** in the spontaneous movies (moved from step 4).
+- **Evoked vs spontaneous spike hotspots:** spontaneous ones are larger; co-firing of other ChIs may add to them (Part B §3).
+- **Modulation** (SPN excitability / plasticity) as a possibility only.
+- **Do the divisions carry functions**, like striosome / matrix (step 5).
+- **Lasting time / "refreshed in pulses"** — if not placed in a step (Part B §4).
+
+---
+---
+
+# Part B — Background notes (2026-10-02 / 03)
+
+> Kept for reference. Where Part A decided differently, Part A wins; superseded points are marked.
+
 ## Kang's original self-talk (verbatim, 2026-10-02)
 
-> Kept word for word as written, for hints and ideas to revisit. Sections 1–5 below summarise and discuss each point.
+> Kept word for word as written, for hints and ideas to revisit.
 
 1. Why study this, the compartments in the striatum? Lack of clear anatomical sections on the basis of neural functions. Inspired by patches and matrix stained by AChE. It was found that the type of chemically defined area/compartments are actually related to certain behavior functions. ACh is the neurochemical, why not directly check it? We just have the kine of intensity based, genetically encoded tools designed for ACh.
 
@@ -33,153 +194,12 @@ Follow-up replies (same day):
 
 ---
 
-## Story flow (agreed 2026-10-03)
+## Earlier story flow (2026-10-03) — superseded by Part A
 
-Marks: 🗣️ = Kang's self-talk (backbone), 💬 = Claude's additions. No statistics here — plain logic only.
+Kept only for the two decisions that still apply:
 
-1. **Problem** -- **final 2026-10-05**, see [Step 1 (final)](#step-1-problem-final-2026-10-05)
-   - 🗣️ The striatum lacks anatomy that matches its functions; patch / matrix were first found by AChE staining.
-   - 💬 AChE is a marker, not the ACh signal. Imaging ACh directly reveals compartments that are "hidden", i.e. invisible to staining.
-2. **Spontaneous zones**
-   - 🗣️ Hotspots recur at the same place and rise together.
-   - 💬 Zones = places repeatedly supplied with ACh → candidate compartments. We *propose* them, we do not prove a function.
-3. **Who supplies a zone?**
-   - 🗣️ A single CIN? Treat single spikes as events; the key is the size comparison.
-   - 💬 Weak point = location / chance → MED location + Jeff's intrusion rate. Evoked (current-driven) spikes are the cleaner single-cell case.
-4. **What one CIN's area looks like**
-   - 🗣️ Lasting time vs zone recurrence; flow = expand → retract → fade in place.
-   - 💬 Broad + brief → release from many axon sites, not diffusion (§5.1).
-   - Role of this block (Q3) is pending Kang's reading on how waves are defined.
-5. **Meaning**
-   - Hidden areas that are broad, brief and refreshed; one CIN is enough to make one.
-
-**Term decision: "refreshed", not "maintained".**
-- "Maintain" = held at a level. That is not what we saw (≈ 0.34 s on / ≈ 9 s off, §4).
-- "Refreshed" = re-supplied in short pulses.
-
-**Wave wordings (corrected).**
-- Say: "Within the field and time window observed, the single-spike hotspot showed no directional spread." Slices cannot test for waves.
-- "Waves need many CINs" is not our result → Discussion only, citing Matityahu's model.
-
----
-
-## Step 1: Problem (final, 2026-10-05)
-
-Story is now refined step by step (1 → 5); each step is fixed before moving on.
-
-**Final wording:**
-
-> The striatum lacks anatomical divisions that match its functions. A precedent shows that chemistry can reveal such divisions: AChE staining first exposed striosome and matrix, which were later found to serve distinct functions. ACh itself modulates striatal circuits, tuning SPN excitability and gating synaptic plasticity, so areas with different ACh levels would be modulated differently. Yet AChE is a static marker, and whether the ACh level itself differs across the striatum is unknown. We therefore imaged ACh directly and defined an **ACh compartment** as an area whose ACh level is distinct from its surroundings in both space and time. Such compartments need not match striosome or matrix; like them, they may carry their own functions.
-
-➡️ *If we image ACh itself, do we see such areas?*
-
-**Decisions:**
-- **Definition:** ACh compartment = area whose ACh level is distinct from its surroundings in **both** space **and** time (not "or": zones need the same place *and* recurrence).
-- **"ACh level"**, not "signal": the sensors (GACh3.0, iAChSnFR) are intensity-based and track concentration. "Level" reads as concentration without claiming absolute µM. The uncalibrated part goes in Methods only.
-- **Striosome / matrix = precedent only** (chemistry → hidden functional units). Our compartments are **not** claimed to be striosome / matrix; their circuit details (limbic input, projection to DA neurons) are left out.
-- **No "ACh drives DA release":** the direction is debated (Matityahu 2023: reciprocal CIN ↔ DA-axon coupling, DA can inhibit CINs). Keep only SPN excitability and plasticity (citations needed).
-- **Static marker vs dynamic signal** is the novelty: AChE = enzyme snapshot in fixed tissue; imaging = the transmitter itself, live, over time.
-- Literature gap kept: Brimblecombe & Cragg 2017, "unclear whether ACh itself" differs between striosome and matrix.
-
----
-
-## Step 2: Spontaneous zones (in progress, 2026-10-05)
-
-**Draft logic (not final):**
-1. We image spontaneous ACh in striatal slices.
-2. Some areas briefly rise above their surroundings: **hotspots**, each an event of ACh release by ChIs.
-3. Hotspots recur at the same places; we group them into **zones**.
-4. A zone is a place that repeatedly receives ACh from ChIs → matches the compartment definition → **candidate ACh compartments**.
-
-➡️ *Step 3: how many ChIs does it take to supply a zone? Is one enough?*
-
-**Agreed so far:**
-- **Hotspot = event, compartment = place.** A hotspot is already distinct in space and time; recurrence is what makes a place. Definition word: **"recurring"**, not "frequent" (no rate threshold to defend; exact criterion → Methods).
-  - Hotspot: an area whose ACh level rises above its surroundings for a brief period.
-  - ACh compartment: an area where hotspots recur, i.e. a place that repeatedly reaches an ACh level distinct from its surroundings. → Step-1 definition to be updated with "repeatedly" when step 2 is final.
-- **Claim chain split:** hotspot = ACh release (step 2, safe); release from ChIs (step 2, safe in slices: ChIs are the principal striatal ACh source, outside cholinergic inputs are cut); ChIs **modulate** the area → step 5 only, as a possibility (release ≠ modulation).
-
-**Results to show (Kang, tentative 2026-10-05):**
-1. Example map of all zones in one recording -- pick the recording with the highest coverage.
-2. Recurring frequency of zones.
-- Still considering: median zone area.
-
-**TODOs (step 2) — come back and check:**
-- [ ] **TODO 4 — Proximity distance is hand-set:** `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`), used for both frame-to-frame chaining and the proximity grouping cut. Needs a justification or a data-driven choice.
-- [ ] **TODO 5 — Trace-corr zones = same place?** Add a centroid check to the spontaneous pipeline: do hotspots grouped by trace correlation have close centroids? (Expected: yes, traces come from overlapping footprints.) If so, both groupings fit "recurring at the same place".
-
----
-
-## Step 3: Can one ChI supply a compartment? (in progress, 2026-10-05)
-
-**Bridge (agreed):**
-
-> Each compartment is a unit of cholinergic influence. Because these compartments may relate to neural functions, it matters what drives them: whether a single ChI is sufficient, or coordinated activity of several ChIs is required. A single ChI's axon arbor innervates a large area (Aosaki 1995), so one cell could, in principle, supply a whole compartment.
-
-**Draft logic:**
-1. We patch one ChI and record its spikes while imaging ACh.
-2. We align the imaging to its spikes → the hotspot that follows one spike.
-3. We check that the hotspot belongs to this cell: it appears at the same place after spikes more often than by chance.
-4. We compare its size with the hotspots of compartments, for evoked and spontaneous spikes separately.
-5. If comparable, one ChI **can** supply a compartment-sized area.
-
-➡️ *Step 4: what does one ChI's area look like?*
-
-**Agreed so far:**
-- **"Influence", not "modulation"** (release ≠ modulation; modulation stays in step 5). Matches the title "a broad domain of local influence".
-- **"Sufficient" vs "required"**, not "single ChI or network" (both may operate).
-- **Q4 wording: "can"** = sufficiency, not ownership.
-- **Q2 / Q3 (temporarily OK):** existing `area_comparison.py` plan -- evoked (A) and spontaneous (B) spike hotspots kept as separate groups, each compared with compartments (C); event vs event (C = each zone's median per-event hotspot size). Union-area option still open (TODO 2).
-- **Q1 attribution = inside step 3**, three pieces:
-  - a. Current reliability: hotspot *anywhere* in the frame at spike / spike+1 → background only (not tied to location).
-  - b. Kang's MED back-check: a segment counts as a hit only if its hotspot falls where the MED hotspot is → "real" reliability.
-  - c. Jeff's intrusion rate: non-aligned frames, how often a hotspot appears at the same place by chance → chance level, evoked and spontaneous separately.
-  - b > c → hotspot is locked to this cell's spikes.
-
-**TODOs (step 3):**
-- [ ] **TODO 6 — Check Aosaki 1995:** exact axon-arbor range and species before citing.
-- [ ] **TODO 1b — MED back-check reliability** (piece b).
-- [ ] **TODO 1c — Intrusion rate** (piece c), evoked and spontaneous separately; compare with 1b.
-
----
-
-## Step 4: Can one ChI spread ACh like a wave? (in progress, 2026-10-05)
-
-**Draft logic (agreed framing):**
-1. Compartments are units of influence. We want to know whether they communicate; one candidate route is wave-like ACh transmission.
-2. First, the single-cell end: can one ChI spread ACh like a wave?
-3. We follow how the single-spike (MED) hotspot moves over time (flow analysis).
-4. If it fades in place, one ChI is **not** sufficient for wave-like spread. Waves between compartments, if they exist, would need coordinated firing of many ChIs (consistent with Matityahu 2023's coupling model).
-
-➡️ *Step 5: what does it all mean?*
-
-**Agreed so far:**
-- **Why not "relation between compartments" from the MED:** the MED keeps only release locked to the patched cell's spike (median removes everything else), covers one cell and a ±10-frame window. It cannot show waves between compartments; it can show whether **one** ChI's release spreads like a wave.
-- **Mirrors step 3:** step 3 = one ChI sufficient for a compartment-sized area (yes, can); step 4 = one ChI sufficient for wave-like spread (no, if it fades in place).
-- **Waves between compartments in the spontaneous movies (Option B) → Discussion / future work**, not this paper's results. Needs a wave definition first (Kang's reading of Matityahu 2023, Hamid 2021).
-- **Limits to state:** 20 Hz cannot resolve spread within the first 50 ms; claim holds only within the field of view and the ±10-frame window. Wording: "Within the field and time window observed, the single-spike hotspot showed no wave-like spread."
-- **Slice wording updated:** we *can* look for waves in slices, but not finding them is weak evidence (slices lose inputs and possibly the coupling that drives waves in vivo). Replaces the earlier "slices cannot test for waves".
-
----
-
-## Step 5: Answer to step 1 (draft, 2026-10-05)
-
-**Role:** Option B -- close the loop with the step-1 problem, not a summary of findings (the summary = Discussion paragraph 1, already in the docx).
-
-**Step 1 asked:** the striatum lacks divisions that match its functions. If we image ACh itself, do we see such areas?
-
-**Step 5 answers:**
-1. **Yes, and they are a new kind of division:** defined by recurring ACh release, not by a stain or a cell marker.
-2. **They have a cellular basis:** a single ChI can be enough to drive one, so a division can be traced to an identifiable cell (unlike a stain pattern).
-3. **They open new questions** (Discussion takes over):
-   - Do these divisions carry functions, like striosome and matrix?
-   - How do they relate to each other, e.g. waves?
-
-**Rejected options:** A = conclusion / summary (restates steps 2–4); C = no step 5 (meaning only in the Discussion).
-
-**Still open:**
-- Lasting time / "refreshed in pulses" no longer fits any step: drop, step 5, or Discussion?
-- Discussion items so far: waves between compartments in the spontaneous movies (from step 4); evoked vs spontaneous spike hotspots and what co-firing may add; modulation (excitability / plasticity) as a possibility only.
+- **"Refreshed", not "maintained":** "maintain" = held at a level, which is not what we saw (≈ 0.34 s on / ≈ 9 s off, §4); "refreshed" = re-supplied in short pulses. Where this goes in the story is open (Part A, step 5).
+- **"Waves need many CINs" is not our result** → Discussion only, citing Matityahu's model. (The wording "slices cannot test for waves" was replaced in Part A, step 4.)
 
 ---
 
@@ -196,7 +216,7 @@ Story is now refined step by step (1 → 5); each step is fixed before moving on
   - Brimblecombe & Cragg 2017: the matrix "is enriched with … cholinergic markers including acetylcholine esterase (AChE) and choline acetyltransferase (ChAT)"; "AChE is found at higher levels in matrix".
   - Developmental twist (same review): the DA islands that become striosomes are AChE-**rich** in late embryonic / early postnatal life and switch to AChE-poor in adulthood.
   - Kang's quote from Graybiel & Ragsdale 1978 ("In some sections, in the dorsolateral part of the head of the caudate nucleus, one or more zones appeared that were characterized by a cholinesterase content higher than that of the surrounding tissue") describes an additional, less common observation; the main finding is AChE-poor striosomes. (Faull 1989 even proposed a third AChE-defined compartment.)
-- **Superseded 2026-10-05:** the story no longer maps ACh zones onto striosome / matrix (see Step 1 final). The two points below stay as background only.
+- **Superseded 2026-10-05:** the story no longer maps ACh zones onto striosome / matrix (Part A, step 1). The two points below stay as background only.
 - **Kang's hypothesis, corrected direction:** low AChE → low hydrolysis → higher [ACh] would point to **striosomes**, not matrix. Brimblecombe & Cragg 2017 state exactly this idea and its alternative:
   > "Lower AChE levels in striosomes could be a surrogate marker for low ACh innervation density and low ACh levels, but alternatively, low AChE levels could limit ACh hydrolysis resulting in paradoxically higher ACh levels." They also note: "It is currently unclear whether ACh itself displays variable levels in striosomes versus matrix."
   → This is a direct, citable gap that ACh imaging can address.
@@ -239,7 +259,7 @@ Story is now refined step by step (1 → 5); each step is fixed before moving on
 - A segment is a "hit" if a hotspot passes the gate **anywhere in the frame**. The hit is **not** tied to the MED hotspot location.
 - So current reliability = P(any hotspot in the field at spike / spike+1), which includes spontaneous zone events by chance.
 
-**Quick chance estimate** (median spontaneous values: 15 zones, 0.11 Hz each, 20 Hz frames, window = 2 frames):
+**Quick chance estimate** (back-of-envelope; median spontaneous values: 15 zones, 0.11 Hz each, 20 Hz frames, window = 2 frames):
 
 | Situation | Calculation | Chance hit |
 |---|---|---|
@@ -253,6 +273,17 @@ Story is now refined step by step (1 → 5); each step is fixed before moving on
 - Caveats: zone rates come from 10X spontaneous recordings, not the same recordings or objectives; the per-frame event probability ignores event duration (>1 frame) and the 2σ vs baseline-σ threshold difference.
 
 **Evoked vs spontaneous hint.** Spontaneous-spike hotspots (132,694 µm², n = 18) are larger than evoked ones (74,383 µm², n = 26). One explanation: spontaneous spikes may coincide with other CINs firing, while current-evoked spikes are isolated. If so, evoked hotspots are the cleaner single-cell estimate. Good Discussion item; also relevant to the intrusion analysis.
+
+**Evoked / spontaneous split** of recordings with a detected hotspot (`has_region = 1`, `reliability_pct > 0`, n = 74; `estim_induced` shown as **evoked**):
+
+| OBJ | Evoked | Spontaneous | E : S |
+|---|---|---|---|
+| 10X | 26 | 18 | 1.44 : 1 |
+| 40X | 4 | 4 | 1 : 1 |
+| 60X | 15 | 7 | 2.14 : 1 |
+| All | 45 | 29 | 1.55 : 1 (61 % evoked) |
+
+Detection rate within each group (all `has_region = 1`): evoked 53 / 114 = 46 %, spontaneous 30 / 52 = 58 %.
 
 **Literature support** (Matityahu 2023):
 - "activation of a single CIN suffices to induce local striatal DA release (i.e., synchrony among several CINs is not required)".
@@ -274,7 +305,7 @@ Story is now refined step by step (1 → 5); each step is fixed before moving on
 - A more intuitive number is the **time until the area falls below the detection limit**: t_end = τ · ln(A₀ / A_min).
   - 10X example: τ = 75 ms, A₀ = 80,900 µm², A_min = 900 µm² → 75 × ln(89.9) = 75 × 4.50 ≈ **337 ms** (≈ 7 frames).
   - Should be computed per recording from its own τ and A₀ (fit is from the peak frame to the end of the 21-frame stack; `lasting_time_ms` is NULL when R² < 0.8).
-- **Comparison with the zone period:** ≈ 0.34 s on vs ≈ 9 s between events → a zone is ACh-high only ≈ **4 %** of the time. Zones are therefore **refreshed in short pulses**, not continuously maintained: *sparse in time, broad in space.* This reframes "maintain" rather than rejecting it.
+- **Comparison with the zone period:** ≈ 0.34 s on vs ≈ 9 s between events → a zone is ACh-high only ≈ **4 %** of the time. Zones are therefore **refreshed in short pulses**, not continuously maintained: *sparse in time, broad in space.*
 
 ### Discussion — how the wave papers measured waves
 
@@ -285,15 +316,17 @@ Story is now refined step by step (1 → 5); each step is fixed before moving on
 - **Bootstrapping:** location vector permuted in chunks of n = 1–20 frames (to respect slow indicator kinetics); compares run lengths between velocity sign reversals against the spurious maximum.
 - Wave events: heuristic detector (runs ≥ 5 frames with consistent ML direction, plus intensity conditions); authors note the free parameters "were manually fine-tuned per movie".
 - Results: GRAB-ACh3.0 waves every **5.2 ± 0.5 s**, duration **391 ± 9 ms**; iAChSnFR every **8.6 ± 1.2 s**, duration **537 ± 18 ms**; ~80 % lateral → medial.
+- Frame rates: in vivo 20 Hz (GRAB-ACh3.0, 4X, 50 ms; iAChSnFR 20 Hz); slices ~31 Hz 2P. Ours: 20 Hz.
 - Mechanism (model): reciprocal CIN ↔ DA-axon coupling as a reaction–diffusion system; "Physical diffusion of DA and ACh from release sites is too short-ranged to produce the spread of activation observed in vivo". In some regimes, Turing "hills of activity" give "a dynamical parcellation or tiling [of the striatum] into distinct functional modules of high and low neuromodulatory activity".
 - Slice data: electrically evoked DA release falls off over ~500 µm, halved by mecamylamine; CIN recruitment (ChAT-GCaMP6f) falls off over ~200 µm.
 
 **Hamid et al. 2021 (*dopamine* waves, not ACh):**
-- dLight and GCaMP6f in DA axons, widefield through a cranial window, in vivo.
-- Method: optical flow (combined global–local, Lucas–Kanade + Horn–Schunck) between successive frames → pixel velocity field; **divergence** → source / sink locations; MATLAB `stream3` → flow trajectories; flow direction distribution (bimodal, ML axis); tdTomato control channel showed no ML bias.
+- dLight and GCaMP6f in DA axons, widefield through a cranial window, in vivo. Widefield 10 Hz (4X, 40 µm/px), dual-colour 20 Hz per channel, 2P 10–15 Hz.
+- Method: optical flow (combined global–local, Lucas–Kanade + Horn–Schunck) between successive frames → pixel velocity field (flow speed = mean vector length); **divergence** map → *where* sources / sinks are (visual, not a label / count); MATLAB `stream3` → trajectories from hand-picked source pixels, Fréchet similarity; flow direction distribution (bimodal, ML axis); tdTomato control channel showed no ML bias; seqNMF-like motif detection.
 
 **Relation to our pipeline:**
 - Our flow analysis (TV-L1 → source / sink / anisotropic, streamlines) is methodologically parallel to Hamid's (optical flow → divergence → streamlines). Worth stating in Methods / Discussion.
+- We also compute TV-L1 on the whole FOV, then use the CAT mask only for the label. Our trace(A) = divergence of the fitted linear field (≈ mean divergence in the hotspot). Our drift term sees a sliding hotspot, which a divergence map cannot (a uniform slide has zero divergence). A divergence map would add *where* (source at the centre / soma? one or several sources?).
 - Their waves are population events over mm-scale windows; ours is one spike in a slice. Different questions, same toolbox.
 - A Hamid-style null (their tdTomato channel) has a natural analogue here: run flow on random non-spike frames.
 
@@ -311,46 +344,41 @@ Story is now refined step by step (1 → 5); each step is fixed before moving on
 
 ## 5. How lasting time and flow can strengthen the story
 
+> Superseded in part by Part A: flow now = step 4 (single-cell wave test); lasting time has no step yet.
+
 ### Kang's concern
 - Up to point 3 the core argument is complete. With so few analyses the paper feels thin, so how can lasting time and flow be discussed further?
 
 ### Suggestions (ideas only)
 1. **Size vs time → distributed release, not diffusion.**
-   With an assumed tissue diffusion coefficient D* ≈ 0.4 µm²/ms (order of magnitude; needs a reference), ACh spreads √(4 × 0.4 × 75) ≈ **11 µm** in 75 ms (≈ 22 µm in 300 ms). The 10X hotspot radius is ≈ **160 µm** (√(80,900 / π)). One point source cannot explain this; the hotspot must come from **many release sites across the axon arbor at once**. This supports "single-CIN territory ≈ axon field" and matches Matityahu's statement that physical diffusion is too short-ranged. Probably the strongest use of τ.
+   With an assumed tissue diffusion coefficient D* ≈ 0.4 µm²/ms (order of magnitude; needs a reference), ACh spreads √(4 × 0.4 × 75) ≈ **11 µm** in 75 ms (≈ 22 µm in 300 ms). The 10X hotspot radius is ≈ **160 µm** (√(80,900 / π)). One point source cannot explain this; the hotspot must come from **many release sites across the axon arbor at once**. This supports "single-CIN territory ≈ axon field" and matches Matityahu's statement that physical diffusion is too short-ranged.
 2. **Pulsed compartments.** ≈ 0.34 s on / ≈ 9 s off gives compartments a temporal identity. It also sharpens the open point that CINs fire tonically at a few Hz while zones appear at 0.11 Hz.
-3. **No directional spread from a single spike.** Within the field and time window observed, the single-spike hotspot showed no directional spread (slices cannot test for waves). That waves may need many CINs (and CIN ↔ DA-axon coupling) is Matityahu's model, not our result → Discussion only, with citation. This fits Kang's idea that waves are **communication between compartments**, not spread within one.
+3. **No directional spread from a single spike.** That waves may need many CINs (and CIN ↔ DA-axon coupling) is Matityahu's model, not our result → Discussion only, with citation. This fits Kang's idea that waves are **communication between compartments**, not spread within one.
 4. **Link to the compartment literature.** Matityahu's Turing-pattern "hills of activity" are a theoretical version of dynamic compartments; Brimblecombe & Cragg note it is unknown whether ACh differs between striosome and matrix.
 
-**Overall view:** Claim 2 (attribution) carries the paper. Lasting time and flow are best presented as *what a single-cell compartment looks like*: broad (distributed release), brief (pulsed), cleared in place (no travel). They are supporting characterisation rather than separate claims.
+Literature checks still open: a reference for D* in striatal tissue; GRAB-ACh3.0 off-kinetics (Jing 2020) vs τ = 56–75 ms (area decay is threshold-based, so it can be faster than the sensor's intensity decay → one sentence in Limitations).
 
 ---
 
 ## 6. Why "ACh in striosome vs matrix" could matter
+
+> Superseded in part by Part A, step 1: striosome / matrix is a precedent only, and "ACh drives DA release" is not used (debated). Kept as Discussion background.
+
 1. **The compartments are functionally different.** Striosomes and matrix differ in inputs (striosomes get more limbic-cortex input), outputs (striosomal SPNs project directly to SNc dopamine neurons) and behaviour links. If ACh differs between them, so does cholinergic modulation of each circuit.
 2. **ACh controls what the compartments do.** ACh drives / gates DA release via nAChRs on DA axons, tunes SPN excitability (M1 / M4), and gates corticostriatal plasticity. A compartment-specific ACh level means compartment-specific DA, excitability and learning.
 3. **The DA analogue is already known.** Brimblecombe & Cragg 2017 describe an uneven "DA landscape" (more DA release in matrix than striosomes). Whether an "ACh landscape" exists is open.
-4. **Marker ≠ signal.** AChE has been the compartment marker for ~50 years, yet nobody knows whether *ACh itself* follows it. Imaging the signal is the missing step; this is the direct link between "chemically defined compartments" (markers) and our "signal-defined zones".
+4. **Marker ≠ signal.** AChE has been the compartment marker for ~50 years, yet nobody knows whether *ACh itself* follows it. Imaging the signal is the missing step.
 5. **Two possible outcomes, both interesting.** If zones line up with striosome / matrix (e.g. by MOR co-staining later), the "hidden compartments" gain an anatomical anchor. If they don't, they are a new kind of compartment, defined only by the signal.
 6. **CIN location.** ChIs sit at the striosome–matrix border, so which side their ACh mainly reaches is itself an open question.
 
 ---
 
-## 7. Status of the claims
+## 7. Old claim list (2026-10-02) — replaced by Part A
 
-| Claim | Status |
+| Old claim | Now |
 |---|---|
-| 1. Spontaneous ACh forms local zones that cover the striatum | kept. **"Not in phase" was dropped** (`PB_001_Story logic.md:90`: "Phase/timing between zones is *not* part of the story"). `RESULTS_GUIDE.md:13,32` and `docs/knowledgebase/paper_claims.md:16,25` still mention it → update later (user approval pending) |
-| 2. One spike of one CIN produces a hotspot ≥ spontaneous zones | kept; attribution is the main weakness (§3) |
-| 3. Hotspots are brief and spatially restricted | kept; looking for a stronger role in the story (§4–5) |
+| 1. Spontaneous ACh forms local zones that cover the striatum ("not in phase" dropped) | Step 2 |
+| 2. One spike of one CIN produces a hotspot ≥ spontaneous zones | Step 3 ("can" supply a compartment-sized area) |
+| 3. Hotspots are brief and spatially restricted | Step 4 (flow = single-cell wave test); lasting time open |
 
-Evoked / spontaneous split of recordings with a detected hotspot (`has_region = 1`, `reliability_pct > 0`, n = 74;
-`estim_induced` shown as **evoked**):
-
-| OBJ | Evoked | Spontaneous | E : S |
-|---|---|---|---|
-| 10X | 26 | 18 | 1.44 : 1 |
-| 40X | 4 | 4 | 1 : 1 |
-| 60X | 15 | 7 | 2.14 : 1 |
-| All | 45 | 29 | 1.55 : 1 (61 % evoked) |
-
-Detection rate within each group (all `has_region = 1`): evoked 53 / 114 = 46 %, spontaneous 30 / 52 = 58 %.
+Still to do outside this doc: drop "not in phase" in `RESULTS_GUIDE.md` and `docs/knowledgebase/paper_claims.md` (needs approval of exact edits).

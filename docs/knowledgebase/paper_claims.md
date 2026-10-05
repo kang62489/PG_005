@@ -13,15 +13,27 @@ Every new analysis or statistic should say which claim it supports.
 
 ---
 
-## Story step 1 — Problem (final, 2026-10-05; no data, motivates all claims)
+## Story logic (2026-10-05) — replaces the three-claim framing below
 
-- **ACh compartment** = an area whose ACh level is distinct from its surroundings in both space and time.
+Full wording, decisions and TODOs: `docs/paper_discussion_2026-10-02.md`, Part A.
+
+| Step | Question | Answer | Old claim | Status |
+|---|---|---|---|---|
+| 1. Problem | If we image ACh itself, do we see compartments? | sets the definition | — | final |
+| 2. Spontaneous zones | Are there areas of recurring ACh release? | zones = candidate ACh compartments | Claim 1 | in progress |
+| 3. One ChI | Is a single ChI sufficient to supply a compartment? | one ChI **can** supply a compartment-sized area | Claim 2 | in progress |
+| 4. Wave-like spread | Can one ChI spread ACh like a wave? (MED flow) | no, if the hotspot fades in place | Claim 3 (flow part) | in progress |
+| 5. Answer to step 1 | Does ACh reveal divisions, and of what kind? | a new kind of division with a cellular basis | — | draft |
+
+- **Hotspot** = event (area whose ACh level briefly rises above its surroundings). **ACh compartment** = place where hotspots recur (step-1 definition gets "repeatedly" once step 2 is final).
 - Striosome / matrix (found by AChE staining) are a **precedent only**; our compartments are not claimed to match them.
-- Full wording and decisions: `docs/paper_discussion_2026-10-02.md`, section "Step 1: Problem (final, 2026-10-05)".
+- "Influence", not "modulation" (release ≠ modulation; modulation only as a possibility in the Discussion).
+- Attribution (step 3): MED back-check reliability vs intrusion rate on non-aligned frames; spike-locked if back-check > intrusion.
+- Lasting time (old Claim 3, temporal part) has no step yet; waves between compartments → Discussion.
 
 ---
 
-## Claim 1 — Spontaneous ACh forms local zones that cover the striatum, but not in phase
+## Claim 1 — Spontaneous ACh forms local zones that cover the striatum, but not in phase ("not in phase" dropped; now story step 2)
 
 - **Pipeline:** `spontaneous_analysis.py` (10X only), output in `results/spontaneous/`
 - **Measures:** zones per recording, zone area, event frequency, striatum coverage (needs `--stbd data/bd_20260922_000.json`)
