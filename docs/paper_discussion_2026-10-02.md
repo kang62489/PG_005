@@ -99,9 +99,87 @@ Story is now refined step by step (1 → 5); each step is fixed before moving on
   - ACh compartment: an area where hotspots recur, i.e. a place that repeatedly reaches an ACh level distinct from its surroundings. → Step-1 definition to be updated with "repeatedly" when step 2 is final.
 - **Claim chain split:** hotspot = ACh release (step 2, safe); release from ChIs (step 2, safe in slices: ChIs are the principal striatal ACh source, outside cholinergic inputs are cut); ChIs **modulate** the area → step 5 only, as a possibility (release ≠ modulation).
 
+**Results to show (Kang, tentative 2026-10-05):**
+1. Example map of all zones in one recording -- pick the recording with the highest coverage.
+2. Recurring frequency of zones.
+- Still considering: median zone area.
+
 **TODOs (step 2) — come back and check:**
 - [ ] **TODO 4 — Proximity distance is hand-set:** `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`), used for both frame-to-frame chaining and the proximity grouping cut. Needs a justification or a data-driven choice.
 - [ ] **TODO 5 — Trace-corr zones = same place?** Add a centroid check to the spontaneous pipeline: do hotspots grouped by trace correlation have close centroids? (Expected: yes, traces come from overlapping footprints.) If so, both groupings fit "recurring at the same place".
+
+---
+
+## Step 3: Can one ChI supply a compartment? (in progress, 2026-10-05)
+
+**Bridge (agreed):**
+
+> Each compartment is a unit of cholinergic influence. Because these compartments may relate to neural functions, it matters what drives them: whether a single ChI is sufficient, or coordinated activity of several ChIs is required. A single ChI's axon arbor innervates a large area (Aosaki 1995), so one cell could, in principle, supply a whole compartment.
+
+**Draft logic:**
+1. We patch one ChI and record its spikes while imaging ACh.
+2. We align the imaging to its spikes → the hotspot that follows one spike.
+3. We check that the hotspot belongs to this cell: it appears at the same place after spikes more often than by chance.
+4. We compare its size with the hotspots of compartments, for evoked and spontaneous spikes separately.
+5. If comparable, one ChI **can** supply a compartment-sized area.
+
+➡️ *Step 4: what does one ChI's area look like?*
+
+**Agreed so far:**
+- **"Influence", not "modulation"** (release ≠ modulation; modulation stays in step 5). Matches the title "a broad domain of local influence".
+- **"Sufficient" vs "required"**, not "single ChI or network" (both may operate).
+- **Q4 wording: "can"** = sufficiency, not ownership.
+- **Q2 / Q3 (temporarily OK):** existing `area_comparison.py` plan -- evoked (A) and spontaneous (B) spike hotspots kept as separate groups, each compared with compartments (C); event vs event (C = each zone's median per-event hotspot size). Union-area option still open (TODO 2).
+- **Q1 attribution = inside step 3**, three pieces:
+  - a. Current reliability: hotspot *anywhere* in the frame at spike / spike+1 → background only (not tied to location).
+  - b. Kang's MED back-check: a segment counts as a hit only if its hotspot falls where the MED hotspot is → "real" reliability.
+  - c. Jeff's intrusion rate: non-aligned frames, how often a hotspot appears at the same place by chance → chance level, evoked and spontaneous separately.
+  - b > c → hotspot is locked to this cell's spikes.
+
+**TODOs (step 3):**
+- [ ] **TODO 6 — Check Aosaki 1995:** exact axon-arbor range and species before citing.
+- [ ] **TODO 1b — MED back-check reliability** (piece b).
+- [ ] **TODO 1c — Intrusion rate** (piece c), evoked and spontaneous separately; compare with 1b.
+
+---
+
+## Step 4: Can one ChI spread ACh like a wave? (in progress, 2026-10-05)
+
+**Draft logic (agreed framing):**
+1. Compartments are units of influence. We want to know whether they communicate; one candidate route is wave-like ACh transmission.
+2. First, the single-cell end: can one ChI spread ACh like a wave?
+3. We follow how the single-spike (MED) hotspot moves over time (flow analysis).
+4. If it fades in place, one ChI is **not** sufficient for wave-like spread. Waves between compartments, if they exist, would need coordinated firing of many ChIs (consistent with Matityahu 2023's coupling model).
+
+➡️ *Step 5: what does it all mean?*
+
+**Agreed so far:**
+- **Why not "relation between compartments" from the MED:** the MED keeps only release locked to the patched cell's spike (median removes everything else), covers one cell and a ±10-frame window. It cannot show waves between compartments; it can show whether **one** ChI's release spreads like a wave.
+- **Mirrors step 3:** step 3 = one ChI sufficient for a compartment-sized area (yes, can); step 4 = one ChI sufficient for wave-like spread (no, if it fades in place).
+- **Waves between compartments in the spontaneous movies (Option B) → Discussion / future work**, not this paper's results. Needs a wave definition first (Kang's reading of Matityahu 2023, Hamid 2021).
+- **Limits to state:** 20 Hz cannot resolve spread within the first 50 ms; claim holds only within the field of view and the ±10-frame window. Wording: "Within the field and time window observed, the single-spike hotspot showed no wave-like spread."
+- **Slice wording updated:** we *can* look for waves in slices, but not finding them is weak evidence (slices lose inputs and possibly the coupling that drives waves in vivo). Replaces the earlier "slices cannot test for waves".
+
+---
+
+## Step 5: Answer to step 1 (draft, 2026-10-05)
+
+**Role:** Option B -- close the loop with the step-1 problem, not a summary of findings (the summary = Discussion paragraph 1, already in the docx).
+
+**Step 1 asked:** the striatum lacks divisions that match its functions. If we image ACh itself, do we see such areas?
+
+**Step 5 answers:**
+1. **Yes, and they are a new kind of division:** defined by recurring ACh release, not by a stain or a cell marker.
+2. **They have a cellular basis:** a single ChI can be enough to drive one, so a division can be traced to an identifiable cell (unlike a stain pattern).
+3. **They open new questions** (Discussion takes over):
+   - Do these divisions carry functions, like striosome and matrix?
+   - How do they relate to each other, e.g. waves?
+
+**Rejected options:** A = conclusion / summary (restates steps 2–4); C = no step 5 (meaning only in the Discussion).
+
+**Still open:**
+- Lasting time / "refreshed in pulses" no longer fits any step: drop, step 5, or Discussion?
+- Discussion items so far: waves between compartments in the spontaneous movies (from step 4); evoked vs spontaneous spike hotspots and what co-firing may add; modulation (excitability / plasticity) as a possibility only.
 
 ---
 

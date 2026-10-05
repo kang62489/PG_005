@@ -1,15 +1,16 @@
 # Story-driven TODOs (2026-10-05, replaces all earlier open TODOs)
 Story logic: 1 Problem -> 2 Spontaneous zones -> 3 One CIN's spike makes a zone-sized hotspot -> 4 Broad / brief / cleared in place -> 5 Hidden, refreshed compartments made by one CIN.
 Earlier open items (Session 81 / 82 lists, R, Jeff bucket, 60X decay fit, 23 no-peak) dropped 2026-10-05.
-Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion_2026-10-02.md` "Step 1: Problem (final)"); **Step 2 (spontaneous zones) in progress**.
+Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion_2026-10-02.md` "Step 1: Problem (final)"); **Steps 2 (spontaneous zones), 3 (one ChI) and 4 (one ChI wave-like spread? MED flow) in progress; step 5 (answer to step 1) drafted**. Open: where lasting time / "refreshed" goes.
 
 | # | TODO | Story step | Status |
 |---|------|------------|--------|
-| 1 | Attribution: intrusion-rate test -- is the spike hotspot from the patched CIN, not chance? (reliability now counts a hotspot anywhere in the frame) | 3 (weakest link) | [ ] |
+| 1 | Attribution: is the spike hotspot from the patched CIN, not chance? (reliability now counts a hotspot anywhere in the frame). 1b = MED back-check reliability (hit only if the segment's hotspot is where the MED hotspot is); 1c = Jeff's intrusion rate on non-aligned frames, evoked / spontaneous separately; b > c → spike-locked. See `paper_discussion_2026-10-02.md` Step 3 | 3 (weakest link) | [ ] |
 | 2 | Zone size measure for the hotspot vs zone comparison: union area (~103k µm²) vs per-event median (45k µm²) -- pick one, justify | 3 | [ ] |
 | 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 | [ ] |
 | 4 | Come back and check the proximity distance: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`) is set by hand and used for both frame-to-frame chaining and the proximity grouping cut -- needs a justification or a data-driven choice | 2 | [ ] |
 | 5 | Centroid check for trace-corr zones: do hotspots grouped by trace correlation have close centroids? (expected yes -- traces come from overlapping footprints; would show trace-corr also means "same place") -- add to spontaneous pipeline | 2 | [ ] |
+| 6 | Check Aosaki 1995: exact CIN axon-arbor range and species before citing it in the step-3 bridge | 3 | [ ] |
 
 ---
 
