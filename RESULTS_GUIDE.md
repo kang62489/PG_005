@@ -1,8 +1,8 @@
 # Results Guide — ACh imaging in striatum (PG_005)
 
 What the data show for each claim, then where to find it.
-Results copied from the OIST clusters on 2026-09-27 into `results/`
-(spike-aligned run with `BASELINE_SIGMA_MULT = 2.0`; a 1.5 re-run is in progress).
+Results copied from the OIST clusters on 2026-09-28 into `results/`
+(spike-aligned run with `BASELINE_SIGMA_MULT = 2.0`, `MIN_OBJECT_UM2 = 900`).
 
 Terms in *italics* are explained in [Key terms](#2-key-terms).
 
@@ -42,28 +42,28 @@ Spike-triggered hotspots (*MED*), detected recordings only:
 
 | OBJ | Detected / total | *Reliability* (median) | Spike-frame hotspot (median) | *Lasting time* (median) |
 |---|---|---|---|---|
-| 10X | 41 / 92 | 52 % | ~72,600 µm² | 73 ms |
-| 40X | 9 / 9 | 8 % | ~34,200 µm² | 60 ms |
-| 60X | 17 / 62 | 13 % | ~21,000 µm² | 74 ms |
+| 10X | 44 / 92 | 66 % | ~80,900 µm² | 75 ms |
+| 40X | 8 / 8 | 13 % | ~41,000 µm² | 56 ms |
+| 60X | 22 / 66 | 16 % | ~10,500 µm² | 66 ms |
 
 MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparison.xlsx`):
 
 | Group | n | Median | Q1 – Q3 |
 |---|---|---|---|
-| A — *estim_induced* MED | 26 | 74,364 µm² | 13,412 – 172,568 |
-| B — *spontaneous* MED | 15 | 145,385 µm² | 93,302 – 177,437 |
-| C — spontaneous zones (not at the MED spot) | 776 | 45,228 µm² | 30,864 – 73,999 |
+| A — *estim_induced* MED | 26 | 74,383 µm² | 14,643 – 166,960 |
+| B — *spontaneous* MED | 18 | 132,694 µm² | 38,758 – 179,346 |
+| C — spontaneous zones (not at the MED spot) | 836 | 45,144 µm² | 30,649 – 73,482 |
 
 | Test (Mann-Whitney U, two-sided) | p |
 |---|---|
-| A vs C | 0.79 |
-| B vs C | 0.0001 |
-| A vs B | 0.11 |
+| A vs C | 0.44 |
+| B vs C | 0.006 |
+| A vs B | 0.23 |
 
-- Per recording, the MED is larger than a median 88 % of that recording's zones; in 27 / 40 recordings it is larger than at least half of them.
-- Group A is split: many estim MEDs are ~200,000 µm² (e.g. the 2025_12_15 and 2025_06_11 cells), others are ~10,000 µm² (e.g. 2025_11_08, 2025_11_13, 2026_01_08).
-- Good example: `2025_12_15-0012` (estim_induced) — 8 / 8 segments detected, 204,107 µm² on the spike frame, τ = 83 ms.
-- Skipped recordings: 96 × "no significant ACh detection", 38 × "no valid segments" (the neuron fired too densely for a clean baseline).
+- Per recording, the MED is larger than a median 84 % of that recording's zones; in 29 / 43 recordings it is larger than at least half of them (`2025_11_27-0010` has no zones).
+- Group A is split: many estim MEDs are ~200,000 µm² (e.g. the 2025_12_15 and 2025_06_11 cells), others are ~10,000 µm² (e.g. 2025_11_08-0034 / -0035, 2025_11_13, 2026_01_08).
+- Good example: `2025_12_15-0012` (estim_induced) — 8 / 8 segments detected, 209,170 µm² on the spike frame, τ = 84 ms.
+- Skipped recordings: 92 × "no significant ACh detection", 35 × "no valid segments" (the neuron fired too densely for a clean baseline).
 
 **Where to look:**
 - `area_comparison.xlsx`
@@ -71,7 +71,7 @@ MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparis
   - `Zones` / `Zone events` → zone sizes (per zone / per event)
   - `Groups`, `Group tests` → the two tables above
 - `ana_20260922_000_deigo_cells.xlsx`
-  - `Summary` → neurons with a detected hotspot (19 / 36)
+  - `Summary` → neurons with a detected hotspot (19 / 37)
   - `Spatial`, `Temporal` → hotspot size and lasting time across neurons
   - `Neurons` → which recording of which neuron was detected
   - `Skipped` → why a recording has no result
@@ -98,11 +98,11 @@ MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparis
 
 | OBJ | Recordings | Anisotropic | Source / sink |
 |---|---|---|---|
-| 10X | 41 | 61 % | 39 % |
-| 40X | 9 | 81 % | 19 % |
-| 60X | 17 | 80 % | 20 % |
+| 10X | 44 | 63 % | 37 % |
+| 40X | 8 | 88 % | 12 % |
+| 60X | 22 | 84 % | 16 % |
 
-- Example `2025_12_15-0012`: source → sink → sink → sink → anisotropic `L 25° D`. The hotspot appears, shrinks back in place and fades; it does not travel across the field.
+- Example `2025_12_15-0012`: source → sink → sink → sink → anisotropic `L 24° D`. The hotspot appears, shrinks back in place and fades; it does not travel across the field.
 
 **Where to look:**
 - `ana_20260922_000_deigo_cells.xlsx`, sheet `Flow pattern` → the table above
@@ -129,7 +129,7 @@ MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparis
 | **z** (gray colour bar) | intensity in units of baseline σ; 1 = noise level, > 5 = strong signal |
 | **Segment** | a short clip around one spike (10 frames before, 10 after) |
 | **MED** | pixel-wise median of all segments of one recording — the "typical" response to one spike |
-| **CAT** | the MED turned into a binary hotspot mask (window 201 px, density ≥ 0.1, threshold 2σ, objects ≥ 2,700 µm²) |
+| **CAT** | the MED turned into a binary hotspot mask (window 201 px, density ≥ 0.1, threshold 2σ, objects ≥ 900 µm²) |
 | **Reliability** | % of single segments that show a hotspot on their own |
 | **Critical frame** | the spike frame or the spike+1 frame, whichever has the larger hotspot |
 | **Lasting time** | decay time constant τ of the hotspot area after the peak (ms) |
@@ -150,7 +150,7 @@ MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparis
 3. Group tracks into zones (trace correlation, then proximity).
 4. Per zone: area, number of events, frequency. Per recording: coverage of the striatum.
 
-**Spike-aligned** (`ach_domain_analysis.py`, deigo job 45233657, 163 recordings):
+**Spike-aligned** (`ach_domain_analysis.py`, deigo job 45504859, 166 recordings):
 1. Detect spikes in the patch-clamp Vm (ABF); keep spikes with enough quiet time around them.
 2. Cut a ±10-frame segment around each spike → reliability (single segments) and MED (median).
 3. MED → CAT hotspot mask → hotspot size on the spike / spike+1 frame, lasting time.
@@ -202,7 +202,7 @@ results/
 
 ## 6. Known issues
 
-- 8 recordings have `has_region = 1` in `results.db` but 0 % reliability and no MED / CAT files. Treat them as *not detected* (`area_comparison.py` already skips them):
-  - 10X: 2025_12_14-0020, -0022, -0023, 2025_12_18-0023
-  - 60X: 2025_04_03-0035, -0036, -0037, 2025_11_08-0027
-- 4 neurons never appear in `Neurons` (so 36, not 40, in `Summary`): all of their recordings were "no valid segments".
+- 9 recordings have `has_region = 1` in `results.db` but 0 % reliability and no MED / CAT files. Treat them as *not detected* (`area_comparison.py` already skips them):
+  - 10X: 2025_12_14-0020, -0021, -0022, -0023, 2025_12_18-0023, -0024
+  - 60X: 2024_12_19-0010, 2025_04_03-0035, -0038
+- Neurons whose recordings were all "no valid segments" never appear in `Neurons`, so `Summary` counts only 37 neurons.

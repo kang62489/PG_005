@@ -1,3 +1,16 @@
+# Story-driven TODOs (2026-10-05, replaces all earlier open TODOs)
+Story logic: 1 Problem -> 2 Spontaneous zones -> 3 One CIN's spike makes a zone-sized hotspot -> 4 Broad / brief / cleared in place -> 5 Hidden, refreshed compartments made by one CIN.
+Earlier open items (Session 81 / 82 lists, R, Jeff bucket, 60X decay fit, 23 no-peak) dropped 2026-10-05.
+Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion_2026-10-02.md` "Step 1: Problem (final)"); **Step 2 (spontaneous zones) in progress**.
+
+| # | TODO | Story step | Status |
+|---|------|------------|--------|
+| 1 | Attribution: intrusion-rate test -- is the spike hotspot from the patched CIN, not chance? (reliability now counts a hotspot anywhere in the frame) | 3 (weakest link) | [ ] |
+| 2 | Zone size measure for the hotspot vs zone comparison: union area (~103k µm²) vs per-event median (45k µm²) -- pick one, justify | 3 | [ ] |
+| 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 | [ ] |
+
+---
+
 # Refined TODOs (2026-09-24, replaces Session 61's six-item list)
 Plan: `.claude/plans/2026-09-24_als_spontaneous_flow_plan.md` -- executed phase by phase, user checks after each phase.
 All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
@@ -12,7 +25,7 @@ All analysis now focuses on `*_BIEXP_ALS.tif` in `proc_tiffs/`.
 | F | Neatness refactor of touched scripts (`sp_ach_zones.py` style: short docstrings, step-banner blocks), behavior-identical, done before each phase's feature change | new | 0-4 | [x] Session 69: all 7 files refactored (`hotspot_flow`, `spatial_categorization`, `plot_results`, `ach_domain_analysis`, `spike_reliability`, `region_analyzer`, `abf_clip`), each verified byte-identical in `output/test7/` (uncommitted -- user commits) |
 
 Still open, outside this plan:
-- [ ] Sort and mark the dataset used, separate results by objective, put it in the bucket for Jeff (old #6, merged with old #2 on 2026-09-25)
+- ~~Sort and mark the dataset used, separate results by objective, put it in the bucket for Jeff (old #6, merged with old #2 on 2026-09-25)~~ -- dropped 2026-10-05
 - ~~Compare the median with its segments (old #3)~~ -- dropped 2026-09-25
 
 # Spontaneous refinement TODOs (2026-09-26)
@@ -33,8 +46,8 @@ Test set: `output/test9/proc_test9.txt` (4 recordings, see below); baseline -> `
 Test set (2026-09-26): `2024_10_11-0009`, `2025_06_11-0003`, `2025_11_27-0011`, `2025_12_15-0012` -> `output/test9/proc_test9.txt` (only the list is kept; spontaneous tests pass `--stbd data/bd_20260922_000.json`).
 
 Spike-aligned follow-ups from the 2026-09-26 results check (not started):
-- [ ] 60X decay fit fails on 43/62 significant recordings (median R² 0.4) -- look at a few SPATIAL.png.
-- [ ] 23 no-peak entries in the deigo run -- spontaneous-only recordings? drop from the ana list if so.
+- ~~60X decay fit fails on 43/62 significant recordings (median R² 0.4) -- look at a few SPATIAL.png.~~ -- dropped 2026-10-05
+- ~~23 no-peak entries in the deigo run -- spontaneous-only recordings? drop from the ana list if so.~~ -- dropped 2026-10-05
 - ~~Copy back `data/ana_20260922_000_deigo.txt` from deigo~~ -- dropped Session 78 (not needed).
 
 # ach_domain_analysis refinement TODOs (2026-09-27)
@@ -51,7 +64,113 @@ Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-
 | P | ABF CH2 (`data[1]`, pA) pulse > 200 pA above median -> `experiments.hotspot_origin` `estim_induced` / `spontaneous` (7); DC hold = spontaneous | 5 | [x] 2026-09-27 |
 | - | Stats out of the ana list -> sheets in `{ana_list}_cells.xlsx` (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped); ana list never written | extra | [x] 2026-09-27 |
 | Q | Area comparison (8): `area_comparison.py` -- MED larger spike/spike+1 size + centroid + origin; per-zone median per-frame size + centroid from `results/spontaneous/`; MED -> nearest zone < 50 px (150 px "natural zone" filter dropped) | 6 | [x] Session 78: + `matched_med`, `pct_zones_smaller`, Zone events sheet, Groups (A / B / C) + Mann-Whitney A-C / B-C / A-B; tested on `output/test01/phase6/`, neat-refactored. Session 79: formal run done (`results/area_comparison.xlsx`, 0 % reliability filter added) |
-| R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | [ ] |
+| R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | dropped 2026-10-05 |
+
+---
+
+# Log of the project progress 2026-10-03 Sat 12:13:38 (Session 82)
+Last working file: `docs/paper_discussion_2026-10-02.md`
+Last working line: 330 (`### 6.6 Next steps`) -- unchanged; this session's results live only in chat and here
+
+## List of modified files
+- `docs/continue_from_here.md` (this log)
+- No code, `results/`, DB or paper-doc changes. `RESULTS_GUIDE.*` changes are still from Session 80.
+
+## Summary of current progress
+- **Story flow confirmed (no statistics, Kang's self-talk as backbone + Claude's additions):**
+  1. Why: striatum lacks function-matched anatomy; patch / matrix first found by AChE staining; AChE is a marker, not the ACh signal; image ACh directly -> "hidden" = invisible to staining.
+  2. Spontaneous zones: hotspots recurring at the same place / rising together -> zones = places repeatedly supplied with ACh -> candidate compartments (propose, not prove function).
+  3. Who supplies a zone: single CIN? single spikes as events, key = size comparison; weak point = location / chance -> MED location + Jeff's intrusion rate; evoked (current-driven) = cleaner single-cell case.
+  4. What one CIN's area looks like: lasting time vs zone recurrence; flow (expand -> retract -> fade in place); broad + brief -> release from many axon sites, not diffusion. Role of this block (Q3) pending Kang's reading.
+  5. Meaning: hidden areas, broad / brief / refreshed, one CIN is enough.
+- **Term decision:** "refreshed" replaces "maintained" (maintain = held at a level, not what we saw).
+- **Wording corrections (accepted):** slices can't test for waves -> "within the field and time window observed, the single-spike hotspot showed no directional spread"; "waves need many CINs" is NOT our result -> Discussion only, citing Matityahu's model.
+- **Frame rates:** Matityahu in vivo 20 Hz (GRAB-ACh3.0, 4X, 50 ms; iAChSnFR 20 Hz), slices ~31 Hz 2P; Hamid widefield 10 Hz (4X, 40 µm/px), dual-colour 20 Hz/channel, 2P 10-15 Hz; ours 20 Hz.
+- **Hamid flow method:** CGL (Lucas-Kanade + Horn-Schunck) per frame pair -> flow speed (mean vector length) -> `divergence` map = WHERE sources / sinks are (visual, not a label / count) -> `stream3` trajectories from hand-picked source pixels, Fréchet similarity; tdTomato control; seqNMF-like motif detection.
+- **Ours vs Hamid:** we also compute TV-L1 on the whole FOV, then CAT mask only for the label. Our trace(A) = divergence of the fitted linear field (≈ mean divergence in the hotspot); our drift term sees a sliding hotspot, which a divergence map can't (uniform slide has zero divergence). Divergence map adds "where" (source at centre / soma? one or several sources?).
+
+## Completed TODOs/Tasks
+- ✅ Story logic flow 1->5 agreed
+- ✅ "refreshed" term; two wave wordings corrected
+- ✅ Matityahu / Hamid frame rates and Hamid's divergence / flow method checked
+
+## What should we do next? (TODOs)
+**All items below dropped 2026-10-05 -- replaced by "Story-driven TODOs" at the top.**
+- [ ] Save the agreed story flow (🗣️ / 💬 marks), "refreshed" decision, corrected wave wordings and the Hamid-vs-ours comparison (corrected "ours" column) into `docs/paper_discussion_2026-10-02.md`
+- [ ] Divergence-map scratch test: block-averaged (8 px) u, v -> ∂u/∂x + ∂v/∂y for one 10X recording -> `output/test*`; no pipeline change. Watch: noise, TV-filled background, brightness appearing / fading ≠ motion
+- [ ] Name the terms to fit the story: hotspot / zone / territory / compartment (/ "domain"?); evoked vs self-firing (the "spontaneous" collision); which zone size (per-frame vs union)
+- [ ] Kang: read how waves are defined (Matityahu 2023 + videos, Hamid 2021), then decide Q3 (lasting time + flow = "what one compartment looks like"?)
+- Still open from Session 81: zone duration check; intrusion-rate K (suggest 5); drop "not in phase" in `RESULTS_GUIDE.md` / `paper_claims.md`; item R neat-refactor check
+- [ ] Find a reference for the ACh effective diffusion coefficient in striatal tissue (D* ≈ 0.4 µm²/ms assumed, paper doc §5.1)
+- [ ] Compute t_end = τ · ln(A₀ / A_min) per recording, if adopted (paper doc §4)
+- [ ] Check GRAB-ACh3.0 off-kinetics (Jing 2020) against τ = 56–75 ms: area decay is threshold-based, so it can be faster than the sensor's intensity decay -> one sentence in Limitations
+- [ ] Optional: fix `fig_zones_hist.py` output path in the `output/A4_Publications` copy (still saves to the Vault path)
+
+## Last Session Recap
+※ recap: Re-built the paper story as plain logic (Kang's self-talk + Claude's additions), adopted "refreshed", corrected wave claims, compared our TV-L1 flow with Hamid's divergence maps. Pending: save story to doc, divergence-map scratch test, term naming.
+
+---
+
+# Log of the project progress 2026-10-02 Fri 04:57:59 (Session 81)
+Last working file: `docs/paper_discussion_2026-10-02.md`
+Last working line: 330 (`### 6.6 Next steps (proposed, awaiting go-ahead)`)
+
+## List of modified files
+- `docs/paper_discussion_2026-10-02.md` (new) -- Kang's self-talk (verbatim) + Claude's first reply (verbatim) + checked discussion §0–5 + follow-up round §6 + open items §7 (<- break here, line 330)
+- `output/A4_Publications/` (scratch, not tracked) -- copy of `D:\Work\Vault_0\A4_Publications` (paper drafts .md / .docx, Story logic, scripts, figure); `fig_zones_hist.py` still saves to the Vault path
+- `output/scratch_db_schema.py`, `scratch_origin_ratio.py`, `scratch_read_docx.py`, `scratch_zones_xlsx_peek.py` (scratch, not tracked)
+- No code, `results/` or DB changes. `RESULTS_GUIDE.*` changes are from Session 80.
+
+## Summary of current progress
+- Evoked (`estim_induced`, display rename only) vs spontaneous among detected recordings (`has_region = 1`, reliability > 0, n = 74): 45 : 29 = 1.55 : 1 (10X 26:18, 40X 4:4, 60X 15:7); detection rate evoked 46 % vs spontaneous 58 %.
+- "Not in phase" confirmed dropped from Claim 1 (`PB_001_Story logic.md:90`); still in `RESULTS_GUIDE.md:13,32` and `paper_claims.md:16,25`.
+- Read A4 paper drafts and the intro analysis (Story logic §2–5); docx intro still lacks early "hidden" and the diffuse ≠ uniform split; small docx issues (`<refs>`, broken `{Sarpong, 2025 #23881`, `<for the discussion>` paragraph).
+- Literature (A5 notes): adult striosomes AChE-poor / matrix AChE-rich (Brimblecombe & Cragg 2017, which also states the low-AChE → higher-ACh idea and that ACh striosome vs matrix is unknown); Matityahu 2023 ACh waves (space–time plot + chunk bootstrap; every 5.2–8.6 s, 391–537 ms); Hamid 2021 = DA waves (CGL optical flow → divergence source/sink → streamlines, same toolbox as ours).
+- Reliability currently = hotspot anywhere in the frame at spike / spike+1 (`spike_reliability.py:90-116`). Intrusion-rate plan decided: centroid-in-MED-mask; null = random ±10 windows from left-over frames; K open (suggest 5).
+- Zone duration example (`2025_06_11-0003` zone 1): 200–400 ms per event, close to in vivo wave duration.
+
+## Completed TODOs/Tasks
+- ✅ Evoked / spontaneous ratio query
+- ✅ Discussion doc with self-talk, replies, literature checks, intrusion plan
+
+## What should we do next? (TODOs)
+- [ ] Zone duration check: split each zone's `active_frames` into events, duration = frames × 50 ms, compare with 391–537 ms (doc §6.2) -- read-only scratch
+- [ ] Intrusion-rate analysis: choose K (suggest 5), scratch test in `output/test*`; real vs null, whole-field + centroid-in-MED-mask; evoked vs spontaneous coincidence handles (doc §3a, §6.1, §6.4)
+- [ ] Drop "not in phase" in `RESULTS_GUIDE.md:13,32` and `docs/knowledgebase/paper_claims.md:16,25` (+ rerun numbers in `paper_claims.md`, from Session 80) -- needs approval of exact edits
+- [ ] Kang: check Matityahu 2023 + supplementary videos, then bring lasting-time / flow questions
+
+## Last Session Recap
+※ recap: Paper-story discussion: evoked : spontaneous = 1.55 : 1, AChE / Matityahu / Hamid checked, intrusion-rate plan decided (centroid, left-over frames), all in `docs/paper_discussion_2026-10-02.md`. Pending: zone duration check, intrusion test (K), drop "not in phase".
+
+---
+
+# Log of the project progress 2026-10-01 Thu 12:08:31 (Session 80)
+Last working file: `RESULTS_GUIDE.md`
+Last working line: 205 (`## 6. Known issues` -- has_region / 0 % reliability list)
+
+## List of modified files
+- `RESULTS_GUIDE.md` -- all numbers updated to the `MIN_OBJECT_UM2 = 900` rerun (deigo 45504859, 166 recordings); "1.5 re-run in progress" line removed; CAT term objects >= 900 µm²
+- `RESULTS_GUIDE.pdf` -- user re-exports it themselves
+- `output/results_20260928_2/area_comparison.xlsx` (scratch, not tracked) -- area comparison on the copied rerun DB
+- `results/` (not tracked) -- user copied the rerun in, incl. `results/area_comparison.xlsx`
+
+## Summary of current progress
+- Ran `area_comparison.py` on the 900 µm² rerun: A estim n=26 median 74,383 µm²; B spont n=18 132,694; C zones n=836 45,144; p A-C 0.44, B-C 0.006, A-B 0.23; MED > median 84 % of its recording's zones (29 / 43 recordings above half).
+- Per objective (detected / total, reliability, spike-frame µm², τ): 10X 44/92, 66 %, ~80,900, 75 ms; 40X 8/8, 13 %, ~41,000, 56 ms; 60X 22/66, 16 %, ~10,500, 66 ms.
+- Flow aniso / src-sink: 10X 63/37 %, 40X 88/12 %, 60X 84/16 %; example `2025_12_15-0012` now `L 24° D`.
+- Skipped 92 no-significant + 35 no-valid-segments; neurons 19 / 37; 9 has_region rows with 0 % reliability (was 8).
+- Claim 1 (spontaneous) unchanged. Its 15 zones / 0.56 coverage are medians over all 105 recordings (18 / 0.65 over the 70 with zones).
+- The `BASELINE_SIGMA_MULT = 1.5` re-run was dropped. The code stays at 2.0.
+
+## Completed TODOs/Tasks
+- ✅ Area comparison on the 900 µm² rerun
+- ✅ `RESULTS_GUIDE.md` numbers checked and updated
+
+## What should we do next? (TODOs)
+- [ ] Update `docs/knowledgebase/paper_claims.md` with the rerun numbers (still has n 15 / 776, B-C p 0.0001, 88 %)
+
+## Last Session Recap
+※ recap: Ran `area_comparison.py` on the 900 µm² rerun and updated every number in `RESULTS_GUIDE.md` (B vs C now p 0.006, n 18 / 836). Pending: update `paper_claims.md` with the new numbers; the user re-exports the PDF.
 
 ---
 

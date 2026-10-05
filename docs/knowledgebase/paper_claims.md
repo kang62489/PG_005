@@ -13,6 +13,14 @@ Every new analysis or statistic should say which claim it supports.
 
 ---
 
+## Story step 1 — Problem (final, 2026-10-05; no data, motivates all claims)
+
+- **ACh compartment** = an area whose ACh level is distinct from its surroundings in both space and time.
+- Striosome / matrix (found by AChE staining) are a **precedent only**; our compartments are not claimed to match them.
+- Full wording and decisions: `docs/paper_discussion_2026-10-02.md`, section "Step 1: Problem (final, 2026-10-05)".
+
+---
+
 ## Claim 1 — Spontaneous ACh forms local zones that cover the striatum, but not in phase
 
 - **Pipeline:** `spontaneous_analysis.py` (10X only), output in `results/spontaneous/`
