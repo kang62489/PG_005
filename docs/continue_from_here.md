@@ -8,6 +8,8 @@ Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion
 | 1 | Attribution: intrusion-rate test -- is the spike hotspot from the patched CIN, not chance? (reliability now counts a hotspot anywhere in the frame) | 3 (weakest link) | [ ] |
 | 2 | Zone size measure for the hotspot vs zone comparison: union area (~103k µm²) vs per-event median (45k µm²) -- pick one, justify | 3 | [ ] |
 | 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 | [ ] |
+| 4 | Come back and check the proximity distance: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`) is set by hand and used for both frame-to-frame chaining and the proximity grouping cut -- needs a justification or a data-driven choice | 2 | [ ] |
+| 5 | Centroid check for trace-corr zones: do hotspots grouped by trace correlation have close centroids? (expected yes -- traces come from overlapping footprints; would show trace-corr also means "same place") -- add to spontaneous pipeline | 2 | [ ] |
 
 ---
 

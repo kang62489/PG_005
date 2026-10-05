@@ -83,6 +83,28 @@ Story is now refined step by step (1 → 5); each step is fixed before moving on
 
 ---
 
+## Step 2: Spontaneous zones (in progress, 2026-10-05)
+
+**Draft logic (not final):**
+1. We image spontaneous ACh in striatal slices.
+2. Some areas briefly rise above their surroundings: **hotspots**, each an event of ACh release by ChIs.
+3. Hotspots recur at the same places; we group them into **zones**.
+4. A zone is a place that repeatedly receives ACh from ChIs → matches the compartment definition → **candidate ACh compartments**.
+
+➡️ *Step 3: how many ChIs does it take to supply a zone? Is one enough?*
+
+**Agreed so far:**
+- **Hotspot = event, compartment = place.** A hotspot is already distinct in space and time; recurrence is what makes a place. Definition word: **"recurring"**, not "frequent" (no rate threshold to defend; exact criterion → Methods).
+  - Hotspot: an area whose ACh level rises above its surroundings for a brief period.
+  - ACh compartment: an area where hotspots recur, i.e. a place that repeatedly reaches an ACh level distinct from its surroundings. → Step-1 definition to be updated with "repeatedly" when step 2 is final.
+- **Claim chain split:** hotspot = ACh release (step 2, safe); release from ChIs (step 2, safe in slices: ChIs are the principal striatal ACh source, outside cholinergic inputs are cut); ChIs **modulate** the area → step 5 only, as a possibility (release ≠ modulation).
+
+**TODOs (step 2) — come back and check:**
+- [ ] **TODO 4 — Proximity distance is hand-set:** `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`), used for both frame-to-frame chaining and the proximity grouping cut. Needs a justification or a data-driven choice.
+- [ ] **TODO 5 — Trace-corr zones = same place?** Add a centroid check to the spontaneous pipeline: do hotspots grouped by trace correlation have close centroids? (Expected: yes, traces come from overlapping footprints.) If so, both groupings fit "recurring at the same place".
+
+---
+
 ## 1. Why study compartments in the striatum
 
 ### Kang's view
