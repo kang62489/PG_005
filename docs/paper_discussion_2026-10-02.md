@@ -1,7 +1,7 @@
 # Paper discussion notes — PB_001
 
 Story logic of the paper, built step by step (2026-10-05), plus the background discussion it grew from (2026-10-02 / 03).
-Discussion only: **no code or results were changed.**
+Discussion only: **no pipeline code or results were changed.** 2026-10-06: revised zone grouping tested in scratch only (step 2, "Zone grouping").
 
 Sources used:
 - Numbers: `D:\Programs\PG_005\results` (2.0σ, `MIN_OBJECT_UM2 = 900`, deigo 45504859; spontaneous saion 4734460), `RESULTS_GUIDE.md`.
@@ -73,8 +73,47 @@ Rule: logic first, then pick the results that serve it. Each step is fixed befor
 1. Example map of all zones in one recording — the recording with the highest coverage.
 2. Recurring frequency of zones.
 - Still considering: median zone area (may fit step 3 better, where size is compared).
+- Both need a re-run once the revised zone grouping below is in the pipeline.
 
-**TODOs:** 4 (proximity distance), 5 (trace-corr centroids) — see [Open TODOs](#open-todos).
+### Zone grouping (revised 2026-10-06, scratch test only)
+
+Tested in `output/test01/all_zones_circle.py` on `2025_06_11-0003` and `2025_12_15-0012`. **Not yet in the pipeline** (`classes/sp_zone_analyzer.py` unchanged).
+
+**Why revise:**
+- Hotspots in one trace-corr group are at the same place: distance between two hotspots in a group, median 15.5–27.7 px (≈ 21–37 µm) per recording, 7 recordings. So the hand-set 115 px (≈ 153 µm) was too loose (TODO 4, 5).
+- Linking consecutive frames by centroid < 115 px could join hotspots that don't touch.
+- A unit's trace was the **average** of its hotspots' traces; averaging could hide a real match (one hotspot r = 0.986, the averaged unit r = 0.885).
+- The 1 % size filter (10,486 px) dropped blobs that mask cleanup kept (4,000–10,486 px), about 1 in 3 hotspots in 0003, e.g. the top hotspots of frames 10–13.
+
+**Rules:**
+
+| # | Grouping | Rule |
+|---|---|---|
+| 0 | Detect | threshold = background peak + 2σ; mask cleanup drops blobs < 4,000 px; **no 1 % lower size limit** (80 % upper kept) |
+| 1 | Consecutive frames → units | hotspot in frame n+1 joins hotspot in frame n if its centroid lies inside n's circle (centroid → farthest pixel) |
+| 2 | Trace correlation | r between two units = **best r** among all pairs of their hotspots' own traces (no averaging); every two units in a group r ≥ 0.95 |
+| 3 | Merge zones | a zone ≥ 95 % inside another zone is merged into it |
+| 4 | Fit leftovers | a leftover unit joins its best zone if its **best hotspot** lies ≥ 90 % inside it |
+| 5 | Leftovers that overlap | split into (A) 0 px with every zone and (B) the rest; within each set, units sharing ≥ 1 px form a zone (≥ 2 units); single units are **dropped** |
+
+- Proximity grouping (115 px) is removed.
+
+**Preliminary numbers:**
+
+| | 0003 | 0012 |
+|---|---|---|
+| Hotspots → units | 554 → 151 | 103 → 55 |
+| 2. Trace-corr groups (hotspots) | 15 (518) | 9 (93) |
+| 3. Merges → zones | 6 → 9 | 0 → 9 |
+| 4. Units fitted | 9 | 1 |
+| 5. New zones / dropped units | 2 / 2 | 2 / 2 |
+| **Final zones** | **11** (old pipeline: 26) | **11** |
+| Hotspots in zones | 552 / 554 | 100 / 103 |
+
+> [!warning] Known minor issue (accepted for now)
+> Grouping 5 chains by ≥ 1 px: A touches B and B touches C → A, B, C form one zone even if A and C are far apart. In 0003, one such zone joins 7 units spread across the middle of the field (x ≈ 280–800 px). Possible fixes: require a real overlap (e.g. shared px ÷ smaller unit ≥ 0.5), or require every two units to overlap (no chaining, like trace-corr).
+
+**TODOs:** 4 (proximity distance), 5 (trace-corr centroids), 8 (grouping into pipeline), 9 (grouping-5 chaining) — see [Open TODOs](#open-todos).
 
 ---
 
@@ -151,8 +190,10 @@ Numbers match `docs/continue_from_here.md`.
 | 1c | Intrusion rate on non-aligned frames, evoked / spontaneous separately; compare with 1b | 3 |
 | 2 | Zone size measure for the comparison: union area vs per-event median — pick one, justify | 3 |
 | 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 |
-| 4 | Proximity distance is hand-set: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`), used for frame-to-frame chaining and the proximity grouping cut — needs a justification or a data-driven choice | 2 |
-| 5 | Trace-corr zones = same place? Add a centroid check to the spontaneous pipeline (expected yes: traces come from overlapping footprints) | 2 |
+| 4 | ~~Proximity distance is hand-set (115 px)~~ → resolved in the revised grouping (2026-10-06, scratch): circle rule for consecutive frames, proximity grouping removed | 2 |
+| 5 | ~~Trace-corr zones = same place?~~ → yes (2026-10-06): median distance between two hotspots in a group 15.5–27.7 px (≈ 21–37 µm), 7 recordings | 2 |
+| 8 | Move the revised zone grouping into `classes/sp_zone_analyzer.py`, re-run spontaneous results (R1 map, R2 frequency) | 2 |
+| 9 | Grouping 5 chaining (≥ 1 px): stricter rule or keep? Minor, accepted for now | 2 |
 | 6 | Check Aosaki 1995: exact axon-arbor range and species before citing | 3 |
 | — | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion |
 

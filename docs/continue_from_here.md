@@ -1,6 +1,7 @@
 # Story-driven TODOs (2026-10-05, replaces all earlier open TODOs)
 Story logic (Part A of `docs/paper_discussion_2026-10-02.md`): 1 Problem (ACh compartment definition) -> 2 Spontaneous zones = places of recurring hotspots = candidate compartments -> 3 One ChI **can** supply a compartment-sized area -> 4 Can one ChI spread ACh like a wave? (MED flow) -> 5 Answer to step 1: a new kind of division with a cellular basis.
 Earlier open items (Session 81 / 82 lists, R, Jeff bucket, 60X decay fit, 23 no-peak) dropped 2026-10-05.
+2026-10-06: revised zone grouping agreed in scratch (Session 84) → TODO 8 ports it to the pipeline.
 Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion_2026-10-02.md` "Step 1: Problem (final)"); **Steps 2 (spontaneous zones), 3 (one ChI) and 4 (one ChI wave-like spread? MED flow) in progress; step 5 (answer to step 1) drafted**. Lasting time / "refreshed" has no step yet (placement TODO dropped 2026-10-05).
 
 | # | TODO | Story step | Status |
@@ -8,8 +9,10 @@ Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion
 | 1 | Attribution: is the spike hotspot from the patched CIN, not chance? (reliability now counts a hotspot anywhere in the frame). 1b = MED back-check reliability (hit only if the segment's hotspot is where the MED hotspot is); 1c = Jeff's intrusion rate on non-aligned frames, evoked / spontaneous separately; b > c → spike-locked. See `paper_discussion_2026-10-02.md` Step 3 | 3 (weakest link) | [ ] |
 | 2 | Zone size measure for the hotspot vs zone comparison: union area (~103k µm²) vs per-event median (45k µm²) -- pick one, justify | 3 | [ ] |
 | 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 | [ ] |
-| 4 | Come back and check the proximity distance: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`) is set by hand and used for both frame-to-frame chaining and the proximity grouping cut -- needs a justification or a data-driven choice | 2 | [ ] |
-| 5 | Centroid check for trace-corr zones: do hotspots grouped by trace correlation have close centroids? (expected yes -- traces come from overlapping footprints; would show trace-corr also means "same place") -- add to spontaneous pipeline | 2 | [ ] |
+| 4 | Come back and check the proximity distance: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`) is set by hand and used for both frame-to-frame chaining and the proximity grouping cut -- needs a justification or a data-driven choice | 2 | [x] 2026-10-06: replaced by the revised grouping (circle rule for consecutive frames, proximity removed) -- in pipeline via TODO 8 |
+| 5 | Centroid check for trace-corr zones: do hotspots grouped by trace correlation have close centroids? (expected yes -- traces come from overlapping footprints; would show trace-corr also means "same place") -- add to spontaneous pipeline | 2 | [x] 2026-10-06: yes, median distance 15.5–27.7 px (≈ 21–37 µm) per recording, 7 recordings (scratch `output/test01/trace_corr_centroids.py`); not added to the pipeline |
+| 8 | Revised zone grouping → pipeline (`classes/sp_zone_analyzer.py`, `spontaneous_analysis.py`, `area_comparison.py`), then re-run spontaneous results (R1 map, R2 frequency). Plan: `.claude/plans/2026-10-06_zone_grouping_pipeline_plan.md` | 2 | [ ] next |
+| 9 | Grouping 5 chains by ≥ 1 px (0003: one zone of 7 units across the field) -- keep or stricter rule? Minor, accepted for now | 2 | [ ] |
 | 6 | Check Aosaki 1995: exact CIN axon-arbor range and species before citing it in the step-3 bridge | 3 | [ ] |
 | 7 | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion | [ ] |
 
@@ -69,6 +72,40 @@ Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-
 | - | Stats out of the ana list -> sheets in `{ana_list}_cells.xlsx` (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped); ana list never written | extra | [x] 2026-09-27 |
 | Q | Area comparison (8): `area_comparison.py` -- MED larger spike/spike+1 size + centroid + origin; per-zone median per-frame size + centroid from `results/spontaneous/`; MED -> nearest zone < 50 px (150 px "natural zone" filter dropped) | 6 | [x] Session 78: + `matched_med`, `pct_zones_smaller`, Zone events sheet, Groups (A / B / C) + Mann-Whitney A-C / B-C / A-B; tested on `output/test01/phase6/`, neat-refactored. Session 79: formal run done (`results/area_comparison.xlsx`, 0 % reliability filter added) |
 | R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | dropped 2026-10-05 |
+
+---
+
+# Log of the project progress 2026-10-06 Tue (Session 84)
+Last working file: `output/test01/all_zones_circle.py` (scratch) / `docs/paper_discussion_2026-10-02.md`
+Last working line: Step 2 "Zone grouping (revised 2026-10-06, scratch test only)"
+
+## List of modified files
+- `docs/paper_discussion_2026-10-02.md` -- Step 2: new "Zone grouping" section (why, rules 0–5, preliminary numbers, known minor issue); Open TODOs 4 / 5 resolved, 8 / 9 added
+- `docs/continue_from_here.md` -- Story TODOs 4 / 5 done, 8 / 9 added; this log
+- `.claude/plans/2026-10-06_zone_grouping_pipeline_plan.md` -- new: port plan for TODO 8
+- `D:\Work\Vault_0\A4_Publications\PB_001_Story logic.md` -- rewritten = Part A of the discussion doc (for Jeff); old §1–6 kept below as "Archive"
+- `D:\Work\Vault_0\A4_Publications\PB_001_Paper draft.md` -- Methods to-do 5: "Revision pending" note
+- Scratch (not tracked, `output/test01/`): `trace_corr_centroids.py`, `hotspot_count_map.py`, `event_count_zones.py` (count-map idea, rejected), `zone_sizes_check.py` (never run), `check_frames.py`, `check_unit.py`, `all_zones_circle.py` (current rules: `BEST_R`, `NO_MIN_FRAC`, `FIT_MERGE`, `MIN_INSIDE = 0.95`, `MIN_FIT = 0.90`) + their PNG / xlsx / TIFF outputs (`*_mergefit.*` = current rules)
+- **No pipeline code, `results/` or DB changes.**
+
+## Summary of current progress
+- Trace-corr groups are at the same place (median 15.5–27.7 px between two hotspots, 7 recordings) → 115 px too loose.
+- Per-pixel recurrence (count) map tried and rejected by the user (big overlapping hotspots blur into one blob + specks).
+- Revised zone grouping agreed (scratch): no 1 % size limit → circle rule for consecutive frames → best-r trace-corr ≥ 0.95 → merge zones ≥ 95 % inside → fit leftovers (best hotspot ≥ 90 % inside) → leftovers overlapping each other (A: 0 px with zones / B: rest) form zones, singles dropped. No proximity.
+- 0003: 554 hotspots → 11 zones (old 26), 552 in zones; 0012: 103 → 11 zones, 100 in zones.
+- Checked case: 0003 unit 3 (top hotspots, frames 10–13) missed zone 2 by trace-corr 0.945 (vs unit 29) and fit 0.946 → fit lowered to 0.90 → joins.
+
+## Completed TODOs/Tasks
+- ✅ Story TODO 5 (trace-corr centroids), TODO 4 (resolved by the new rules, pending pipeline)
+- ✅ Revised grouping rules fixed in scratch; docs updated for Jeff
+
+## What should we do next? (TODOs)
+- User commits first.
+- TODO 8: port the grouping to the pipeline, phase by phase (plan file above), verify against the scratch numbers.
+- TODO 9 later (step-5 chaining).
+
+## Last Session Recap
+※ recap: Revised spontaneous zone grouping in scratch (circle linking, best-r trace-corr, merge 0.95, fit 0.90, overlap groups for leftovers, no proximity / 1 % limit); 0003 26 → 11 zones. Docs + Vault story logic (= Part A) updated for Jeff. Next: port to `classes/sp_zone_analyzer.py` (TODO 8).
 
 ---
 
