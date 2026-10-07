@@ -2,17 +2,26 @@
 Story logic (Part A of `docs/paper_discussion_2026-10-02.md`): 1 Problem (ACh compartment definition) -> 2 Spontaneous zones = places of recurring hotspots = candidate compartments -> 3 One ChI **can** supply a compartment-sized area -> 4 Can one ChI spread ACh like a wave? (MED flow) -> 5 Answer to step 1: a new kind of division with a cellular basis.
 Earlier open items (Session 81 / 82 lists, R, Jeff bucket, 60X decay fit, 23 no-peak) dropped 2026-10-05.
 2026-10-06: revised zone grouping agreed in scratch (Session 84) → TODO 8 ports it to the pipeline.
+2026-10-07 (Session 85): TODO 8 phases 1–4 committed (Rule B: NR zones out of stats; zone → compartment naming). Next: TODO 10 (paper stats, logic first), then phase 5 formal run.
+2026-10-07 (Session 86): zone-map TIFF export parallelised (`--map_workers`, pixel-identical, 495 pages ~68 s → ~21 s locally); `.slm` for Saion fixed (`--cpus-per-task=8`) + new `run_preproc_on_saion.slm`. TODO 2 decided (per-event), TODOs 11–14 added. **Step 2 finished** (Results text, numbers, Fig. 1 draft) on the new Saion results; leftovers = TODOs 15–20. Next: step 3 (`area_comparison.py`, logic first).
 Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion_2026-10-02.md` "Step 1: Problem (final)"); **Steps 2 (spontaneous zones), 3 (one ChI) and 4 (one ChI wave-like spread? MED flow) in progress; step 5 (answer to step 1) drafted**. Lasting time / "refreshed" has no step yet (placement TODO dropped 2026-10-05).
 
 | # | TODO | Story step | Status |
 |---|------|------------|--------|
-| 1 | Attribution: is the spike hotspot from the patched CIN, not chance? (reliability now counts a hotspot anywhere in the frame). 1b = MED back-check reliability (hit only if the segment's hotspot is where the MED hotspot is); 1c = Jeff's intrusion rate on non-aligned frames, evoked / spontaneous separately; b > c → spike-locked. See `paper_discussion_2026-10-02.md` Step 3 | 3 (weakest link) | [ ] |
-| 2 | Zone size measure for the hotspot vs zone comparison: union area (~103k µm²) vs per-event median (45k µm²) -- pick one, justify | 3 | [ ] |
+| 1 | Attribution: is the spike hotspot from the patched CIN, not chance? (reliability now counts a hotspot anywhere in the frame). 1b = MED back-check reliability (hit only if the segment's hotspot is where the MED hotspot is); 1c = Jeff's intrusion rate on non-aligned frames, evoked / spontaneous separately; b > c → spike-locked. See `paper_discussion_2026-10-02.md` Step 3 | 3 (weakest link) | [ ] split 2026-10-07: 1b → TODO 13, 1c → TODO 12 |
+| 2 | Zone size measure for the hotspot vs zone comparison: union area (~103k µm²) vs per-event median (45k µm²) -- pick one, justify | 3 | [x] 2026-10-07 (Kang): **per-event vs per-event** -- one ChI spike = one event, so compare it with single compartment hotspots, not the union area (= many events) |
 | 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 | [ ] |
 | 4 | Come back and check the proximity distance: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`) is set by hand and used for both frame-to-frame chaining and the proximity grouping cut -- needs a justification or a data-driven choice | 2 | [x] 2026-10-06: replaced by the revised grouping (circle rule for consecutive frames, proximity removed) -- in pipeline via TODO 8 |
 | 5 | Centroid check for trace-corr zones: do hotspots grouped by trace correlation have close centroids? (expected yes -- traces come from overlapping footprints; would show trace-corr also means "same place") -- add to spontaneous pipeline | 2 | [x] 2026-10-06: yes, median distance 15.5–27.7 px (≈ 21–37 µm) per recording, 7 recordings (scratch `output/test01/trace_corr_centroids.py`); not added to the pipeline |
-| 8 | Revised zone grouping → pipeline (`classes/sp_zone_analyzer.py`, `spontaneous_analysis.py`, `area_comparison.py`), then re-run spontaneous results (R1 map, R2 frequency). Plan: `.claude/plans/2026-10-06_zone_grouping_pipeline_plan.md` | 2 | [~] 2026-10-07: phases 1–4 done (+ Rule B / NR zones, zone → compartment naming, `_HOTSPOT_MASK.tif`); phase 5 formal run (Kang) + `area_comparison.py` pending |
-| 10 | Statistics for the paper: which numbers each story step needs (step 2 compartments, step 3 size comparison) -- decide before the formal `area_comparison.py` run | 2 / 3 | [ ] next |
+| 8 | Revised zone grouping → pipeline (`classes/sp_zone_analyzer.py`, `spontaneous_analysis.py`, `area_comparison.py`), then re-run spontaneous results (R1 map, R2 frequency). Plan: `.claude/plans/2026-10-06_zone_grouping_pipeline_plan.md` | 2 | [~] 2026-10-07: phases 1–4 done (+ Rule B / NR zones, zone → compartment naming, `_HOTSPOT_MASK.tif`); phase 5 spontaneous run done on Saion (Kang re-made all proc TIFFs, copied to `results/spontaneous/` + `results/logs/`); `area_comparison.py` = step 3, pending |
+| 10 | Statistics for the paper: which numbers each story step needs (step 2 compartments, step 3 size comparison) -- decide before the formal `area_comparison.py` run | 2 / 3 | [~] 2026-10-07 logic agreed: step 2 = compartments with recurring hotspots + some single hotspots fill almost the whole compartment (per-event coverage = hotspot ∩ compartment ÷ compartment area) → "can one ChI drive a hotspot that big?" → step 3 = patched ChI spike hotspot vs single compartment hotspots (TODO 2). Area yardsticks kept: ChI spike hotspot, axon arbor (TODO 6), ChI density, size spread -- but red-channel 10X FOVs show **several ChIs in every compartment** (so not "one ChI = one compartment"). Striatum coverage = descriptive only. Open: chance level (chance test vs trace correlation). **Step 2 done 2026-10-07** (text + numbers + Fig. 1 draft in `paper_discussion_2026-10-02.md`; "fill" → largest hotspot per compartment in µm²); step 3 statistics next |
+| 11 | ABFClip: spontaneous and evoked spike frequency of the patched ChIs → `f_ChI`; then compare compartment frequency with `f_ChI × R` (R = reliability, TODO 13): ≈ one ChI could drive a compartment, ≫ several ChIs, ≪ missed spikes / lower firing | 2 → 3 | [ ] |
+| 12 | Non-aligned analysis (= old 1c): hotspot intrusion rate on frames not aligned to a spike, evoked / spontaneous separately -- the chance baseline for reliability | 3 | [ ] |
+| 13 | MED back-check (= old 1b) and recalculate reliability: a segment counts as a hit only if its hotspot is where the MED hotspot is | 3 | [ ] |
+| 14 | Figure: most / intermediate / least reliable spike patterns (Vm), maybe with their frames | 3 | [ ] |
+| 15–20 | Step 2 leftovers -- listed in `paper_discussion_2026-10-02.md` Open TODOs: 15 chance level, 17 Methods text, 18 section title, 19 6.67 Hz compartment (check in step 3), 20 copy text to the Vault draft (16 Fig. 1 example done: `2025_06_11-0008`) | 2 | [ ] |
+| 22 | Final Fig. 1: port the scratch draft (`output/test06/fig1_draft.py` → `docs/figures/fig1_step2_draft.png`) into `functions/plot_results.py` (only with Kang's OK); add the z colorbar back to panel A | 2 | [ ] |
+| 23 | Step 3 `area_comparison.py`, logic first: main comparison = MED vs its own (matched) compartment; matching by overlap instead of centroid < 50 px; ratio / effect size instead of Mann-Whitney only; compare MED with the largest hotspot per compartment (µm², as in step 2); results provisional until TODO 13 | 3 | [ ] next |
 | 9 | Grouping 5 chains by ≥ 1 px (0003: one zone of 7 units across the field) -- keep or stricter rule? Minor, accepted for now | 2 | [x] 2026-10-07: resolved by Rule B -- step-5 zones are non-recurring (NR) zones, not compartments, out of every stat; chaining only changes how NR zones look on the map |
 | 6 | Check Aosaki 1995: exact CIN axon-arbor range and species before citing it in the step-3 bridge | 3 | [ ] |
 | 7 | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion | [ ] |
@@ -76,9 +85,50 @@ Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-
 
 ---
 
+# Log of the project progress 2026-10-07 Wed (Session 86)
+Last working file: `docs/paper_discussion_2026-10-02.md` (Step 2 "Results text (draft 2026-10-07, numbers filled from the latest Saion run)", ~line 80) / `output/test06/fig1_draft.py`
+Last working line: Step 2 numbers table, "Paper rule" row (≥ 2 separate events)
+Not committed yet (Kang commits).
+
+## List of modified files
+- `spontaneous_analysis.py` -- zone-map pages rendered on a process pool: `map_workers_auto()` (CPUs of the job via `os.sched_getaffinity`, max `MAP_WORKERS_MAX = 16`), `--map_workers N` (1 = no pool), `MAP_CHUNK_PAGES = 8`, one Figure kept per worker per recording (`_worker_state`), ordered sliding window (2 chunks / worker); `run()` opens one spawn pool, loop body → `_run_recordings()`. Pixel-identical to the old serial code; neat-refactored (docstring, 3a / 3b sub-blocks); ruff clean
+- `run_on_saion.slm` -- `--cpus-per-task=8` (fair share of a 36-CPU / 4-GPU node), `--mem=32G`
+- `run_preproc_on_saion.slm` (new) -- `img_proc.py` → `als_correct.py` in series, `set -e`, `proc_20260922_000_saion.txt`
+- `docs/paper_discussion_2026-10-02.md` -- Step 2 Results text with real numbers, numbers + sources table, Fig. 1 legend + embedded draft, Open TODOs 11–21
+- `docs/figures/fig1_step2_draft.png` (new) -- Fig. 1 draft
+- `docs/continue_from_here.md` -- TODOs 2, 8, 10, 11–23; this log
+- `.claude/plans/2026-10-06_zone_grouping_pipeline_plan.md` -- status (from Session 85)
+- Scratch (not tracked): `output/test04/` (zone-map profiling + parallel verification), `output/test05/` (neat-refactor before / after, 17 / 17 identical), `output/test06/` (`step2_stats.py`, `animal_settings.py`, `detected_per_day.py`, `event_coverage.py` + xlsx, `largest_hotspot.py` + xlsx, `fig1_candidates.py` + `candidates/`, `fig1_draft.py`, `one_event_compartment.py`, `one_event_frames.py`)
+
+## Summary of current progress
+- Zone-map TIFF export: 495 pages ~68 s → ~21 s locally (16 workers); Saion job had only 1 CPU (no `--cpus-per-task`) → now 8.
+- Saion vs local mismatch (0003: 11 vs 9 compartments) = local `proc_tiffs/` are from 09-22; Saion ones re-made today with the latest code → Saion results are the formal ones.
+- Step 2 (GACh3.0, 103 recordings): compartments in 63 recordings (8 / 15 slices, 5 / 8 animals), 631 compartments, 9 [7–12] per recording; 40 recordings from 3 animals (660 / 661 / 662, same 0.1X virus injection 2025_11_09) show ~0 hotspots → expression; rate 0.15 [0.08–0.28] Hz (period 6.7 s); largest hotspot per compartment 101 [54–163] × 10³ µm².
+- Paper rule: a compartment needs ≥ 2 separate events -- drops `2025_06_11-0006` #11 (two hotspots ~470 µm apart firing together once = synchrony).
+- Per-event coverage (% of compartment) computed, then dropped from the text: step 3 compares µm², so "largest hotspot per compartment (µm²)" replaces it.
+- Fig. 1 draft: A = `2025_06_11-0008` map, B = compartments per recording per animal / event rate / largest hotspot (median solid, IQR dashed, legends).
+
+## Completed TODOs/Tasks
+- ✅ Parallel zone-map export (F) + neat-refactor of `spontaneous_analysis.py`
+- ✅ Saion `.slm` fixed + preprocessing `.slm`
+- ✅ TODO 2 (per-event vs per-event), TODO 16 (Fig. 1 example), TODO 21 (coverage dropped)
+- ✅ Step 2 text + numbers + Fig. 1 draft
+
+## What should we do next? (TODOs)
+1. **TODO 23 -- Step 3 `area_comparison.py`, logic first** (matched compartment, overlap matching, ratio, MED vs largest hotspot µm²).
+2. TODOs 11–14 -- `f_ChI` from ABFClip, non-aligned analysis, MED back-check + reliability, reliability figure.
+3. TODOs 15, 17–20 -- step-2 leftovers (chance level, Methods, title, 6.67 Hz compartment, copy to Vault).
+4. TODO 22 -- final Fig. 1 in `functions/plot_results.py` (with OK).
+
+## Last Session Recap
+※ recap: Parallelised the zone-map TIFF export (~3× faster, pixel-identical), fixed Saion `.slm` CPUs, and finished step 2 (text, numbers, Fig. 1 draft) on the new Saion results. Pending: step 3 `area_comparison.py` logic, step-2 leftovers, commit.
+
+---
+
 # Log of the project progress 2026-10-07 Wed (Session 85)
-Last working file: `classes/sp_zone_analyzer.py`, `spontaneous_analysis.py`, `area_comparison.py`
-Last working line: TODO 8 phase 4 done; next = paper statistics (TODO 10), then formal run
+Last working file: `docs/paper_discussion_2026-10-02.md` / `area_comparison.py`
+Last working line: paper_discussion Step 2 "Zone grouping (revised 2026-10-06, in the pipeline 2026-10-07)"; area_comparison.py `run()` (line ~212) -- untouched until TODO 10 is decided
+Committed by Kang (TODO 8 phases 1–4 + docs).
 
 ## List of modified files
 - `classes/sp_zone_analyzer.py` -- revised grouping (circle linking, best-r trace-corr, merge 0.95, fit 0.90, step 5 → NR zones apart); sheets `counts` / `compartment_stats` / `compartments` / `non_recur_zones` / `step3_merge` / `step4_fit` / `step5_overlap`; `mask/_HOTSPOT_MASK.tif`; `CLOSE_RADIUS` (unused) removed
@@ -98,12 +148,23 @@ Last working line: TODO 8 phase 4 done; next = paper statistics (TODO 10), then 
 - ✅ TODO 8 phases 1–4, TODO 9 (resolved by Rule B)
 
 ## What should we do next? (TODOs)
-- Kang commits.
-- TODO 10: decide the statistics each story step needs (before the formal `area_comparison.py` run).
-- Phase 5: formal spontaneous run → `results/spontaneous/`, then `area_comparison.py`.
+1. **TODO 10 -- paper statistics, logic only (no numbers), step by step; step 2 first.** Points raised (not decided):
+   - Step 2 "places of recurring ACh release":
+     - existence overview: how many recordings / animals have ≥ 1 compartment (only per-recording `n_compartments` now);
+     - recurrence: `n_events`, `mean_freq_hz` per compartment (have);
+     - **chance level**: would large hotspots hit the same place by chance? (not done) -- open question for Kang: keep in scope, or define "recurring" by trace correlation (same time course) so chance overlap is not the main argument;
+     - coverage (have).
+   - Step 3 "one ChI can supply a compartment-sized area":
+     - attribution first (TODO 1b / 1c);
+     - size measure (TODO 2): union footprint vs per-event median -- could flip the conclusion;
+     - "comparable" ≠ "not significantly different": Mann-Whitney only tests a difference → effect size / CI, equivalence test, or rank (`pct_compartments_smaller`);
+     - nesting: many compartments per recording / animal (pseudo-replication);
+     - group C = unmatched compartments vs all compartments.
+   - Only after this: change `area_comparison.py`.
+2. **Phase 5 -- formal run (Kang)**: `spontaneous_analysis.py --proc_list data/proc_20260922_000.txt` → `results/spontaneous/`, then `area_comparison.py --db results/<db>` (old `results/spontaneous/` can no longer be read: new `compartments` sheet + `_HOTSPOT_MASK.tif`).
 
 ## Last Session Recap
-※ recap: Revised grouping in the pipeline with Rule B (NR zones out of stats), compartment naming, neat-refactor verified identical. Next: settle paper statistics (TODO 10), then formal run.
+※ recap: Revised zone grouping moved into the pipeline with Rule B (NR zones out of all stats), zone → compartment naming, `_HOTSPOT_MASK.tif`, neat-refactor verified identical; committed. Pending: TODO 10 paper statistics (logic first), then formal run.
 
 ---
 

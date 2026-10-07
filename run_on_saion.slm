@@ -5,7 +5,8 @@
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --nodelist=saion-gpu21
-#SBATCH --mem=16G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
 #SBATCH --time=12:00:00
 #SBATCH --output=/work/WickensU/kang/logs/saion_%j.out
 #SBATCH --error=/work/WickensU/kang/logs/saion_%j.err
@@ -13,6 +14,10 @@
 # Spontaneous zone analysis -- CUDA kernels (zone_kernels, fit_hist) on the V100, CPU fallback otherwise.
 # proc_tiffs path is read from the proc-list footer (dir_proc_tiffs) -> must point to /work/WickensU/kang/proc_tiffs
 # Outputs go to $RESULTS_DIR/spontaneous/ (xlsx + ZONE_MAPS.tif, footprints/*.npz, mask/*.tif; --no_mask skips the mask).
+# Zone-map TIFF pages are rendered by a process pool: workers = CPUs of this job (--cpus-per-task), max 16
+# (8 = fair share of a 36-CPU / 4-GPU node; 8 vs 16 workers were equally fast in a local test);
+# without --cpus-per-task SLURM gives 1 CPU and the pages render one by one (~0.3 s / page).
+# 32G: the main process holds the stack (~2.5 GB float16 + the float32 read) + ~0.2-0.3 GB per worker.
 # Create the log folder once before submitting: mkdir -p /work/WickensU/kang/logs
 
 PROJECT=/home/k/kang-chu/PG_005

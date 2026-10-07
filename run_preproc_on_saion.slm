@@ -1,0 +1,33 @@
+#!/bin/bash
+#SBATCH --job-name=preproc
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=kang.chu@oist.jp
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=12:00:00
+#SBATCH --output=/work/WickensU/kang/logs/saion_preproc_%j.out
+#SBATCH --error=/work/WickensU/kang/logs/saion_preproc_%j.err
+
+# Preprocessing in series: img_proc.py (BIEXP detrend + z-score + Gaussian blur -> *_GAUSS.tif)
+# then als_correct.py (ALS slow-fluctuation removal on every *_GAUSS.tif -> *_ALS.tif).
+# CUDA kernels on the GPU, numba CPU fallback otherwise (--cpus-per-task = its threads).
+# raw_tiffs / proc_tiffs paths are read from the proc-list footer (dir_raw_tiffs, dir_proc_tiffs)
+# -> must point to /work/WickensU/kang/... ; img_proc.py only processes rows marked for processing.
+# img_proc.py updates gauss_exists in the proc list, which als_correct.py then reads.
+# set -e: if img_proc.py fails, als_correct.py is not started.
+# Create the log folder once before submitting: mkdir -p /work/WickensU/kang/logs
+
+set -e
+
+PROJECT=/home/k/kang-chu/PG_005
+PROC_LIST=$PROJECT/data/proc_20260922_000_saion.txt
+
+export COLUMNS=200
+
+$PROJECT/.venv/bin/python $PROJECT/img_proc.py \
+    --proc_list $PROC_LIST
+
+$PROJECT/.venv/bin/python $PROJECT/als_correct.py \
+    --proc_list $PROC_LIST

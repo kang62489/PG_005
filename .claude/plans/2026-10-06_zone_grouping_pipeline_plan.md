@@ -17,7 +17,17 @@ Step 2 "Zone grouping". Phase by phase; user checks after each phase. **No code 
 
 Proximity grouping (115 px) removed. Known minor issue: step 5 chains (TODO 9, accepted for now).
 
-## Phases
+## Status (2026-10-07, Session 85) -- phases 1–4 done and committed
+
+- Phase 1 ✅ ported, identical to scratch at merge 0.95 (`TH_MERGE_ZONES = 0.95`, `TH_FIT_ZONES = 0.90`; 0.9 tried, back to 0.95).
+- Phase 2 ✅ + **Rule B**: grouping-5 zones = **NR zones** (`non_recur_zones` sheet, light gray NR1.. on ZONE_MAPS, NR hotspots hatched `////`), out of every stat; no all-contours page, no extra PNG.
+- Phase 3 ✅ `area_comparison.py` reads the `compartments` sheet (`compartment_id`, `active_frames`).
+- Phase 4 ✅ neat-refactor of the 4 touched files, identical (`output/test03/`); then naming zone → compartment (sheets, columns, logs) + `mask/_HOTSPOT_MASK.tif`, values identical (`output/test03/compare_renamed.py`).
+- TODO 9 resolved by Rule B.
+- **Phase 5 pending** -- but first TODO 10 (paper statistics, `docs/continue_from_here.md`), since `area_comparison.py` may change.
+- 2026-10-07 (Session 86): Phase 5 spontaneous part ✅ (Saion, all proc TIFFs re-made with the latest code → `results/spontaneous/`). `area_comparison.py` run = step 3, waits for TODO 23 (logic first).
+
+## Phases (original plan)
 
 1. **`classes/sp_zone_analyzer.py`**: constants; `group()` 2a (no lower limit) + 2b (circle linking) + 2c/2d (best-r
    trace-corr); new step 3 / 4 / 5 functions; `map()` builds zones from the new groups; `save()` sheets:

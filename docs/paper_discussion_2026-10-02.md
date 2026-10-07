@@ -77,6 +77,43 @@ Rule: logic first, then pick the results that serve it. Each step is fixed befor
 - Still considering: median zone area (may fit step 3 better, where size is compared).
 - Both need the formal re-run with the revised grouping below (in the pipeline since 2026-10-07).
 
+### Results text (draft 2026-10-07, numbers filled from the latest Saion run)
+
+Updates the old parts of Paper draft Results §1 (`PB_001_Paper draft.md`); the section title is not changed yet.
+
+> We first imaged ACh without reference to the patched neuron. In GRAB-ACh3.0 recordings at 10× (1,200 frames at 20 Hz), we detected hotspots, areas whose ACh level briefly rose above their surroundings, frame by frame. Hotspots that recurred at the same place were grouped into compartments: hotspots in consecutive frames were linked, and hotspots with highly correlated time courses were grouped (see Methods). Compartments were found in 63 of 103 recordings (8 of 15 slices, 5 of 8 animals), 631 compartments in total (9 [7–12] per recording, median [IQR]). The remaining 40 recordings, all from three animals, showed almost no hotspots at all (median 0 per recording); these three animals received a 10-fold diluted sensor virus, which points to too little sensor expression rather than to an absence of ACh release. Each compartment received a hotspot every 6.7 s (median [IQR 3.5–11.9 s]; 0.15 [0.08–0.28] Hz) [chance level: pending]. Single hotspots could be large: the largest hotspot of each compartment measured 101 × 10³ µm² (median [IQR 54–163 × 10³ µm²]), and in half of the compartments it exceeded 100 × 10³ µm² (Fig. 1). These compartments are places that repeatedly reach an ACh level distinct from their surroundings in space and time, that is, candidate ACh compartments. Because a single hotspot can be this large, we next asked whether one ChI can release enough ACh to produce a hotspot of this size.
+
+*Figure 1. [TO ADD] (A) Maximum projection with all compartments colour-coded and numbered; dashed line = striatum boundary (example: 2025_06_11-0008, 8 compartments). (B) Compartment count, event rate and per-event coverage across recordings.*
+
+![Fig. 1 draft (step 2)](figures/fig1_step2_draft.png)
+
+*Draft 2026-10-07, made by scratch `output/test06/fig1_draft.py`. A = page 1 of the Saion `ZONE_MAPS.tif`, cropped (QC title and z colorbar cut off).*
+*B (top): number of compartments in each recording, grouped by animal (neoChAT-587, -663, -664, -676, -677; n = recordings per animal; only the 63 GACh3.0 recordings with ≥ 1 compartment). Each dot = one recording (jittered sideways); solid black line = median of that animal's recordings; dashed gray lines = IQR (25th / 75th percentile).*
+*B (middle): event rate of each compartment (631 compartments, pooled over recordings), log axis; solid line = median, dashed lines = IQR.*
+*B (bottom): for each compartment (n = 631), the size of its biggest hotspot during the recording (one value per compartment), ×10³ µm². Solid line = median, dashed lines = IQR. Same unit as the single-ChI hotspot in step 3. Example: the first bar = 32 compartments whose biggest hotspot was 0–20 × 10³ µm².*
+
+**Numbers and sources (2026-10-07, GACh3.0 only, `results/spontaneous/` from the latest Saion run):**
+
+| Number | Value | Source |
+|---|---|---|
+| Recordings / slices / animals with ≥ 1 compartment | 63 / 103, 8 / 15, 5 / 8 | `spontaneous_summary.xlsx` `recordings` + `rec_data.db` SLICE + `exp_info.db` BASIC_INFO (DOR → animal); scratch `output/test06/step2_stats.py` |
+| **Paper rule (2026-10-07)** | a compartment needs ≥ 2 separate events (recurring in time). Drops 1 pipeline compartment: `2025_06_11-0006` #11 = two hotspots ~470 µm apart firing **together** once (frames 1000–1008), grouped by trace correlation (synchrony, not recurrence). Applied in the scratch scripts only, not in the pipeline | `output/test06/one_event_compartment.py`, `one_event_frames.py` |
+| Compartments, per recording | 631; 9 [7–12] (mean 10.0 ± 4.2), recordings with compartments | same |
+| No-compartment animals | 660, 661, 662 (2025_11_27, 12_14, 12_18): 40 recordings, median 0 hotspots detected; all injected 2025_11_09 with 0.1X AAV1-121922-GREEN (3 of the 4 animals that got 0.1X; 587 also 0.1X but 98 compartments). Confounded with surgery day and sex (all M) | `exp_info.db` INJECTION_HISTORY; `output/test06/animal_settings.py`, `detected_per_day.py` |
+| Event rate (pooled compartments, option b) | 0.15 [0.08–0.28] Hz; period 6.7 [3.5–11.9] s; mean 0.29 ± 0.54 Hz (skewed → median); max 6.67 Hz to check in step 3 (may be a patched-neuron compartment) | `compartments` sheet; `step2_stats.py` |
+| **Largest hotspot per compartment (used in text / Fig. 1B)** | median 101 × 10³ µm² [IQR 54–163 × 10³], range 8.6–509 × 10³; ≥ 50 × 10³: 78 %, ≥ 100 × 10³: 51 %, ≥ 200 × 10³: 16 % of 631 compartments. Per active frame, the compartment's hotspot = the blob of the binary `_HOTSPOT_MASK.tif` with the largest overlap with its footprint, size = the whole blob; max over frames. Check: 0008 compartment 2 → 61,225 px = 108,844 µm² (frame 1104) | `output/test06/largest_hotspot.py` → `output/test06/largest_hotspot.xlsx` |
+| ~~Per-event coverage~~ (dropped from the text 2026-10-07: % of the compartment is not needed for the step-3 comparison, which is in µm²) | event = run of consecutive active frames (6,393 = `n_events`); all events 0.18 [0.06–0.43]; compartments with ≥ 1 event ≥ 80 %: 238 / 632 (leave-one-out 221 / 631) | `output/test06/event_coverage.py` → `output/test06/event_coverage.xlsx` |
+
+**Changed vs the old paragraph:**
+- All numbers refreshed (old ones were from saion job 4734460, old grouping); iAChSnFR (2 recordings) left out.
+- Compartment counts reported per recording (median [IQR]), not summed per slice / animal: recordings of one slice may image the same field again, so sums double-count.
+- "Often fills" → "single hotspots could be large" with the largest hotspot per compartment in µm² (same unit as the step-3 single-ChI hotspot).
+- "zones" → **compartments** (NR zones not in stats).
+- Removed "discrete" (compartments overlap) and "the striatum is divided into" (a step-5 claim).
+- Striatum coverage removed from the claim (descriptive only, 2026-10-07); can return as a plain number if wanted.
+- Added observation 2 (large single hotspots, µm²) and the bridge to step 3.
+- Fig. 1: "zones" → compartments, old example numbers (26 zones, coverage 0.64) → placeholders; coverage → per-event coverage in (B).
+
 ### Zone grouping (revised 2026-10-06, in the pipeline 2026-10-07)
 
 Tested in scratch (`output/test01/all_zones_circle.py`), then ported to `classes/sp_zone_analyzer.py` (identical to the scratch on `2025_06_11-0003` / `2025_12_15-0012`). Formal re-run of `results/spontaneous/` pending.
@@ -196,7 +233,7 @@ Numbers match `docs/continue_from_here.md`.
 |---|---|---|
 | 1b | MED back-check reliability: hit only if the segment's hotspot falls where the MED hotspot is | 3 |
 | 1c | Intrusion rate on non-aligned frames, evoked / spontaneous separately; compare with 1b | 3 |
-| 2 | Compartment size measure for the comparison: union area vs per-event median — pick one, justify | 3 |
+| 2 | ~~Compartment size measure for the comparison~~ → per-event vs per-event (2026-10-07): one ChI spike = one event, so compare with single compartment hotspots, not the union area | 3 |
 | 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 |
 | 4 | ~~Proximity distance is hand-set (115 px)~~ → resolved in the revised grouping (2026-10-06, scratch): circle rule for consecutive frames, proximity grouping removed | 2 |
 | 5 | ~~Trace-corr zones = same place?~~ → yes (2026-10-06): median distance between two hotspots in a group 15.5–27.7 px (≈ 21–37 µm), 7 recordings | 2 |
@@ -204,6 +241,19 @@ Numbers match `docs/continue_from_here.md`.
 | 9 | ~~Grouping 5 chaining (≥ 1 px)~~ → resolved by Rule B (2026-10-07): grouping-5 zones are NR zones, out of every stat | 2 |
 | 6 | Check Aosaki 1995: exact axon-arbor range and species before citing | 3 |
 | — | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion |
+| 11 | ABFClip: spontaneous / evoked spike frequency of the patched ChIs (`f_ChI`); compare compartment event rate with `f_ChI × R` | 2 → 3 |
+| 12 | Non-aligned analysis (= 1c) | 3 |
+| 13 | MED back-check + recalculate reliability (= 1b) | 3 |
+| 14 | Figure: most / intermediate / least reliable spike patterns (+ frames) | 3 |
+| 15 | Step 2 text: **chance level** for "recurring" (chance test vs trace correlation) — `[chance level: pending]` in the draft | 2 |
+| 16 | ~~Step 2 Fig. 1: pick the example recording for (A)~~ → `2025_06_11-0008` (2026-10-07; 8 compartments + 1 NR, 0.164 Hz, 3 compartments with a ≥ 80 % event; picked from 6 typical candidates, `output/test06/fig1_candidates.py`). Fig. 1 itself not made yet | 2 |
+| 17 | Step 2 Methods: revised grouping (Rule B), event = run of consecutive active frames, largest hotspot per compartment (blob with the largest footprint overlap); Vault Methods to-do 5 is still the old version | 2 |
+| 18 | Step 2 section title (not changed yet) | 2 |
+| 19 | 6.67 Hz compartment (period 0.15 s): check in step 3 — may be the compartment of a patched neuron | 2 / 3 |
+| 20 | Copy the step-2 Results text into the Vault draft (`PB_001_Paper draft.md`) when final | 2 |
+| 22 | Final Fig. 1 in `functions/plot_results.py` (with OK); z colorbar back on panel A | 2 |
+| 23 | Step 3 `area_comparison.py`, logic first: MED vs its own (matched) compartment; overlap matching instead of centroid < 50 px; ratio / effect size; MED vs largest hotspot per compartment (µm²); provisional until TODO 13 | 3 |
+| 21 | ~~Per-event coverage over-counts neighbours' hotspots~~ → dropped (2026-10-07): text / Fig. 1B now use the largest hotspot per compartment in µm² (blob with the largest footprint overlap). Remaining small caveat: a hotspot made of separate fragments counts only its biggest blob, and a neighbour's blob touching it would join it | 2 |
 
 ---
 

@@ -6,7 +6,8 @@ spontaneous_analysis.py  --  Spontaneous ACh hotspot -> zone analysis (10X, *_BI
           Coverage: union of all compartments (NR zones excluded) inside the striatum / striatum area
                     (striatum outline from the Striatum Boundary export bd_{date}_{serial}.json; NaN if none)
   Step 3. Export  : per recording {stem}_ZONES.xlsx + {stem}_ZONE_MAPS.tif (z-scored RGB stack: max projection
-                    + compartments + NR zones (light gray) + striatum outline, then one page per detection frame)
+                    + compartments + NR zones (light gray) + striatum outline, then one page per detection frame;
+                    frame pages rendered on a process pool, --map_workers)
                     + footprints/{stem}_ZONES.npz + mask/{stem}_HOTSPOT_MASK.tif (off with --no_mask)
   Step 4. Summary : spontaneous_summary.xlsx (one row per recording + pooled compartment table)
 
@@ -18,14 +19,21 @@ Usage:
     python spontaneous_analysis.py --proc_list data/proc_20260924_000.txt
         [--results_dir results] [--sigma 2.0] [--no_mask] [--all_obj] [--debug]
         [--stbd data/bd_20260924_000.json]  (default: bd_{date}_{serial}.json next to the proc list)
+        [--map_workers N]  (default: usable CPUs, max MAP_WORKERS_MAX; 1 = no pool)
 """
 
 ## Modules
 # Standard library imports
 import argparse
+import itertools
+import multiprocessing as mp
+import os
 import textwrap
 import time
+from collections import deque
 from collections.abc import Iterator
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import nullcontext
 from pathlib import Path
 
 # Third-party imports
@@ -68,6 +76,8 @@ MAP_DPI = 120
 MAP_Z_MIN = 1.0  # zone-map gray range starts at background peak + this many sigmas (black)
 MAP_TITLE_WIDTH = 100  # characters per title line before the compartment / NR zone list wraps
 NR_COLOR = (0.85, 0.85, 0.85)  # NR zones (NR1, NR2, ...) on the zone maps: light gray
+MAP_WORKERS_MAX = 16  # auto worker count for zone-map rendering = usable CPUs, capped here (--map_workers overrides)
+MAP_CHUNK_PAGES = 8  # frame pages per pool task (each task builds its own Figure once)
 
 
 # ===========================================================================
@@ -168,13 +178,80 @@ def _thr_text(analyzer: SpontaneousZoneAnalyzer) -> str:
             f"{analyzer.threshold:.3f}")
 
 
+# --- 3a. page rendering (serial / process pool) ----------------------------
+
+
+def map_workers_auto() -> int:
+    """CPUs this process may use (the SLURM allocation on Linux, not the whole node), capped at MAP_WORKERS_MAX."""
+    n_cpu = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
+    return max(1, min(n_cpu, MAP_WORKERS_MAX))
+
+
+def _render_pages(specs, ctx: dict) -> Iterator[np.ndarray]:
+    """Frame specs -> RGB pages, rendered on one reused Figure (frame_zone_figures).
+
+    spec = (raw float16 frame, hotspot footprints, NR flag per footprint, zone ids hit, title).
+    """
+    center, sigma, shape = ctx["center"], ctx["sigma"], ctx["shape"]
+
+    def inputs() -> Iterator[tuple]:
+        for frame_raw, footprints, nr_flags, frame_zone_ids, title in specs:
+            z_frame = img_zscore_convert(frame_raw.astype(np.float32), center, sigma)
+            hotspot_mask = np.zeros(shape, dtype=bool)
+            nr_hotspot_mask = np.zeros(shape, dtype=bool)  # hotspots of NR-zone units -> '////'
+            for fp, is_nr in zip(footprints, nr_flags, strict=True):
+                hotspot_mask[fp[:, 0], fp[:, 1]] = True
+                if is_nr:
+                    nr_hotspot_mask[fp[:, 0], fp[:, 1]] = True
+            yield z_frame, frame_zone_ids, hotspot_mask, nr_hotspot_mask, title
+
+    for fig in frame_zone_figures(inputs(), shape, ctx["masks"], ctx["centroids"], ctx["colors"],
+                                  ctx["vmin"], ctx["vmax"], ctx["um_per_px"]):
+        yield _figure_to_rgb(fig)  # one reused Figure: render before pulling the next page
+
+
+_worker_state: dict = {}  # per pool worker: {"key", "feed", "pages"} -- one Figure kept across chunks of a recording
+
+
+def _render_chunk(specs: list[tuple], ctx: dict) -> list[np.ndarray]:
+    """Process-pool task: one chunk of frame specs -> its RGB pages.
+
+    The worker's page generator (and its Figure, ~0.3 s to build) lives on between chunks of the same recording
+    (ctx["key"]); each next() pulls exactly one spec from the feed, so the feed never runs dry.
+    """
+    if _worker_state.get("key") != ctx["key"]:
+        feed: deque = deque()
+        _worker_state.update(key=ctx["key"], feed=feed, pages=_render_pages(iter(feed.popleft, None), ctx))
+    _worker_state["feed"].extend(specs)
+    return [next(_worker_state["pages"]) for _ in specs]
+
+
+def _render_pages_parallel(specs, ctx: dict, pool: ProcessPoolExecutor, n_workers: int) -> Iterator[np.ndarray]:
+    """Like _render_pages, but MAP_CHUNK_PAGES-page chunks on the pool; pages come back in frame order.
+
+    At most 2 chunks per worker are in flight, so finished-but-unwritten pages stay bounded in memory.
+    """
+    pending: deque = deque()
+    for chunk in itertools.batched(specs, MAP_CHUNK_PAGES):
+        pending.append(pool.submit(_render_chunk, list(chunk), ctx))
+        if len(pending) >= 2 * n_workers:
+            yield from pending.popleft().result()
+    while pending:
+        yield from pending.popleft().result()
+
+
+# --- 3b. TIFF stack ---------------------------------------------------------
+
+
 def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path: Path,
-                     striatum_outline: np.ndarray | None = None, axis_labels: tuple[str, str] | None = None) -> int:
+                     striatum_outline: np.ndarray | None = None, axis_labels: tuple[str, str] | None = None,
+                     pool: ProcessPoolExecutor | None = None, n_workers: int = 1) -> int:
     """Write one RGB TIFF stack: page 1 = max projection + all zones, then one page per detection frame.
 
     All zones = compartments (1, 2, ...) + NR zones (NR1, NR2, ...; light gray, for reference, not in stats).
     Every page is z-scored against the fitted background and shares one gray range: z = MAP_Z_MIN
     -> median of the detections' max z, so single bright specks can't stretch it. Returns page count.
+    pool: frame pages rendered on its n_workers processes (same pixels); None -> in this process.
     """
     stack = analyzer.stack_f16
     center, sigma = analyzer.bg_center, analyzer.bg_sigma
@@ -200,17 +277,11 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
         img_zscore_convert(max_proj.astype(np.float32), center, sigma), map_masks, map_centroids, colors, vmin,
         vmax, overview_title, analyzer.um_per_px, striatum_outline, axis_labels))
 
-    def frame_inputs() -> Iterator[tuple]:
+    def frame_specs() -> Iterator[tuple]:
         for frame in frames:
-            z_frame = img_zscore_convert(stack[frame - 1].astype(np.float32), center, sigma)
             rows = np.flatnonzero(det_frames == frame)
-            hotspot_mask = np.zeros(z_frame.shape, dtype=bool)
-            nr_hotspot_mask = np.zeros(z_frame.shape, dtype=bool)  # hotspots of NR-zone units -> '////'
-            for i in rows:
-                fp = analyzer.footprints[i]
-                hotspot_mask[fp[:, 0], fp[:, 1]] = True
-                if det["joint_label"].iloc[i] in nr_labels:
-                    nr_hotspot_mask[fp[:, 0], fp[:, 1]] = True
+            footprints = [analyzer.footprints[i] for i in rows]
+            nr_flags = [det["joint_label"].iloc[i] in nr_labels for i in rows]
             hit = {label_to_zone[label] for label in det["joint_label"].iloc[rows]
                    if label in label_to_zone}  # hotspots of dropped units have no zone
             frame_zone_ids = [z for z in map_masks if z in hit]  # map order: compartments, then NR zones
@@ -220,13 +291,18 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
             title = (f"frame {frame} ({frame / analyzer.fps:.2f} s) | {thr_text} | "
                      f"max z = {det_max_z[rows].max():.2f}\n"
                      + textwrap.fill(zones_text, MAP_TITLE_WIDTH))
-            yield z_frame, frame_zone_ids, hotspot_mask, nr_hotspot_mask, title
+            yield stack[frame - 1], footprints, nr_flags, frame_zone_ids, title
+
+    ctx = {"key": (str(out_path), time.time_ns()),  # one export call -> pool workers rebuild their Figure once
+           "center": center, "sigma": sigma, "shape": max_proj.shape, "masks": map_masks, "centroids": map_centroids,
+           "colors": colors, "vmin": vmin, "vmax": vmax, "um_per_px": analyzer.um_per_px}
 
     def frame_pages() -> Iterator[np.ndarray]:
         yield first
-        for fig in frame_zone_figures(frame_inputs(), max_proj.shape, map_masks, map_centroids,
-                                      colors, vmin, vmax, analyzer.um_per_px):
-            yield _figure_to_rgb(fig)  # one reused Figure: render before pulling the next page
+        if pool is None:
+            yield from _render_pages(frame_specs(), ctx)
+        else:
+            yield from _render_pages_parallel(frame_specs(), ctx, pool, n_workers)
 
     n_pages = 1 + frames.size
     tifffile.imwrite(out_path, frame_pages(), shape=(n_pages, *first.shape), dtype=np.uint8, photometric="rgb",
@@ -243,12 +319,28 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
 def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = CROSSOVER_RATIO,
         save_mask: bool = True, all_obj: bool = False, debug: bool = False, cuda_available: bool = False,
         db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db"),
-        stbd_path: Path | None = None) -> None:
+        stbd_path: Path | None = None, map_workers: int | None = None) -> None:
     """Run the spontaneous zone analysis for every selected recording in a proc list.
 
     stbd_path: Striatum Boundary export; None -> bd_{date}_{serial}.json next to the proc list.
+    map_workers: processes rendering the zone-map pages; None -> map_workers_auto(), 1 -> in this process.
     """
     run_t0 = time.time()
+    n_workers = map_workers or map_workers_auto()
+    console.log(f"zone-map rendering: {n_workers} worker(s)")
+    # one pool for the whole run ('spawn': same on Linux / Windows, no fork of the numba / CUDA state)
+    pool_ctx = (ProcessPoolExecutor(n_workers, mp_context=mp.get_context("spawn")) if n_workers > 1
+                else nullcontext())
+    with pool_ctx as pool:
+        _run_recordings(proc_list_path, results_dir, sigma, save_mask, all_obj, debug, cuda_available, db_path,
+                        exp_db_path, stbd_path, pool, n_workers)
+    console.rule(f"[dim]Total time: {time.time() - run_t0:.1f}s")
+
+
+def _run_recordings(proc_list_path: Path, results_dir: Path, sigma: float, save_mask: bool, all_obj: bool, debug: bool,
+                    cuda_available: bool, db_path: Path, exp_db_path: Path, stbd_path: Path | None,
+                    pool: ProcessPoolExecutor | None, n_workers: int) -> None:
+    """Steps 1-4 of run() (pool: zone-map renderer, None -> in this process)."""
     out_root = results_dir / "spontaneous"
     out_root.mkdir(parents=True, exist_ok=True)
 
@@ -299,7 +391,8 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             paths = analyzer.save(out_root, stem, save_mask=save_mask, debug=debug)
         map_path = out_root / f"{stem}_ZONE_MAPS.tif"
         with timed("export zone-map TIFF"):
-            n_pages = export_zone_maps(analyzer, f"{stem}, {row['SENSOR']}", map_path, striatum_outline, axis_labels)
+            n_pages = export_zone_maps(analyzer, f"{stem}, {row['SENSOR']}", map_path, striatum_outline, axis_labels,
+                                       pool, n_workers)
         for path in paths.values():
             console.log(f"[green]saved[/green] {path.resolve()}")
         console.log(f"[green]saved[/green] {n_pages}-page zone-map TIFF ({map_path.stat().st_size / 1e6:.1f} MB) "
@@ -346,8 +439,6 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             pooled.to_excel(writer, sheet_name="compartments", index=False)
         console.log(f"[green]saved[/green] {summary_path.resolve()}")
 
-    console.rule(f"[dim]Total time: {time.time() - run_t0:.1f}s")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Spontaneous ACh hotspot -> zone analysis")
@@ -363,9 +454,12 @@ if __name__ == "__main__":
     parser.add_argument("--exp_db", type=Path, default=Path("data/exp_info.db"), help="Path to exp_info.db")
     parser.add_argument("--stbd", type=Path, default=None,
                         help="Striatum Boundary export (default: bd_{date}_{serial}.json next to the proc list)")
+    parser.add_argument("--map_workers", type=int, default=None,
+                        help=f"Processes rendering the zone-map pages (default: usable CPUs, max {MAP_WORKERS_MAX}; "
+                             "1 = no pool)")
     args = parser.parse_args()
 
     _cuda_available, _cuda_msg = check_cuda()  # must run before anything imports numba
     console.log(_cuda_msg)
     run(args.proc_list, args.results_dir, args.sigma, not args.no_mask, args.all_obj,
-        args.debug, _cuda_available, args.db, args.exp_db, args.stbd)
+        args.debug, _cuda_available, args.db, args.exp_db, args.stbd, args.map_workers)
