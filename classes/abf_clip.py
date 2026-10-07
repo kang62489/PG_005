@@ -3,7 +3,7 @@ Spike detection in the paired ABF and clipping into per-spike image / Vm segment
 
   Step 1. Load   : read the ABF; recording window = TTL (channel 3) rising -> falling edge;
                    current pulses on channel 1 inside the window -> hotspot_origin estim_induced / spontaneous
-  Step 2. Detect : find_peaks on Vm -> spike times / values
+  Step 2. Detect : find_peaks on Vm -> spike times / values; firing rate = spikes / TTL window
   Step 3. Window : collapse same-frame spikes, set_interval_frames = KEEP_FRACTION_QUANTILE margin -> pick / skip
   Step 4. Clip   : image frame range + ABF sample range per picked spike
   Step 5. Export : spike-detection PNG (spikes/), get_export_data(), get_vm_segments()
@@ -53,7 +53,7 @@ class AbfClip:
 
     Results after construction:
         hotspot_origin                                                (step 1)
-        peak_indices, num_found_spikes                                (step 2)
+        peak_indices, num_found_spikes, rec_window_s, spike_rate_hz   (step 2)
         set_interval_frames, df_picked_spikes, df_skipped_spikes,
         df_collapsed_peaks                                            (step 3)
         lst_img_frame_ranges, lst_abf_sample_ranges                   (step 4)
@@ -140,11 +140,13 @@ class AbfClip:
             self.Vm, distance=spike_min_distance, prominence=spike_min_prominence
         )
         self.num_found_spikes = len(self.peak_indices)
+        self.rec_window_s: float = (self.abf_idx_tend - self.abf_idx_tstart) / self.abf_fs  # TTL window = imaging period
+        self.spike_rate_hz: float = self.num_found_spikes / self.rec_window_s
 
         console.log(f"Membrane Potential Sampling Rate: {self.abf_fs} Hz")
         console.log(f"Start index: {self.abf_idx_tstart}, Start time: {self.abf_time[self.abf_idx_tstart]}")
         console.log(f"End index: {self.abf_idx_tend}, End time: {self.abf_time[self.abf_idx_tend]}")
-        console.log(f"Found {self.num_found_spikes} peaks")
+        console.log(f"Found {self.num_found_spikes} peaks in {self.rec_window_s:.1f} s ({self.spike_rate_hz:.3f} Hz)")
         console.log(f"Hotspot origin: {self.hotspot_origin}")
 
         self.df_Vm = pl.DataFrame({"Time": self.rec_time, "Vm": self.Vm})
@@ -387,7 +389,7 @@ class AbfClip:
         console.log(f"[green]Saved spike detection plot -> {stem}.png[/green]")
 
     def get_export_data(self) -> dict:
-        """exp_date, file paths, serials, spike counts and hotspot_origin for ResultsExporter."""
+        """exp_date, file paths, serials, spike counts, firing rate and hotspot_origin for ResultsExporter."""
         return {
             "exp_date": self.exp_date,
             "tiff_full_path": self.proc_tiff_path,
@@ -396,6 +398,8 @@ class AbfClip:
             "img_serial": self.img_serial,
             "num_found_spikes": self.num_found_spikes,
             "n_spikes_analyzed": len(self.df_picked_spikes),
+            "rec_window_s": self.rec_window_s,
+            "spike_rate_hz": self.spike_rate_hz,
             "hotspot_origin": self.hotspot_origin,
         }
 

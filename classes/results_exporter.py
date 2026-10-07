@@ -182,6 +182,8 @@ class ResultsExporter:
                 "flow_aniso_pct": "REAL",      # 100 * anisotropic / n_flow_labelled (NULL if 0)
                 "flow_srcsink_pct": "REAL",    # 100 * (source + sink) / n_flow_labelled (NULL if 0)
                 "hotspot_origin": "TEXT",      # estim_induced (current pulses on ABF CH2) / spontaneous
+                "rec_window_s": "REAL",        # TTL window (imaging period), s
+                "spike_rate_hz": "REAL",       # n_spikes_detected / rec_window_s (f_ChI)
             },
         )
         conn.execute("""
@@ -256,6 +258,8 @@ class ResultsExporter:
         lasting_time_ms: float | None,
         significant: bool = True,
         hotspot_origin: str | None = None,
+        rec_window_s: float | None = None,
+        spike_rate_hz: float | None = None,
     ) -> dict[str, Path]:
         """
         Export all results and update database.
@@ -287,6 +291,8 @@ class ResultsExporter:
             lasting_time_ms: Decay time constant, from RegionAnalyzer.get_lasting_time_ms()
             significant: When False, skips MED/CAT TIFF writes (no ACh detected).
             hotspot_origin: "estim_induced" / "spontaneous" from AbfClip (None if the ABF has no CH2)
+            rec_window_s: TTL window (imaging period) in s, from AbfClip
+            spike_rate_hz: num_found_spikes / rec_window_s, from AbfClip
 
         Returns:
             dict with keys "median", "categorized" → Path to each subfolder
@@ -329,6 +335,8 @@ class ResultsExporter:
             lasting_time_ms=lasting_time_ms,
             med_filename=f"{med_stem}.tif",
             hotspot_origin=hotspot_origin,
+            rec_window_s=rec_window_s,
+            spike_rate_hz=spike_rate_hz,
         )
 
         return dirs
@@ -448,6 +456,8 @@ class ResultsExporter:
         lasting_time_ms: float | None,
         med_filename: str,
         hotspot_origin: str | None,
+        rec_window_s: float | None,
+        spike_rate_hz: float | None,
     ) -> None:
         """Insert or update experiment record in SQLite."""
         clusters = region_data["clusters"]
@@ -487,8 +497,9 @@ class ResultsExporter:
                 decay_peak_offset, decay_fit_r2, lasting_time_ms,
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um,
-                intensity_min, intensity_max, hotspot_origin
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                intensity_min, intensity_max, hotspot_origin,
+                rec_window_s, spike_rate_hz
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 exp_date,
@@ -526,6 +537,8 @@ class ResultsExporter:
                 intensity_range[0],
                 intensity_range[1],
                 hotspot_origin,
+                rec_window_s,
+                spike_rate_hz,
             ),
         )
         conn.commit()

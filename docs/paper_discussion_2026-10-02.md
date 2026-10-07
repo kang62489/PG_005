@@ -168,12 +168,28 @@ Tested in scratch (`output/test01/all_zones_circle.py`), then ported to `classes
 
 > Each compartment is a unit of cholinergic influence. Because these compartments may relate to neural functions, it matters what drives them: whether a single ChI is sufficient, or coordinated activity of several ChIs is required. A single ChI's axon arbor innervates a large area (Aosaki 1995), so one cell could, in principle, supply a whole compartment.
 
-**Draft logic:**
-1. We patch one ChI and record its spikes while imaging ACh.
-2. We align the imaging to its spikes → the hotspot that follows one spike.
-3. We check that the hotspot belongs to this cell: it appears at the same place after spikes more often than by chance.
-4. We compare its size with the hotspots of compartments, for evoked and spontaneous spikes separately.
-5. If comparable, one ChI **can** supply a compartment-sized area.
+**Draft logic (revised 2026-10-07):**
+1. We patch one ChI and record its spikes while imaging ACh. Spikes are evoked or spontaneous, and we record its firing rate for each.
+2. We align the imaging to its spikes and take the median over spikes (MED) → the hotspot that typically follows one successful spike.
+3. **Attribution:** a spike counts as successful only if its hotspot appears at the MED location (reliability). This happens more often than a hotspot appears there by chance on non-aligned frames (intrusion rate) → the hotspot is locked to this cell's spikes.
+4. **Size:** we compare the MED area with the largest hotspot of each *other* compartment in the same slice, for evoked and spontaneous spikes separately. Conservative: a typical single-spike hotspot vs each compartment's biggest event.
+5. If the size is comparable, one ChI **can** supply a compartment-sized area.
+
+*Moved to Discussion (2026-10-07):* rate — event rate of the compartment the MED sits on vs the cell's firing rate × reliability (uses the MED's own compartment, unlike the size test).
+
+**Results text (skeleton, numbers pending):**
+
+> **One ChI can supply a compartment-sized area.**
+> We patched [n] ChIs in [n] slices and imaged ACh while they fired spontaneously ([f] Hz) or were evoked ([f] Hz).
+> The hotspot that followed a spike appeared at the same place in [R] % of spikes, above the [chance] % expected from non-aligned frames, so it is locked to the patched cell.
+> The single-spike hotspot covered [area] µm², compared with [area] µm² for the largest hotspot of the other compartments in the same slice (evoked: […]; spontaneous: […]).
+> [Evoked / spontaneous share of the recordings (TODO 24) — where to state it is decided with reliability / intrusion rate.]
+
+**Decided 2026-10-07:**
+- **Size comparison = other compartments of the same recording** (option b), not the compartment the MED sits on, not all recordings pooled. Replaces the old Group C (unmatched compartments, median per-frame area).
+- **Measure = largest hotspot per compartment (µm²)**, as in step 2 Fig. 1B; typical vs extreme is stated as conservative.
+- **Two-pass MED:** MED of all segments → MED location → back-check → MED of hits only = final MED. The current code builds the MED from segments with a hotspot *anywhere* (`ach_domain_analysis.py`, Step 3), so the area changes after the fix → rerun before comparing.
+- Plan: `.claude/plans/2026-10-07_step3_plan.md` (phases: f_ChI → back-check → non-aligned → rerun → `area_comparison.py` → figure + text).
 
 **Agreed:**
 - **"Influence", not "modulation"** (release ≠ modulation). Matches the title "a broad domain of local influence".
@@ -243,7 +259,8 @@ Numbers match `docs/continue_from_here.md`.
 | — | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion |
 | 11 | ABFClip: spontaneous / evoked spike frequency of the patched ChIs (`f_ChI`); compare compartment event rate with `f_ChI × R` | 2 → 3 |
 | 12 | Non-aligned analysis (= 1c) | 3 |
-| 13 | MED back-check + recalculate reliability (= 1b) | 3 |
+| 13 | MED back-check + recalculate reliability (= 1b); two-pass MED (all segments → location → hits only = final MED) | 3 |
+| 24 | Share of recordings that are evoked vs spontaneous (`hotspot_origin`): (a) all patched recordings, every objective + (c) 10X recordings with a MED; for later use with reliability and intrusion rate | 3 |
 | 14 | Figure: most / intermediate / least reliable spike patterns (+ frames) | 3 |
 | 15 | Step 2 text: **chance level** for "recurring" (chance test vs trace correlation) — `[chance level: pending]` in the draft | 2 |
 | 16 | ~~Step 2 Fig. 1: pick the example recording for (A)~~ → `2025_06_11-0008` (2026-10-07; 8 compartments + 1 NR, 0.164 Hz, 3 compartments with a ≥ 80 % event; picked from 6 typical candidates, `output/test06/fig1_candidates.py`). Fig. 1 itself not made yet | 2 |
@@ -252,7 +269,7 @@ Numbers match `docs/continue_from_here.md`.
 | 19 | 6.67 Hz compartment (period 0.15 s): check in step 3 — may be the compartment of a patched neuron | 2 / 3 |
 | 20 | Copy the step-2 Results text into the Vault draft (`PB_001_Paper draft.md`) when final | 2 |
 | 22 | Final Fig. 1 in `functions/plot_results.py` (with OK); z colorbar back on panel A | 2 |
-| 23 | Step 3 `area_comparison.py`, logic first: MED vs its own (matched) compartment; overlap matching instead of centroid < 50 px; ratio / effect size; MED vs largest hotspot per compartment (µm²); provisional until TODO 13 | 3 |
+| 23 | Step 3 `area_comparison.py`: ~~MED vs its own (matched) compartment~~ → logic decided 2026-10-07: MED vs largest hotspot (µm²) of the **other** compartments in the same recording; after TODOs 13 / 12 and the `ach_domain_analysis` rerun. Plan: `.claude/plans/2026-10-07_step3_plan.md` (phase 5) | 3 |
 | 21 | ~~Per-event coverage over-counts neighbours' hotspots~~ → dropped (2026-10-07): text / Fig. 1B now use the largest hotspot per compartment in µm² (blob with the largest footprint overlap). Remaining small caveat: a hotspot made of separate fragments counts only its biggest blob, and a neighbour's blob touching it would join it | 2 |
 
 ---

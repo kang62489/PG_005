@@ -426,6 +426,8 @@ def analyze_entry(
         lasting_time_ms=lasting_time_ms,
         significant=final_significant,
         hotspot_origin=export_data["hotspot_origin"],
+        rec_window_s=export_data["rec_window_s"],
+        spike_rate_hz=export_data["spike_rate_hz"],
         reliability_pct=reliability_pct,
         n_segments_detected=n_detected,
         n_segments_total=n_total,

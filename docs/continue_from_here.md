@@ -17,11 +17,12 @@ Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion
 | 10 | Statistics for the paper: which numbers each story step needs (step 2 compartments, step 3 size comparison) -- decide before the formal `area_comparison.py` run | 2 / 3 | [~] 2026-10-07 logic agreed: step 2 = compartments with recurring hotspots + some single hotspots fill almost the whole compartment (per-event coverage = hotspot ∩ compartment ÷ compartment area) → "can one ChI drive a hotspot that big?" → step 3 = patched ChI spike hotspot vs single compartment hotspots (TODO 2). Area yardsticks kept: ChI spike hotspot, axon arbor (TODO 6), ChI density, size spread -- but red-channel 10X FOVs show **several ChIs in every compartment** (so not "one ChI = one compartment"). Striatum coverage = descriptive only. Open: chance level (chance test vs trace correlation). **Step 2 done 2026-10-07** (text + numbers + Fig. 1 draft in `paper_discussion_2026-10-02.md`; "fill" → largest hotspot per compartment in µm²); step 3 statistics next |
 | 11 | ABFClip: spontaneous and evoked spike frequency of the patched ChIs → `f_ChI`; then compare compartment frequency with `f_ChI × R` (R = reliability, TODO 13): ≈ one ChI could drive a compartment, ≫ several ChIs, ≪ missed spikes / lower firing | 2 → 3 | [ ] |
 | 12 | Non-aligned analysis (= old 1c): hotspot intrusion rate on frames not aligned to a spike, evoked / spontaneous separately -- the chance baseline for reliability | 3 | [ ] |
-| 13 | MED back-check (= old 1b) and recalculate reliability: a segment counts as a hit only if its hotspot is where the MED hotspot is | 3 | [ ] |
+| 13 | MED back-check (= old 1b) and recalculate reliability: a segment counts as a hit only if its hotspot is where the MED hotspot is. Two-pass MED (2026-10-07): MED of all segments → location → back-check → MED of hits only = final MED (current MED uses segments with a hotspot *anywhere*, so its area changes) | 3 | [ ] plan phase 2 |
 | 14 | Figure: most / intermediate / least reliable spike patterns (Vm), maybe with their frames | 3 | [ ] |
+| 24 | Share of recordings that are evoked vs spontaneous (`experiments.hotspot_origin`), scope (2026-10-07): (a) all patched recordings, every objective + (c) 10X recordings with a MED -- for later use with reliability (TODO 13) and intrusion rate (TODO 12) | 3 | [ ] plan phase 5 (added 2026-10-07) |
 | 15–20 | Step 2 leftovers -- listed in `paper_discussion_2026-10-02.md` Open TODOs: 15 chance level, 17 Methods text, 18 section title, 19 6.67 Hz compartment (check in step 3), 20 copy text to the Vault draft (16 Fig. 1 example done: `2025_06_11-0008`) | 2 | [ ] |
 | 22 | Final Fig. 1: port the scratch draft (`output/test06/fig1_draft.py` → `docs/figures/fig1_step2_draft.png`) into `functions/plot_results.py` (only with Kang's OK); add the z colorbar back to panel A | 2 | [ ] |
-| 23 | Step 3 `area_comparison.py`, logic first: main comparison = MED vs its own (matched) compartment; matching by overlap instead of centroid < 50 px; ratio / effect size instead of Mann-Whitney only; compare MED with the largest hotspot per compartment (µm², as in step 2); results provisional until TODO 13 | 3 | [ ] next |
+| 23 | Step 3 `area_comparison.py`: logic decided 2026-10-07 -- MED vs largest hotspot (µm²) of the **other** compartments in the same recording (option b; conservative: typical vs extreme); old Group C replaced. Runs after TODOs 13 / 12 and the `ach_domain_analysis` rerun. Plan: `.claude/plans/2026-10-07_step3_plan.md` (phases 1 f_ChI → 2 back-check → 3 non-aligned → 4 rerun → 5 area_comparison → 6 figure + text) | 3 | [~] logic done; phase 1 next |
 | 9 | Grouping 5 chains by ≥ 1 px (0003: one zone of 7 units across the field) -- keep or stricter rule? Minor, accepted for now | 2 | [x] 2026-10-07: resolved by Rule B -- step-5 zones are non-recurring (NR) zones, not compartments, out of every stat; chaining only changes how NR zones look on the map |
 | 6 | Check Aosaki 1995: exact CIN axon-arbor range and species before citing it in the step-3 bridge | 3 | [ ] |
 | 7 | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion | [ ] |
@@ -82,6 +83,46 @@ Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-
 | - | Stats out of the ana list -> sheets in `{ana_list}_cells.xlsx` (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped); ana list never written | extra | [x] 2026-09-27 |
 | Q | Area comparison (8): `area_comparison.py` -- MED larger spike/spike+1 size + centroid + origin; per-zone median per-frame size + centroid from `results/spontaneous/`; MED -> nearest zone < 50 px (150 px "natural zone" filter dropped) | 6 | [x] Session 78: + `matched_med`, `pct_zones_smaller`, Zone events sheet, Groups (A / B / C) + Mann-Whitney A-C / B-C / A-B; tested on `output/test01/phase6/`, neat-refactored. Session 79: formal run done (`results/area_comparison.xlsx`, 0 % reliability filter added) |
 | R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | dropped 2026-10-05 |
+
+---
+
+# Log of the project progress 2026-10-07 Wed (Session 87)
+Last working file: `classes/results_exporter.py` / `ach_domain_analysis.py` (phase 1, `rec_window_s` / `spike_rate_hz`)
+Last working line: `ach_domain_analysis.py` ~line 429 (`export_all(...)` call)
+Not committed yet (Kang commits).
+
+> [!important] Jeff's advice (2026-10-07, after the session) -- start here next time
+> Start with a **very simple description of the data + very simple histograms** first. The current analysis and description are too deep at the beginning and hard for readers to follow. Revisit the story steps / step-3 plan with this in mind before continuing phase 2.
+
+## List of modified files
+- `classes/abf_clip.py` -- step 2: `rec_window_s` (TTL window `data[3]`, first ≥ 2.0 V → last ≥ 0.8 V = imaging period) and `spike_rate_hz` (= `num_found_spikes / rec_window_s`); both in `get_export_data()` and the log line
+- `classes/results_exporter.py` -- `experiments` columns `rec_window_s`, `spike_rate_hz` (`_ensure_columns`), `export_all()` / `_upsert_record()` params + INSERT
+- `ach_domain_analysis.py` -- passes the two values to `export_all()`
+- `.claude/plans/2026-10-07_step3_plan.md` (new) -- step-3 decisions + phases 1–6
+- `docs/paper_discussion_2026-10-02.md` -- Step 3: revised 5-point logic, Results skeleton, "Decided 2026-10-07", rate point → Discussion; Open TODOs 13, 23, 24
+- `docs/continue_from_here.md` -- TODOs 13, 23, 24; this log
+- Scratch (not tracked): `output/test07/` (`db_peek.py`, `f_chi_example.py`, `pulse_patterns.py`, `distance_cap.py`, `ana_test07.txt`, `check_db.py`, `results/`)
+
+## Summary of current progress
+- Step 3 logic decided: MED vs **largest hotspot of the other compartments** in the same recording (option b), stated as conservative (typical vs extreme); two-pass MED (all segments → location → back-check → hits only); rate comparison → Discussion.
+- TODO 24 added: evoked / spontaneous share, scope (a) all patched recordings + (c) 10X with a MED.
+- Evoked rule (Kang): pulse train on CH2 → evoked; current code already does this. Note: `2025_06_11-0010` / `-0011` have only 3 × 2-ms pulses (10 / 30 / 50 s) and ≤ 1 locked spike, but stay "evoked" by this rule.
+- find_peaks 300 ms min distance: negligible (0003: 100 vs 101 spikes).
+- **Phase 1 done + verified** (`output/test07/results/results.db`): 0003 → 1.665 Hz, 0011 → 0.616 Hz; all other columns identical to `results/results.db`. Ruff clean. Formal values come with the phase-4 rerun.
+
+## Completed TODOs/Tasks
+- ✅ Step 3 logic + plan (`.claude/plans/2026-10-07_step3_plan.md`)
+- ✅ Phase 1 / TODO 11 data part: `f_ChI` in the pipeline
+
+## What should we do next? (TODOs)
+1. **Jeff's advice first:** simple data description + simple histograms; decide how this changes the step order / plan.
+2. **Kang: clean `output/` by hand** (my deletion was blocked by the auto-mode safety check): `test02`–`test05` and `results_20260928`, `results_20260928_2` approved for deletion; also decide on the loose `output/scratch_*.py` files. Keep `iAChSnFR_2P`, `test01`, `test06`, `test07`.
+3. Phase 2 (TODO 13): MED back-check + two-pass MED (restate with a real recording first).
+4. Neat-refactor `abf_clip.py`, `results_exporter.py`, `ach_domain_analysis.py` after phase 2.
+5. Commit phase 1 + docs + plan.
+
+## Last Session Recap
+※ recap: Fixed step-3 logic (MED vs largest hotspot of other compartments, two-pass MED) and added f_ChI (`rec_window_s`, `spike_rate_hz`) to the pipeline, verified. Pending: Jeff's "simple description + histograms first", output/ cleanup by hand, phase 2, commit.
 
 ---
 
