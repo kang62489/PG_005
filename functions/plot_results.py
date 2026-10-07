@@ -954,7 +954,7 @@ def plot_med_kymographs(med: np.ndarray, um_per_pixel, frame_ms, title) -> Figur
 # --- 6a. zone maps (-> spontaneous/{stem}_ZONE_MAPS.tif) -------------------
 
 
-def _label_zone(ax: mpl.axes.Axes, zone_id: int, centroid: tuple[float, float]) -> mpl.text.Text:
+def _label_zone(ax: mpl.axes.Axes, zone_id: int | str, centroid: tuple[float, float]) -> mpl.text.Text:
     """Zone id in a black circle at the zone centroid (row, col)."""
     cy, cx = centroid
     return ax.text(cx, cy, str(zone_id), color="white", fontsize=9, fontweight="bold",
@@ -979,12 +979,14 @@ def _z_page(z_image: np.ndarray, vmin: float, vmax: float, title: str, um_per_px
     return fig, ax
 
 
-def plot_zone_overview(z_image: np.ndarray, zone_masks: dict[int, np.ndarray],
-                       zone_centroids: dict[int, tuple[float, float]], colors: dict[int, tuple], vmin: float,
-                       vmax: float, title: str, um_per_px: float, striatum_outline: np.ndarray | None = None,
+def plot_zone_overview(z_image: np.ndarray, zone_masks: dict[int | str, np.ndarray],
+                       zone_centroids: dict[int | str, tuple[float, float]], colors: dict[int | str, tuple],
+                       vmin: float, vmax: float, title: str, um_per_px: float,
+                       striatum_outline: np.ndarray | None = None,
                        axis_labels: tuple[str, str] | None = None) -> Figure:
     """All zones as translucent fills (largest painted first so small zones stay on top) over the z image.
 
+    Zone ids may mix ints (compartments) and strings ("NR1"), so zones are drawn / labelled in dict order.
     striatum_outline: closed (N, 2) x / y polygon from the Striatum Boundary export, drawn white dashed.
     axis_labels: (x, y) anatomical direction labels; shown without ticks or frame.
     """
@@ -1007,32 +1009,34 @@ def plot_zone_overview(z_image: np.ndarray, zone_masks: dict[int, np.ndarray],
             spine.set_visible(False)
         ax.set_xlabel(axis_labels[0], fontsize=12)
         ax.set_ylabel(axis_labels[1], fontsize=12)
-    for zone_id in sorted(zone_masks):
+    for zone_id in zone_masks:
         if zone_id in zone_centroids:
             _label_zone(ax, zone_id, zone_centroids[zone_id])
     return fig
 
 
-def frame_zone_figures(pages, shape: tuple[int, int],
-                       zone_masks: dict[int, np.ndarray], zone_centroids: dict[int, tuple[float, float]],
-                       colors: dict[int, tuple], vmin: float, vmax: float, um_per_px: float) -> Iterator[Figure]:
-    """One frame per page: contours of the zones hit in this frame + thin white outline of the frame's own hotspots.
+def frame_zone_figures(pages, shape: tuple[int, int], zone_masks: dict[int | str, np.ndarray],
+                       zone_centroids: dict[int | str, tuple[float, float]], colors: dict[int | str, tuple],
+                       vmin: float, vmax: float, um_per_px: float) -> Iterator[Figure]:
+    """One frame per page: contours of the zones hit in this frame + thin white outline of the frame's hotspots
+    (those in hatch_mask, e.g. non-recurring units, also shaded white '////').
 
-    pages: (z_frame, frame_zone_ids, hotspot_mask, title) per frame. Yields the SAME Figure, updated per page --
-    render it before pulling the next one. Figure, colorbar and zone contours / labels are built once.
+    pages: (z_frame, frame_zone_ids, hotspot_mask, hatch_mask, title) per frame. Yields the SAME Figure, updated per
+    page -- render it before pulling the next one. Figure, colorbar and zone contours / labels are built once.
     """
     fig, ax = _z_page(np.zeros(shape, dtype=np.float32), vmin, vmax, "", um_per_px)
     image = ax.images[0]
     zone_artists = {}
-    for zone_id in sorted(zone_masks):
-        artists = [ax.contour(zone_masks[zone_id].astype(float), levels=[0.5], colors=[colors[zone_id]], linewidths=2.5)]
+    for zone_id in zone_masks:  # dict order (ids may mix ints and "NR1" strings)
+        artists = [ax.contour(zone_masks[zone_id].astype(float), levels=[0.5], colors=[colors[zone_id]],
+                              linewidths=2.5)]
         if zone_id in zone_centroids:
             artists.append(_label_zone(ax, zone_id, zone_centroids[zone_id]))
         for artist in artists:
             artist.set_visible(False)
         zone_artists[zone_id] = artists
 
-    for z_frame, frame_zone_ids, hotspot_mask, title in pages:
+    for z_frame, frame_zone_ids, hotspot_mask, hatch_mask, title in pages:
         image.set_data(z_frame)
         ax.set_title(title)
         for zone_id, artists in zone_artists.items():
@@ -1041,10 +1045,16 @@ def frame_zone_figures(pages, shape: tuple[int, int],
         rows, cols = np.nonzero(hotspot_mask)  # contour only the hotspots' bounding box (+1 px) -> same outline
         r0, r1 = max(rows.min() - 1, 0), min(rows.max() + 2, shape[0])
         c0, c1 = max(cols.min() - 1, 0), min(cols.max() + 2, shape[1])
-        hotspots = ax.contour(np.arange(c0, c1), np.arange(r0, r1), hotspot_mask[r0:r1, c0:c1].astype(float),
-                              levels=[0.5], colors="white", linewidths=1)
+        xs, ys = np.arange(c0, c1), np.arange(r0, r1)
+        drawn = [ax.contour(xs, ys, hotspot_mask[r0:r1, c0:c1].astype(float), levels=[0.5], colors="white",
+                            linewidths=1)]
+        if hatch_mask.any():
+            with mpl.rc_context({"hatch.color": "white"}):
+                drawn.append(ax.contourf(xs, ys, hatch_mask[r0:r1, c0:c1].astype(float), levels=[0.5, 1.5],
+                                         colors="none", hatches=["////"]))
         yield fig
-        hotspots.remove()
+        for artist in drawn:
+            artist.remove()
 
 
 # --- 6b. zone stats (not exported for now) ---------------------------------

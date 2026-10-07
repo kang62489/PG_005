@@ -3,12 +3,14 @@ spontaneous_analysis.py  --  Spontaneous ACh hotspot -> zone analysis (10X, *_BI
 
   Step 1. Select  : proc list -> recordings with an ALS tiff; OBJ / SENSOR from rec_data.db, 10X only
   Step 2. Analyze : per recording, SpontaneousZoneAnalyzer detect -> group -> map
-          Coverage: union of all zones inside the striatum / striatum area (striatum outline from the
-                    Striatum Boundary export bd_{date}_{serial}.json; NaN if the recording has none)
+          Coverage: union of all compartments (NR zones excluded) inside the striatum / striatum area
+                    (striatum outline from the Striatum Boundary export bd_{date}_{serial}.json; NaN if none)
   Step 3. Export  : per recording {stem}_ZONES.xlsx + {stem}_ZONE_MAPS.tif (z-scored RGB stack: max projection
-                    + all zones + striatum outline, then one page per detection frame) + footprints/{stem}_ZONES.npz
-                    + mask/{stem}_ZONE_MASK.tif (off with --no_mask)
-  Step 4. Summary : spontaneous_summary.xlsx (one row per recording + pooled zone table)
+                    + compartments + NR zones (light gray) + striatum outline, then one page per detection frame)
+                    + footprints/{stem}_ZONES.npz + mask/{stem}_HOTSPOT_MASK.tif (off with --no_mask)
+  Step 4. Summary : spontaneous_summary.xlsx (one row per recording + pooled compartment table)
+
+Zone = any mapped region; compartment = recurring zone (the only ones in stats); NR zone = non-recurring zone.
 
 All outputs go to {results_dir}/spontaneous/.
 
@@ -64,7 +66,8 @@ TARGET_OBJ = "10X"
 PROC_SUFFIX = "_BIEXP_ALS.tif"
 MAP_DPI = 120
 MAP_Z_MIN = 1.0  # zone-map gray range starts at background peak + this many sigmas (black)
-MAP_TITLE_WIDTH = 100  # characters per title line before the zone list wraps
+MAP_TITLE_WIDTH = 100  # characters per title line before the compartment / NR zone list wraps
+NR_COLOR = (0.85, 0.85, 0.85)  # NR zones (NR1, NR2, ...) on the zone maps: light gray
 
 
 # ===========================================================================
@@ -100,7 +103,7 @@ def select_recordings(proc_list_path: Path, db_path: Path, exp_db_path: Path, al
 
 # ===========================================================================
 #
-#   STEP 2b -- COVERAGE: union of all zones inside the striatum / striatum area
+#   STEP 2b -- COVERAGE: union of all compartments (NR zones excluded) inside the striatum / striatum area
 #
 # ===========================================================================
 
@@ -111,22 +114,23 @@ def striatum_of(stbd: dict[str, dict], raw_stem: str, shape: tuple[int, int]) ->
         console.log(f"[yellow]No striatum outline for {raw_stem} -- coverage NaN[/yellow]")
         return None
     if tuple(entry["image_shape"]) != shape:
-        console.log(f"[yellow]Striatum drawn on {entry['image_shape']}, zones are {list(shape)} -- coverage NaN[/yellow]")
+        console.log(f"[yellow]Striatum drawn on {entry['image_shape']}, image is {list(shape)} -- "
+                    f"coverage NaN[/yellow]")
         return None
     return outline_mask(entry["striatum_outline_px"], shape)
 
 
 def zone_coverage(zone_masks: dict[int, np.ndarray], striatum: np.ndarray | None, um_per_px: float) -> dict:
-    """Summary columns: striatum area, area of the zone union inside it (um^2), and their ratio (0-1)."""
+    """Summary columns: striatum area, area of the compartment union inside it (um^2), and their ratio (0-1)."""
     if striatum is None:
-        return {"striatum_area_um2": np.nan, "zone_area_in_striatum_um2": np.nan, "striatum_coverage": np.nan}
+        return {"striatum_area_um2": np.nan, "compartment_area_in_striatum_um2": np.nan, "striatum_coverage": np.nan}
     union = np.zeros_like(striatum)
     for mask in zone_masks.values():
         union |= mask
     striatum_px, covered_px = int(striatum.sum()), int((union & striatum).sum())
     return {
         "striatum_area_um2": striatum_px * um_per_px**2,
-        "zone_area_in_striatum_um2": covered_px * um_per_px**2,
+        "compartment_area_in_striatum_um2": covered_px * um_per_px**2,
         "striatum_coverage": covered_px / striatum_px,
     }
 
@@ -145,56 +149,82 @@ def _figure_to_rgb(fig) -> np.ndarray:
     return np.asarray(canvas.buffer_rgba())[..., :3].copy()
 
 
+def _gray_range(analyzer: SpontaneousZoneAnalyzer) -> tuple[np.ndarray, np.ndarray, float]:
+    """(max projection, max z inside each detection, gray top = median of those max z) for the zone maps."""
+    stack, center, sigma = analyzer.stack_f16, analyzer.bg_center, analyzer.bg_sigma
+    det = analyzer.detections
+    det_frames = det["frame"].to_numpy() if not det.empty else np.array([], dtype=int)
+    max_proj = stack.max(axis=0)
+    det_raw_max = np.array([stack[f - 1][fp[:, 0], fp[:, 1]].max() for f, fp in zip(det_frames, analyzer.footprints,
+                                                                                    strict=True)], dtype=np.float32)
+    det_max_z = img_zscore_convert(det_raw_max, center, sigma)
+    vmax = float(np.median(det_max_z)) if det_max_z.size else float((max_proj.max() - center) / sigma)
+    return max_proj, det_max_z, vmax
+
+
+def _thr_text(analyzer: SpontaneousZoneAnalyzer) -> str:
+    """'thr = c + k × σ = thr' for map titles."""
+    return (f"thr = {analyzer.bg_center:.3f} + {analyzer.sigma_ratio} × {analyzer.bg_sigma:.3f} = "
+            f"{analyzer.threshold:.3f}")
+
+
 def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path: Path,
                      striatum_outline: np.ndarray | None = None, axis_labels: tuple[str, str] | None = None) -> int:
     """Write one RGB TIFF stack: page 1 = max projection + all zones, then one page per detection frame.
 
+    All zones = compartments (1, 2, ...) + NR zones (NR1, NR2, ...; light gray, for reference, not in stats).
     Every page is z-scored against the fitted background and shares one gray range: z = MAP_Z_MIN
     -> median of the detections' max z, so single bright specks can't stretch it. Returns page count.
     """
     stack = analyzer.stack_f16
-    center, sigma, thr = analyzer.bg_center, analyzer.bg_sigma, analyzer.threshold
+    center, sigma = analyzer.bg_center, analyzer.bg_sigma
     det = analyzer.detections
     det_frames = det["frame"].to_numpy() if not det.empty else np.array([], dtype=int)
     frames = np.unique(det_frames)  # 1-based
 
-    max_proj = stack.max(axis=0)
-    det_raw_max = np.array([stack[f - 1][fp[:, 0], fp[:, 1]].max() for f, fp in zip(det_frames, analyzer.footprints,
-                                                                                    strict=True)], dtype=np.float32)
-    det_max_z = img_zscore_convert(det_raw_max, center, sigma)  # max z inside each detection
+    max_proj, det_max_z, vmax = _gray_range(analyzer)
     vmin = MAP_Z_MIN
-    vmax = float(np.median(det_max_z)) if det_max_z.size else float((max_proj.max() - center) / sigma)
-    thr_text = f"thr = {center:.3f} + {analyzer.sigma_ratio} × {sigma:.3f} = {thr:.3f}"
+    thr_text = _thr_text(analyzer)
 
-    zone_ids = sorted(analyzer.zone_masks)
-    colors = zone_colors(zone_ids)
-    label_to_zone = {label: row.zone_id for row in analyzer.zones.itertuples() for label in row.joint_labels}
-    zone_source = dict(zip(analyzer.zones["zone_id"], analyzer.zones["source"], strict=True))
-    n_by_source = analyzer.zone_stats["source"].str.split(" #").str[0].value_counts()
-    overview_title = (f"{title_tag} | {len(zone_ids)} zones -- {n_by_source.get('trace_corr', 0)} trace-corr, "
-                      f"{n_by_source.get('proximity', 0)} proximity, {n_by_source.get('isolated', 0)} isolated\n"
-                      f"{thr_text}")
+    # compartments first (ids 1..N, tab20 colors), then NR1.. in light gray (reference only)
+    map_masks = {**analyzer.zone_masks, **analyzer.non_recur_masks}
+    map_centroids = {**analyzer.zone_centroids, **analyzer.non_recur_centroids}
+    colors = {**zone_colors(list(analyzer.zone_masks)), **dict.fromkeys(analyzer.non_recur_masks, NR_COLOR)}
+    map_zones = pd.concat([analyzer.zones[["zone_id", "source", "joint_labels"]], analyzer.non_recur_zones])
+    label_to_zone = {label: row.zone_id for row in map_zones.itertuples() for label in row.joint_labels}
+    zone_source = dict(zip(map_zones["zone_id"], map_zones["source"], strict=True))
+    nr_labels = {label for labels in analyzer.non_recur_zones["joint_labels"] for label in labels}
+    overview_title = (f"{title_tag}\n{len(analyzer.zone_masks)} compartments + "
+                      f"{len(analyzer.non_recur_masks)} NR zones (non-recurring, not in stats)\n{thr_text}")
     first = _figure_to_rgb(plot_zone_overview(
-        img_zscore_convert(max_proj.astype(np.float32), center, sigma), analyzer.zone_masks,
-        analyzer.zone_centroids, colors, vmin, vmax, overview_title, analyzer.um_per_px, striatum_outline,
-        axis_labels))
+        img_zscore_convert(max_proj.astype(np.float32), center, sigma), map_masks, map_centroids, colors, vmin,
+        vmax, overview_title, analyzer.um_per_px, striatum_outline, axis_labels))
 
     def frame_inputs() -> Iterator[tuple]:
         for frame in frames:
             z_frame = img_zscore_convert(stack[frame - 1].astype(np.float32), center, sigma)
             rows = np.flatnonzero(det_frames == frame)
             hotspot_mask = np.zeros(z_frame.shape, dtype=bool)
+            nr_hotspot_mask = np.zeros(z_frame.shape, dtype=bool)  # hotspots of NR-zone units -> '////'
             for i in rows:
-                hotspot_mask[analyzer.footprints[i][:, 0], analyzer.footprints[i][:, 1]] = True
-            frame_zone_ids = sorted({label_to_zone[label] for label in det["joint_label"].iloc[rows]})
-            zones_text = ", ".join(f"{z} ({zone_source[z]})" for z in frame_zone_ids)
-            title = (f"frame {frame} ({frame / analyzer.fps:.2f} s) | {thr_text} | max z = {det_max_z[rows].max():.2f}\n"
-                     + textwrap.fill(f"zones {zones_text}", MAP_TITLE_WIDTH))
-            yield z_frame, frame_zone_ids, hotspot_mask, title
+                fp = analyzer.footprints[i]
+                hotspot_mask[fp[:, 0], fp[:, 1]] = True
+                if det["joint_label"].iloc[i] in nr_labels:
+                    nr_hotspot_mask[fp[:, 0], fp[:, 1]] = True
+            hit = {label_to_zone[label] for label in det["joint_label"].iloc[rows]
+                   if label in label_to_zone}  # hotspots of dropped units have no zone
+            frame_zone_ids = [z for z in map_masks if z in hit]  # map order: compartments, then NR zones
+            compartments = ", ".join(f"{z} ({zone_source[z]})" for z in frame_zone_ids if z in analyzer.zone_masks)
+            nr_zones = ", ".join(f"{z} ({zone_source[z]})" for z in frame_zone_ids if z in analyzer.non_recur_masks)
+            zones_text = f"compartments {compartments or '-'}" + (f" | NR zones {nr_zones}" if nr_zones else "")
+            title = (f"frame {frame} ({frame / analyzer.fps:.2f} s) | {thr_text} | "
+                     f"max z = {det_max_z[rows].max():.2f}\n"
+                     + textwrap.fill(zones_text, MAP_TITLE_WIDTH))
+            yield z_frame, frame_zone_ids, hotspot_mask, nr_hotspot_mask, title
 
     def frame_pages() -> Iterator[np.ndarray]:
         yield first
-        for fig in frame_zone_figures(frame_inputs(), max_proj.shape, analyzer.zone_masks, analyzer.zone_centroids,
+        for fig in frame_zone_figures(frame_inputs(), max_proj.shape, map_masks, map_centroids,
                                       colors, vmin, vmax, analyzer.um_per_px):
             yield _figure_to_rgb(fig)  # one reused Figure: render before pulling the next page
 
@@ -210,8 +240,9 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
 #
 # ===========================================================================
 
-def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = CROSSOVER_RATIO, save_mask: bool = True,
-        all_obj: bool = False, debug: bool = False, cuda_available: bool = False, db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db"),
+def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = CROSSOVER_RATIO,
+        save_mask: bool = True, all_obj: bool = False, debug: bool = False, cuda_available: bool = False,
+        db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db"),
         stbd_path: Path | None = None) -> None:
     """Run the spontaneous zone analysis for every selected recording in a proc list.
 
@@ -258,7 +289,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         axis_labels = direction_labels(stbd[raw_stem]["dorsal"], stbd[raw_stem]["medial"]) if raw_stem in stbd else None
         coverage = zone_coverage(analyzer.zone_masks, striatum, analyzer.um_per_px)
         if striatum is not None:
-            console.log(f"  coverage {coverage['striatum_coverage']:.3f} ({len(analyzer.zone_masks)} zones, "
+            console.log(f"  coverage {coverage['striatum_coverage']:.3f} ({len(analyzer.zone_masks)} compartments, "
                         f"striatum {striatum.mean():.2f} of FOV)")
 
         # -------------------------------------------------------------------
@@ -274,7 +305,8 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         console.log(f"[green]saved[/green] {n_pages}-page zone-map TIFF ({map_path.stat().st_size / 1e6:.1f} MB) "
                     f"-> {map_path.resolve()}")
 
-        zone_stats = analyzer.zone_stats
+        zone_stats = analyzer.zone_stats  # compartments only; NR zones stay out of every stat
+        non_recur_source = analyzer.non_recur_zones["source"]
         freq = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_freq_hz"]
         period = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_period_s"]
         summary_rows.append({
@@ -283,13 +315,14 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             "obj": row["OBJ"],
             "n_frames": analyzer.n_frames,
             "background_threshold": analyzer.threshold,
-            "n_zones": len(zone_stats),
-            "n_trace_corr": int(zone_stats["source"].str.startswith("trace_corr").sum()),
-            "n_proximity": int(zone_stats["source"].str.startswith("proximity").sum()),
-            "n_isolated": int(zone_stats["source"].str.startswith("isolated").sum()),
+            "n_compartments": len(zone_stats),
+            "n_non_recur_zone_type_1": int(non_recur_source.str.startswith("non_recur_zone_type_1").sum()),
+            "n_non_recur_zone_type_2": int(non_recur_source.str.startswith("non_recur_zone_type_2").sum()),
+            "n_dropped_units": len(analyzer.dropped_units),
+            "n_dropped_hotspots": int(analyzer.detections["joint_label"].isin(analyzer.dropped_units).sum()),
             "median_area_um2": float(zone_stats["area_um2"].median()),
-            "n_low_freq_zones": int((zone_stats["n_events"] == 1).sum()),  # < 1 event per recording
-            "n_freq_zones": len(freq),  # zones with >= MIN_EVENTS_FOR_FREQ events, used below
+            "n_low_freq_compartments": int((zone_stats["n_events"] == 1).sum()),  # < 1 event per recording
+            "n_freq_compartments": len(freq),  # compartments with >= MIN_EVENTS_FOR_FREQ events, used below
             "median_freq_hz": float(freq.median()),
             "freq_q1_hz": float(freq.quantile(0.25)),
             "freq_q3_hz": float(freq.quantile(0.75)),
@@ -310,7 +343,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         pooled = pooled[["recording", "sensor", *[c for c in pooled.columns if c not in ("recording", "sensor")]]]
         with pd.ExcelWriter(summary_path) as writer:
             pd.DataFrame(summary_rows).to_excel(writer, sheet_name="recordings", index=False)
-            pooled.to_excel(writer, sheet_name="zones", index=False)
+            pooled.to_excel(writer, sheet_name="compartments", index=False)
         console.log(f"[green]saved[/green] {summary_path.resolve()}")
 
     console.rule(f"[dim]Total time: {time.time() - run_t0:.1f}s")
@@ -322,7 +355,8 @@ if __name__ == "__main__":
     parser.add_argument("--results_dir", type=Path, default=Path("results"), help="Outputs go to <results_dir>/spontaneous/")
     parser.add_argument("--sigma", type=float, default=CROSSOVER_RATIO,
                         help="Threshold = background peak + this many sigmas")
-    parser.add_argument("--no_mask", action="store_true", help="Skip saving the per-frame hotspot mask (mask/)")
+    parser.add_argument("--no_mask", action="store_true",
+                        help="Skip saving the per-frame hotspot mask (mask/{stem}_HOTSPOT_MASK.tif)")
     parser.add_argument("--all_obj", action="store_true", help=f"Also analyze non-{TARGET_OBJ} recordings (testing only)")
     parser.add_argument("--debug", action="store_true", help="Also save the raw per-frame detections CSV")
     parser.add_argument("--db", type=Path, default=Path("data/rec_data.db"), help="Path to rec_data.db")

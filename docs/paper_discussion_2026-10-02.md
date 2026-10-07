@@ -1,7 +1,7 @@
 # Paper discussion notes — PB_001
 
 Story logic of the paper, built step by step (2026-10-05), plus the background discussion it grew from (2026-10-02 / 03).
-Discussion only: **no pipeline code or results were changed.** 2026-10-06: revised zone grouping tested in scratch only (step 2, "Zone grouping").
+Discussion only: **no `results/` were changed.** 2026-10-06: revised zone grouping tested in scratch; 2026-10-07: moved into the pipeline (step 2, "Zone grouping"), formal re-run pending.
 
 Sources used:
 - Numbers: `D:\Programs\PG_005\results` (2.0σ, `MIN_OBJECT_UM2 = 900`, deigo 45504859; spontaneous saion 4734460), `RESULTS_GUIDE.md`.
@@ -56,8 +56,10 @@ Rule: logic first, then pick the results that serve it. Each step is fixed befor
 **Draft logic:**
 1. We image spontaneous ACh in striatal slices.
 2. Some areas briefly rise above their surroundings: **hotspots**, each an event of ACh release by ChIs.
-3. Hotspots recur at the same places; we group them into **zones**.
-4. A zone is a place that repeatedly receives ACh from ChIs → matches the compartment definition → **candidate ACh compartments**.
+3. Hotspots recur at the same places; we group them into **compartments** (places of recurring hotspots).
+4. A compartment is a place that repeatedly receives ACh from ChIs → matches the compartment definition → **candidate ACh compartments**.
+
+**Terms (2026-10-07):** **zone** = any mapped region; **compartment** = recurring zone (trace-corr based, the only ones in stats); **NR zone** = non-recurring zone (overlapping leftovers, reference only).
 
 **Agreed:**
 - **Hotspot = event, compartment = place.** A hotspot is already distinct in space and time (that is why it is detected); recurrence is what makes a place.
@@ -73,11 +75,11 @@ Rule: logic first, then pick the results that serve it. Each step is fixed befor
 1. Example map of all zones in one recording — the recording with the highest coverage.
 2. Recurring frequency of zones.
 - Still considering: median zone area (may fit step 3 better, where size is compared).
-- Both need a re-run once the revised zone grouping below is in the pipeline.
+- Both need the formal re-run with the revised grouping below (in the pipeline since 2026-10-07).
 
-### Zone grouping (revised 2026-10-06, scratch test only)
+### Zone grouping (revised 2026-10-06, in the pipeline 2026-10-07)
 
-Tested in `output/test01/all_zones_circle.py` on `2025_06_11-0003` and `2025_12_15-0012`. **Not yet in the pipeline** (`classes/sp_zone_analyzer.py` unchanged).
+Tested in scratch (`output/test01/all_zones_circle.py`), then ported to `classes/sp_zone_analyzer.py` (identical to the scratch on `2025_06_11-0003` / `2025_12_15-0012`). Formal re-run of `results/spontaneous/` pending.
 
 **Why revise:**
 - Hotspots in one trace-corr group are at the same place: distance between two hotspots in a group, median 15.5–27.7 px (≈ 21–37 µm) per recording, 7 recordings. So the hand-set 115 px (≈ 153 µm) was too loose (TODO 4, 5).
@@ -92,28 +94,34 @@ Tested in `output/test01/all_zones_circle.py` on `2025_06_11-0003` and `2025_12_
 | 0 | Detect | threshold = background peak + 2σ; mask cleanup drops blobs < 4,000 px; **no 1 % lower size limit** (80 % upper kept) |
 | 1 | Consecutive frames → units | hotspot in frame n+1 joins hotspot in frame n if its centroid lies inside n's circle (centroid → farthest pixel) |
 | 2 | Trace correlation | r between two units = **best r** among all pairs of their hotspots' own traces (no averaging); every two units in a group r ≥ 0.95 |
-| 3 | Merge zones | a zone ≥ 95 % inside another zone is merged into it |
-| 4 | Fit leftovers | a leftover unit joins its best zone if its **best hotspot** lies ≥ 90 % inside it |
-| 5 | Leftovers that overlap | split into (A) 0 px with every zone and (B) the rest; within each set, units sharing ≥ 1 px form a zone (≥ 2 units); single units are **dropped** |
+| 3 | Merge compartments | a compartment ≥ 95 % inside another is merged into it (`TH_MERGE_ZONES = 0.95`) |
+| 4 | Fit leftovers | a leftover unit joins its best compartment if its **best hotspot** lies ≥ 90 % inside it (`TH_FIT_ZONES = 0.90`) |
+| 5 | Leftovers that overlap → **NR zones** | split into type 1 (0 px with every compartment) and type 2 (the rest); within each type, units sharing ≥ 1 px form an NR zone (≥ 2 units); single units are **dropped** |
 
 - Proximity grouping (115 px) is removed.
+- **Rule B (2026-10-07):** only groupings 2–4 make **compartments**. Grouping-5 zones are **NR zones** (same place, different time course = weak recurrence): kept in the xlsx (`non_recur_zones` sheet) and drawn light gray (NR1, NR2, ...) on the zone maps, NR hotspots hatched `////` on frame pages, but **left out of every stat** (count, size, frequency, coverage). A recording without trace-corr groups has **no compartments**.
 
-**Preliminary numbers:**
+**Numbers (pipeline, 4 test recordings, 2026-10-07):**
 
-| | 0003 | 0012 |
-|---|---|---|
-| Hotspots → units | 554 → 151 | 103 → 55 |
-| 2. Trace-corr groups (hotspots) | 15 (518) | 9 (93) |
-| 3. Merges → zones | 6 → 9 | 0 → 9 |
-| 4. Units fitted | 9 | 1 |
-| 5. New zones / dropped units | 2 / 2 | 2 / 2 |
-| **Final zones** | **11** (old pipeline: 26) | **11** |
-| Hotspots in zones | 552 / 554 | 100 / 103 |
+| | 0009 | 0003 | 0011 | 0012 |
+|---|---|---|---|---|
+| Hotspots → units | 0 (frame-1 giant dropped) | 554 → 151 | 37 → 26 | 103 → 55 |
+| 2. Trace-corr groups (hotspots) | 0 | 15 (518) | 0 | 9 (93) |
+| 3. Merges | 0 | 6 | 0 | 0 |
+| 4. Units fitted | 0 | 9 | 0 | 1 |
+| **Compartments** | **0** | **9** (old pipeline: 26 zones) | **0** | **9** |
+| NR zones (type 1 / 2) | 0 | 2 (0 / 2) | 1 (1 / 0) | 2 (1 / 1) |
+| Dropped units / hotspots | 0 | 2 / 2 | 0 | 2 / 3 |
+| Striatum coverage | 0 | 0.627 | 0 | 0.528 |
 
-> [!warning] Known minor issue (accepted for now)
-> Grouping 5 chains by ≥ 1 px: A touches B and B touches C → A, B, C form one zone even if A and C are far apart. In 0003, one such zone joins 7 units spread across the middle of the field (x ≈ 280–800 px). Possible fixes: require a real overlap (e.g. shared px ÷ smaller unit ≥ 0.5), or require every two units to overlap (no chaining, like trace-corr).
+- 0011 had 1202 frames in the raw TIFF (also 0005, 0007–0010 of 2025_11_27); Kang fixed the raw files, all 6 re-processed (2026-10-07).
 
-**TODOs:** 4 (proximity distance), 5 (trace-corr centroids), 8 (grouping into pipeline), 9 (grouping-5 chaining) — see [Open TODOs](#open-todos).
+> [!note] Grouping-5 chaining (TODO 9) — resolved by Rule B
+> Grouping 5 chains by ≥ 1 px (A touches B, B touches C → one NR zone). Before Rule B this made 0011 one zone of all 26 units (51 % of the frame with the 1202-frame file). Now it only changes how NR zones look; no stat uses them.
+
+**Outputs (names, 2026-10-07):** `{stem}_ZONES.xlsx` sheets `counts`, `compartment_stats`, `compartments` (`compartment_id`, `active_frames`), `non_recur_zones`, `step3_merge`, `step4_fit`, `step5_overlap`; `{stem}_ZONE_MAPS.tif`; `footprints/{stem}_ZONES.npz`; `mask/{stem}_HOTSPOT_MASK.tif`; `spontaneous_summary.xlsx` (`n_compartments`, `n_non_recur_zone_type_1/2`, `n_dropped_units/hotspots`, `compartment_area_in_striatum_um2`, ...).
+
+**TODOs:** 4, 5, 8, 9 done — see [Open TODOs](#open-todos). Formal re-run pending.
 
 ---
 
@@ -188,12 +196,12 @@ Numbers match `docs/continue_from_here.md`.
 |---|---|---|
 | 1b | MED back-check reliability: hit only if the segment's hotspot falls where the MED hotspot is | 3 |
 | 1c | Intrusion rate on non-aligned frames, evoked / spontaneous separately; compare with 1b | 3 |
-| 2 | Zone size measure for the comparison: union area vs per-event median — pick one, justify | 3 |
+| 2 | Compartment size measure for the comparison: union area vs per-event median — pick one, justify | 3 |
 | 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 |
 | 4 | ~~Proximity distance is hand-set (115 px)~~ → resolved in the revised grouping (2026-10-06, scratch): circle rule for consecutive frames, proximity grouping removed | 2 |
 | 5 | ~~Trace-corr zones = same place?~~ → yes (2026-10-06): median distance between two hotspots in a group 15.5–27.7 px (≈ 21–37 µm), 7 recordings | 2 |
-| 8 | Move the revised zone grouping into `classes/sp_zone_analyzer.py`, re-run spontaneous results (R1 map, R2 frequency) | 2 |
-| 9 | Grouping 5 chaining (≥ 1 px): stricter rule or keep? Minor, accepted for now | 2 |
+| 8 | ~~Move the revised zone grouping into `classes/sp_zone_analyzer.py`~~ → done 2026-10-07 (+ Rule B, NR zones, zone → compartment naming); formal re-run of spontaneous results (R1 map, R2 frequency) + `area_comparison.py` pending | 2 |
+| 9 | ~~Grouping 5 chaining (≥ 1 px)~~ → resolved by Rule B (2026-10-07): grouping-5 zones are NR zones, out of every stat | 2 |
 | 6 | Check Aosaki 1995: exact axon-arbor range and species before citing | 3 |
 | — | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion |
 

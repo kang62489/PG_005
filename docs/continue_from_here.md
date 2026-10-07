@@ -11,8 +11,9 @@ Story refined step by step: **Step 1 final** (2026-10-05, `docs/paper_discussion
 | 3 | "Stays local" number (e.g. centre shift ÷ hotspot radius) + per-recording lasting time (t_end) | 4 | [ ] |
 | 4 | Come back and check the proximity distance: `MAX_CENTROID_DEVIATION = 115` px (≈ 153 µm at 10X, `classes/sp_zone_analyzer.py:64`) is set by hand and used for both frame-to-frame chaining and the proximity grouping cut -- needs a justification or a data-driven choice | 2 | [x] 2026-10-06: replaced by the revised grouping (circle rule for consecutive frames, proximity removed) -- in pipeline via TODO 8 |
 | 5 | Centroid check for trace-corr zones: do hotspots grouped by trace correlation have close centroids? (expected yes -- traces come from overlapping footprints; would show trace-corr also means "same place") -- add to spontaneous pipeline | 2 | [x] 2026-10-06: yes, median distance 15.5–27.7 px (≈ 21–37 µm) per recording, 7 recordings (scratch `output/test01/trace_corr_centroids.py`); not added to the pipeline |
-| 8 | Revised zone grouping → pipeline (`classes/sp_zone_analyzer.py`, `spontaneous_analysis.py`, `area_comparison.py`), then re-run spontaneous results (R1 map, R2 frequency). Plan: `.claude/plans/2026-10-06_zone_grouping_pipeline_plan.md` | 2 | [ ] next |
-| 9 | Grouping 5 chains by ≥ 1 px (0003: one zone of 7 units across the field) -- keep or stricter rule? Minor, accepted for now | 2 | [ ] |
+| 8 | Revised zone grouping → pipeline (`classes/sp_zone_analyzer.py`, `spontaneous_analysis.py`, `area_comparison.py`), then re-run spontaneous results (R1 map, R2 frequency). Plan: `.claude/plans/2026-10-06_zone_grouping_pipeline_plan.md` | 2 | [~] 2026-10-07: phases 1–4 done (+ Rule B / NR zones, zone → compartment naming, `_HOTSPOT_MASK.tif`); phase 5 formal run (Kang) + `area_comparison.py` pending |
+| 10 | Statistics for the paper: which numbers each story step needs (step 2 compartments, step 3 size comparison) -- decide before the formal `area_comparison.py` run | 2 / 3 | [ ] next |
+| 9 | Grouping 5 chains by ≥ 1 px (0003: one zone of 7 units across the field) -- keep or stricter rule? Minor, accepted for now | 2 | [x] 2026-10-07: resolved by Rule B -- step-5 zones are non-recurring (NR) zones, not compartments, out of every stat; chaining only changes how NR zones look on the map |
 | 6 | Check Aosaki 1995: exact CIN axon-arbor range and species before citing it in the step-3 bridge | 3 | [ ] |
 | 7 | Kang: read how waves are defined (Matityahu 2023, Hamid 2021) before any wave analysis | 4 / Discussion | [ ] |
 
@@ -72,6 +73,37 @@ Test set (final): `2025_06_11-0002` (60X), `2025_06_11-0003` (10X), `2025_11_13-
 | - | Stats out of the ana list -> sheets in `{ana_list}_cells.xlsx` (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped); ana list never written | extra | [x] 2026-09-27 |
 | Q | Area comparison (8): `area_comparison.py` -- MED larger spike/spike+1 size + centroid + origin; per-zone median per-frame size + centroid from `results/spontaneous/`; MED -> nearest zone < 50 px (150 px "natural zone" filter dropped) | 6 | [x] Session 78: + `matched_med`, `pct_zones_smaller`, Zone events sheet, Groups (A / B / C) + Mann-Whitney A-C / B-C / A-B; tested on `output/test01/phase6/`, neat-refactored. Session 79: formal run done (`results/area_comparison.xlsx`, 0 % reliability filter added) |
 | R | Neat-refactor check of `classes/abf_clip.py`, `functions/xlsx_writer.py`, `append_stats.py` (Phase 5 + stats xlsx) | - | dropped 2026-10-05 |
+
+---
+
+# Log of the project progress 2026-10-07 Wed (Session 85)
+Last working file: `classes/sp_zone_analyzer.py`, `spontaneous_analysis.py`, `area_comparison.py`
+Last working line: TODO 8 phase 4 done; next = paper statistics (TODO 10), then formal run
+
+## List of modified files
+- `classes/sp_zone_analyzer.py` -- revised grouping (circle linking, best-r trace-corr, merge 0.95, fit 0.90, step 5 → NR zones apart); sheets `counts` / `compartment_stats` / `compartments` / `non_recur_zones` / `step3_merge` / `step4_fit` / `step5_overlap`; `mask/_HOTSPOT_MASK.tif`; `CLOSE_RADIUS` (unused) removed
+- `spontaneous_analysis.py` -- compartment-only stats / coverage; NR zones light gray on ZONE_MAPS, NR hotspots hatched; summary `n_compartments`, `n_non_recur_zone_type_1/2`, `n_dropped_units/hotspots`; `n_trace_corr` / `n_proximity` / `n_isolated` dropped
+- `area_comparison.py` -- reads `compartments` sheet (`compartment_id`, `active_frames`) + `_HOTSPOT_MASK.tif`; output names zone → compartment
+- `functions/plot_results.py` -- zone ids may mix ints / "NR1"; `frame_zone_figures` hatch_mask
+- `docs/paper_discussion_2026-10-02.md` (step 2 zone grouping, Rule B, numbers), this file
+- Raw TIFF fix (Kang): 2025_11_27-0005, 0007–0011 had 1202 frames → fixed and re-processed
+- Scratch: `output/test02/` (phase checks), `output/test03/` (neat-refactor + rename checks, all identical)
+
+## Summary of current progress
+- Rule B: compartments = groupings 2–4 only; grouping-5 = NR zones, out of every stat; no trace-corr groups → no compartments.
+- 4 test recordings: 0009 0, 0003 9 (+2 NR), 0011 0 (+1 NR), 0012 9 (+2 NR) compartments.
+- Naming: zone = any region, compartment = recurring zone, NR zone = non-recurring.
+
+## Completed TODOs/Tasks
+- ✅ TODO 8 phases 1–4, TODO 9 (resolved by Rule B)
+
+## What should we do next? (TODOs)
+- Kang commits.
+- TODO 10: decide the statistics each story step needs (before the formal `area_comparison.py` run).
+- Phase 5: formal spontaneous run → `results/spontaneous/`, then `area_comparison.py`.
+
+## Last Session Recap
+※ recap: Revised grouping in the pipeline with Rule B (NR zones out of stats), compartment naming, neat-refactor verified identical. Next: settle paper statistics (TODO 10), then formal run.
 
 ---
 

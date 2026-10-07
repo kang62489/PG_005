@@ -1,0 +1,15 @@
+Date Created: 20261006
+Analysis: 1202p fixed
+
+Picked: [raw_tiff_name, gauss_exists, als_exists, do_processing, detrend_mode, paired_abf]
+[2025_11_27-0005.tif, BIEXP, BIEXP, SKIP, NONE, 2025_11_27_0004.abf]
+[2025_11_27-0007.tif, BIEXP, BIEXP, SKIP, NONE, 2025_11_27_0006.abf]
+[2025_11_27-0008.tif, BIEXP, BIEXP, SKIP, NONE, 2025_11_27_0007.abf]
+[2025_11_27-0009.tif, BIEXP, BIEXP, SKIP, NONE, 2025_11_27_0008.abf]
+[2025_11_27-0010.tif, BIEXP, BIEXP, SKIP, NONE, 2025_11_27_0009.abf]
+[2025_11_27-0011.tif, BIEXP, BIEXP, SKIP, NONE, 2025_11_27_0011.abf]
+
+Total 6 records picked
+
+dir_raw_tiffs: D:\Programs\PG_005\raw_tiffs
+dir_proc_tiffs: D:\Programs\PG_005\proc_tiffs

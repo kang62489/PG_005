@@ -1,9 +1,12 @@
 """
-Spontaneous ACh hotspot -> zone analysis for one deltaF/F0 stack (ported from PG_010 sp_ach_zones.py).
+Spontaneous ACh hotspot -> zone analysis for one deltaF/F0 stack.
 
   Step 1. Detect : threshold every frame -> cleaned hotspot mask
-  Step 2. Group  : per-frame hotspots -> tracks -> trace-corr / proximity groups
-  Step 3. Map    : groups -> zones -> zone masks, contours, per-zone size/event stats
+  Step 2. Group  : per-frame hotspots -> units (circle rule) -> best-r trace-corr groups + leftover units
+  Step 3. Map    : merge zones -> spatial fit of leftovers = compartments -> masks, per-compartment stats;
+                   overlapping unfitted units -> non-recurring (NR) zones (reference only, not in stats)
+
+Zone = any mapped region; compartment = recurring zone (the only ones in stats); NR zone = non-recurring zone.
 
 Example:
     >>> analyzer = SpontaneousZoneAnalyzer(stack, obj="10X")
@@ -26,7 +29,7 @@ from rich.console import Console
 from scipy import ndimage
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial import KDTree
-from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import squareform
 from skimage.measure import find_contours, regionprops
 
 # Local imports
@@ -55,28 +58,30 @@ def timed(label: str) -> Iterator[None]:
 # (histogram bins / percentile range / fit live in functions/fit_hist.py -- shared with img_proc)
 CROSSOVER_RATIO = 2.0         # threshold = background peak + this many fitted sigmas
 TH_SMALL_OBJ = 4000           # px: drop per-frame blobs smaller than this (noise speckle)
-CLOSE_RADIUS = 3              # px: morphological closing to fill small notches in a blob's shape
 
 # --- Step 2: group ---------------------------------------------------------
-MIN_HOTSPOT_FRAC = 0.01       # frame fraction: drop smaller merged hotspots (1 % of 1024 x 1024 = 10,486 px)
 MAX_HOTSPOT_FRAC = 0.8        # frame fraction: drop larger merged hotspots (over-exposed first frames)
-CONNECT_RADIUS = 75          # px: merge same-frame fragments whose boundaries are this close
-MAX_CENTROID_DEVIATION = 115  # px: max centroid distance for frame-to-frame chaining and proximity grouping
-MIN_GROUP_CORR = 0.95         # trace-corr grouping: every pair in a group has r >= this
+CONNECT_RADIUS = 75           # px: merge same-frame fragments whose boundaries are this close
+MIN_GROUP_CORR = 0.95         # trace-corr grouping: every pair of units in a group has best r >= this
 
 # --- Step 3: map -----------------------------------------------------------
-FRAME_RATE_HZ = 20            # imaging rate, converts frames -> seconds for zone event stats
-MIN_EVENTS_FOR_FREQ = 2       # summary freq / period stats use only zones with at least this many events
+TH_MERGE_ZONES = 0.95         # 3a: compartment A merges into B if shared px / A px >= this
+TH_FIT_ZONES = 0.90           # 3b: leftover unit joins a compartment if its best hotspot's shared px / hotspot px >= this
+FRAME_RATE_HZ = 20            # imaging rate, converts frames -> seconds for compartment event stats
+MIN_EVENTS_FOR_FREQ = 2       # summary freq / period stats use only compartments with at least this many events
 
 
 class SpontaneousZoneAnalyzer:
-    """Detect -> group -> map spontaneous hotspots into zones for one stack.
+    """Detect -> group -> map spontaneous hotspots into compartments (+ NR zones) for one stack.
+
+    zones / zone_masks / zone_centroids / zone_stats hold the compartments only.
 
     Results after run():
-        bg_center, bg_sigma, threshold, mask               (step 1)
-        detections, footprints, trace_corr_groups,
-        proximity_groups, isolated_tracks                  (step 2)
-        zones, zone_masks, zone_centroids, zone_stats      (step 3)
+        bg_center, bg_sigma, threshold, mask                          (step 1)
+        detections, footprints, trace_corr_groups, leftover_units     (step 2)
+        merge_log, fit_log, unfitted_units, overlap_log, dropped_units,
+        zones, zone_masks, zone_centroids, zone_stats,
+        non_recur_zones, non_recur_masks, non_recur_centroids         (step 3)
     """
 
     def __init__(self, stack: np.ndarray, obj: str = "10X", fps: float = FRAME_RATE_HZ,
@@ -114,76 +119,116 @@ class SpontaneousZoneAnalyzer:
     # -----------------------------------------------------------------------
 
     def group(self) -> None:
-        """Per-frame hotspots -> chained tracks -> trace-corr groups, proximity groups, isolated tracks."""
-        # 2a. per-frame hotspots
-        frame_px = self.height * self.width
-        min_area, max_area = MIN_HOTSPOT_FRAC * frame_px, MAX_HOTSPOT_FRAC * frame_px
+        """Per-frame hotspots -> units (circle rule) -> best-r trace-corr groups + leftover units."""
+        # 2a. per-frame hotspots (no lower size limit beyond the mask cleanup's TH_SMALL_OBJ)
+        max_area = MAX_HOTSPOT_FRAC * self.height * self.width
         with timed("group  2a connect hotspots"):
-            detections, self.footprints, dropped = spatiotemporally_connect_hotspots(
-                self.mask, min_area, max_area, CONNECT_RADIUS)
-        small = [frame for frame, area in dropped if area < min_area]
-        giant = [frame for frame, area in dropped if area > max_area]
-        console.log(f"  {len(small)} small hotspot(s) dropped (< {MIN_HOTSPOT_FRAC:.0%} of frame = {min_area:.0f} px)")
+            detections, self.footprints, giant = spatiotemporally_connect_hotspots(
+                self.mask, max_area, CONNECT_RADIUS)
         if giant:
             console.log(f"  [yellow]{len(giant)} giant hotspot(s) dropped (> {MAX_HOTSPOT_FRAC:.0%} of frame) "
-                        f"in frames {giant}[/yellow]")
+                        f"in frames {[frame for frame, _ in giant]}[/yellow]")
         if detections.empty:
-            console.log("[yellow]group: no hotspots above threshold -- 0 zones[/yellow]")
+            console.log("[yellow]group: no hotspots above threshold -- 0 compartments[/yellow]")
             self.detections = detections
             self.trace_corr_groups = pd.DataFrame(columns=["group", "labels", "frames"])
-            self.proximity_groups = pd.DataFrame(columns=["group", "labels", "frames"])
-            self.isolated_tracks = pd.DataFrame(columns=["joint_label", "frames"])
+            self.leftover_units = []
             return
 
-        # 2b. chain across frames into tracks
-        n_before = detections["joint_label"].nunique()
-        with timed("group  2b chain tracks"):
-            self.detections = assign_frame_adjacent_joint_labels(detections, MAX_CENTROID_DEVIATION)
-        console.log(f"  {len(detections)} detections, {n_before} -> "
-                    f"{self.detections['joint_label'].nunique()} tracks (<{MAX_CENTROID_DEVIATION}px chains)")
+        # 2b. consecutive frames -> units (circle rule)
+        with timed("group  2b link units (circle rule)"):
+            self.detections, n_links = link_by_circle(detections, self.footprints)
+        console.log(f"  {len(detections)} hotspots, {n_links} circle links -> "
+                    f"{self.detections['joint_label'].nunique()} units")
 
-        # 2c + 2d. traces -> two-stage grouping
-        self.trace_corr_groups, self.proximity_groups, self.isolated_tracks = group_tracks(
+        # 2c + 2d. hotspot traces -> best-r trace-corr grouping
+        self.trace_corr_groups, self.leftover_units = group_tracks_best_r(
             self.detections, self.footprints, self.stack_f16, self.cuda_available
         )
-        console.log(f"  {len(self.trace_corr_groups)} trace-corr (r>={MIN_GROUP_CORR}), "
-                    f"{len(self.proximity_groups)} proximity, {len(self.isolated_tracks)} isolated")
+        console.log(f"  {len(self.trace_corr_groups)} trace-corr groups (best r>={MIN_GROUP_CORR}), "
+                    f"{len(self.leftover_units)} leftover units")
 
     # -----------------------------------------------------------------------
     # Step 3. Map
     # -----------------------------------------------------------------------
 
     def map(self) -> None:
-        """Groups -> zones -> zone masks, centroids, and per-zone stats."""
-        with timed("map    3  zones + masks + stats"):
-            self.zones = build_zones(self.trace_corr_groups, self.proximity_groups, self.isolated_tracks)
-            self.zone_masks = build_zone_masks(self.zones, self.detections, self.footprints, self.height, self.width)
+        """Trace-corr groups -> merged -> fitted leftovers = compartments (the only ones in stats);
+        unfitted units that overlap -> NR zones (reference only)."""
+        shape = (self.height, self.width)
+        zones = [{"labels": list(labels), "source": f"trace_corr #{i}", "fitted": [], "merged_from": [],
+                  "mask": unit_mask(self.detections, self.footprints, labels, shape)}
+                 for i, labels in enumerate(self.trace_corr_groups["labels"])]
+
+        with timed("map    3a merge compartments"):
+            self.merge_log = merge_zones(zones, TH_MERGE_ZONES)
+        with timed("map    3b spatial fit of leftovers"):
+            self.fit_log, self.unfitted_units = spatial_fit_zones(
+                zones, self.leftover_units, self.detections, self.footprints, shape, TH_FIT_ZONES)
+        with timed("map    3c NR zones"):
+            self.overlap_log, self.dropped_units, non_recur = non_recur_zones(
+                zones, self.unfitted_units, self.detections, self.footprints, shape)
+
+        with timed("map    3d tables + compartment stats"):
+            # non-recurring zones: NR1, NR2, ... -- kept apart from the compartments, no stats
+            self.non_recur_zones = pd.DataFrame({
+                "zone_id": [f"NR{k}" for k in range(1, len(non_recur) + 1)],
+                "source": [zone["source"] for zone in non_recur],
+                "joint_labels": [zone["labels"] for zone in non_recur],
+            }, dtype=object)  # object even when empty, so .str works on source
+            self.non_recur_masks = dict(zip(self.non_recur_zones["zone_id"], [zone["mask"] for zone in non_recur],
+                                            strict=True))
+            self.non_recur_centroids = zone_centroids(self.non_recur_zones, self.detections)
+
+            self.zones = pd.DataFrame({
+                "joint_labels": [zone["labels"] for zone in zones],
+                "source": [zone["source"] for zone in zones],
+                "fitted_units": [zone["fitted"] for zone in zones],
+                "merged_from": [zone["merged_from"] for zone in zones],
+            })
+            self.zones["zone_id"] = range(1, len(zones) + 1)  # 1-based, 0 stays background
+            self.zone_masks = dict(zip(self.zones["zone_id"], [zone["mask"] for zone in zones], strict=True))
             self.zone_centroids = zone_centroids(self.zones, self.detections)
             self.zone_stats = zone_stats_table(self.zones, self.zone_masks, self.detections, self.fps, self.um_per_px)
-        console.log(f"  {len(self.zone_masks)} zones")
+        console.log(f"  {len(self.merge_log)} merges, {len(self.fit_log) - len(self.unfitted_units)} fitted, "
+                    f"{len(self.dropped_units)} single units dropped -> {len(self.zone_masks)} compartments "
+                    f"(+ {len(self.non_recur_masks)} NR zones)")
 
     # -----------------------------------------------------------------------
     # Save
     # -----------------------------------------------------------------------
 
     def save(self, out_dir: Path, stem: str, save_mask: bool = True, debug: bool = False) -> dict[str, Path]:
-        """Write {stem}_ZONES.xlsx, footprints/{stem}_ZONES.npz (+ mask/{stem}_ZONE_MASK.tif, raw detections)."""
+        """Write {stem}_ZONES.xlsx, footprints/{stem}_ZONES.npz (+ mask/{stem}_HOTSPOT_MASK.tif, raw detections)."""
         (out_dir / "footprints").mkdir(parents=True, exist_ok=True)
         paths = {
             "xlsx": out_dir / f"{stem}_ZONES.xlsx",
             "npz":  out_dir / "footprints" / f"{stem}_ZONES.npz",
         }
 
+        frames_by_label = self.detections.groupby("joint_label")["frame"].apply(list)
+
+        def active_frames(units: list) -> list[int]:
+            return sorted(f for unit in units for f in frames_by_label[unit])
+
+        compartments = self.zones.rename(columns={"zone_id": "compartment_id", "joint_labels": "track_ids"})
+        compartments = compartments[["compartment_id", "source", "track_ids", "fitted_units", "merged_from"]].copy()
+        compartments["active_frames"] = compartments["track_ids"].apply(active_frames)  # merged + fitted included
+        non_recur = self.non_recur_zones.rename(columns={"joint_labels": "track_ids"})
+        non_recur["active_frames"] = non_recur["track_ids"].apply(active_frames)
+        non_recur["area_px"] = non_recur["zone_id"].map(lambda z: int(self.non_recur_masks[z].sum()))
         with pd.ExcelWriter(paths["xlsx"]) as writer:
-            self.zone_stats.to_excel(writer, sheet_name="zone_stats", index=False)
-            _readable_groups(self.trace_corr_groups).to_excel(writer, sheet_name="trace_corr_groups", index=False)
-            _readable_groups(self.proximity_groups).to_excel(writer, sheet_name="proximity_groups", index=False)
-            self.isolated_tracks.rename(columns={"joint_label": "track_id", "frames": "active_frames"}).to_excel(
-                writer, sheet_name="isolated_tracks", index=False)
+            fit_merge_counts(self).to_excel(writer, sheet_name="counts", index=False)
+            self.zone_stats.to_excel(writer, sheet_name="compartment_stats", index=False)
+            compartments.to_excel(writer, sheet_name="compartments", index=False)
+            non_recur.to_excel(writer, sheet_name="non_recur_zones", index=False)
+            self.merge_log.to_excel(writer, sheet_name="step3_merge", index=False)
+            self.fit_log.to_excel(writer, sheet_name="step4_fit", index=False)
+            self.overlap_log.to_excel(writer, sheet_name="step5_overlap", index=False)
 
         if save_mask:  # 1200 x 1024 x 1024 uint8 = 1.26 GB raw -> zlib
             (out_dir / "mask").mkdir(exist_ok=True)
-            paths["mask"] = out_dir / "mask" / f"{stem}_ZONE_MASK.tif"
+            paths["mask"] = out_dir / "mask" / f"{stem}_HOTSPOT_MASK.tif"
             tifffile.imwrite(paths["mask"], self.mask.astype(np.uint8) * 255, compression="zlib")
 
         arrays: dict[str, np.ndarray] = {"background_threshold": np.array(self.threshold)}
@@ -191,6 +236,10 @@ class SpontaneousZoneAnalyzer:
             arrays[f"zone{zone_id}_footprint"] = np.argwhere(mask)
             for k, contour in enumerate(find_contours(mask.astype(float), level=0.5)):
                 arrays[f"zone{zone_id}_contour{k}"] = contour
+        for nr_id, mask in self.non_recur_masks.items():  # NR1 -> non_recur1_*
+            arrays[f"non_recur{nr_id[2:]}_footprint"] = np.argwhere(mask)
+            for k, contour in enumerate(find_contours(mask.astype(float), level=0.5)):
+                arrays[f"non_recur{nr_id[2:]}_contour{k}"] = contour
         np.savez_compressed(paths["npz"], **arrays)
 
         if debug:
@@ -204,7 +253,7 @@ class SpontaneousZoneAnalyzer:
 
 # ===========================================================================
 #
-#   STEP 2 -- GROUP: per-frame hotspots -> tracks -> groups
+#   STEP 2 -- GROUP: per-frame hotspots -> units -> trace-corr groups
 #
 # ===========================================================================
 
@@ -221,6 +270,7 @@ def _find(parent: dict, x: int) -> int:
 
 
 def _union(parent: dict, a: int, b: int) -> None:
+    """Join the sets of a and b."""
     root_a = _find(parent, a)
     root_b = _find(parent, b)
     if root_a != root_b:
@@ -283,11 +333,11 @@ def merge_adjacent_hotspots(labeled_frame: np.ndarray, connect_radius: float) ->
     return remap[labeled_frame]
 
 
-def spatiotemporally_connect_hotspots(mask: np.ndarray, min_area: float, max_area: float,
+def spatiotemporally_connect_hotspots(mask: np.ndarray, max_area: float,
                                       connect_radius: int) -> tuple[pd.DataFrame, list, list[tuple[int, int]]]:
-    """Per frame: label, merge fragments, keep min_area <= area <= max_area.
+    """Per frame: label, merge fragments, keep area <= max_area.
 
-    Returns (detections table, footprints, dropped [(frame 1-based, area)]).
+    Returns (detections table, footprints, dropped giants [(frame 1-based, area)]).
     """
     hotspots_props = []
     footprints = []
@@ -303,7 +353,7 @@ def spatiotemporally_connect_hotspots(mask: np.ndarray, min_area: float, max_are
         for joint_label_at_frame_id in np.unique(labeled_frame[frame_mask]):
             footprint_mask = frame_mask & (labeled_frame == joint_label_at_frame_id)
             area = int(footprint_mask.sum())
-            if not min_area <= area <= max_area:
+            if area > max_area:
                 dropped.append((frame_id + 1, area))
                 continue
 
@@ -323,65 +373,35 @@ def spatiotemporally_connect_hotspots(mask: np.ndarray, min_area: float, max_are
     return pd.DataFrame(hotspots_props, columns=columns), footprints, dropped
 
 
-# --- 2b. Chain frame-adjacent hotspots into tracks -------------------------
+# --- 2b. Consecutive frames -> units (circle rule) -------------------------
 
-def chain_frame_adjacent_centroids(hotspots_props: pd.DataFrame, max_dist: float) -> pd.DataFrame:
-    """Link joint_labels in consecutive frames whose centroids are < max_dist apart."""
-    rows = hotspots_props.groupby("joint_label").agg(
-        frame=("frame", "first"),
-        centroid_y=("centroid_y", "mean"),
-        centroid_x=("centroid_x", "mean"),
-    ).reset_index()
+def link_by_circle(detections: pd.DataFrame, footprints: list) -> tuple[pd.DataFrame, int]:
+    """Link hotspot B (frame n+1) to A (frame n) if B's centroid is inside A's circle -> one joint_label per unit.
 
-    labels = rows["joint_label"].tolist()
+    A's circle: centred on A's centroid, radius = distance to A's farthest footprint pixel. Also returns the link count.
+    """
+    cy, cx = detections["centroid_y"].to_numpy(), detections["centroid_x"].to_numpy()
+    radius = [np.hypot(fp[:, 0] - cy[i], fp[:, 1] - cx[i]).max() for i, fp in enumerate(footprints)]
+    labels = detections["joint_label"].tolist()
     parent = {label: label for label in labels}
 
-    by_frame = dict(list(rows.groupby("frame")))
+    by_frame = {frame: grp.index for frame, grp in detections.groupby("frame")}
+    n_links = 0
     for frame, current in by_frame.items():
-        next_frame = by_frame.get(frame + 1)
-        if next_frame is None:
-            continue
-        for _, row_a in current.iterrows():
-            for _, row_b in next_frame.iterrows():
-                dist = np.hypot(row_a["centroid_y"] - row_b["centroid_y"], row_a["centroid_x"] - row_b["centroid_x"])
-                if dist < max_dist:
-                    _union(parent, row_a["joint_label"], row_b["joint_label"])
+        for i in current:
+            for j in by_frame.get(frame + 1, []):
+                if np.hypot(cy[j] - cy[i], cx[j] - cx[i]) <= radius[i]:
+                    _union(parent, labels[i], labels[j])
+                    n_links += 1
 
     roots = [_find(parent, label) for label in labels]
-    group_id_map = {root: new for new, root in enumerate(pd.unique(np.array(roots)))}
-    group_ids = [group_id_map[root] for root in roots]
-    return pd.DataFrame({"joint_label": labels, "group": group_ids})
+    new_id = {root: k for k, root in enumerate(pd.unique(np.array(roots)))}
+    linked = detections.copy()
+    linked["joint_label"] = [new_id[root] for root in roots]
+    return linked, n_links
 
 
-def assign_frame_adjacent_joint_labels(hotspots_props: pd.DataFrame, max_dist: float) -> pd.DataFrame:
-    """Give every detection in one chained track the same joint_label."""
-    result = chain_frame_adjacent_centroids(hotspots_props, max_dist)
-    label_to_group = dict(zip(result["joint_label"], result["group"], strict=True))
-
-    hotspots_props = hotspots_props.copy()
-    hotspots_props["joint_label"] = hotspots_props["joint_label"].map(label_to_group)
-    return hotspots_props
-
-
-# --- 2c. Per-track deltaF/F0 traces (per-detection traces: functions/zone_kernels.footprint_traces) ---
-
-def track_mean_traces(hotspots_props: pd.DataFrame, det_traces: np.ndarray) -> pd.DataFrame:
-    """One averaged trace per joint_label."""
-    rows = [
-        {"joint_label": joint_label, "trace": det_traces[group.index].mean(axis=0)}
-        for joint_label, group in hotspots_props.groupby("joint_label")
-    ]
-    return pd.DataFrame(rows)
-
-
-def track_centroids(hotspots_props: pd.DataFrame) -> pd.DataFrame:
-    """One mean (y, x) centroid per joint_label."""
-    grouped = hotspots_props.groupby("joint_label")[["centroid_y", "centroid_x"]].mean()
-    mean_centroid = list(zip(grouped["centroid_y"], grouped["centroid_x"], strict=True))
-    return pd.DataFrame({"joint_label": grouped.index, "mean_centroid": mean_centroid})
-
-
-# --- 2d. Two-stage grouping ------------------------------------------------
+# --- 2c + 2d. Best-r trace-corr grouping (per-hotspot traces: functions/zone_kernels.footprint_traces) ---
 
 def _renumber(raw_group_ids: np.ndarray) -> list[int]:
     """Renumber cluster ids 0, 1, 2, ... in first-seen order."""
@@ -389,122 +409,176 @@ def _renumber(raw_group_ids: np.ndarray) -> list[int]:
     return [group_id_map[raw] for raw in raw_group_ids]
 
 
-def first_grouping(tracks: pd.DataFrame, min_corr: float) -> pd.DataFrame:
-    """Complete-linkage clustering on trace correlation, cut at r = min_corr."""
-    labels = tracks["joint_label"].tolist()
-    if len(labels) == 1:
-        return pd.DataFrame({"joint_label": labels, "group": [0]})
+def group_tracks_best_r(detections: pd.DataFrame, footprints: list, stack_f16: np.ndarray,
+                        cuda_available: bool = False) -> tuple[pd.DataFrame, list]:
+    """Unit-unit r = best r among their hotspots' own traces; complete linkage cut at MIN_GROUP_CORR.
 
-    traces = np.stack(tracks["trace"].to_numpy())
-    distance = 1 - np.corrcoef(traces)
-    np.fill_diagonal(distance, 0)
-    distance = (distance + distance.T) / 2  # force exact symmetry
+    Returns (trace-corr groups of >= 2 units, leftover units).
+    """
+    with timed("group  2c hotspot traces"):
+        det_r = np.nan_to_num(np.corrcoef(footprint_traces(footprints, stack_f16, cuda_available)))  # hotspot x hotspot
 
-    linkage_matrix = linkage(squareform(distance, checks=False), method="complete")
-    raw_group_ids = fcluster(linkage_matrix, t=1 - min_corr, criterion="distance")
-    return pd.DataFrame({"joint_label": labels, "group": _renumber(raw_group_ids)})
+    with timed("group  2d best-r trace-corr grouping"):
+        members = detections.groupby("joint_label").groups  # unit label -> row indices
+        labels = list(members)
+        n = len(labels)
+        best_r = np.ones((n, n))
+        for a in range(n):
+            for b in range(a + 1, n):
+                best_r[a, b] = best_r[b, a] = det_r[np.ix_(members[labels[a]], members[labels[b]])].max()
 
+        if n == 1:
+            raw_ids = np.array([0])
+        else:
+            distance = 1 - best_r
+            np.fill_diagonal(distance, 0)
+            raw_ids = fcluster(linkage(squareform(distance, checks=False), method="complete"),
+                               t=1 - MIN_GROUP_CORR, criterion="distance")
+    result = pd.DataFrame({"joint_label": labels, "group": _renumber(raw_ids)})
 
-def second_grouping(centroids: pd.DataFrame, max_dist: float) -> pd.DataFrame:
-    """Complete-linkage clustering on centroid distance, cut at max_dist."""
-    labels = centroids["joint_label"].tolist()
-    if len(labels) == 0:
-        return pd.DataFrame({"joint_label": [], "group": []})
-    if len(labels) == 1:
-        return pd.DataFrame({"joint_label": labels, "group": [0]})
-
-    coords = np.stack(centroids["mean_centroid"].to_numpy())
-    linkage_matrix = linkage(pdist(coords), method="complete")
-    raw_group_ids = fcluster(linkage_matrix, t=max_dist, criterion="distance")
-    return pd.DataFrame({"joint_label": labels, "group": _renumber(raw_group_ids)})
-
-
-def group_tracks(hotspots_props: pd.DataFrame, footprints: list, stack_f16: np.ndarray,
-                 cuda_available: bool = False) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Trace-corr grouping, then proximity grouping of leftovers -> (trace_corr, proximity, isolated)."""
-    # traces
-    with timed("group  2c footprint traces"):
-        det_traces = footprint_traces(footprints, stack_f16, cuda_available)
-        tracks = track_mean_traces(hotspots_props, det_traces)
-    frames_by_label = hotspots_props.groupby("joint_label")["frame"].apply(lambda s: sorted(s.tolist()))
-
-    def _frames_of(labels: list) -> list[int]:
-        return sorted(f for label in labels for f in frames_by_label[label])
-
-    # 1st grouping: trace correlation
-    with timed("group  2d trace-corr grouping"):
-        result1 = first_grouping(tracks, MIN_GROUP_CORR)
-    sizes1 = result1.groupby("group")["joint_label"].transform("size")
-    ungrouped_labels = result1.loc[sizes1 == 1, "joint_label"].tolist()
-
-    trace_corr = result1[sizes1 > 1].groupby("group")["joint_label"].apply(list).reset_index(name="labels")
+    frames_by_label = detections.groupby("joint_label")["frame"].apply(lambda s: sorted(s.tolist()))
+    sizes = result.groupby("group")["joint_label"].transform("size")
+    trace_corr = result[sizes > 1].groupby("group")["joint_label"].apply(list).reset_index(name="labels")
     trace_corr["group"] = range(len(trace_corr))
-    trace_corr["frames"] = trace_corr["labels"].apply(_frames_of)
-
-    # 2nd grouping: centroid distance, on the leftovers only
-    centroids = track_centroids(hotspots_props)
-    sub_centroids = centroids[centroids["joint_label"].isin(ungrouped_labels)].reset_index(drop=True)
-    with timed("group  2e proximity grouping"):
-        result2 = second_grouping(sub_centroids, MAX_CENTROID_DEVIATION)
-    sizes2 = result2.groupby("group")["joint_label"].transform("size")
-    isolated_labels = result2.loc[sizes2 == 1, "joint_label"].tolist()
-
-    proximity = result2[sizes2 > 1].groupby("group")["joint_label"].apply(list).reset_index(name="labels")
-    proximity["group"] = range(len(proximity))
-    proximity["frames"] = proximity["labels"].apply(_frames_of)
-
-    # whatever is still alone
-    isolated = pd.DataFrame({"joint_label": sorted(isolated_labels)})
-    isolated["frames"] = isolated["joint_label"].apply(lambda label: frames_by_label[label])
-
-    return trace_corr, proximity, isolated
-
-
-def _readable_groups(groups: pd.DataFrame) -> pd.DataFrame:
-    """Group table with readable column names for the xlsx export."""
-    readable = groups.rename(columns={"group": "group_id", "labels": "track_ids", "frames": "active_frames"})
-    readable.insert(1, "n_tracks", readable["track_ids"].apply(len))
-    return readable
+    trace_corr["frames"] = trace_corr["labels"].apply(
+        lambda units: sorted(f for label in units for f in frames_by_label[label]))
+    return trace_corr, sorted(result.loc[sizes == 1, "joint_label"].tolist())
 
 
 # ===========================================================================
 #
-#   STEP 3 -- MAP: groups -> zones -> masks, centroids, stats
+#   STEP 3 -- MAP: merge compartments -> spatial fit -> NR zones -> masks, centroids, stats
+#
+#   A zone is a dict: labels (units), source, fitted (units from 3b), merged_from (sources from 3a),
+#   mask (H, W bool union of member footprints). 3a-3b edit the compartment list in place; 3c returns NR zones apart.
 #
 # ===========================================================================
 
-def build_zones(trace_corr: pd.DataFrame, proximity: pd.DataFrame, isolated: pd.DataFrame) -> pd.DataFrame:
-    """One row per zone (ids 1..N across trace-corr, proximity, isolated)."""
-    zones = pd.concat([
-        pd.DataFrame({"joint_labels": trace_corr["labels"],
-                      "source": [f"trace_corr #{i}" for i in range(len(trace_corr))]}),
-        pd.DataFrame({"joint_labels": proximity["labels"],
-                      "source": [f"proximity #{i}" for i in range(len(proximity))]}),
-        pd.DataFrame({"joint_labels": isolated["joint_label"].apply(lambda label: [label]),
-                      "source": [f"isolated #{i}" for i in range(len(isolated))]}),
-    ], ignore_index=True)
-    zones["zone_id"] = range(1, len(zones) + 1)  # 1-based, 0 stays background
-    return zones
+def unit_mask(detections: pd.DataFrame, footprints: list, units: list, shape: tuple[int, int]) -> np.ndarray:
+    """Union of all hotspot footprints of the given units."""
+    mask = np.zeros(shape, dtype=bool)
+    for i in np.flatnonzero(detections["joint_label"].isin(units).to_numpy()):
+        mask[footprints[i][:, 0], footprints[i][:, 1]] = True
+    return mask
 
 
-def build_zone_masks(zones: pd.DataFrame, detections: pd.DataFrame, footprints: list,
-                     height: int, width: int) -> dict[int, np.ndarray]:
-    """zone id -> (H, W) bool mask: union of all member footprints over all frames."""
-    joint_label_to_zone = {label: row.zone_id for row in zones.itertuples() for label in row.joint_labels}
-    zone_masks: dict[int, np.ndarray] = {}
+# --- 3a. Merge compartments lying inside another ---------------------------
 
-    for i, row in enumerate(detections.itertuples()):
-        zone = joint_label_to_zone.get(row.joint_label)
-        if zone is None:
-            continue
-        coords = footprints[i]
-        mask = zone_masks.setdefault(zone, np.zeros((height, width), dtype=bool))
-        mask[coords[:, 0], coords[:, 1]] = True
-    return zone_masks
+def merge_zones(zones: list[dict], th_merge: float) -> pd.DataFrame:
+    """Merge compartment A into B while A is >= th_merge inside B (shared px / A px); best pair first, smaller into
+    larger."""
+    merge_rows = []
+    while True:
+        best_pair, best_inside = None, th_merge
+        for a, zone_a in enumerate(zones):
+            area_a = zone_a["mask"].sum()
+            for b, zone_b in enumerate(zones):
+                if a == b or area_a > zone_b["mask"].sum():
+                    continue
+                inside = (zone_a["mask"] & zone_b["mask"]).sum() / area_a
+                if inside >= best_inside:
+                    best_pair, best_inside = (a, b), inside
+        if best_pair is None:
+            break
 
+        a, b = best_pair
+        zone_a, zone_b = zones[a], zones[b]
+        merge_rows.append({"merged": zone_a["source"], "into": zone_b["source"], "inside": float(best_inside),
+                           "merged_px": int(zone_a["mask"].sum()), "into_px": int(zone_b["mask"].sum())})
+        zone_b["labels"] += zone_a["labels"]
+        zone_b["mask"] |= zone_a["mask"]
+        zone_b["merged_from"].append(zone_a["source"])
+        del zones[a]
+    return pd.DataFrame(merge_rows, columns=["merged", "into", "inside", "merged_px", "into_px"])
+
+
+# --- 3b. Spatial fit of leftover units --------------------------------------
+
+def spatial_fit_zones(zones: list[dict], units: list, detections: pd.DataFrame, footprints: list,
+                      shape: tuple[int, int], th_fit: float) -> tuple[pd.DataFrame, list]:
+    """Leftover unit -> best compartment if its best hotspot is >= th_fit inside (shared px / hotspot px).
+
+    Compartment masks are fixed after 3a (order-independent). Returns (fit log, unfitted units).
+    """
+    columns = ["unit", "unit_px", "frames", "best_compartment", "best_fit", "best_frame", "hotspot_fits", "result"]
+    merged_masks = [zone["mask"].copy() for zone in zones]
+    det_labels = detections["joint_label"].to_numpy()
+    det_frames = detections["frame"].to_numpy()
+    fit_rows, unfitted = [], []
+
+    for unit in sorted(units):
+        rows = np.flatnonzero(det_labels == unit)
+        mask = unit_mask(detections, footprints, [unit], shape)
+        row = {"unit": unit, "unit_px": int(mask.sum()), "frames": det_frames[rows].tolist(), "best_compartment": None,
+               "best_fit": np.nan, "best_frame": None, "hotspot_fits": [], "result": "leftover"}
+        if merged_masks:
+            # compartments x hotspots: shared px / hotspot px; per compartment, the unit's best hotspot counts
+            per_hotspot = np.array([[zone_mask[footprints[i][:, 0], footprints[i][:, 1]].mean() for i in rows]
+                                    for zone_mask in merged_masks])
+            fits = per_hotspot.max(axis=1)
+            best = int(np.argmax(fits))
+            row.update(best_compartment=zones[best]["source"], best_fit=float(fits[best]),
+                       best_frame=int(det_frames[rows[per_hotspot[best].argmax()]]),
+                       hotspot_fits=[round(float(v), 3) for v in per_hotspot[best]])
+            if fits[best] >= th_fit:
+                zones[best]["labels"].append(unit)
+                zones[best]["fitted"].append(unit)
+                zones[best]["mask"] |= mask
+                row["result"] = f"-> {zones[best]['source']}"
+        if row["result"] == "leftover":
+            unfitted.append(unit)
+        fit_rows.append(row)
+    return pd.DataFrame(fit_rows, columns=columns), unfitted
+
+
+# --- 3c. NR zones from overlapping unfitted units ---------------------------
+
+def non_recur_zones(zones: list[dict], unfitted: list, detections: pd.DataFrame, footprints: list,
+                    shape: tuple[int, int]) -> tuple[pd.DataFrame, list, list[dict]]:
+    """Unfitted units -> type_1 (0 px with every compartment) / type_2 (the rest); within each type, units sharing
+    >= 1 px are chained into a non_recur_zone_type_N zone (>= 2 units); single units are dropped.
+
+    NR zones are not compartments: returned apart, the compartment list stays unchanged.
+    Returns (overlap log, dropped units, non-recurring zones).
+    """
+    all_zones = np.zeros(shape, dtype=bool)
+    for zone in zones:
+        all_zones |= zone["mask"]
+    unit_masks = {unit: unit_mask(detections, footprints, [unit], shape) for unit in unfitted}
+    sets = {"type_1": [u for u, m in unit_masks.items() if not (m & all_zones).any()]}
+    sets["type_2"] = [u for u in unfitted if u not in sets["type_1"]]
+
+    dropped, overlap_rows, non_recur = [], [], []
+    for kind, units in sets.items():
+        parent = {u: u for u in units}
+        for k, a in enumerate(units):
+            for b in units[k + 1:]:
+                if (unit_masks[a] & unit_masks[b]).any():
+                    _union(parent, a, b)
+        groups: dict[int, list] = {}
+        for u in units:
+            groups.setdefault(_find(parent, u), []).append(u)
+
+        n_new = 0
+        for members in groups.values():
+            if len(members) < 2:
+                dropped += members
+                overlap_rows.append({"set": kind, "units": members, "result": "dropped"})
+                continue
+            source = f"non_recur_zone_{kind} #{n_new}"
+            n_new += 1
+            mask = np.zeros(shape, dtype=bool)
+            for u in members:
+                mask |= unit_masks[u]
+            non_recur.append({"labels": members, "source": source, "mask": mask})
+            overlap_rows.append({"set": kind, "units": members, "result": f"-> {source}"})
+    return pd.DataFrame(overlap_rows, columns=["set", "units", "result"]), dropped, non_recur
+
+
+# --- 3d. Centroids, compartment stats, counts -------------------------------
 
 def zone_centroids(zones: pd.DataFrame, detections: pd.DataFrame) -> dict[int, tuple[float, float]]:
-    """zone id -> mean (y, x) of its member tracks' centroids."""
+    """zone id -> mean (y, x) of its member units' centroids."""
     track_xy = detections.groupby("joint_label")[["centroid_y", "centroid_x"]].mean()
     centroids: dict[int, tuple[float, float]] = {}
     for row in zones.itertuples():
@@ -530,14 +604,15 @@ def zone_event_stats(frames: np.ndarray, fps: float) -> tuple[int, float, float]
 
 def zone_stats_table(zones: pd.DataFrame, zone_masks: dict[int, np.ndarray], detections: pd.DataFrame,
                      fps: float, um_per_px: float) -> pd.DataFrame:
-    """One row per zone: size (px, um^2) and event frequency/period."""
-    columns = ["zone_id", "source", "n_tracks", "area_px", "area_um2", "n_events", "mean_period_s", "mean_freq_hz"]
+    """One row per compartment: size (px, um^2) and event frequency/period."""
+    columns = ["compartment_id", "source", "n_tracks", "area_px", "area_um2", "n_events", "mean_period_s",
+               "mean_freq_hz"]
     if zones.empty:
         return pd.DataFrame(columns=columns)
 
-    stats = zones[["zone_id", "source"]].copy()
+    stats = zones[["zone_id", "source"]].rename(columns={"zone_id": "compartment_id"})
     stats["n_tracks"] = zones["joint_labels"].apply(len)
-    stats["area_px"] = stats["zone_id"].map(lambda z: int(zone_masks[z].sum()) if z in zone_masks else 0)
+    stats["area_px"] = stats["compartment_id"].map(lambda z: int(zone_masks[z].sum()) if z in zone_masks else 0)
     stats["area_um2"] = stats["area_px"] * um_per_px ** 2
 
     frames_by_label = detections.groupby("joint_label")["frame"].apply(np.array)
@@ -545,4 +620,43 @@ def zone_stats_table(zones: pd.DataFrame, zone_masks: dict[int, np.ndarray], det
         np.concatenate([frames_by_label.get(label, np.array([], dtype=int)) for label in labels]), fps))
     stats[["n_events", "mean_period_s", "mean_freq_hz"]] = pd.DataFrame(event_stats.tolist(), index=stats.index)
 
-    return stats.sort_values("zone_id").reset_index(drop=True)
+    return stats.sort_values("compartment_id").reset_index(drop=True)
+
+
+def fit_merge_counts(analyzer: SpontaneousZoneAnalyzer) -> pd.DataFrame:
+    """Groups, units and hotspots at each grouping stage (the xlsx counts sheet)."""
+    hotspots_per_unit = analyzer.detections.groupby("joint_label").size()
+
+    def n_hotspots(units: list) -> int:
+        return int(hotspots_per_unit[units].sum())
+
+    fit_log = analyzer.fit_log
+    trace_corr = [u for labels in analyzer.trace_corr_groups["labels"] for u in labels]
+    leftover = fit_log["unit"].tolist()
+    fitted = fit_log.loc[fit_log["result"] != "leftover", "unit"].tolist()
+    unfitted = fit_log.loc[fit_log["result"] == "leftover", "unit"].tolist()
+    n_trace_corr = len(analyzer.trace_corr_groups)
+    rows = [
+        ("detected", np.nan, np.nan, len(analyzer.detections)),
+        ("1st consecutive frames -> units", np.nan, len(hotspots_per_unit), len(analyzer.detections)),
+        ("2nd in trace-corr groups", n_trace_corr, len(trace_corr), n_hotspots(trace_corr)),
+        (f"3rd merges (inside >= {TH_MERGE_ZONES})", len(analyzer.merge_log), np.nan, np.nan),
+        ("compartments after 3rd", n_trace_corr - len(analyzer.merge_log), len(trace_corr),
+         n_hotspots(trace_corr)),
+        ("left after 2nd", np.nan, len(leftover), n_hotspots(leftover)),
+        (f"4th fitted into a compartment (fit >= {TH_FIT_ZONES})", np.nan, len(fitted), n_hotspots(fitted)),
+        ("4th not fitted -> leftover", np.nan, len(unfitted), n_hotspots(unfitted)),
+    ]
+    for kind, label in (("type_1", "type 1: 0 px with every compartment"),
+                        ("type_2", "type 2: touching a compartment")):
+        log = analyzer.overlap_log[analyzer.overlap_log["set"] == kind]
+        units = [u for members in log["units"] for u in members]
+        new = log[log["result"] != "dropped"]
+        new_units = [u for members in new["units"] for u in members]
+        rows.append((f"5th leftover {label}", np.nan, len(units), n_hotspots(units)))
+        rows.append((f"5th non_recur_zone_{kind} (NR zones, not compartments)", len(new), len(new_units),
+                     n_hotspots(new_units)))
+    in_zones = [u for labels in analyzer.zones["joint_labels"] for u in labels]
+    rows += [("5th dropped (single units)", np.nan, len(analyzer.dropped_units), n_hotspots(analyzer.dropped_units)),
+             ("final compartments", len(analyzer.zones), len(in_zones), n_hotspots(in_zones))]
+    return pd.DataFrame(rows, columns=["stage", "n_groups", "n_units", "n_hotspots"])
