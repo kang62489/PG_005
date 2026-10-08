@@ -147,4 +147,62 @@ Steps 3.1–3.3 (detrend → z-score → blur) give the first type of pre-proces
 
 ---
 
+## 4. Flashes in the GAUSS files
+
+### 4.1 Observation
+
+Opening the `*_GAUSS.tif` files in ImageJ:
+
+- **Multiple flashes** appear at **different locations**.
+- They appear in **many frames** (at different times) of a recording.
+
+### 4.2 Question and first guess
+
+**❓ What are they?**
+
+- They are recorded by the ACh sensor (GACh3.0).
+- They also appear in recordings **without any stimulation** → they are **spontaneous ACh signals**.
+- Each one usually lasts only **a few frames** (50 ms/frame) → they are probably **release events**.
+
+#### Figure
+
+**Fig. 6 — ABF channels of a spontaneous and an evoked recording.** Raw traces of CH1 (Vm), CH2 (command current) and CH14 (camera TTL), cell 2R on 2026_01_08. Shaded = imaging window. A: spontaneous, no current injected. B: evoked, 40 pulses of 600 pA (same recording as Figs. 1–5). Same CH2 range in both columns.
+
+![Fig. 6](../output/test08/fig6_abf_channels.png)
+
+To know them better, we do some simple statistics. Before that, we need to know **which recordings are used and why**, and the basic properties of this dataset.
+
+---
+
+### 4.3 The dataset
+
+#### 4.3a First pick: `proc_/ana_20260618_000.txt` (214 recordings)
+
+This was the first formal dataset sent to the cluster. A recording was picked if its paired ABF file passed four rules:
+
+1. **The ABF has three channels:**
+   - **CH1** = membrane potential (Vm) → spike peaks and frequencies.
+   - **CH2** = command current → was a pulse train applied? Yes → **evoked**. Anything else, including a holding current → **spontaneous**.
+   - **CH14** = digital out 14, the TTL trigger to the camera → actual frame numbers, used to align spikes with frames.
+2. **At least one spike** in CH1.
+3. **Continuous CH14 triggering.** Some protocols are episodic or split the scan into separate 400-frame blocks; those are excluded.
+4. **Paired TIFF:** the matching TIFF is picked, whatever the objective (OBJ).
+
+#### 4.3b Current dataset: `proc_/ana_20260922_000.txt` (201 recordings)
+
+After the first analysis, 13 recordings were removed by hand:
+
+- **2025_01_01** (all 11 recordings): their results had **strong artifacts** (horizontal stripe interference in the raw TIFFs).
+- **2025_11_08-0032 and -0033** (2 recordings): tdTomato recordings, not the ACh sensor.
+
+**This is the dataset used for everything in this document.**
+
+#### 4.3c ⚠️ One dataset for both spontaneous and evoked
+
+The same dataset is used for `spontaneous_analysis.py` and the following `ach_domain_analysis.py`.
+
+**Why:** at the moment of picking, the plan was to compare **evoked** ACh release events with **spontaneous** ones, so both kinds were picked together.
+
+---
+
 *(To be continued.)*

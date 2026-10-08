@@ -120,7 +120,7 @@ class AbfClip:
         self.loaded_abf = pyabf.ABF(self.raw_abf_path)
 
     def spike_detection(
-        self, spike_min_distance: int = 3000, spike_min_prominence: float = 40.0
+        self, spike_min_distance: int = 3000, spike_min_prominence: float = 20.0
     ) -> None:
         """TTL recording window -> Vm / rec_time slices -> find_peaks (distance in samples, prominence in mV)."""
         self.abf_time = self.loaded_abf.sweepX
