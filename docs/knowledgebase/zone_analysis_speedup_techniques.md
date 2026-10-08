@@ -122,7 +122,7 @@ is_edge_bg = np.zeros(bg_labels.max() + 1, bool); is_edge_bg[edge] = True
 filled = frame | ~is_edge_bg[bg_labels]                     # all other background patches = holes
 ```
 
-Example: a ring-shaped hotspot. Its inside is a background patch that never reaches the border,
+Example: a ring-shaped flash. Its inside is a background patch that never reaches the border,
 so it's a hole and is filled. Its outside touches the border, so it stays background.
 
 Connectivity must match scipy: `fill_holes` uses a 4-connected cross (`generate_binary_structure(2, 1)`).

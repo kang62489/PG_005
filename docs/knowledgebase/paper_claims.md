@@ -1,5 +1,5 @@
 ---
-keywords: paper, claims, spontaneous, zones, coverage, synchrony, not in phase, single neuron, single spike, hotspot size, area comparison, locality, wave, flow, anisotropic, source, sink
+keywords: paper, claims, spontaneous, zones, coverage, synchrony, not in phase, single neuron, single spike, flash size, area comparison, locality, wave, flow, anisotropic, source, sink
 files_referenced: spontaneous_analysis.py, classes/sp_zone_analyzer.py, ach_domain_analysis.py, classes/region_analyzer.py, area_comparison.py
 related: zone_analysis_speedup_techniques.md
 ---
@@ -22,7 +22,7 @@ Full wording, decisions and TODOs: `docs/paper_discussion_2026-10-02.md`, Part A
 | 1. Problem | If we image ACh itself, do we see compartments? | sets the definition | — | final |
 | 2. Spontaneous zones | Are there areas of recurring ACh release? | zones = candidate ACh compartments | Claim 1 | in progress |
 | 3. One ChI | Is a single ChI sufficient to supply a compartment? | one ChI **can** supply a compartment-sized area | Claim 2 | in progress |
-| 4. Wave-like spread | Can one ChI spread ACh like a wave? (MED flow) | no, if the hotspot fades in place | Claim 3 (flow part) | in progress |
+| 4. Wave-like spread | Can one ChI spread ACh like a wave? (MED flow) | no, if the flash fades in place | Claim 3 (flow part) | in progress |
 | 5. Answer to step 1 | Does ACh reveal divisions, and of what kind? | a new kind of division with a cellular basis | — | draft |
 
 - **Hotspot** = event (area whose ACh level briefly rises above its surroundings). **ACh compartment** = place where hotspots recur (step-1 definition gets "repeatedly" once step 2 is final).
@@ -40,25 +40,25 @@ Full wording, decisions and TODOs: `docs/paper_discussion_2026-10-02.md`, Part A
 - **Evidence so far (saion job 4734460, 105 recordings):**
   - 70 / 105 recordings have zones, 1,330 zones in total
   - median zone area ~102,700 µm², median frequency 0.11 Hz (period ~9 s), median coverage 0.56
-  - 35 recordings with 0 zones are truly silent (log: "no hotspots above threshold"), clustered on
+  - 35 recordings with 0 zones are truly silent (log: "no flashes above threshold"), clustered on
     2025_12_14 (16), 2025_11_27 (10), 2025_12_18 (7), 2024_10_11 (2, iAChSnFR)
 - **Gap:** "not in phase" needs an event-timing (synchrony) measure between zones.
   Frequency spread alone does not show it.
 
 ---
 
-## Claim 2 — One spike of one neuron releases a hotspot >= natural spontaneous hotspots
+## Claim 2 — One spike of one neuron releases a flash >= natural spontaneous flashes
 
 - **Meaning:** a local striatal area can be modulated by a single cholinergic interneuron.
-- **Pipeline:** `ach_domain_analysis.py` (MED hotspot) + `area_comparison.py` (vs spontaneous zones)
+- **Pipeline:** `ach_domain_analysis.py` (MED flash) + `area_comparison.py` (vs spontaneous zones)
 - **Groups:**
-  - A = estim-induced MED hotspots
-  - B = spontaneous-spike MED hotspots
+  - A = estim-induced MED flashes
+  - B = spontaneous-spike MED flashes
   - C = spontaneous zones not matched to the MED (nearest centroid >= 50 px)
 - **Test:** Mann-Whitney U, two-sided, A vs C, B vs C, A vs B. Expectation: A, B > C.
   Also per recording: `pct_zones_smaller` = % of unmatched zones smaller than the MED.
 - **Evidence so far (deigo job 45233657, 163 experiments):**
-  - 10X detected: 45 / 92 (estim 30, spontaneous 15); median spike-frame hotspot 58,119 µm²
+  - 10X detected: 45 / 92 (estim 30, spontaneous 15); median spike-frame flash 58,119 µm²
 - **Status:** formal `area_comparison.py --db results/results.db` run pending.
 
 ---

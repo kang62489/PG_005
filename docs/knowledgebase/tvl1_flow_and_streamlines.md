@@ -1,6 +1,6 @@
 ---
 keywords: optical flow, TV-L1, total variation, L1 data term, pyramid, warp, dual projection, flow pattern, source, sink, anisotropic, drift, spread, divergence, least squares, streamlines, streamplot
-files_referenced: functions/tvl1_flow.py, functions/hotspot_flow.py, functions/flow_pattern.py, functions/plot_results.py
+files_referenced: functions/tvl1_flow.py, functions/flash_flow.py, functions/flow_pattern.py, functions/plot_results.py
 related: paper_claims.md
 ---
 
@@ -134,7 +134,7 @@ Each warp re-reads B at x + u for real (bilinear interpolation), replacing the s
 
 ## 7. Source / sink / anisotropic (`flow_pattern.py`)
 
-1. Block-average u, v in 8 × 8 px blocks; keep blocks inside the CAT hotspot.
+1. Block-average u, v in 8 × 8 px blocks; keep blocks inside the CAT flash.
 2. Least-squares fit around the centroid: `u ≈ a11·(x−cx) + a12·(y−cy) + bu`, `v ≈ a21·(x−cx) + a22·(y−cy) + bv`.
 3. spread = |a11 + a22| / 2 × r_rms; drift = √(bu² + bv²).
 4. drift > spread -> anisotropic; else trace > 0 -> source, trace < 0 -> sink.
@@ -234,7 +234,7 @@ Sink = all arrows flipped (lines run into the centre); anisotropic = parallel li
 |---|---|
 | Seeds | panel divided into ≈ 75 × 75 cells (`density = 2.5`); lines start from free cells |
 | No crowding | each line marks the cells it passes; a new line stops on entering an occupied cell -> even spacing |
-| Mask | blocks outside the CAT hotspot are masked -> lines stop at the hotspot edge (row 2) |
+| Mask | blocks outside the CAT flash are masked -> lines stop at the flash edge (row 2) |
 | Stop at zero | speed 0 -> stop (e.g. centre of a source) |
 | Steps | small adaptive steps (2nd-order Runge–Kutta), same idea as the 0.5 px demo |
 | Arrowhead | one per line, at its middle, pointing along the flow (`arrowsize = 1.2`) |
@@ -254,5 +254,5 @@ Every pixel has its own (u, v) (~1 million arrows). Each output reduces them dif
 | Speed map (`FLOW.png` row 3) | none: every pixel, µm/s | `imshow(speed)` |
 
 - The quiver arrow at (x = 24, y = 48) is exactly `u[48, 24], v[48, 24]`, not a 24 × 24 average (TV makes neighbours similar, so one pixel is representative).
-- Row 2 draws only grid points within 24 px of the CAT hotspot, so thin hotspots are not missed.
+- Row 2 draws only grid points within 24 px of the CAT flash, so thin flashes are not missed.
 - Arrow **length is auto-scaled per panel** (95th-percentile arrow drawn 0.9 × 24 ≈ 22 px long): compare lengths within a panel only. For absolute speed use row 3 (shared colour scale).
