@@ -107,10 +107,10 @@ Section numbers follow `plain_01.md`.
   | 1 | Sec_01 | pA | CH2, command current |
   | 3 | IN 14 | V | CH14, camera TTL |
 
-- **Evoked vs spontaneous is coded later**, in `classes/abf_clip.py` → `_detect_hotspot_origin()`:
+- **Evoked vs spontaneous is coded later**, in `classes/abf_clip.py` → `_detect_flash_origin()`:
   - Window = TTL ≥ 2.0 V (first sample) → TTL ≥ 0.8 V (last sample).
   - Inside the window, any CH2 sample > **200 pA above the CH2 median** → `estim_induced`; else `spontaneous`. The median absorbs a holding current.
-  - Stored as `hotspot_origin` in the results database; used by `area_comparison.py` (groups A / B).
+  - Stored as `flash_origin` in the results database; used by `area_comparison.py` (groups A / B).
 - `spontaneous_analysis.py` runs on every recording in the list.
 
 #### 4.3b 20260618 → 20260922

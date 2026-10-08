@@ -25,28 +25,28 @@ Terms in *italics* are explained in [Key terms](#2-key-terms).
   - sheet `zones` → every zone: area, number of events, frequency
 - `spontaneous/{rec}_ZONE_MAPS.tif` (multi-page)
   - page 1: max projection + all zones in colour, numbered; dashed line = striatum boundary; axes = ventral–dorsal, medial–lateral
-  - page 2 onward: one page per detection frame; title = frame / time, *threshold*, max *z*, active zone; blue = zone outline, white = the hotspot in that frame
+  - page 2 onward: one page per detection frame; title = frame / time, *threshold*, max *z*, active zone; blue = zone outline, white = the flash in that frame
 - `spontaneous/{rec}_ZONES.xlsx` → sheets `trace_corr_groups` / `proximity_groups` / `isolated_tracks` list the **active frames** of each zone
 
 **Still open:**
 - **"Not in phase" is not measured yet.** The active frames of each zone are available; a timing comparison between zones is still to do.
-- `2025_11_27-0033`: one very large hotspot in mid-recording (frame 1078) was removed by the 80 % filter — worth a look.
+- `2025_11_27-0033`: one very large flash in mid-recording (frame 1078) was removed by the 80 % filter — worth a look.
 
 ---
 
-### Claim 2 — One spike of one neuron releases a hotspot ≥ natural spontaneous hotspots
+### Claim 2 — One spike of one neuron releases a flash ≥ natural spontaneous flashes
 
 **What we see:**
 
-Spike-triggered hotspots (*MED*), detected recordings only:
+Spike-triggered flashes (*MED*), detected recordings only:
 
-| OBJ | Detected / total | *Reliability* (median) | Spike-frame hotspot (median) | *Lasting time* (median) |
+| OBJ | Detected / total | *Reliability* (median) | Spike-frame flash (median) | *Lasting time* (median) |
 |---|---|---|---|---|
 | 10X | 44 / 92 | 66 % | ~80,900 µm² | 75 ms |
 | 40X | 8 / 8 | 13 % | ~41,000 µm² | 56 ms |
 | 60X | 22 / 66 | 16 % | ~10,500 µm² | 66 ms |
 
-MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparison.xlsx`):
+MED flash vs. spontaneous zones of the same field of view (10X, `area_comparison.xlsx`):
 
 | Group | n | Median | Q1 – Q3 |
 |---|---|---|---|
@@ -71,21 +71,21 @@ MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparis
   - `Zones` / `Zone events` → zone sizes (per zone / per event)
   - `Groups`, `Group tests` → the two tables above
 - `ana_20260922_000_deigo_cells.xlsx`
-  - `Summary` → neurons with a detected hotspot (19 / 37)
-  - `Spatial`, `Temporal` → hotspot size and lasting time across neurons
+  - `Summary` → neurons with a detected flash (19 / 37)
+  - `Spatial`, `Temporal` → flash size and lasting time across neurons
   - `Neurons` → which recording of which neuron was detected
   - `Skipped` → why a recording has no result
 - `spatial/{rec}_SPATIAL.png`
-  - top: hotspot area per frame (star = *critical frame*, green dashed = decay fit with τ)
-  - middle: *CAT* masks, frame −4 to +4 (pink = hotspot counted, × = centroid)
+  - top: flash area per frame (star = *critical frame*, green dashed = decay fit with τ)
+  - middle: *CAT* masks, frame −4 to +4 (pink = flash counted, × = centroid)
   - bottom: all spike waveforms overlaid
-- `reliability/{rec}_RELIABILITY.png` → one tile per *segment*; green frame = hotspot found; title = reliability
+- `reliability/{rec}_RELIABILITY.png` → one tile per *segment*; green frame = flash found; title = reliability
 - `reliability/{rec}_VM_SUCCESS_FAIL.png` → Vm of successful vs. failed segments; black dots = AP threshold
 - `spikes/ABF_*_spike_analysis.png` → whole Vm trace; green dots = spikes used
 - `median/*_MED.tif`, `categorized/*_CAT.tif` → the movies behind the figures (open in ImageJ)
 
 **Still open:**
-- Why group A splits into large and small hotspots (cell? slice? stimulation?).
+- Why group A splits into large and small flashes (cell? slice? stimulation?).
 - The per-objective table above was computed from `results.db`; it is not in a sheet yet.
 
 ---
@@ -102,21 +102,21 @@ MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparis
 | 40X | 8 | 88 % | 12 % |
 | 60X | 22 | 84 % | 16 % |
 
-- Example `2025_12_15-0012`: source → sink → sink → sink → anisotropic `L 24° D`. The hotspot appears, shrinks back in place and fades; it does not travel across the field.
+- Example `2025_12_15-0012`: source → sink → sink → sink → anisotropic `L 24° D`. The flash appears, shrinks back in place and fades; it does not travel across the field.
 
 **Where to look:**
 - `ana_20260922_000_deigo_cells.xlsx`, sheet `Flow pattern` → the table above
 - `results.db`, table `flow_pairs` → one row per frame pair: pattern, drift / spread (µm per frame), DV / ML direction
 - `flow/{rec}_FLOW.png`
   - row 1: flow arrows on the MED (gray = z), inside the striatum
-  - row 2: flow arrows only inside the CAT hotspot
+  - row 2: flow arrows only inside the CAT flash
   - row 3: flow speed (µm/s)
 - `flow/{rec}_STREAMLINES.png`
   - row 1: streamlines on the MED
-  - row 2: streamlines inside the hotspot; title ends with the pattern; last panel has a D–V–M–L crosshair
+  - row 2: streamlines inside the flash; title ends with the pattern; last panel has a D–V–M–L crosshair
 
 **Still open:**
-- No single "stays local" number yet (e.g. how far the hotspot centre moves vs. its size).
+- No single "stays local" number yet (e.g. how far the flash centre moves vs. its size).
 
 ---
 
@@ -124,42 +124,42 @@ MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparis
 
 | Term | Meaning |
 |---|---|
-| **Hotspot** | a connected patch of pixels above threshold in one frame |
+| **Flash** | a connected patch of pixels above threshold in one frame |
 | **Threshold** | from the intensity histogram: `thr = peak + 2 × σ` (figure titles: `thr = c + 2.0 × σ = value`) |
 | **z** (gray colour bar) | intensity in units of baseline σ; 1 = noise level, > 5 = strong signal |
 | **Segment** | a short clip around one spike (10 frames before, 10 after) |
 | **MED** | pixel-wise median of all segments of one recording — the "typical" response to one spike |
-| **CAT** | the MED turned into a binary hotspot mask (window 201 px, density ≥ 0.1, threshold 2σ, objects ≥ 900 µm²) |
-| **Reliability** | % of single segments that show a hotspot on their own |
-| **Critical frame** | the spike frame or the spike+1 frame, whichever has the larger hotspot |
-| **Lasting time** | decay time constant τ of the hotspot area after the peak (ms) |
+| **CAT** | the MED turned into a binary flash mask (window 201 px, density ≥ 0.1, threshold 2σ, objects ≥ 900 µm²) |
+| **Reliability** | % of single segments that show a flash on their own |
+| **Critical frame** | the spike frame or the spike+1 frame, whichever has the larger flash |
+| **Lasting time** | decay time constant τ of the flash area after the peak (ms) |
 | **estim_induced / spontaneous** | origin of the spike: evoked by a current pulse (> 200 pA in ABF CH2) vs. fired on its own |
-| **Zone** | a place that lights up repeatedly; the union of all hotspot footprints that belong together |
-| **trace-corr / proximity / isolated** | how hotspots were grouped into a zone: correlated time traces (r ≥ 0.95) / close by / alone |
+| **Zone** | a place that lights up repeatedly; the union of all flash footprints that belong together |
+| **trace-corr / proximity / isolated** | how flashes were grouped into a zone: correlated time traces (r ≥ 0.95) / close by / alone |
 | **Coverage** | zone area inside the striatum ÷ striatum area |
 | **Optical flow (TV-L1)** | for every pixel, how far the image content moved between two frames (px per frame) |
-| **Flow pattern** | fit of the flow inside the CAT hotspot: **source** (spreads out), **sink** (shrinks in), **anisotropic** (drifts one way, e.g. `L 25° D` = lateral, tilted 25° toward dorsal) |
+| **Flow pattern** | fit of the flow inside the CAT flash: **source** (spreads out), **sink** (shrinks in), **anisotropic** (drifts one way, e.g. `L 25° D` = lateral, tilted 25° toward dorsal) |
 
 ---
 
 ## 3. How the results were produced
 
 **Spontaneous** (`spontaneous_analysis.py`, saion job 4734460, 105 × 10X):
-1. Threshold each frame (`peak + 2σ`); keep hotspots between 1 % and 80 % of the frame.
-2. Chain hotspots across frames into tracks (centroids < 115 px apart).
+1. Threshold each frame (`peak + 2σ`); keep flashes between 1 % and 80 % of the frame.
+2. Chain flashes across frames into tracks (centroids < 115 px apart).
 3. Group tracks into zones (trace correlation, then proximity).
 4. Per zone: area, number of events, frequency. Per recording: coverage of the striatum.
 
 **Spike-aligned** (`ach_domain_analysis.py`, deigo job 45504859, 166 recordings):
 1. Detect spikes in the patch-clamp Vm (ABF); keep spikes with enough quiet time around them.
 2. Cut a ±10-frame segment around each spike → reliability (single segments) and MED (median).
-3. MED → CAT hotspot mask → hotspot size on the spike / spike+1 frame, lasting time.
+3. MED → CAT flash mask → flash size on the spike / spike+1 frame, lasting time.
 4. TV-L1 optical flow between consecutive MED frames → flow pattern per frame pair.
 
 **Area comparison** (`area_comparison.py`, run locally on the copied `results.db`):
-1. MED hotspot size = the larger of the spike / spike+1 frame.
+1. MED flash size = the larger of the spike / spike+1 frame.
 2. Zone size = median per-event area of each spontaneous zone.
-3. The zone nearest the MED hotspot (< 50 px) is set aside; the others form group C.
+3. The zone nearest the MED flash (< 50 px) is set aside; the others form group C.
 
 ---
 
@@ -183,13 +183,13 @@ MED hotspot vs. spontaneous zones of the same field of view (10X, `area_comparis
 results/
 ├── results.db                              spike-aligned numbers, one row per recording (SQLite)
 ├── ana_20260922_000_deigo_cells.xlsx       spike-aligned summary sheets
-├── area_comparison.xlsx                    MED hotspot vs. spontaneous zones (claim 2)
+├── area_comparison.xlsx                    MED flash vs. spontaneous zones (claim 2)
 ├── spikes/        ABF_*_spike_analysis.png           Vm trace + which spikes were used
 ├── reliability/   *_RELIABILITY.png, *_VM_SUCCESS_FAIL.png
 ├── median/        *_MED.tif                          spike-aligned median movie (21 frames)
-├── categorized/   *_CAT.tif                          binary hotspot movie of the MED
-├── spatial/       *_SPATIAL.png                      hotspot size over time
-├── flow/          *_FLOW.png, *_STREAMLINES.png      how the hotspot moves / spreads
+├── categorized/   *_CAT.tif                          binary flash movie of the MED
+├── spatial/       *_SPATIAL.png                      flash size over time
+├── flow/          *_FLOW.png, *_STREAMLINES.png      how the flash moves / spreads
 └── spontaneous/
     ├── spontaneous_summary.xlsx            one row per recording + one row per zone
     ├── *_ZONES.xlsx                        per-recording zone details
