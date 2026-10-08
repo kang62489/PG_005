@@ -6,7 +6,7 @@ fit_hist.py  --  Pixel-value histogram + left-side Gaussian fit (CPU Numba JIT +
   Step 2. Left fit  : fit a Gaussian to the peak + left side only (right side holds real signal)
   Step 3. Consumers : fit_hist_sigma()            -> background mean/sigma for img_proc z-scoring
                       fit_background()            -> smoothed peak + sigma for spontaneous zones (z-scored maps)
-                      find_background_threshold() -> smoothed peak + k*sigma hotspot threshold for spontaneous zones
+                      find_background_threshold() -> smoothed peak + k*sigma flash threshold for spontaneous zones
 """
 
 ## Modules
@@ -307,7 +307,7 @@ def fit_background(stack: np.ndarray, n_bins: int = ZONE_HIST_BINS, cuda_availab
 
 def find_background_threshold(stack: np.ndarray, sigma_ratio: float, n_bins: int = ZONE_HIST_BINS,
                               cuda_available: bool = False) -> float:
-    """Hotspot threshold = smoothed background peak + sigma_ratio * sigma (see fit_background)."""
+    """Flash threshold = smoothed background peak + sigma_ratio * sigma (see fit_background)."""
     center, sigma = fit_background(stack, n_bins, cuda_available)
     return float(center + sigma_ratio * sigma)
 

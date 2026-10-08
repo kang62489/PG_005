@@ -2,7 +2,7 @@
 Spike detection in the paired ABF and clipping into per-spike image / Vm segments.
 
   Step 1. Load   : read the ABF; recording window = TTL (channel 3) rising -> falling edge;
-                   current pulses on channel 1 inside the window -> hotspot_origin estim_induced / spontaneous
+                   current pulses on channel 1 inside the window -> flash_origin estim_induced / spontaneous
   Step 2. Detect : find_peaks on Vm -> spike times / values; firing rate = spikes / TTL window
   Step 3. Window : collapse same-frame spikes, set_interval_frames = KEEP_FRACTION_QUANTILE margin -> pick / skip
   Step 4. Clip   : image frame range + ABF sample range per picked spike
@@ -52,7 +52,7 @@ class AbfClip:
     """Load -> detect -> window -> clip -> export for one TIFF + ABF pair (all run in __init__).
 
     Results after construction:
-        hotspot_origin                                                (step 1)
+        flash_origin                                                  (step 1)
         peak_indices, num_found_spikes, rec_window_s, spike_rate_hz   (step 2)
         set_interval_frames, df_picked_spikes, df_skipped_spikes,
         df_collapsed_peaks                                            (step 3)
@@ -134,7 +134,7 @@ class AbfClip:
 
         self.Vm: np.ndarray = self.abf_dataset[0][self.abf_idx_tstart : self.abf_idx_tend]
         self.rec_time: np.ndarray = self.abf_time[self.abf_idx_tstart : self.abf_idx_tend]
-        self.hotspot_origin = self._detect_hotspot_origin()
+        self.flash_origin = self._detect_flash_origin()
 
         self.peak_indices, _properties = find_peaks(
             self.Vm, distance=spike_min_distance, prominence=spike_min_prominence
@@ -147,14 +147,14 @@ class AbfClip:
         console.log(f"Start index: {self.abf_idx_tstart}, Start time: {self.abf_time[self.abf_idx_tstart]}")
         console.log(f"End index: {self.abf_idx_tend}, End time: {self.abf_time[self.abf_idx_tend]}")
         console.log(f"Found {self.num_found_spikes} peaks in {self.rec_window_s:.1f} s ({self.spike_rate_hz:.3f} Hz)")
-        console.log(f"Hotspot origin: {self.hotspot_origin}")
+        console.log(f"Flash origin: {self.flash_origin}")
 
         self.df_Vm = pl.DataFrame({"Time": self.rec_time, "Vm": self.Vm})
         self.peak_times = self.rec_time[self.peak_indices]
         self.peak_values = self.Vm[self.peak_indices]
         self.df_peaks = pl.DataFrame({"Time": self.peak_times, "Peaks": self.peak_values})
 
-    def _detect_hotspot_origin(self) -> str | None:
+    def _detect_flash_origin(self) -> str | None:
         """'estim_induced' if STIM_CHANNEL has a pulse > STIM_PULSE_PA above its median inside the TTL window,
         else 'spontaneous'; None if the ABF has no STIM_CHANNEL."""
         if self.abf_dataset.shape[0] <= STIM_CHANNEL:
@@ -389,7 +389,7 @@ class AbfClip:
         console.log(f"[green]Saved spike detection plot -> {stem}.png[/green]")
 
     def get_export_data(self) -> dict:
-        """exp_date, file paths, serials, spike counts, firing rate and hotspot_origin for ResultsExporter."""
+        """exp_date, file paths, serials, spike counts, firing rate and flash_origin for ResultsExporter."""
         return {
             "exp_date": self.exp_date,
             "tiff_full_path": self.proc_tiff_path,
@@ -400,7 +400,7 @@ class AbfClip:
             "n_spikes_analyzed": len(self.df_picked_spikes),
             "rec_window_s": self.rec_window_s,
             "spike_rate_hz": self.spike_rate_hz,
-            "hotspot_origin": self.hotspot_origin,
+            "flash_origin": self.flash_origin,
         }
 
     def _segment_vm_slices(self) -> list[tuple[np.ndarray, np.ndarray]]:
@@ -410,7 +410,7 @@ class AbfClip:
     def get_vm_segments(self) -> list[tuple[np.ndarray, np.ndarray]]:
         """Per-segment (time_ms, Vm) pairs; t=0 = start of the spike's own image frame, not the Vm peak.
 
-        Same frame-offset reference as the image panels / hotspot-area trace in plot_spatiotemporal_summary,
+        Same frame-offset reference as the image panels / flash-area trace in plot_spatiotemporal_summary,
         so the frame-boundary gridlines line up.
         """
         segments = []

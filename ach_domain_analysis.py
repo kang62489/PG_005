@@ -4,10 +4,10 @@ ach_domain_analysis.py  --  Spike-aligned image analysis pipeline.
 For every ana-list entry (processed TIFF + paired ABF, OBJ looked up in rec_data.db):
 
   Step 1. Clip        : spikes in the ABF -> one image/Vm segment per spike
-  Step 2. Reliability : per-segment hotspot check -> RELIABILITY.png + VM_SUCCESS_FAIL.png
+  Step 2. Reliability : per-segment flash check -> RELIABILITY.png + VM_SUCCESS_FAIL.png
   Step 3. Median      : spike-centered median of the detected segments
   Step 4. Categorize  : bright / background per frame
-  Step 5. Region+Flow : critical-frame clusters, hotspot area decay, TV-L1 flow (+ CAT keep mask),
+  Step 5. Region+Flow : critical-frame clusters, flash area decay, TV-L1 flow (+ CAT keep mask),
                         anisotropic drift -> DV / ML (e.g. 'L 25° D') from the Striatum Boundary export
   Step 6. Export      : results.db rows (experiments + flow_pairs), MED/CAT TIFFs, SPATIAL.png + FLOW.png + STREAMLINES.png
                         (all PNGs built + saved on a background thread; flow figures shown in the striatum from the
@@ -153,7 +153,7 @@ def build_stats_tables(
             "iqr_q1": r["iqr_q1"], "iqr_q3": r["iqr_q3"], "geomean": r["geomean"], "geostd_factor": r["geostd_factor"],
             "n": r["n_detected"],
         }
-        for metric in ("spike_frame_hotspot_um2", "spike_plus1_frame_hotspot_um2")
+        for metric in ("spike_frame_flash_um2", "spike_plus1_frame_flash_um2")
         if (r := rows_by_metric.get(metric)) is not None
     ]
     temporal = [
@@ -297,7 +297,7 @@ def analyze_entry(
     def export_stem(file_type: str) -> str:
         return ResultsExporter.build_export_stem(export_data["exp_date"], export_data["img_serial"], *name_args, file_type)
 
-    # --- Step 2. Reliability: per-segment hotspot check + montage + success/failure Vm ---
+    # --- Step 2. Reliability: per-segment flash check + montage + success/failure Vm ---
     if emitter:
         emitter({"type": "step", "msg": "Loading raw segments..."})
     lst_segments = load_img_segs(clip.proc_tiff_path, clip.lst_img_frame_ranges)  # detrended, unnormalized
@@ -361,7 +361,7 @@ def analyze_entry(
             if clusters is None:
                 continue
             if not clusters:
-                console.log(f"[green]{frame_tag_} frame: no hotspot clusters[/green]")
+                console.log(f"[green]{frame_tag_} frame: no flash clusters[/green]")
                 continue
             sizes = ", ".join(f"cluster {c['cluster_id']}={c['area_um2']:.0f} µm² ({c['area_px']} px)" for c in clusters)
             console.log(f"[green]{frame_tag_} frame: {sizes}[/green]")
@@ -385,7 +385,7 @@ def analyze_entry(
     # --- 5b. TV-L1 flow (significant recordings only) ---
     if final_significant:
         if emitter:
-            emitter({"type": "step", "msg": "Computing hotspot flow..."})
+            emitter({"type": "step", "msg": "Computing flash flow..."})
         region_analyzer.compute_flow(cat_stack, median_segment)
         console.log(f"[green]Flow: {len(region_analyzer.flow_pairs)} pair(s)  ({time.time() - entry_t0:.1f}s)[/green]")
 
@@ -425,7 +425,7 @@ def analyze_entry(
         region_data=region_results,
         lasting_time_ms=lasting_time_ms,
         significant=final_significant,
-        hotspot_origin=export_data["hotspot_origin"],
+        flash_origin=export_data["flash_origin"],
         rec_window_s=export_data["rec_window_s"],
         spike_rate_hz=export_data["spike_rate_hz"],
         reliability_pct=reliability_pct,

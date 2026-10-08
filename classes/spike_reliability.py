@@ -1,5 +1,5 @@
 """
-Per-segment reliability check -- does each raw spike segment show its own hotspot?
+Per-segment reliability check -- does each raw spike segment show its own flash?
 
   Step 1. Check  : categorize spike / spike+1 of every raw segment -> density-gated detection (segments in threads)
   Step 2. Export : per-segment detection montage (RELIABILITY.png)
@@ -28,7 +28,7 @@ from classes.region_analyzer import (
     compute_density_thresh,
     compute_eps_px,
     compute_window_px,
-    detect_hotspot,
+    detect_flash,
 )
 from classes.results_exporter import ResultsExporter
 from classes.spatial_categorization import BASELINE_SIGMA_MULT, SpatialCategorizer
@@ -45,11 +45,11 @@ N_THREADS_RELIABILITY = 8  # segments checked in parallel threads; each peaks at
 
 
 class SpikeReliabilityChecker:
-    """Density-gated hotspot check on every raw segment, plus its two reliability exports.
+    """Density-gated flash check on every raw segment, plus its two reliability exports.
 
     Cheaper than a full RegionAnalyzer per segment: only the spike and spike+1 frames are
     categorized (SpatialCategorizer.categorize_frame), and RegionAnalyzer's earliest-wins
-    detection loop (detect_hotspot) is reused as a plain function.
+    detection loop (detect_flash) is reused as a plain function.
 
     Results after check():
         seg_results, reliability_pct
@@ -71,7 +71,7 @@ class SpikeReliabilityChecker:
     # =======================================================================
 
     def check(self, lst_segments: list[np.ndarray], spike_frame_idx: int) -> tuple[list[dict], float]:
-        """Density-gated hotspot detection on every raw segment (from load_img_segs()); also stored on self.
+        """Density-gated flash detection on every raw segment (from load_img_segs()); also stored on self.
 
         Returns (seg_results, reliability_pct): one dict per segment with "detected", "frame_offset"
         (0 = spike, 1 = spike+1), "bright_mask", "label_frame", "centroids", "n_clusters"; % detected.
@@ -102,7 +102,7 @@ class SpikeReliabilityChecker:
             candidates.append((idx, cat_frame, segment[idx]))
 
         # 1c. earliest frame passing the density gate wins
-        detected, frame_idx, label_frame, centroids, _ = detect_hotspot(
+        detected, frame_idx, label_frame, centroids, _ = detect_flash(
             candidates, self.eps_px, self.window_px, self.density_thresh
         )
         winning_cat_frame = next(cat_frame for idx, cat_frame, _ in candidates if idx == frame_idx)

@@ -1,8 +1,8 @@
 """
 Region analysis of one spike-aligned median segment (categorized + raw-intensity stacks).
 
-  Step 1. Detect : critical frame = earliest of spike / spike+1 with a density-gated hotspot
-  Step 2. Area   : per-frame hotspot area -> decay-tau fit (lasting time)
+  Step 1. Detect : critical frame = earliest of spike / spike+1 with a density-gated flash
+  Step 2. Area   : per-frame flash area -> decay-tau fit (lasting time)
   Step 3. Report : per-cluster centroid + enclosing radius, spike and spike+1 cluster sizes
   Step 4. Flow   : TV-L1 flow + CAT keep mask, spike-1->spike ... spike+3->spike+4, + source / sink /
                    anisotropic pattern per pair (compute_flow())
@@ -23,8 +23,8 @@ from skimage.measure import label as skimage_label
 # Local imports
 from classes.spatial_categorization import CATEGORY_BRIGHT
 from functions.cluster_kernels import within_distance
+from functions.flash_flow import compute_flow_pairs
 from functions.flow_pattern import fit_flow_pattern
-from functions.hotspot_flow import compute_flow_pairs
 
 # ===========================================================================
 #
@@ -52,11 +52,11 @@ MIN_DECAY_FIT_R2 = 0.8       # lower R² -> lasting time reported as None
 
 
 class RegionAnalyzer:
-    """Critical-frame hotspot clusters, hotspot-area decay, and (on request) hotspot flow.
+    """Critical-frame flash clusters, flash-area decay, and (on request) flash flow.
 
     Results after construction:
         critical_frame_idx, significant, label_frame, centroids      (step 1)
-        hotspot_area_um2, decay_* fields                             (step 2)
+        flash_area_um2, decay_* fields                               (step 2)
         clusters, spike_frame_clusters, spike_plus1_frame_clusters   (step 3)
     After compute_flow():
         flow_pairs                                                   (step 4)
@@ -96,14 +96,14 @@ class RegionAnalyzer:
             self.n_raw_clusters,
         ) = self._detect_critical_frame(cat_stack, med_stack, spike_frame_idx, eps_px, window_px, density_thresh)
 
-        # --- Step 2. Area: hotspot area trace -> decay fit ---
-        self.hotspot_area_um2 = self._compute_hotspot_area_trace(cat_stack, eps_px, window_px, density_thresh)
-        peak_search_end = min(self.spike_frame_idx + 2, len(self.hotspot_area_um2))
+        # --- Step 2. Area: flash area trace -> decay fit ---
+        self.flash_area_um2 = self._compute_flash_area_trace(cat_stack, eps_px, window_px, density_thresh)
+        peak_search_end = min(self.spike_frame_idx + 2, len(self.flash_area_um2))
         self.decay_peak_frame_idx = self.spike_frame_idx + int(
-            np.argmax(self.hotspot_area_um2[self.spike_frame_idx:peak_search_end])
+            np.argmax(self.flash_area_um2[self.spike_frame_idx:peak_search_end])
         )
         self.decay_fit_A, self.decay_tau_frames, self.decay_fit_r2 = fit_decay_tau(
-            self.hotspot_area_um2, self.decay_peak_frame_idx
+            self.flash_area_um2, self.decay_peak_frame_idx
         )
 
         # --- Step 3. Report: critical-frame clusters + spike / spike+1 cluster sizes ---
@@ -130,13 +130,13 @@ class RegionAnalyzer:
         window_px: int,
         density_thresh: float,
     ) -> tuple[int, bool, np.ndarray, list[tuple[float, float]], int]:
-        """detect_hotspot() over [spike, spike+1] -> (critical_frame_idx, significant, label_frame, centroids, n_raw)."""
+        """detect_flash() over [spike, spike+1] -> (critical_frame_idx, significant, label_frame, centroids, n_raw)."""
         candidate_idxs = [spike_frame_idx]
         if spike_frame_idx + 1 < cat_stack.shape[0]:
             candidate_idxs.append(spike_frame_idx + 1)
         candidates = [(idx, cat_stack[idx], med_stack[idx]) for idx in candidate_idxs]
 
-        significant, critical_frame_idx, label_frame, centroids, n_raw = detect_hotspot(
+        significant, critical_frame_idx, label_frame, centroids, n_raw = detect_flash(
             candidates, eps_px, window_px, density_thresh
         )
         return critical_frame_idx, significant, label_frame, centroids, n_raw
@@ -147,20 +147,20 @@ class RegionAnalyzer:
     #
     # =======================================================================
 
-    def _compute_hotspot_area_trace(
+    def _compute_flash_area_trace(
         self, cat_stack: np.ndarray, eps_px: int, window_px: int, density_thresh: float
     ) -> np.ndarray:
         """Density-gated kept-cluster area (µm²) per frame, for the decay-tau fit."""
         n_frames = cat_stack.shape[0]
-        hotspot_area_um2 = np.zeros(n_frames, dtype=float)
+        flash_area_um2 = np.zeros(n_frames, dtype=float)
         for idx in range(n_frames):
             bright_mask = cat_stack[idx] == CATEGORY_BRIGHT
             label_frame, _, _ = _run_density_gated_cluster_seeker(
                 bright_mask, eps_px, window_px, density_thresh, z_frame=None
             )
             kept_px = int(np.count_nonzero(label_frame >= 0))
-            hotspot_area_um2[idx] = self._area_to_um2(kept_px)
-        return hotspot_area_um2
+            flash_area_um2[idx] = self._area_to_um2(kept_px)
+        return flash_area_um2
 
     # =======================================================================
     #
@@ -236,7 +236,7 @@ class RegionAnalyzer:
     # =======================================================================
 
     def compute_flow(self, cat_stack: np.ndarray, med_stack: np.ndarray) -> list[dict]:
-        """TV-L1 flow pairs + CAT keep masks around the spike (see functions/hotspot_flow.py), each with a
+        """TV-L1 flow pairs + CAT keep masks around the spike (see functions/flash_flow.py), each with a
         "pattern" dict (source / sink / anisotropic, functions/flow_pattern.py); stored as flow_pairs."""
         self.flow_pairs = compute_flow_pairs(med_stack, cat_stack, self.spike_frame_idx)
         for pair in self.flow_pairs:
@@ -326,11 +326,11 @@ def compute_window_px(obj: str) -> int:
 
 
 def compute_density_thresh(obj: str) -> float:
-    """Min local bright-pixel density for a hotspot, for this objective."""
+    """Min local bright-pixel density for a flash, for this objective."""
     return DENSITY_THRESH_BY_OBJ[obj]
 
 
-def detect_hotspot(
+def detect_flash(
     candidates: list[tuple[int, np.ndarray, np.ndarray]], eps_px: int, window_px: int, density_thresh: float
 ) -> tuple[bool, int, np.ndarray, list[tuple[float, float]], int]:
     """Earliest candidate frame with an accepted density-gated cluster wins.
@@ -360,7 +360,7 @@ def _run_density_gated_cluster_seeker(
 ) -> tuple[np.ndarray, list[tuple[float, float]], int]:
     """Cluster only bright pixels in a locally dense neighborhood, then grow clusters back to their full blobs.
 
-    The density gate rejects isolated noise pixels; the regrow step restores a real hotspot's
+    The density gate rejects isolated noise pixels; the regrow step restores a real flash's
     ragged low-density edge. Centroids come from the pre-regrow gated pixels.
 
     Returns:
@@ -368,10 +368,10 @@ def _run_density_gated_cluster_seeker(
     """
     # --- 1a. density gate ---
     density = uniform_filter(bright_mask.astype(float), size=window_px, mode="constant", cval=0.0)
-    hotspot_mask = bright_mask & (density >= density_thresh)
+    flash_mask = bright_mask & (density >= density_thresh)
 
     # --- 1b. cluster the gated pixels ---
-    gated_label_frame, centroids, n_raw = _run_cluster_seeker(hotspot_mask.astype(int), eps_px, z_frame)
+    gated_label_frame, centroids, n_raw = _run_cluster_seeker(flash_mask.astype(int), eps_px, z_frame)
     n_clusters = len(centroids)
 
     # --- 1c. regrow each cluster to the full bright blob(s) it touches ---

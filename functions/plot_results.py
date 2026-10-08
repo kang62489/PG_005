@@ -1,7 +1,7 @@
 """
 Headless matplotlib export figures (plain Figure objects, no PySide6; the GUI canvas is classes/mpl_canvas.py).
 
-  Step 1. Spatial     : hotspot-area trace + spike-4..spike+4 CAT panels + Vm overlay  (-> spatial/)
+  Step 1. Spatial     : flash-area trace + spike-4..spike+4 CAT panels + Vm overlay  (-> spatial/)
   Step 2. Flow        : striatum / CAT-mask quivers + speed (*_FLOW.png), streamlines + pattern (*_STREAMLINES.png);
                         MED shown as baseline z  (-> flow/)
   Step 3. Reliability : per-segment detection montage + Vm success vs failure  (-> reliability/)
@@ -157,7 +157,7 @@ def plot_spatiotemporal_summary(
     vm_segments: list[tuple[np.ndarray, np.ndarray]],
     frame_duration_ms: float,
 ) -> Figure:
-    """3 rows: density-gated hotspot-area trace (why the critical frame was picked) +
+    """3 rows: density-gated flash-area trace (why the critical frame was picked) +
     spike-4..spike+4 CAT panels (cluster shading on spike and spike+1) + overlaid Vm of every segment.
 
     Args:
@@ -166,7 +166,7 @@ def plot_spatiotemporal_summary(
         frame_duration_ms: ms per frame (e.g. AbfClip.ts_imgs * 1000), for the frame gridlines.
     """
     n_frames = len(categorizer.source_frames)
-    hotspot_area_um2 = region_analyzer.hotspot_area_um2
+    flash_area_um2 = region_analyzer.flash_area_um2
     critical_frame_idx = region_analyzer.critical_frame_idx
     um_per_pixel = region_analyzer.um_per_pixel
 
@@ -175,34 +175,34 @@ def plot_spatiotemporal_summary(
     gs_outer = fig.add_gridspec(3, 1, height_ratios=[2.0, 2.5, 2.0], hspace=0.7)
     gs_panels = gs_outer[1].subgridspec(1, 9, wspace=0.08)
 
-    # --- Row 0: density-gated hotspot area per frame trace ---
-    # Same units the decay-tau fit below was fit on (hotspot_area_um2) -- see RegionAnalyzer._compute_hotspot_area_trace.
+    # --- Row 0: density-gated flash area per frame trace ---
+    # Same units the decay-tau fit below was fit on (flash_area_um2) -- see RegionAnalyzer._compute_flash_area_trace.
     ax_bd = fig.add_subplot(gs_outer[0])
-    ax_bd.plot(np.arange(n_frames) - spike_frame_idx, hotspot_area_um2, color="#3498db", linewidth=1.6,
+    ax_bd.plot(np.arange(n_frames) - spike_frame_idx, flash_area_um2, color="#3498db", linewidth=1.6,
                marker="o", markersize=3.5)
 
     for frame_idx, label, color in [
         (spike_frame_idx - 1,
-         f"spike-1: {hotspot_area_um2[spike_frame_idx - 1]:.0f} µm²"
+         f"spike-1: {flash_area_um2[spike_frame_idx - 1]:.0f} µm²"
          if spike_frame_idx > 0 else "spike-1 (OOB)", "#888888"),
         (spike_frame_idx,
-         f"spike: {hotspot_area_um2[spike_frame_idx]:.0f} µm²", "#e74c3c"),
+         f"spike: {flash_area_um2[spike_frame_idx]:.0f} µm²", "#e74c3c"),
         (spike_frame_idx + 1,
-         f"spike+1: {hotspot_area_um2[spike_frame_idx + 1]:.0f} µm²"
+         f"spike+1: {flash_area_um2[spike_frame_idx + 1]:.0f} µm²"
          if spike_frame_idx + 1 < n_frames else "spike+1 (OOB)", "#f39c12"),
     ]:
         if 0 <= frame_idx < n_frames:
             ax_bd.axvline(frame_idx - spike_frame_idx, color=color, linestyle="--", linewidth=1.2, alpha=0.8, label=label)
 
-    ax_bd.plot(critical_frame_idx - spike_frame_idx, hotspot_area_um2[critical_frame_idx], "*", color="white", markersize=14,
+    ax_bd.plot(critical_frame_idx - spike_frame_idx, flash_area_um2[critical_frame_idx], "*", color="white", markersize=14,
                markeredgecolor="black", markeredgewidth=1, zorder=5,
-               label=f"critical: frame {critical_frame_idx}  {hotspot_area_um2[critical_frame_idx]:.0f} µm²")
+               label=f"critical: frame {critical_frame_idx}  {flash_area_um2[critical_frame_idx]:.0f} µm²")
 
     _draw_decay_fit(ax_bd, region_analyzer, spike_frame_idx, n_frames, frame_duration_ms)
 
     ax_bd.set_xlabel("Frame offset from spike (0 = spike)", fontsize=12)
-    ax_bd.set_ylabel("Hotspot area (µm²)", fontsize=12)
-    ax_bd.set_title("Density-gated hotspot area per frame  |  star = critical frame (spike or spike+1)", fontsize=12)
+    ax_bd.set_ylabel("Flash area (µm²)", fontsize=12)
+    ax_bd.set_title("Density-gated flash area per frame  |  star = critical frame (spike or spike+1)", fontsize=12)
     ax_bd.legend(fontsize=10, loc="upper right")
     ax_bd.tick_params(labelsize=10)
 
@@ -214,8 +214,8 @@ def plot_spatiotemporal_summary(
             return region_analyzer.spike_plus1_frame_label_frame
         return None
 
-    hotspot_area_lines = {
-        idx: _format_hotspot_area_line(um_per_pixel, _label_frame_for(idx))
+    flash_area_lines = {
+        idx: _format_flash_area_line(um_per_pixel, _label_frame_for(idx))
         for idx in range(spike_frame_idx - 4, spike_frame_idx + 5)
         if 0 <= idx < n_frames
     }
@@ -233,7 +233,7 @@ def plot_spatiotemporal_summary(
                 offset,
                 um_per_pixel,
                 tag,
-                hotspot_area_line=hotspot_area_lines.get(frame_idx),
+                flash_area_line=flash_area_lines.get(frame_idx),
             )
             # spike and spike+1 frames each get their own independent cluster shading
             if offset == 0:
@@ -284,12 +284,12 @@ def _plot_frame_panel(
     offset: int,
     um_per_pixel: float,
     tag: str = "",
-    hotspot_area_line: str | None = None,
+    flash_area_line: str | None = None,
     stats_lines: list[str] | None = None,
 ) -> None:
     """One frame's categorized image with a stats title.
 
-    Defaults to a hotspot area line (plot_spatiotemporal_summary); pass stats_lines
+    Defaults to a flash area line (plot_spatiotemporal_summary); pass stats_lines
     for a different title. No cluster overlay here -- callers add it (_draw_cluster_shading).
     """
     cat_frame = categorizer.categorized_frames[frame_idx]
@@ -305,8 +305,8 @@ def _plot_frame_panel(
     # --- Stats lines ---
     if stats_lines is None:
         stats_lines = []
-        if hotspot_area_line is not None:
-            stats_lines.append(hotspot_area_line)
+        if flash_area_line is not None:
+            stats_lines.append(flash_area_line)
 
     # --- Title and decorations ---
     frame_label = "(SPIKE) Frame 0" if offset == 0 else f"Frame {offset:+d}"
@@ -321,14 +321,14 @@ def _plot_frame_panel(
     _add_scale_bar(um_per_pixel, ax, cat_frame.shape[1], cat_frame.shape[0], font_size=7)
 
 
-def _format_hotspot_area_line(um_per_pixel: float, label_frame: np.ndarray | None) -> str | None:
-    """'hotspots: <µm²> (<%>)' for the spike / spike+1 panel titles; None for other panels (no label_frame)."""
+def _format_flash_area_line(um_per_pixel: float, label_frame: np.ndarray | None) -> str | None:
+    """'flashes: <µm²> (<%>)' for the spike / spike+1 panel titles; None for other panels (no label_frame)."""
     if label_frame is None:
         return None
-    hotspot_px = np.count_nonzero(label_frame >= 0)
-    hotspot_um2 = hotspot_px * um_per_pixel ** 2
-    hotspot_pct = 100.0 * hotspot_px / label_frame.size
-    return f"hotspots: {hotspot_um2:.0f} µm² ({hotspot_pct:.1f}%)"
+    flash_px = np.count_nonzero(label_frame >= 0)
+    flash_um2 = flash_px * um_per_pixel ** 2
+    flash_pct = 100.0 * flash_px / label_frame.size
+    return f"flashes: {flash_um2:.0f} µm² ({flash_pct:.1f}%)"
 
 
 def _draw_cluster_shading(ax: mpl.axes.Axes, label_frame: np.ndarray, centroids: list[tuple[float, float]]) -> None:
@@ -353,7 +353,7 @@ def _draw_decay_fit(
     n_frames: int,
     frame_duration_ms: float,
 ) -> None:
-    """Dashed exponential decay curve over the post-peak hotspot-area trace, with tau/R² in the label.
+    """Dashed exponential decay curve over the post-peak flash-area trace, with tau/R² in the label.
 
     Draws only a "fit failed" note if fit_decay_tau() couldn't fit (see RegionAnalyzer.__init__).
     """
@@ -452,7 +452,7 @@ def plot_flow_panels(
 
     striatum None (no outline, e.g. 40X / 60X) -> rows 1 and 3 cover the full FOV. Row 1 shows the MED as baseline z
     (range from _med_z_display()). Row-2 arrows sit at grid points within FLOW_QUIVER_STEP of keep_mask (a dilation,
-    so a coarse grid can't miss a thin hotspot). Arrows auto-scale per panel; speed panels share one color scale.
+    so a coarse grid can't miss a thin flash). Arrows auto-scale per panel; speed panels share one color scale.
 
     Args:
         flow_pairs: dicts with "label", "idx_from", "u", "v", "keep_mask" (from compute_flow_pairs()).
@@ -865,7 +865,7 @@ def plot_full_stack_kymographs(profiles, um_per_pixel, spikes: np.ndarray, title
     fig.colorbar(image, ax=list(axes), shrink=0.8, label="Mean strip intensity (shared scale within figure)")
     fig.suptitle(f"{title} | full {frames / 20:.0f} seconds | 20 Hz | whole image, no ROI\n"
                  f"16-pixel bands ({16 * um_per_pixel:.1f} µm); no temporal smoothing; spikes shown as ticks above panels\n"
-                 "Cyan = position of the maximum strip mean, not a tracked hotspot. Diagonal end bands contain fewer pixels.",
+                 "Cyan = position of the maximum strip mean, not a tracked flash. Diagonal end bands contain fewer pixels.",
                  fontsize=13)
     return fig
 
@@ -986,7 +986,7 @@ def plot_zone_overview(z_image: np.ndarray, zone_masks: dict[int | str, np.ndarr
                        axis_labels: tuple[str, str] | None = None) -> Figure:
     """All zones as translucent fills (largest painted first so small zones stay on top) over the z image.
 
-    Zone ids may mix ints (compartments) and strings ("NR1"), so zones are drawn / labelled in dict order.
+    Zone ids may mix ints (recur_zones) and strings ("NR1"), so zones are drawn / labelled in dict order.
     striatum_outline: closed (N, 2) x / y polygon from the Striatum Boundary export, drawn white dashed.
     axis_labels: (x, y) anatomical direction labels; shown without ticks or frame.
     """
@@ -1018,10 +1018,10 @@ def plot_zone_overview(z_image: np.ndarray, zone_masks: dict[int | str, np.ndarr
 def frame_zone_figures(pages, shape: tuple[int, int], zone_masks: dict[int | str, np.ndarray],
                        zone_centroids: dict[int | str, tuple[float, float]], colors: dict[int | str, tuple],
                        vmin: float, vmax: float, um_per_px: float) -> Iterator[Figure]:
-    """One frame per page: contours of the zones hit in this frame + thin white outline of the frame's hotspots
+    """One frame per page: contours of the zones hit in this frame + thin white outline of the frame's flashes
     (those in hatch_mask, e.g. non-recurring units, also shaded white '////').
 
-    pages: (z_frame, frame_zone_ids, hotspot_mask, hatch_mask, title) per frame. Yields the SAME Figure, updated per
+    pages: (z_frame, frame_zone_ids, flash_mask, hatch_mask, title) per frame. Yields the SAME Figure, updated per
     page -- render it before pulling the next one. Figure, colorbar and zone contours / labels are built once.
     """
     fig, ax = _z_page(np.zeros(shape, dtype=np.float32), vmin, vmax, "", um_per_px)
@@ -1036,17 +1036,17 @@ def frame_zone_figures(pages, shape: tuple[int, int], zone_masks: dict[int | str
             artist.set_visible(False)
         zone_artists[zone_id] = artists
 
-    for z_frame, frame_zone_ids, hotspot_mask, hatch_mask, title in pages:
+    for z_frame, frame_zone_ids, flash_mask, hatch_mask, title in pages:
         image.set_data(z_frame)
         ax.set_title(title)
         for zone_id, artists in zone_artists.items():
             for artist in artists:
                 artist.set_visible(zone_id in frame_zone_ids)
-        rows, cols = np.nonzero(hotspot_mask)  # contour only the hotspots' bounding box (+1 px) -> same outline
+        rows, cols = np.nonzero(flash_mask)  # contour only the flashes' bounding box (+1 px) -> same outline
         r0, r1 = max(rows.min() - 1, 0), min(rows.max() + 2, shape[0])
         c0, c1 = max(cols.min() - 1, 0), min(cols.max() + 2, shape[1])
         xs, ys = np.arange(c0, c1), np.arange(r0, r1)
-        drawn = [ax.contour(xs, ys, hotspot_mask[r0:r1, c0:c1].astype(float), levels=[0.5], colors="white",
+        drawn = [ax.contour(xs, ys, flash_mask[r0:r1, c0:c1].astype(float), levels=[0.5], colors="white",
                             linewidths=1)]
         if hatch_mask.any():
             with mpl.rc_context({"hatch.color": "white"}):
@@ -1110,6 +1110,6 @@ def plot_zone_stats(zones, title: str) -> Figure:
     fig.suptitle(title, color=_INK_PRIMARY)
     if "high_freq_flag" in zones and zones["high_freq_flag"].any():
         fig.text(0.5, -0.02, f"Hollow dots: {int(zones['high_freq_flag'].sum())} zones flagged high-frequency "
-                 "(mean_freq_hz > 1 Hz, e.g. manually induced hotspots) -- kept, not removed.",
+                 "(mean_freq_hz > 1 Hz, e.g. manually induced flashes) -- kept, not removed.",
                  ha="center", va="top", color=_INK_SECONDARY, fontsize=9)
     return fig

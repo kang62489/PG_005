@@ -17,7 +17,7 @@ if TYPE_CHECKING:
         compute_density_thresh,
         compute_eps_px,
         compute_window_px,
-        detect_hotspot,
+        detect_flash,
     )
     from .results_exporter import ResultsExporter
     from .sp_zone_analyzer import SpontaneousZoneAnalyzer
@@ -46,7 +46,7 @@ __all__ = [
     "compute_density_thresh",
     "compute_eps_px",
     "compute_window_px",
-    "detect_hotspot",
+    "detect_flash",
     "CATEGORY_BRIGHT",
 ]
 
@@ -66,7 +66,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "compute_density_thresh": (".region_analyzer", "compute_density_thresh"),
     "compute_eps_px": (".region_analyzer", "compute_eps_px"),
     "compute_window_px": (".region_analyzer", "compute_window_px"),
-    "detect_hotspot": (".region_analyzer", "detect_hotspot"),
+    "detect_flash": (".region_analyzer", "detect_flash"),
     "CATEGORY_BRIGHT": (".region_analyzer", "CATEGORY_BRIGHT"),
 }
 

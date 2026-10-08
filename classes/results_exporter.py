@@ -142,9 +142,9 @@ class ResultsExporter:
                 critical_frame_offset INTEGER,
                 critical_frame_area_pct REAL,
                 critical_frame_area_um2 REAL,
-                spike_frame_hotspot_um2 REAL,
+                spike_frame_flash_um2 REAL,
                 spike_frame_n_clusters INTEGER,
-                spike_plus1_frame_hotspot_um2 REAL,
+                spike_plus1_frame_flash_um2 REAL,
                 spike_plus1_frame_n_clusters INTEGER,
                 decay_peak_offset INTEGER,
                 decay_fit_r2 REAL,
@@ -169,9 +169,9 @@ class ResultsExporter:
                 "reliability_pct": "REAL",
                 "n_segments_detected": "INTEGER",
                 "n_segments_total": "INTEGER",
-                "spike_frame_hotspot_um2": "REAL",
+                "spike_frame_flash_um2": "REAL",
                 "spike_frame_n_clusters": "INTEGER",
-                "spike_plus1_frame_hotspot_um2": "REAL",
+                "spike_plus1_frame_flash_um2": "REAL",
                 "spike_plus1_frame_n_clusters": "INTEGER",
                 "decay_peak_offset": "INTEGER",
                 "decay_fit_r2": "REAL",
@@ -181,7 +181,7 @@ class ResultsExporter:
                 "n_flow_labelled": "INTEGER",  # flow pairs with a pattern label (None pairs left out)
                 "flow_aniso_pct": "REAL",      # 100 * anisotropic / n_flow_labelled (NULL if 0)
                 "flow_srcsink_pct": "REAL",    # 100 * (source + sink) / n_flow_labelled (NULL if 0)
-                "hotspot_origin": "TEXT",      # estim_induced (current pulses on ABF CH2) / spontaneous
+                "flash_origin": "TEXT",        # estim_induced (current pulses on ABF CH2) / spontaneous
                 "rec_window_s": "REAL",        # TTL window (imaging period), s
                 "spike_rate_hz": "REAL",       # n_spikes_detected / rec_window_s (f_ChI)
             },
@@ -257,7 +257,7 @@ class ResultsExporter:
         region_data: dict,
         lasting_time_ms: float | None,
         significant: bool = True,
-        hotspot_origin: str | None = None,
+        flash_origin: str | None = None,
         rec_window_s: float | None = None,
         spike_rate_hz: float | None = None,
     ) -> dict[str, Path]:
@@ -276,9 +276,9 @@ class ResultsExporter:
             normalization: Normalization used ("GAUSS"/"ALS")
             num_found_spikes: Total number of spikes detected
             n_spikes_analyzed: Number of spikes analyzed
-            reliability_pct: Percentage of segments with their own density-gated hotspot,
+            reliability_pct: Percentage of segments with their own density-gated flash,
                 from compute_segment_reliability() in ach_domain_analysis.py
-            n_segments_detected: Number of segments that showed a hotspot
+            n_segments_detected: Number of segments that showed a flash
             n_segments_total: Total number of segments checked
             threshold_method: Threshold method used for categorization
             objective: Microscope objective used
@@ -290,7 +290,7 @@ class ResultsExporter:
             region_data: Critical-frame cluster dict from RegionAnalyzer.get_results()
             lasting_time_ms: Decay time constant, from RegionAnalyzer.get_lasting_time_ms()
             significant: When False, skips MED/CAT TIFF writes (no ACh detected).
-            hotspot_origin: "estim_induced" / "spontaneous" from AbfClip (None if the ABF has no CH2)
+            flash_origin: "estim_induced" / "spontaneous" from AbfClip (None if the ABF has no CH2)
             rec_window_s: TTL window (imaging period) in s, from AbfClip
             spike_rate_hz: num_found_spikes / rec_window_s, from AbfClip
 
@@ -334,7 +334,7 @@ class ResultsExporter:
             at=at,
             lasting_time_ms=lasting_time_ms,
             med_filename=f"{med_stem}.tif",
-            hotspot_origin=hotspot_origin,
+            flash_origin=flash_origin,
             rec_window_s=rec_window_s,
             spike_rate_hz=spike_rate_hz,
         )
@@ -455,7 +455,7 @@ class ResultsExporter:
         at: str,
         lasting_time_ms: float | None,
         med_filename: str,
-        hotspot_origin: str | None,
+        flash_origin: str | None,
         rec_window_s: float | None,
         spike_rate_hz: float | None,
     ) -> None:
@@ -471,15 +471,15 @@ class ResultsExporter:
             centroid_y = centroid_x = r_lat_px = r_lat_um = None
 
         spike_clusters = region_data["spike_frame_clusters"]
-        spike_frame_hotspot_um2 = sum(c["area_um2"] for c in spike_clusters) if spike_clusters else 0.0
+        spike_frame_flash_um2 = sum(c["area_um2"] for c in spike_clusters) if spike_clusters else 0.0
         spike_frame_n_clusters = len(spike_clusters)
 
         plus1_clusters = region_data["spike_plus1_frame_clusters"]
         if plus1_clusters is None:
-            spike_plus1_frame_hotspot_um2 = None
+            spike_plus1_frame_flash_um2 = None
             spike_plus1_frame_n_clusters = None
         else:
-            spike_plus1_frame_hotspot_um2 = sum(c["area_um2"] for c in plus1_clusters) if plus1_clusters else 0.0
+            spike_plus1_frame_flash_um2 = sum(c["area_um2"] for c in plus1_clusters) if plus1_clusters else 0.0
             spike_plus1_frame_n_clusters = len(plus1_clusters)
 
         conn = sqlite3.connect(self.db_path)
@@ -492,12 +492,12 @@ class ResultsExporter:
                 reliability_pct, n_segments_detected, n_segments_total,
                 n_clusters, has_region,
                 critical_frame_offset, critical_frame_area_pct, critical_frame_area_um2,
-                spike_frame_hotspot_um2, spike_frame_n_clusters,
-                spike_plus1_frame_hotspot_um2, spike_plus1_frame_n_clusters,
+                spike_frame_flash_um2, spike_frame_n_clusters,
+                spike_plus1_frame_flash_um2, spike_plus1_frame_n_clusters,
                 decay_peak_offset, decay_fit_r2, lasting_time_ms,
                 ANIMAL_ID, SLICE, AT, med_filename,
                 centroid_y, centroid_x, R_lat_px, R_lat_um,
-                intensity_min, intensity_max, hotspot_origin,
+                intensity_min, intensity_max, flash_origin,
                 rec_window_s, spike_rate_hz
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -519,9 +519,9 @@ class ResultsExporter:
                 region_data["critical_frame_offset"],
                 region_data["critical_frame_area_pct"],
                 region_data["critical_frame_area_um2"],
-                spike_frame_hotspot_um2,
+                spike_frame_flash_um2,
                 spike_frame_n_clusters,
-                spike_plus1_frame_hotspot_um2,
+                spike_plus1_frame_flash_um2,
                 spike_plus1_frame_n_clusters,
                 region_data["decay_peak_offset"],
                 region_data["decay_fit_r2"],
@@ -536,7 +536,7 @@ class ResultsExporter:
                 r_lat_um,
                 intensity_range[0],
                 intensity_range[1],
-                hotspot_origin,
+                flash_origin,
                 rec_window_s,
                 spike_rate_hz,
             ),
