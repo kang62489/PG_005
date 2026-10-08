@@ -26,7 +26,10 @@ from scipy.signal import savgol_filter
 #
 # ===========================================================================
 
+# --- Step 3: fit_hist_sigma (img_proc) -------------------------------------
 N_HIST_BINS = 1000                 # img_proc z-scoring (fit_hist_sigma)
+
+# --- Step 3: fit_background (zones) ----------------------------------------
 ZONE_HIST_BINS = 512               # zones: histogram bins for find_background_threshold
 ZONE_HIST_RANGE_PCT = (0.1, 99.9)  # zones: histogram spans these percentiles, so rare outliers can't widen the bins
 ZONE_SMOOTH_FRAC = 0.05            # zones: Savitzky-Golay window = this fraction of the histogram range
@@ -44,6 +47,7 @@ ZONE_SIGMA_SEED = 0.0016           # zones: initial sigma guess for the fixed-me
 @njit(parallel=True)
 def _cpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, hi: float, bin_width: float,
                           drop_outside: bool) -> np.ndarray:
+    """Bin counts over [lo, hi] on the CPU (parallel); outside values clamped to the edge bins, or dropped."""
     n = values.shape[0]
     n_threads = numba.get_num_threads()
     local_counts = np.zeros((n_threads, n_bins), dtype=np.int64)  # per-thread bins, avoids write races
@@ -72,7 +76,7 @@ def _cpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, hi: float,
 @cuda.jit
 def _gpu_histogram_kernel(values: np.ndarray, counts: np.ndarray, n_bins: int, lo: float, hi: float,
                           bin_width: float, drop_outside: bool) -> None:
-    # one thread per value, atomic-add into the shared bin counter
+    """One thread per value, atomic-add into the shared bin counter."""
     i = cuda.grid(1)
     if i >= values.shape[0]:
         return
@@ -89,6 +93,7 @@ def _gpu_histogram_kernel(values: np.ndarray, counts: np.ndarray, n_bins: int, l
 
 def _gpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, hi: float, bin_width: float,
                           drop_outside: bool) -> np.ndarray:
+    """Same counts as _cpu_histogram_counts, on the GPU."""
     d_values = cuda.to_device(values.astype(np.float32))
     d_counts = cuda.to_device(np.zeros(n_bins, dtype=np.int64))
     threads = 256
@@ -120,6 +125,7 @@ def histogram_counts(values: np.ndarray, n_bins: int, lo: float, hi: float, cuda
 
 @njit(parallel=True)
 def _cpu_code_counts(codes: np.ndarray) -> np.ndarray:
+    """Count of each of the 65536 float16 codes (uint16 view), parallel."""
     n = codes.shape[0]
     n_threads = numba.get_num_threads()
     local_counts = np.zeros((n_threads, 65536), dtype=np.int64)  # per-thread bins, avoids write races
@@ -175,7 +181,7 @@ def rebin_code_counts(values: np.ndarray, counts: np.ndarray, n_bins: int, lo: f
 
 @njit(parallel=True)
 def _cpu_masked_std(values: np.ndarray, threshold: float) -> float:
-    # std of values <= threshold, single pass (sum/sum_sq/count), no boolean-mask copy
+    """Std of values <= threshold, single pass (sum/sum_sq/count), no boolean-mask copy."""
     n = values.shape[0]
     n_threads = numba.get_num_threads()
     local_sum = np.zeros(n_threads, dtype=np.float64)
@@ -201,7 +207,7 @@ def _cpu_masked_std(values: np.ndarray, threshold: float) -> float:
 
 @cuda.jit
 def _gpu_masked_sum_kernel(values: np.ndarray, threshold: float, sums: np.ndarray) -> None:
-    # sums = [sum, sum_sq, count] accumulator, one thread per value, atomic-add
+    """sums = [sum, sum_sq, count] accumulator, one thread per value, atomic-add."""
     i = cuda.grid(1)
     if i >= values.shape[0]:
         return
@@ -213,6 +219,7 @@ def _gpu_masked_sum_kernel(values: np.ndarray, threshold: float, sums: np.ndarra
 
 
 def _gpu_masked_std(values: np.ndarray, threshold: float) -> float:
+    """Same std as _cpu_masked_std, on the GPU."""
     d_values = cuda.to_device(values.astype(np.float64))
     d_sums = cuda.to_device(np.zeros(3, dtype=np.float64))
     threads = 256
@@ -229,6 +236,7 @@ def _gpu_masked_std(values: np.ndarray, threshold: float) -> float:
 # --- 2b. Fit ---------------------------------------------------------------
 
 def _gaussian(x: np.ndarray, amp: float, mean: float, sigma: float) -> np.ndarray:
+    """Gaussian curve amp * exp(-(x - mean)^2 / (2 sigma^2))."""
     return amp * np.exp(-((x - mean) ** 2) / (2 * sigma**2))
 
 
@@ -313,4 +321,5 @@ def find_background_threshold(stack: np.ndarray, sigma_ratio: float, n_bins: int
 
 
 def img_zscore_convert(detrended: np.ndarray, mean: float, sigma: float) -> np.ndarray:
+    """(x - mean) / sigma, elementwise."""
     return (detrended - mean) / sigma

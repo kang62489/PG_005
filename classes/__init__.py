@@ -71,7 +71,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
+    """Import a lazy name on first access, then cache it in the module."""
     if name in _LAZY_IMPORTS:
         module_path, attr = _LAZY_IMPORTS[name]
         module = importlib.import_module(module_path, __package__)

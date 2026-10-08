@@ -1,13 +1,15 @@
 """
-Results exporter for saving analysis outputs.
+Results exporter for the spike-aligned pipeline (folder layout: see the ResultsExporter docstring).
 
-Exports analysis results to:
-- SQLite database (metadata, critical-frame cluster measurements; flow_pairs = per-pair flow pattern + DV / ML direction)
-- TIFF files (spike-centered median stack, categorized frames for ImageJ overlay)
-- PNG figures (spatiotemporal summary plot)
+  Step 1. Name   : animal index LUT, site code -> compact file stem
+                   {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_{TYPE}
+  Step 2. DB     : results.db tables experiments + flow_pairs; missing columns added to older DBs
+  Step 3. Export : MED / CAT TIFFs + experiments row (export_all), flow_pairs rows, PNG figures
 
-Filenames use a compact code: {exp_date}-{img_serial}_A{n}S{slice}C{site}_{detrend}_{normalization}_{TYPE}.
-See ResultsExporter's class docstring for the full folder layout.
+Example:
+    >>> exporter = ResultsExporter(results_root=results_dir)
+    >>> stem = ResultsExporter.build_export_stem(exp_date, img_serial, animal_idx, slice_val, at, "BIEXP", "ALS", "SPATIAL")
+    >>> exporter.export_figure("spatial", fig, f"{stem}.png")
 """
 
 ## Modules
@@ -26,7 +28,14 @@ import tifffile
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
-_SITE_NUMBER = re.compile(r"(\d+)$")
+# ===========================================================================
+#
+#   CONFIG
+#
+# ===========================================================================
+
+# --- Step 1: name ----------------------------------------------------------
+_SITE_NUMBER = re.compile(r"(\d+)$")  # AT value -> trailing site number (e.g. 'CELL_2' -> 2)
 
 
 class ResultsExporter:
@@ -62,15 +71,16 @@ class ResultsExporter:
     """
 
     def __init__(self, results_root: Path = Path(__file__).parent.parent / "results") -> None:
-        """
-        Initialize the ResultsExporter.
-
-        Args:
-            results_root: Root directory for results (default: "results")
-        """
+        """Exporter writing under results_root (results.db + its tables created if missing)."""
         self.results_root = Path(results_root)
         self.db_path = self.results_root / "results.db"
         self._init_db()
+
+    # =======================================================================
+    #
+    #   STEP 1 -- NAME
+    #
+    # =======================================================================
 
     @staticmethod
     def build_animal_idx_lut(df_checked_tiff: pl.DataFrame) -> dict[str, dict[str, int]]:
@@ -117,6 +127,12 @@ class ResultsExporter:
         """
         site_code = ResultsExporter.derive_site_code(at)
         return f"{exp_date}-{img_serial}_A{animal_idx}S{slice_val}{site_code}_{detrend_mode}_{normalization}_{file_type}"
+
+    # =======================================================================
+    #
+    #   STEP 2 -- DB
+    #
+    # =======================================================================
 
     def _init_db(self) -> None:
         """Create database and tables if not exist."""
@@ -222,6 +238,12 @@ class ResultsExporter:
         for column_name, column_type in columns.items():
             if column_name not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_name} {column_type}")
+
+    # =======================================================================
+    #
+    #   STEP 3 -- EXPORT
+    #
+    # =======================================================================
 
     def export_all(
         self,

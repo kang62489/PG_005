@@ -208,6 +208,7 @@ def plot_spatiotemporal_summary(
 
     # --- Row 1: spike-4 .. spike+4 frame panels ---
     def _label_frame_for(idx: int) -> np.ndarray | None:
+        """Label frame of the spike / spike+1 panel; None for the other panels."""
         if idx == spike_frame_idx:
             return region_analyzer.spike_frame_label_frame
         if idx == spike_frame_idx + 1:

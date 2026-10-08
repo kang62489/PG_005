@@ -1,3 +1,15 @@
+"""
+database_ops.py  --  Read-side helpers for rec_data.db / exp_info.db (inputs) and results.db (outputs).
+
+  Step 1. Lookup : rec_data.db rows for a file list, ANIMAL_ID filled from exp_info.db, columns ordered
+  Step 2. Stats  : results.db experiments -> region stats, flow-pattern stats, per-cell status, excluded rows
+  Step 3. Cells  : unique cells (ANIMAL_ID, SLICE, AT) in a looked-up table
+
+Example:
+    >>> df_checked_tiff = lookup_rec_from_db(entries, Path("data/rec_data.db"), Path("data/exp_info.db"))
+    >>> stats = compute_region_stats(Path("results/results.db"))
+"""
+
 ## Modules
 # Standard library imports
 import math
@@ -8,11 +20,17 @@ from pathlib import Path
 import polars as pl
 from rich.console import Console
 
-# Local application imports
+# Local imports
 from utils import ColumnSorter
 
 console = Console()
 
+
+# ===========================================================================
+#
+#   STEP 1 -- LOOKUP: rec_data.db rows (+ ANIMAL_ID from exp_info.db)
+#
+# ===========================================================================
 
 def _sort_rec_columns(df: pl.DataFrame) -> pl.DataFrame:
     """Drop IGNORE_COLUMNS, then reorder the rest by ColumnSorter group priority.
@@ -144,6 +162,12 @@ def lookup_rec_from_db(table: pl.DataFrame, db_path: Path, exp_db_path: Path) ->
     result = _sort_rec_columns(pl.concat(frames, how="diagonal_relaxed"))
     return populate_animal_id_values(result, exp_db_path)
 
+
+# ===========================================================================
+#
+#   STEP 2 -- STATS: results.db experiments / flow_pairs
+#
+# ===========================================================================
 
 def _geomean_geostd(series: pl.Series) -> tuple[float | None, float | None]:
     """Geometric mean and geometric std factor (multiplicative) for a polars Series.
@@ -324,6 +348,12 @@ def compute_flow_pattern_stats(
         pl.col("pattern").is_in(["source", "sink"]).sum().alias("n_srcsink"),
     ).sort("objective")
 
+
+# ===========================================================================
+#
+#   STEP 3 -- CELLS
+#
+# ===========================================================================
 
 def count_unique_cells(ref_df: pl.DataFrame) -> pl.DataFrame:
     """Reduce ref_df rows to one row per unique cell, listing each cell's filenames.

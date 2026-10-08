@@ -41,6 +41,8 @@ console = Console()
 # --- Step 1: load ----------------------------------------------------------
 STIM_CHANNEL = 1        # ABF channel of the injected current (pA); 0 = Vm, 3 = TTL frame window
 STIM_PULSE_PA = 200.0   # pA above the channel median (absorbs a DC holding current) -> a stim pulse
+TTL_HIGH_V = 2.0        # V: first TTL sample >= this = recording window start
+TTL_LOW_V = 0.8         # V: last TTL sample >= this = recording window end
 
 # --- Step 3: window --------------------------------------------------------
 MIN_SET_INTERVAL_FRAMES = 3    # frames: floor on set_interval_frames; spikes with a smaller margin are skipped
@@ -93,10 +95,6 @@ class AbfClip:
         self.df_picked_spikes: pl.DataFrame | None = None
         self.df_collapsed_peaks: pl.DataFrame | None = None
 
-        # Hardware constants
-        self.TTL_5V_HIGH: float = 2.0
-        self.TTL_5V_LOW: float = 0.8
-
         results_dir.mkdir(parents=True, exist_ok=True)
 
         with tifffile.TiffFile(proc_tiff_path) as tif:
@@ -127,9 +125,9 @@ class AbfClip:
         self.abf_dataset = self.loaded_abf.data
         self.abf_fs = self.loaded_abf.dataRate
 
-        self.abf_idx_tstart: int = np.where(self.abf_dataset[3] >= self.TTL_5V_HIGH)[0][0]
+        self.abf_idx_tstart: int = np.where(self.abf_dataset[3] >= TTL_HIGH_V)[0][0]
         self.abf_idx_tend: int = (
-            len(self.abf_dataset[3]) - np.where(np.flip(self.abf_dataset[3]) >= self.TTL_5V_LOW)[0][0]
+            len(self.abf_dataset[3]) - np.where(np.flip(self.abf_dataset[3]) >= TTL_LOW_V)[0][0]
         )
 
         self.Vm: np.ndarray = self.abf_dataset[0][self.abf_idx_tstart : self.abf_idx_tend]

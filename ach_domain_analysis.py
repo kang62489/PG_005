@@ -295,6 +295,7 @@ def analyze_entry(
     name_args = (animal_idx, slice_val, at, detrend_mode, normalization)
 
     def export_stem(file_type: str) -> str:
+        """Export file stem for this entry + file_type (e.g. 'SPATIAL')."""
         return ResultsExporter.build_export_stem(export_data["exp_date"], export_data["img_serial"], *name_args, file_type)
 
     # --- Step 2. Reliability: per-segment flash check + montage + success/failure Vm ---
