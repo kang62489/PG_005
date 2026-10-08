@@ -141,9 +141,9 @@ trend(t) = A · exp(−t / τ1) + B · exp(−t / τ2) + C
 
 ### 3.4 Output: the first type of pre-processed files
 
-Steps 3.1–3.3 (detrend → z-score → blur) give the first type of pre-processed files, named with the **GAUSS** suffix.
+Steps 3.1–3.3 (detrend → z-score → blur) give the first type of pre-processed files, named with the **`_GAUSS`** suffix.
 
-📂 Jeff, you can check them in `/bucket/WickensU/Kang/Cluster/proc_tiffs`.
+📂 Stored in `/bucket/WickensU/Kang/Cluster/proc_tiffs`.
 
 ---
 
@@ -202,6 +202,96 @@ After the first analysis, 13 recordings were removed by hand:
 The same dataset is used for `spontaneous_analysis.py` and the following `ach_domain_analysis.py`.
 
 **Why:** at the moment of picking, the plan was to compare **evoked** ACh release events with **spontaneous** ones, so both kinds were picked together.
+
+#### 4.3d Basic properties
+
+| Item | Count |
+|---|---|
+| Recording days (1 animal per day) | 17 |
+| Animals | 17 (15 neoChAT-Hom, 2 WT; 12 M, 5 F; 9–28 weeks old) |
+| Slices | 32 |
+| Patched cells | 40 |
+| Recordings | 201 |
+
+| Sensor | Animals | Recordings |
+|---|---|---|
+| GACh3.0 | 13 | 176 |
+| iAChSnFR | 2 | 13 |
+| rACh1h | 2 | 12 |
+
+| Objective | Recordings |
+|---|---|
+| 10X | 105 |
+| 40X | 14 |
+| 60X | 82 |
+
+**Per recording day:**
+
+| Date of recording | Animal | Sensor | Slices | Cells | Recordings | OBJ (recordings) |
+|---|---|---|---|---|---|---|
+| 2024_10_11 | KC-nChAT-Hom-6 | iAChSnFR | 2 | 2 | 7 | 10X (2), 60X (5) |
+| 2024_12_19 | neoChAT-555 | iAChSnFR | 2 | 2 | 6 | 60X (6) |
+| 2025_02_05 | neoChAT-549 | GACh3.0 | 3 | 4 | 15 | 60X (15) |
+| 2025_02_27 | neoChAT-550 | GACh3.0 | 1 | 1 | 1 | 60X (1) |
+| 2025_04_03 | neoChAT-584 | GACh3.0 | 2 | 3 | 15 | 60X (15) |
+| 2025_06_11 | neoChAT-587 | GACh3.0 | 1 | 1 | 13 | 10X (10), 60X (3) |
+| 2025_07_17 | 202503-022-12 (WT) | rACh1h | 1 | 1 | 3 | 60X (3) |
+| 2025_07_19 | 202503-022-11 (WT) | rACh1h | 2 | 2 | 9 | 60X (9) |
+| 2025_09_26 | neoChAT-640 | GACh3.0 | 1 | 1 | 4 | 60X (4) |
+| 2025_10_13 | neoChAT-632 | GACh3.0 | 2 | 3 | 14 | 60X (14) |
+| 2025_11_08 | neoChAT-663 | GACh3.0 | 2 | 2 | 9 | 10X (4), 60X (5) |
+| 2025_11_13 | neoChAT-664 | GACh3.0 | 2 | 3 | 19 | 10X (5), 40X (14) |
+| 2025_11_27 | neoChAT-660 | GACh3.0 | 3 | 4 | 14 | 10X (14) |
+| 2025_12_14 | neoChAT-661 | GACh3.0 | 2 | 3 | 18 | 10X (16), 60X (2) |
+| 2025_12_15 | neoChAT-676 | GACh3.0 | 2 | 3 | 22 | 10X (22) |
+| 2025_12_18 | neoChAT-662 | GACh3.0 | 2 | 2 | 10 | 10X (10) |
+| 2026_01_08 | neoChAT-677 | GACh3.0 | 2 | 3 | 22 | 10X (22) |
+
+---
+
+### 4.4 Recognizing the events
+
+A recording usually contains **many flashes** (ACh release events). Some recordings failed, because of the sensor type (iAChSnFR, rACh1h) or a 0.1X dilution.
+
+**First things to know:** the **number**, **area size** and **location** of the events. So they have to be recognized in the GAUSS files first.
+
+**Plan:** reuse the histogram trick from 3.2.
+
+1. Find the basal (background) z-scored intensity of the pixels.
+2. Threshold = basal + **N × σ** (now N = 2).
+3. Mask out every pixel below the threshold. What is left are the events.
+
+**Problem:** detrending (3.1) removes only the exponential bleaching trend, **not the slow fluctuations** (Fig. 2). These slow changes make the basal intensity vary a lot over time, so one fixed threshold doesn't fit the whole recording.
+
+---
+
+### 4.5 Baseline correction with ALS (`als_correct.py`)
+
+**Method:** asymmetric least-squares (ALS) smoothing. For each pixel, it fits a smooth baseline that follows the **lower edge** of the trace. Short flashes rise above it and are mostly ignored. The baseline is then subtracted.
+
+**Parameters** (like the detrend, tuned on **5 random ROIs** of 128 × 128 px):
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| λ (lambda) | 11 | smoothness: larger → smoother baseline |
+| p | 0.05 | asymmetry: smaller → baseline hugs the lower edge more |
+| n_iter | 10 | number of fitting iterations |
+
+#### Figure
+
+**Fig. 7 — ALS baseline correction.** 5 random 128 × 128 px ROIs of `2026_01_08-0012`, shown on GAUSS frame 948 (left, numbered boxes). Middle: ROI mean of the GAUSS file (black) and the fitted ALS baseline (orange). Right: ROI mean of the ALS file, after correction. Same y range down each column.
+
+![Fig. 7](../output/test08/fig7_als_correction.png)
+
+---
+
+### 4.6 Output: the second type of pre-processed files
+
+Step 4.5 (ALS correction) gives the second type of pre-processed files, named with the **`_ALS`** suffix.
+
+📂 Stored in `/bucket/WickensU/Kang/Cluster/proc_tiffs`.
+
+**The ALS files are the main pre-processed files** used by the following `spontaneous_analysis.py` and `ach_domain_analysis.py`.
 
 ---
 

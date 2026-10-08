@@ -1,7 +1,7 @@
-# Side notes for `plain.md`
+# Side notes for `plain_01.md`
 
 Implementation details behind the plain story. Not needed for the main read.
-Section numbers follow `plain.md`.
+Section numbers follow `plain_01.md`.
 
 ---
 
@@ -36,7 +36,7 @@ Section numbers follow `plain.md`.
 
 #### Open
 
-- The single-exponential trial (`plain.md` 3.1a) is not in the current code or `archive/`. It's from Kang's description. Add a figure or script if one turns up.
+- The single-exponential trial (`plain_01.md` 3.1a) is not in the current code or `archive/`. It's from Kang's description. Add a figure or script if one turns up.
 
 ---
 
@@ -120,49 +120,7 @@ Section numbers follow `plain.md`.
   - 2 from **2025_11_08**: `-0032` and `-0033`. In `rec_data.db` their SENSOR is **tdTomato**, with the note "MAX OUT RED 1200p".
 - There is no local `ana_20260922_000.txt`, only the `_deigo` version.
 
-#### 4.3d Basic properties (temporary, not in `plain.md` yet)
-
-| Item | Count |
-|---|---|
-| Recording days (1 animal per day) | 17 |
-| Animals | 17 (15 neoChAT-Hom, 2 WT; 12 M, 5 F; 9–28 weeks old) |
-| Slices | 32 |
-| Patched cells | 40 |
-| Recordings | 201 |
-
-| Sensor (from `rec_data.db`) | Animals | Recordings |
-|---|---|---|
-| GACh3.0 | 13 | 176 |
-| iAChSnFR | 2 | 13 |
-| rACh1h | 2 | 12 |
-
-| Objective | Recordings |
-|---|---|
-| 10X | 105 |
-| 40X | 14 |
-| 60X | 82 |
-
-| Date of recording | Animal | Sensor | Slices | Cells | Recordings | OBJ (recordings) |
-|---|---|---|---|---|---|---|
-| 2024_10_11 | KC-nChAT-Hom-6 | iAChSnFR | 2 | 2 | 7 | 10X (2), 60X (5) |
-| 2024_12_19 | neoChAT-555 | iAChSnFR | 2 | 2 | 6 | 60X (6) |
-| 2025_02_05 | neoChAT-549 | GACh3.0 | 3 | 4 | 15 | 60X (15) |
-| 2025_02_27 | neoChAT-550 | GACh3.0 | 1 | 1 | 1 | 60X (1) |
-| 2025_04_03 | neoChAT-584 | GACh3.0 | 2 | 3 | 15 | 60X (15) |
-| 2025_06_11 | neoChAT-587 | GACh3.0 | 1 | 1 | 13 | 10X (10), 60X (3) |
-| 2025_07_17 | 202503-022-12 (WT) | rACh1h | 1 | 1 | 3 | 60X (3) |
-| 2025_07_19 | 202503-022-11 (WT) | rACh1h | 2 | 2 | 9 | 60X (9) |
-| 2025_09_26 | neoChAT-640 | GACh3.0 | 1 | 1 | 4 | 60X (4) |
-| 2025_10_13 | neoChAT-632 | GACh3.0 | 2 | 3 | 14 | 60X (14) |
-| 2025_11_08 | neoChAT-663 | GACh3.0 | 2 | 2 | 9 | 10X (4), 60X (5) |
-| 2025_11_13 | neoChAT-664 | GACh3.0 | 2 | 3 | 19 | 10X (5), 40X (14) |
-| 2025_11_27 | neoChAT-660 | GACh3.0 | 3 | 4 | 14 | 10X (14) |
-| 2025_12_14 | neoChAT-661 | GACh3.0 | 2 | 3 | 18 | 10X (16), 60X (2) |
-| 2025_12_15 | neoChAT-676 | GACh3.0 | 2 | 3 | 22 | 10X (22) |
-| 2025_12_18 | neoChAT-662 | GACh3.0 | 2 | 2 | 10 | 10X (10) |
-| 2026_01_08 | neoChAT-677 | GACh3.0 | 2 | 3 | 22 | 10X (22) |
-
-#### How the counts are made
+#### 4.3d How the counts are made
 
 **Script:** `output/test08/dataset_summary.py`
 
@@ -171,3 +129,45 @@ Section numbers follow `plain.md`.
 - **Slice:** unique `SLICE` values per day (e.g. `1R`, `2L`).
 - **Patched cell:** unique (`SLICE`, `AT`) pairs per day (e.g. `1R` + `CELL_2`).
 - **Age:** `Ages` on the recording day, 9w2d – 27w5d.
+
+---
+
+### 4.5 ALS baseline correction
+
+**Code:** `als_correct.py` → `process_als()`; math in `functions/als.py` → `als_run()` (CPU Numba / GPU CUDA, same math)
+
+- **Input:** every `*_BIEXP_GAUSS.tif` in the proc list. So ALS runs **after** detrend → z-score → blur, on z values.
+- **Per pixel:** each pixel's time trace gets its own baseline. Output = GAUSS − baseline.
+- **Penalty:** 1st-order differences (λ · Σ (z[t+1] − z[t])²), solved per iteration with the Thomas (tridiagonal) algorithm.
+- **Weights:** a frame above the current baseline gets weight p; at or below gets 1 − p. Start: baseline = the trace itself.
+- **Max length:** 2048 frames (`MAX_T`).
+
+#### Parameters actually used
+
+- The stored `_ALS.tif` was **reproduced exactly with p = 0.05** (λ 11, n_iter 10): recomputed on a 64 × 64 px crop of `2026_01_08-0012`, max difference 0.0002 (float16 rounding). p = 0.03 gives up to 0.05, p = 0.02 up to 0.09.
+- Where the defaults live:
+
+  | Place | λ | p | n_iter |
+  |---|---|---|---|
+  | `als_correct.py` CLI (used by `run_preproc_on_saion.slm`) | 11 | **0.05** | 10 |
+  | GUI fields (`views/view_als_correct.py`) | 11 | 0.02 | 10 |
+  | `functions/als.py` defaults | 11 | 0.02 | 10 |
+
+#### Parameter tuning (ALS test)
+
+- `controllers/ctrl_als_correct.py` → `_als_test()`: **5 ROIs of 128 × 128 px**, random positions (unseeded, whole frame, not only tissue).
+- ALS is fitted on the **ROI-mean** trace there (not per pixel), and plotted as "Signal" vs "Slow Fluctuation".
+
+#### Fig. 7
+
+**Script:** `output/test08/als_figure.py`
+
+- Same ROI size and count as the ALS test, with seed 0 for a reproducible figure.
+- Middle column: ALS fitted on the ROI mean, as in the ALS test.
+- Right column: ROI mean of the **stored ALS file** (per-pixel ALS), not "before − fitted".
+
+---
+
+### 4.6 Output
+
+- File name: `<recording>_BIEXP_ALS.tif` (the `_GAUSS` part of the name replaced by `_ALS`), float16, same folder as the GAUSS file.
