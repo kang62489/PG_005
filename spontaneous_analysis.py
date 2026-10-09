@@ -9,6 +9,8 @@ spontaneous_analysis.py  --  Spontaneous ACh flash -> zone analysis (10X, *_BIEX
                     + recur_zones + NR zones (light gray) + striatum outline, then one page per detection frame;
                     frame pages rendered on a process pool, --map_workers)
                     + footprints/{stem}_ZONES.npz + mask/{stem}_FLASH_MASK.tif (off with --no_mask)
+                    + zone_contours/{stem}_ZONE_CONTOURS_TIGHT.png (inner circle) / _LOOSE.png (furthest circle):
+                      zone outlines on white -- all zones, one panel per group, largest of each group
   Step 4. Summary : spontaneous_summary.xlsx (one row per recording + pooled recur_zone table)
 
 Zone = any mapped region; recur_zone = recurring zone (the only ones in stats); NR zone = non-recurring zone.
@@ -25,6 +27,7 @@ Usage:
 ## Modules
 # Standard library imports
 import argparse
+import gc
 import itertools
 import multiprocessing as mp
 import os
@@ -52,11 +55,14 @@ from functions import (
     check_cuda,
     direction_labels,
     frame_zone_figures,
+    group_overlaps,
+    group_zones,
     img_zscore_convert,
     list_parser,
     load_st_bd,
     lookup_rec_from_db,
     outline_mask,
+    plot_zone_groups,
     plot_zone_overview,
     zone_colors,
 )
@@ -310,6 +316,33 @@ def export_zone_maps(analyzer: SpontaneousZoneAnalyzer, title_tag: str, out_path
     return n_pages
 
 
+# --- 3c. contour montages ---------------------------------------------------
+
+
+def export_zone_contours(analyzer: SpontaneousZoneAnalyzer, stem: str, out_dir: Path, xlsx_path: Path,
+                         striatum_outline: np.ndarray | None = None) -> list[Path]:
+    """Zone-group contour montages, TIGHT (inner circle) / LOOSE (furthest circle), + overlap of the group-largest
+    zones (NR zones excluded) as sheets overlap_tight / overlap_loose of xlsx_path.
+
+    Returns the PNG paths; none if there are no recur_zones.
+    """
+    masks, nr_masks = analyzer.zone_masks, analyzer.non_recur_masks
+    shape = (analyzer.height, analyzer.width)
+    paths, sheets = [], {}
+    for mode, suffix in (("inner", "TIGHT"), ("far", "LOOSE")):
+        groups, circles = group_zones(masks, mode)
+        sheets[f"overlap_{suffix.lower()}"] = group_overlaps(masks, groups, analyzer.um_per_px)
+        if masks:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            paths.append(out_dir / f"{stem}_ZONE_CONTOURS_{suffix}.png")
+            plot_zone_groups(masks, nr_masks, groups, circles, mode, stem, shape, striatum_outline).savefig(
+                paths[-1], dpi=MAP_DPI)
+    with pd.ExcelWriter(xlsx_path, mode="a", engine="openpyxl") as writer:
+        for name, table in sheets.items():
+            table.to_excel(writer, sheet_name=name, index=False)
+    return paths
+
+
 # ===========================================================================
 #
 #   RUN
@@ -393,7 +426,10 @@ def _run_recordings(proc_list_path: Path, results_dir: Path, sigma: float, save_
         with timed("export zone-map TIFF"):
             n_pages = export_zone_maps(analyzer, f"{stem}, {row['SENSOR']}", map_path, striatum_outline, axis_labels,
                                        pool, n_workers)
-        for path in paths.values():
+        with timed("export zone contours"):
+            montage_paths = export_zone_contours(analyzer, stem, out_root / "zone_contours", paths["xlsx"],
+                                                 striatum_outline)
+        for path in [*paths.values(), *montage_paths]:
             console.log(f"[green]saved[/green] {path.resolve()}")
         console.log(f"[green]saved[/green] {n_pages}-page zone-map TIFF ({map_path.stat().st_size / 1e6:.1f} MB) "
                     f"-> {map_path.resolve()}")
@@ -424,6 +460,8 @@ def _run_recordings(proc_list_path: Path, results_dir: Path, sigma: float, save_
             **coverage,
         })
         pooled_zones.append(zone_stats.assign(recording=stem, sensor=row["SENSOR"]))
+        del analyzer, zone_stats  # free this recording's stack + mask (~4.7 GB) before the next one is read
+        gc.collect()
         console.log(f"[bold magenta]{'entry total':<40} {time.time() - entry_t0:6.1f}s[/bold magenta]")
 
     # -----------------------------------------------------------------------

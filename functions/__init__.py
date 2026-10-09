@@ -42,6 +42,7 @@ if TYPE_CHECKING:
         plot_spatiotemporal_summary,
         plot_spike_detection_summary,
         plot_vm_success_vs_failure,
+        plot_zone_groups,
         plot_zone_overview,
         plot_zone_stats,
         zone_colors,
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
     from .test_cuda import test_cuda
     from .xlsx_reader import get_picked_pairs
     from .xlsx_writer import write_cell_summary_xlsx, write_stats_xlsx
+    from .zone_groups import group_overlaps, group_zones
 
 __all__ = [
     "abf_ready",
@@ -94,6 +96,8 @@ __all__ = [
     "get_excluded_recordings",
     "get_memory_usage",
     "get_picked_pairs",
+    "group_overlaps",
+    "group_zones",
     "img_zscore_convert",
     "label_regions",
     "lateral_check",
@@ -111,6 +115,7 @@ __all__ = [
     "plot_spatiotemporal_summary",
     "plot_spike_detection_summary",
     "plot_vm_success_vs_failure",
+    "plot_zone_groups",
     "plot_zone_overview",
     "plot_zone_stats",
     "populate_animal_id_values",
@@ -163,6 +168,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "plot_zone_overview":  (".plot_results",                              "plot_zone_overview"),
     "plot_zone_stats":     (".plot_results",                              "plot_zone_stats"),
     "frame_zone_figures":  (".plot_results",                              "frame_zone_figures"),
+    "plot_zone_groups":    (".plot_results",                              "plot_zone_groups"),
+    "group_zones":         (".zone_groups",                               "group_zones"),
+    "group_overlaps":      (".zone_groups",                               "group_overlaps"),
     "zone_colors":         (".plot_results",                              "zone_colors"),
     "lookup_rec_from_db":  (".database_ops",                           "lookup_rec_from_db"),
     "populate_animal_id_values": (".database_ops",                     "populate_animal_id_values"),

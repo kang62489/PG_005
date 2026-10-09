@@ -136,9 +136,39 @@ Other examples: `2025_06_11-0008` (8 zones → 7 groups inner / 6 furthest), `20
 1. All the contours / outlines together look messy because some zones are still very close and of similar area. One way is to regroup them and show the groups in montages (Figs. 8–9). → Ask Jeff what he thinks.
 2. (To be added)
 
-> Note: not done yet
-> 1. The overlap areas between all contours (the new sorted / grouped zones) have not been dealt with.
-> 2. Spontaneous flashes have not been analyzed on concatenated recordings of the same slice (for the sake of statistics).
+> Note: status of the open items
+> 1. ~~The overlap areas between all contours (the new sorted / grouped zones) have not been dealt with.~~ Done (measured only): in the pipeline, the overlap of every pair of group-largest zones (NR excluded) is saved as sheets `overlap_tight` / `overlap_loose` of `{stem}_ZONES.xlsx` (shared area, % of each zone). The contour montages (`zone_contours/{stem}_ZONE_CONTOURS_TIGHT/LOOSE.png`) now start with an "all zones" panel.
+> 2. Spontaneous flashes on concatenated recordings of the same slice: tested on 3 slices (below), not in the pipeline yet.
+> 3. To do: make the joined analysis an independent pipeline: script at the repo root, SLURM job on Saion, export to `results/contours/` with subfolders (e.g. `joined/`, `comparison/`).
+
+### Test: separated vs joined recordings of one slice
+
+Idea test only, not in the pipeline (`plain_02/slice_concat/slice_concat.py`).
+
+1. Recordings with the same date + SLICE + site (AT) are used together.
+2. **Separated:** every recording is analyzed on its own, as in the pipeline.
+3. **Joined:** masks, flashes and units stay per recording; from the trace correlation on, the flashes of all recordings are pooled. Each flash's trace runs over all recordings back to back (z-scored per recording), then grouping, merge, fit and NR zones run once.
+4. Figures: largest zone of each group (LOOSE = furthest circle), no NR zones. Left = joined, right = separated recordings.
+
+| Slice / site | Recordings | Separated: recur_zones per recording | Joined: recur_zones → largest (LOOSE) |
+|---|---|---|---|
+| 2025_06_11 4R / CELL_1 | 10 | 6–15 | 23 → 6 |
+| 2025_12_15 4R / CELL_2 | 8 | 5–13 | 20 → 5 |
+| 2026_01_08 2R / CELL_1 | 10 | 8–16 | 35 → 11 |
+
+**Fig. 10 — Separated vs joined, 2025_06_11 4R / CELL_1 (LOOSE).**
+
+![Fig. 10](plain_02/slice_concat/figures/2025_06_11_4R_CELL_1_SEPARATED_VS_JOINED_LOOSE.png)
+
+**Fig. 11 — Separated vs joined, 2025_12_15 4R / CELL_2 (LOOSE).**
+
+![Fig. 11](plain_02/slice_concat/figures/2025_12_15_4R_CELL_2_SEPARATED_VS_JOINED_LOOSE.png)
+
+**Fig. 12 — Separated vs joined, 2026_01_08 2R / CELL_1 (LOOSE).**
+
+![Fig. 12](plain_02/slice_concat/figures/2026_01_08_2R_CELL_1_SEPARATED_VS_JOINED_LOOSE.png)
+
+TIGHT versions (inner circle): same folder, `*_SEPARATED_VS_JOINED_TIGHT.png`.
 
 ---
 

@@ -27,8 +27,9 @@ import matplotlib as mpl
 import numpy as np
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
-from matplotlib.patches import Rectangle
-from scipy.ndimage import maximum_filter
+from matplotlib.patches import Circle, Rectangle
+from scipy.ndimage import center_of_mass, maximum_filter
+from skimage.measure import find_contours
 
 # Local imports
 from classes.region_analyzer import (
@@ -80,6 +81,9 @@ VM_WINDOW_MS = 50                                     # ± ms around each trace'
 # with the dataviz palette validator. Unknown sensors fall back to neutral gray.
 SENSOR_COLORS = {"GACh3.0": "#2a78d6", "iAChSnFR": "#eb6834", "rACh1h": "#1baf7a"}
 _INK_PRIMARY, _INK_SECONDARY, _INK_GRID, _SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+MONTAGE_ZONE_NCOLS = 6                  # contour montages: panels per row
+MONTAGE_NR_OUTLINE = (0.45, 0.45, 0.45)  # contour montages: NR zones dark gray, dashed
+MONTAGE_CIRCLE_TEXT = {"inner": "inner (nearest edge)", "far": "enclosing (farthest pixel)"}
 
 
 # ===========================================================================
@@ -962,6 +966,15 @@ def _label_zone(ax: mpl.axes.Axes, zone_id: int | str, centroid: tuple[float, fl
                    ha="center", va="center", bbox={"boxstyle": "circle", "fc": "black", "alpha": 0.6})
 
 
+def _draw_outline(ax: mpl.axes.Axes, mask: np.ndarray, **line_kw) -> list:
+    """Zone outline (0.5 level, x = col, y = row) as plain lines; returns the Line2D artists.
+
+    find_contours + ax.plot keeps only the edge points (~1 MB), ax.contour keeps full float64 grids (~30 MB / call).
+    """
+    return [line for path in find_contours(mask.astype(np.uint8), 0.5)
+            for line in ax.plot(path[:, 1], path[:, 0], **line_kw)]
+
+
 def zone_colors(zone_ids: list[int]) -> dict[int, tuple]:
     """Fixed tab20 color per zone id (sorted order), shared by the overlay and single-zone maps."""
     palette = mpl.colormaps["tab20"].colors
@@ -1029,8 +1042,7 @@ def frame_zone_figures(pages, shape: tuple[int, int], zone_masks: dict[int | str
     image = ax.images[0]
     zone_artists = {}
     for zone_id in zone_masks:  # dict order (ids may mix ints and "NR1" strings)
-        artists = [ax.contour(zone_masks[zone_id].astype(float), levels=[0.5], colors=[colors[zone_id]],
-                              linewidths=2.5)]
+        artists = _draw_outline(ax, zone_masks[zone_id], color=colors[zone_id], lw=2.5)
         if zone_id in zone_centroids:
             artists.append(_label_zone(ax, zone_id, zone_centroids[zone_id]))
         for artist in artists:
@@ -1058,7 +1070,71 @@ def frame_zone_figures(pages, shape: tuple[int, int], zone_masks: dict[int | str
             artist.remove()
 
 
-# --- 6b. zone stats (not exported for now) ---------------------------------
+# --- 6b. contour montages (-> spontaneous/zone_contours/) -------------------
+
+
+def _outline_panel(ax: mpl.axes.Axes, ids: list, masks: dict, colors: dict, nr_ids: set, title: str,
+                   shape: tuple[int, int], striatum_outline: np.ndarray | None,
+                   circle: tuple[float, float, float] | None = None) -> None:
+    """Zone outlines on white, drawn in list order (largest first = bottom); NR zones gray dashed.
+
+    Labels sit at each mask's centre of mass: recur_zones in a circle of their map color, NR ids as gray text.
+    """
+    ax.imshow(np.ones((*shape, 3)))
+    for zone_id in ids:
+        is_nr = zone_id in nr_ids
+        _draw_outline(ax, masks[zone_id], color=MONTAGE_NR_OUTLINE if is_nr else colors[zone_id],
+                      lw=1.2 if is_nr else 2, ls="--" if is_nr else "-")
+        cy, cx = center_of_mass(masks[zone_id])
+        if is_nr:
+            ax.text(cx, cy, str(zone_id), color=MONTAGE_NR_OUTLINE, fontsize=8, ha="center", va="center")
+        else:
+            ax.text(cx, cy, str(zone_id), color="white", fontsize=9, fontweight="bold", ha="center", va="center",
+                    bbox={"boxstyle": "circle", "fc": colors[zone_id], "ec": "none"})
+    if circle is not None:
+        ax.add_patch(Circle((circle[1], circle[0]), circle[2], fill=False, ec="black", ls=":", lw=1.5))
+    if striatum_outline is not None:
+        closed = np.vstack([striatum_outline, striatum_outline[:1]])
+        ax.plot(closed[:, 0], closed[:, 1], color="black", ls="--", lw=1)
+    ax.set_xlim(-0.5, shape[1] - 0.5)
+    ax.set_ylim(shape[0] - 0.5, -0.5)
+    ax.set_title(title, fontsize=10)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+
+def _montage(panels: list[tuple], suptitle: str) -> Figure:
+    """panels: (ids, title, extra kwargs for _outline_panel) -> Figure, at most MONTAGE_ZONE_NCOLS per row."""
+    n_rows = -(-len(panels) // MONTAGE_ZONE_NCOLS)
+    n_cols = min(len(panels), MONTAGE_ZONE_NCOLS)
+    fig = Figure(figsize=(4.5 * n_cols, 4.7 * n_rows + 0.6), layout="constrained")
+    fig.suptitle(suptitle, fontsize=12)
+    for k, (ids, title, kwargs) in enumerate(panels):
+        _outline_panel(fig.add_subplot(n_rows, n_cols, k + 1), ids, title=title, **kwargs)
+    return fig
+
+
+def plot_zone_groups(zone_masks: dict, nr_masks: dict, groups: list[tuple], circles: dict, mode: str, title: str,
+                     shape: tuple[int, int], striatum_outline: np.ndarray | None = None) -> Figure:
+    """All zones, then one panel per group (dotted = the seed's circle), then the largest zone of each group
+    without / with NR zones.
+
+    groups / circles: from functions.zone_groups.group_zones(zone_masks, mode).
+    """
+    common = {"masks": {**zone_masks, **nr_masks}, "colors": zone_colors(list(zone_masks)), "nr_ids": set(nr_masks),
+              "shape": shape, "striatum_outline": striatum_outline}
+    by_area = sorted(zone_masks, key=lambda z: zone_masks[z].sum(), reverse=True)
+    panels = [([*by_area, *nr_masks], "all zones", common)]
+    panels += [(ids, f"group {k}: zones {', '.join(map(str, ids))}", {**common, "circle": circles[seed]})
+               for k, (seed, ids) in enumerate(groups, 1)]
+    largest = [ids[0] for _, ids in groups]
+    panels.append((largest, f"largest of each group: {', '.join(map(str, largest))}", common))
+    panels.append(([*largest, *nr_masks], "largest of each group + NR zones", common))
+    return _montage(panels, f"{title}: {len(zone_masks)} recur_zones -> {len(groups)} groups (dotted circle = the "
+                            f"smallest zone's {MONTAGE_CIRCLE_TEXT[mode]} circle; largest outline drawn first)")
+
+
+# --- 6c. zone stats (not exported for now) ---------------------------------
 
 
 def plot_zone_stats(zones, title: str) -> Figure:
