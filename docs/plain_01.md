@@ -75,11 +75,11 @@ trend(t) = A · exp(−t / τ1) + B · exp(−t / τ2) + C
 
 **Fig. 1 — Detrending removes the basal intensity.** One frame (`2026_01_08-0012`, frame 948). A: raw frame, tissue brightness dominates. B: the same frame after detrending.
 
-![Fig. 1](../output/test08/fig1_basal_removal.png)
+![Fig. 1](plain_01/figures/fig1_basal_removal.png)
 
 **Fig. 2 — ROI trace before and after detrending.** Mean of a 100 × 100 px ROI on tissue (orange box), in 3 recordings.
 
-![Fig. 2](../output/test08/fig2_roi_traces.png)
+![Fig. 2](plain_01/figures/fig2_roi_traces.png)
 
 ---
 
@@ -110,7 +110,7 @@ trend(t) = A · exp(−t / τ1) + B · exp(−t / τ2) + C
 
 **Fig. 3 — Global histogram and left-side Gaussian fit.** All pixels in all frames of the detrended stack, 3 recordings (log y-axis). Shaded = fitted range (peak + left side).
 
-![Fig. 3](../output/test08/fig3_histogram_fit.png)
+![Fig. 3](plain_01/figures/fig3_histogram_fit.png)
 
 ---
 
@@ -131,11 +131,11 @@ trend(t) = A · exp(−t / τ1) + B · exp(−t / τ2) + C
 
 **Fig. 4 — Blur width comparison.** The z-scored frame 948 of `2026_01_08-0012`, unblurred and blurred with widths 1–16 px (kernel size in brackets). Same gray range in every panel. Orange = used in the pipeline.
 
-![Fig. 4](../output/test08/fig4_blur_width_comparison.png)
+![Fig. 4](plain_01/figures/fig4_blur_width_comparison.png)
 
 **Fig. 5 — Flash before and after blur.** The same frame: A, z-scored; B, after the pipeline blur (width 4 px, kernel 25 × 25 px). Same gray range in both panels.
 
-![Fig. 5](../output/test08/fig5_blur_before_after.png)
+![Fig. 5](plain_01/figures/fig5_blur_before_after.png)
 
 ---
 
@@ -168,7 +168,7 @@ Opening the `*_GAUSS.tif` files in ImageJ:
 
 **Fig. 6 — ABF channels of a spontaneous and an evoked recording.** Raw traces of CH1 (Vm), CH2 (command current) and CH14 (camera TTL), cell 2R on 2026_01_08. Shaded = imaging window. A: spontaneous, no current injected. B: evoked, 40 pulses of 600 pA (same recording as Figs. 1–5). Same CH2 range in both columns.
 
-![Fig. 6](../output/test08/fig6_abf_channels.png)
+![Fig. 6](plain_01/figures/fig6_abf_channels.png)
 
 To know them better, we do some simple statistics. Before that, we need to know **which recordings are used and why**, and the basic properties of this dataset.
 
@@ -281,7 +281,7 @@ A recording usually contains **many flashes** (ACh release events). Some recordi
 
 **Fig. 7 — ALS baseline correction.** 5 random 128 × 128 px ROIs of `2026_01_08-0012`, shown on GAUSS frame 948 (left, numbered boxes). Middle: ROI mean of the GAUSS file (black) and the fitted ALS baseline (orange). Right: ROI mean of the ALS file, after correction. Same y range down each column.
 
-![Fig. 7](../output/test08/fig7_als_correction.png)
+![Fig. 7](plain_01/figures/fig7_als_correction.png)
 
 ---
 

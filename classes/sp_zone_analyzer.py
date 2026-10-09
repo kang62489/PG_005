@@ -57,7 +57,7 @@ def timed(label: str) -> Iterator[None]:
 # --- Step 1: detect --------------------------------------------------------
 # (histogram bins / percentile range / fit live in functions/fit_hist.py -- shared with img_proc)
 CROSSOVER_RATIO = 2.0         # threshold = background peak + this many fitted sigmas
-TH_SMALL_OBJ = 4000           # px: drop per-frame blobs smaller than this (noise speckle)
+TH_SMALL_OBJ = 5000           # px: drop per-frame blobs smaller than this (noise speckle)
 
 # --- Step 2: group ---------------------------------------------------------
 MAX_FLASH_FRAC = 0.8          # frame fraction: drop larger merged flashes (over-exposed first frames)

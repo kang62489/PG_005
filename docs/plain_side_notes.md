@@ -78,7 +78,7 @@ Section numbers follow `plain_01.md`.
 
 ### 4.2 Fig. 6 (ABF channels)
 
-**Script:** `output/test08/abf_channels_figure.py`
+**Script:** `docs/plain_01/scripts/abf_channels_figure.py`
 
 - **Spike detection** = `classes/abf_clip.py` → `spike_detection()`: `find_peaks` on Vm inside the TTL window, distance **3000 samples** (0.3 s at 10 kHz), prominence **20 mV**.
   - Prominence was **40 mV** before 2026-10-08. With 40 mV, `2026_01_08-0022` (Vm ≈ −28 mV, spikes ≈ 20 mV tall) gives 0 spikes; with 20 mV, 115.
@@ -122,7 +122,7 @@ Section numbers follow `plain_01.md`.
 
 #### 4.3d How the counts are made
 
-**Script:** `output/test08/dataset_summary.py`
+**Script:** `docs/plain_01/scripts/dataset_summary.py`
 
 - **Recording table:** `rec_data.db` → `REC_<date>` (OBJ, SLICE, AT, SENSOR), joined by TIFF file name. All 201 recordings are found.
 - **Animal:** `exp_info.db` → `BASIC_INFO`, matched by date of recording (DOR). Every day here has exactly one animal.
@@ -160,7 +160,7 @@ Section numbers follow `plain_01.md`.
 
 #### Fig. 7
 
-**Script:** `output/test08/als_figure.py`
+**Script:** `docs/plain_01/scripts/als_figure.py`
 
 - Same ROI size and count as the ALS test, with seed 0 for a reproducible figure.
 - Middle column: ALS fitted on the ROI mean, as in the ALS test.
