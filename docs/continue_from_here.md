@@ -1,3 +1,48 @@
+# Log of the project progress 2026-10-10 Sat (plain_03 paused)
+Last working file: docs/plain_03.md (Question 1 + Figs. 1–2 done)
+
+## Summary of current progress
+- All 201 ABFs now local; `fig1_2_firing.py` rerun on all of them.
+- Rules (Kang): recordings with < 2 spikes dropped; group read from each ABF's own stim waveform (`classify_stim`): pulse train (≥ 2 pulses) = evoked, rate = spikes inside train ÷ train duration; no stim / long DC step = spontaneous, rate = spikes ÷ TTL window; single-pulse recordings left out. Protocol names are unreliable (Kang sometimes edited the waveform without switching protocols).
+- Result: 136 recordings, 35 cells, 14 animals; spontaneous 18 cells 0.62 [0.29–1.01] Hz, evoked 27 cells 0.53 [0.50–1.25] Hz. Figs. 1–2 + captions in `docs/plain_03.md`.
+- 5 `kang_pulse_train_100` recordings with 100 pA trains (old label said spontaneous) checked: 4 follow 1:1 (evoked), 1 no firing (dropped). Plot `output/plain_03_check_trains.png`.
+
+## What should we do next? (TODOs)
+- **Now:** Kang revises plain_01 / plain_02 with Jeff's feedback (2026-10-10 meeting) in another session.
+- **Then back to plain_03:** IQR method (polars "nearest" vs linear); neat-refactor `docs/plain_03/scripts/fig1_2_firing.py`; Kang writes Observation 2 / Question 2.
+
+## Last Session Recap
+※ recap: plain_03 Q1 finished (Figs. 1–2 with pulse-train-based evoked rates, ≥ 2 spikes, waveform-based groups); paused so Kang can fold Jeff's feedback into plain_01/02 first.
+
+---
+
+# Log of the project progress 2026-10-09 Fri 13:50
+Last working file: docs/plain_03/scripts/fig1_2_firing.py
+Last working line: 125 (main: summary print + figure / table save)
+
+# List of modified files:
+- docs/plain_03.md (new: Observation 1, Question 1, Fig. 1 / Fig. 2 slots `[TO ADD]`)
+- docs/plain_03/scripts/fig1_2_firing.py (new; <- break here)
+- docs/plain_03/figures/fig1_cell_ratio.png, fig2_firing_rate.png (new, drafts)
+- docs/plain_03/tables/firing.xlsx (new: sheets `recordings`, `cells`)
+
+## Summary of current progress
+- plain_03 started with Kang's flow: Obs. 1 = use every ABF whose spikes pass the current `find_peaks`; Q1 = share of spontaneous vs evoked + firing frequency per group (reference for reliability).
+- Rules (Kang): unit = independent cell (ANIMAL_ID, SLICE, AT); a cell with both types counts in both groups; one value per cell and type = **median** `spike_rate_hz`; all objectives.
+- Script reuses `AbfClip.load_abf()` + `spike_detection()` only (same settings as the pipeline) on `data/ana_20260922_000_deigo.txt`.
+- First run (local ABFs only): 158 recordings, 2 with 0 spikes dropped, 37 cells -> spontaneous 19, evoked 30; median 0.33 Hz in both groups.
+
+## What should we do next? (TODOs)
+- **Missing 43 ABFs:** 43 of the 201 listed ABFs are not in local `raw_abfs/` (on Deigo; e.g. 2025_10_13, 2025_12_15, 2025_12_18, 2026_01_08). Copy them, then rerun `fig1_2_firing.py`.
+- **Review Figs. 1–2:** Kang checks the two PNGs, then the figures + captions go into `docs/plain_03.md`.
+- **Evoked rate meaning:** evoked "frequency" mostly follows the stim protocol (dots stack at ~0.33 / 0.83 / 1.67 Hz). Decide how to read / show it.
+- Then: Step 3 plan phase 2 (MED back-check + two-pass MED), `.claude/plans/2026-10-07_step3_plan.md`.
+
+## Last Session Recap
+※ recap: Started docs/plain_03.md with Kang's flow and drafted Figs. 1–2 (spontaneous vs evoked cells, firing frequency per cell) via fig1_2_firing.py; pending: copy 43 missing ABFs from Deigo, rerun, review figures.
+
+---
+
 # Story-driven TODOs (2026-10-05, replaces all earlier open TODOs)
 Story logic (Part A of `docs/paper_discussion_2026-10-02.md`): 1 Problem (ACh compartment definition) -> 2 Spontaneous zones = places of recurring hotspots = candidate compartments -> 3 One ChI **can** supply a compartment-sized area -> 4 Can one ChI spread ACh like a wave? (MED flow) -> 5 Answer to step 1: a new kind of division with a cellular basis.
 Earlier open items (Session 81 / 82 lists, R, Jeff bucket, 60X decay fit, 23 no-peak) dropped 2026-10-05.
