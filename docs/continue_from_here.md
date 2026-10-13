@@ -1,3 +1,34 @@
+# Log of the project progress 2026-10-13 Tue (before lunch)
+Last working file: docs/plain_02.md
+Last working line: ~251 (section "Follow-up: describing the flash sizes with an exponential distribution")
+
+# List of modified files:
+- docs/plain_02.md (3 new follow-up sections, Figs. 13–19)
+- docs/plain_02/permutation/ (new: toy_process.png, test1_sizes_2025_02_05-0006.png, hotspot_overlay_0006_0007.png, test2_occupancy_2025_06_11-0009.png)
+- docs/plain_02/histograms/ (new: gauss_vs_als.png)
+- docs/plain_02/area_fit/ (new: area_exp_10X.png, area_exp_10X_per_recording_p1.png) (<- break here)
+- Scratch, git-ignored (not in the commit): output/test_permutation/, output/test_histograms/, output/test_area_fit/
+
+## Summary of current progress
+- Saion job 4754160 finished; `output/flash_area/` copied and checked (176 CSV + 176 NPZ, no partial files, 0006/0007 identical to local).
+- **Permutation test** (plain_02 follow-up, Figs. 13–16): 16 × 16 px tiles shifted in time by a random lag each, 100 surrogates; cutoff 2,345 / 2,789 / 2,623 px (0006 / 0007 60X, 0009 10X) → all flashes ≥ 5,000 px are above chance; one hotspot per recording, 0006 and 0007 (same slice) overlap ~60 %. Per-pixel shift fails on ALS files (blur links pixels); cleaner version = pixelwise shift after detrend, before blur.
+- **Small left peak of the ALS global histogram** (Fig. 17): at exactly 0 in all 176 recordings (~20 % drop), absent in GAUSS files → made by ALS (asymmetric weights p = 0.05).
+- **Exponential fit of the 10X flash-area histogram** (Figs. 18–19): bins of 10,000 µm² from 5,000 px, straight line through log(counts) of the continuous bars → 1/λ = 59,624 µm², half-area 41,328 µm²; per recording 63 / 103 fitted, median half-area 29,548 µm².
+- Notes for the 16:00 Jeff meeting are in plain_02 (follow-up sections).
+
+## What should we do next? (TODOs)
+- **Jeff meeting:** check how Figure 1 and Figure 3 should be made. Change the frame of flashes to zone-oriented, then maybe montages showing different frames for the paper.
+- **th_small_obj:** consider changing the 5,000 px removal to a number we can explain (e.g. the permutation cutoff, ~2,300–2,800 px).
+- **Permutation → img_proc.py:** if Jeff agrees, add the pixelwise shift (after detrend, before blur) and rerun all recordings on Saion.
+- **Move cited scripts to docs/:** plain_02 cites 8 scripts under `output/test_*` (git-ignored): `permutation_test.py`, `toy_process.py`, `overlay_hotspots.py`, `gauss_vs_als.py`, `hist_montage.py`, `zero_step.py`, `area_exp_example.py`, `area_exp_per_recording.py` → `docs/plain_02/scripts/`.
+- **Manuscript figures:** copy `output/flash_area/figures/flash_area_{60X,40X,10X}.png` + `_bins.csv` to `docs/manuscript/figures/`.
+- Carry-over: plain_03 (IQR method, neat-refactor `fig1_2_firing.py`, Obs. 2 / Q2).
+
+## Last Session Recap
+※ recap: Added three plain_02 follow-ups (permutation test: flashes ≥ 5,000 px non-random; ALS makes the histogram peak at 0; 10X flash-area histogram exponential, 1/λ ≈ 60,000 µm²). Pending: Jeff meeting, th_small_obj choice, move scripts to docs/.
+
+---
+
 # Log of the project progress 2026-10-10 Sat (plain_03 paused)
 Last working file: docs/plain_03.md (Question 1 + Figs. 1–2 done)
 

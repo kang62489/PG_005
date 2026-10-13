@@ -172,4 +172,145 @@ TIGHT versions (inner circle): same folder, `*_SEPARATED_VS_JOINED_TIGHT.png`.
 
 ---
 
+## Follow-up: are the flashes random? (permutation test, temporary notes)
+
+**❓ Could the flashes be random noise that happens to cross the threshold together, and do they recur at the same place more often than by chance?**
+
+Test on 3 recordings only (2025_02_05-0006 and -0007: 60X, same slice; 2025_06_11-0009: 10X), **without** the 5,000 px limit.
+
+### Flow
+
+**Test 1 — is a blob bigger than chance?**
+
+1. Cut every frame into tiles of 16 × 16 px.
+2. Give each tile one random lag (0 … last frame); all pixels of a tile share it.
+3. Slide each tile's movie in time by its lag (wraps around). Every tile keeps its own values, noise and flashes; only the **timing between tiles** becomes random.
+4. Detect blobs in this surrogate stack with the same threshold and mask cleanup as the real data; keep the largest blob.
+5. Repeat 100 times → **cutoff** = 95th percentile of the largest blobs. A real blob above the cutoff is not chance (p = 1 / 101 ≈ 0.0099).
+
+**Fig. 13 — How Test 1 works (toy stack: 8 frames, 8 × 8 px, 4 tiles).**
+
+![Fig. 13](plain_02/permutation/toy_process.png)
+
+**Test 2 — do flashes recur at the same place?**
+
+1. Keep only the real blobs above the Test 1 cutoff.
+2. Map = for every pixel, the number of frames it is inside such a flash.
+3. Shuffle: move every flash to a random position inside the frame (shape kept), 100 times.
+4. Patches of the map (≥ k frames) whose sum is larger than in 95 % of the shuffled maps = **hotspots**.
+
+> Note: shifting single pixels instead of tiles does not work on the ALS files. The Gaussian blur (sigma = 4 px) links neighbouring pixels, and a per-pixel shift breaks that link, so almost no noise blob survives (0006: 72 blobs instead of 774,203, largest 9 px). A cleaner version would shift single pixels **after the detrend and before the blur**, then run blur → ALS → detection on each surrogate (no tile size needed).
+
+### Results
+
+| Recording | Cutoff | Blobs above cutoff | Blobs ≥ 5,000 px | Hotspots |
+|---|---|---|---|---|
+| 2025_02_05-0006 (60X) | 2,345 px | 113 of 774,203 | 5 | 1 (p ≈ 0.0099) |
+| 2025_02_05-0007 (60X) | 2,789 px | 41 of 800,683 | 2 | 1 (p ≈ 0.0099) |
+| 2025_06_11-0009 (10X) | 2,623 px | 636 of 540,713 | 487 | 1 (p ≈ 0.0099) |
+
+- Noise alone never made a blob bigger than ~2,300–2,800 px. **All flashes ≥ 5,000 px (Figs. 1–4) are above chance.**
+- The tiny blobs (> 99.9 %) can't be told apart from noise.
+- The cutoff could replace the fixed 5,000 px limit as a data-driven removal size.
+- Each recording has one hotspot. In 0006 and 0007 (same slice) the two hotspots overlap: 63 % / 59 % of each lies inside the other.
+
+**Fig. 14 — Test 1, 2025_02_05-0006.** Blue = real blobs, orange = largest blob of each surrogate, dashed = cutoff.
+
+![Fig. 14](plain_02/permutation/test1_sizes_2025_02_05-0006.png)
+
+**Fig. 15 — Hotspots of 2025_02_05-0006 (blue) and -0007 (orange), same slice.** Grey = frames inside a flash (both recordings summed).
+
+![Fig. 15](plain_02/permutation/hotspot_overlay_0006_0007.png)
+
+**Fig. 16 — Test 2, 2025_06_11-0009 (10X).** Left = real map with the hotspot (orange), right = one shuffle.
+
+![Fig. 16](plain_02/permutation/test2_occupancy_2025_06_11-0009.png)
+
+> Open: only 3 recordings so far; the tile size (16 px) is a choice, not tested; at 10X a hotspot may also follow brighter tissue. Scripts are still scratch: `output/test_permutation/permutation_test.py`, `toy_process.py`, `overlay_hotspots.py`.
+
+> Next (if Jeff thinks this is a good approach): add the permutation step to `img_proc.py` (pixelwise shift after the detrend, before the blur), then rerun all recordings on the cluster (Saion).
+
+---
+
+## Follow-up: the small peak left of the main peak (global histogram)
+
+**❓ The global histogram of every `*_ALS.tif` has a small peak on the left side of the main peak. What is it?**
+
+- It sits at **exactly 0** in all 176 recordings (60X / 40X / 10X): counts pile up just below 0 and drop by ~20 % just above (median 20.3 %, range 15.1–23.0 %).
+- Check: the same histogram of the file **before ALS** (`*_GAUSS.tif`) has no peak at 0 (drop 0.7–4.8 % = the normal slope of the curve), the ALS file has it (17.5–21.2 %).
+- **→ The small peak is made by ALS**, not by the tissue. ALS (`p = 0.05`) pulls the baseline strongly onto points below it and weakly onto points above it, so the lowest points end up just below 0 after the subtraction. The same rule puts the background (main peak) slightly above 0 (~0.07).
+
+**Fig. 17 — Global histogram before (GAUSS, left) and after ALS (right).** One recording per objective, 512 bins, linear y; red dotted line = 0.
+
+![Fig. 17](plain_02/histograms/gauss_vs_als.png)
+
+> Open: the peak lies on the left side of the main peak, which the background fit (threshold) uses; how much it moves the threshold is not tested. Scripts: `output/test_histograms/gauss_vs_als.py`, `hist_montage.py`, `zero_step.py`.
+
+---
+
+## Follow-up: describing the flash sizes with an exponential distribution (dirty try)
+
+**❓ Can a few numbers of an exponential distribution describe how large the 10X flashes are?**
+
+Data: every 10X flash ≥ 5,000 px of `output/flash_area/` (no 10X merge, one 4-connected blob per frame), GACh3.0, 103 recordings → **19,587 flashes**.
+
+### The model and its parameters
+
+The flash areas are put into a histogram with equal bins. An exponential decay says: the height of the bars drops by the **same factor** for every equal step in area. On a log-y axis this is a **straight falling line**.
+
+> count of a bar = C · e^(−λ · (x − A₀)),  x = center of the bar, x ≥ A₀
+
+| Parameter | Unit | Meaning | How it is obtained |
+|---|---|---|---|
+| **A₀** | µm² | Start of the fit: smaller blobs are not described. | Chosen: 5,000 px = 5,000 / 0.75² = **8,889 µm²** (10X: 0.75 px per µm). |
+| **Bin width** | µm² | Width of every bar. | Chosen: **10,000 µm²**. |
+| **C** | flashes per bar | Height of the line at A₀ (where the line starts). | Fitted (intercept of the line). |
+| **λ** (lambda, "rate") | per µm² | **How fast** the bars drop as the area grows. Large λ = large flashes are rare (steep line); small λ = large flashes are common (flat line). | Fitted (slope of the line = −λ). |
+| **1 / λ** ("scale") | µm² | The area step that lowers the bars by a factor e (2.72). In a pure exponential it is also the **average amount** by which a flash is larger than A₀. Same unit as the area, so it is the easiest one to read. | 1 / λ |
+| **ln 2 / λ** ("half-area") | µm² | Area step that **halves** the bars. | 0.693 × (1 / λ) |
+| **A₀ + 1 / λ** | µm² | **Mean flash area** of the fitted line (not of the data). | |
+| **A₀ + ln 2 / λ** | µm² | **Median flash area** of the fitted line: half of the flashes smaller, half larger. | |
+
+> Note: an exponential has **no memory**. A flash that already reached 30,000 µm² has the same chance to grow another half-area (and halve its count) as a flash that just reached A₀. If the real data follow the line, flash size behaves like "stop growing with a constant chance per µm²".
+
+### How the numbers are calculated (10X, all recordings pooled)
+
+1. **Histogram:** the 19,587 flashes in bars of 10,000 µm² starting at A₀. Example: the first bar (8,889–18,889 µm²) holds **7,747** flashes.
+2. **Bars used:** from A₀ up to the **first empty bar** → **43 bars** (8,889–438,889 µm²). The bars further out (scattered single flashes up to ~1.8 million µm²) are left out: they would pull the line flat.
+3. **Log of each bar:** e.g. 7,747 → ln = 8.955; the bar 208,889–218,889 µm² holds 68 → 4.220; the bar 428,889–438,889 µm² holds 3 → 1.099.
+4. **Straight line** through the 43 points (least squares), x = bar center − A₀: slope = −λ = **−1.68 × 10⁻⁵ per µm²**, intercept = ln C = 7.674 → **C = 2,152** flashes per bar.
+5. **1 / λ** = 1 / (1.677 × 10⁻⁵) = **59,624 µm²**; **half-area** = 0.693 × 59,624 = **41,328 µm²**.
+6. **Mean** (line) = 8,889 + 59,624 = **68,513 µm²**; **median** (line) = 8,889 + 41,328 = **50,217 µm²**.
+7. **Prediction for one bar**, e.g. 208,889–218,889 µm² (center 213,889, x − A₀ = 205,000): 2,152 × e^(−1.68 × 10⁻⁵ × 205,000) = 2,152 × e^(−3.44) = **69** (real: 68).
+
+| Flashes from … (bar edge) | Real | Line | Real / line |
+|---|---|---|---|
+| 18,889 µm² | 11,840 | 10,835 | 1.09 |
+| 28,889 µm² | 8,978 | 9,162 | 0.98 |
+| 58,889 µm² | 4,773 | 5,540 | 0.86 |
+| 108,889 µm² | 1,995 | 2,395 | 0.83 |
+| 208,889 µm² | 452 | 448 | 1.01 |
+| 308,889 µm² | 79 | 84 | 0.94 |
+
+**Fig. 18 — Histogram of the 10X flash areas with the fitted exponential.** Equal bins of 10,000 µm², log y; red = the fitted line over the 43 continuous bars. Grey = the 67,809,511 blobs < 5,000 px (one bar 0–8,889 µm², not fitted); blue = the 19,587 flashes ≥ 5,000 px.
+
+![Fig. 18](plain_02/area_fit/area_exp_10X.png)
+
+- From ~20,000 to ~440,000 µm² the bars follow **one exponential** (real / line 0.83–1.09): the size of the 10X flashes can be described by **1 / λ ≈ 60,000 µm²** (halves every ~41,000 µm²).
+- Only the **first bar** (8,889–18,889 µm²) is clearly above the line (7,747 vs 1,979 on the line at its center): there are more flashes just above 5,000 px than the exponential predicts.
+
+### Per recording
+
+Same fit for each 10X recording: **63 of 103** recordings (needs ≥ 10 flashes and ≥ 3 continuous bars; the others have few flashes ≥ 5,000 px, many have none). Half-area per recording: median **29,548 µm²** (IQR 24,840–39,672).
+
+- The per-recording half-areas are smaller than the pooled one (41,328 µm²): a single recording has fewer flashes, so its first empty bar comes earlier and its line covers mostly the steeper start.
+
+**Fig. 19 — Per recording, page 1 of 6.** Grey = blobs < 5,000 px (dark bar at 0 + count, not fitted). All pages: `output/test_area_fit/per_recording/`; table: `output/test_area_fit/area_exp_per_recording_10X.csv`.
+
+![Fig. 19](plain_02/area_fit/area_exp_10X_per_recording_p1.png)
+
+> Open: A₀ (5,000 px) and the bin width (10,000 µm²) are choices and change λ; "up to the first empty bar" is a rule of thumb; bars with 1–5 flashes have noisy logs. Scripts: `output/test_area_fit/area_exp_example.py`, `area_exp_per_recording.py`.
+
+---
+
 *(To be continued.)*
