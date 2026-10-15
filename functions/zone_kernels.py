@@ -3,6 +3,7 @@ zone_kernels.py  --  Heavy per-pixel steps of the spontaneous zone analysis (CPU
 
   Step 1. Mask   : threshold -> 3x3 opening -> 3x3 closing  (GPU / numba), then
                    fill holes -> drop small blobs            (scipy labels, frames in parallel threads)
+                   (flash_sizes / mask_flash_sizes: same mask, only the flash sizes -- permutation test)
   Step 2. Traces : mean value of every detection footprint in every frame (GPU / numba)
 
 The stack is float16; numba can't load float16, so kernels read the raw uint16 codes and
@@ -157,14 +158,18 @@ def _gpu_threshold_open_close(codes: np.ndarray, lut: np.ndarray, thr: np.float3
 _CROSS = ndimage.generate_binary_structure(2, 1)  # 4-connectivity, scipy's default for both steps
 
 
-def _fill_and_filter_frame(frame: np.ndarray, th_small_obj: int) -> np.ndarray:
-    """fill holes (background 4-regions not touching the edge) -> keep blobs >= th_small_obj px."""
+def _fill_holes(frame: np.ndarray) -> np.ndarray:
+    """fill holes = background 4-regions not touching the edge become foreground."""
     bg_labels, _ = ndimage.label(~frame, structure=_CROSS)
     edge = np.unique(np.concatenate([bg_labels[0], bg_labels[-1], bg_labels[:, 0], bg_labels[:, -1]]))
     is_edge_bg = np.zeros(bg_labels.max() + 1, dtype=bool)
     is_edge_bg[edge] = True
-    filled = frame | ~is_edge_bg[bg_labels]  # label 0 = foreground, never an edge background label
+    return frame | ~is_edge_bg[bg_labels]  # label 0 = foreground, never an edge background label
 
+
+def _fill_and_filter_frame(frame: np.ndarray, th_small_obj: int) -> np.ndarray:
+    """fill holes -> keep blobs >= th_small_obj px."""
+    filled = _fill_holes(frame)
     labels, n = ndimage.label(filled, structure=_CROSS)
     if n == 0:
         return filled
@@ -176,19 +181,40 @@ def _fill_and_filter_frame(frame: np.ndarray, th_small_obj: int) -> np.ndarray:
 
 # --- 1d. Dispatch ----------------------------------------------------------
 
-def zone_mask(stack_f16: np.ndarray, threshold: float, th_small_obj: int, cuda_available: bool = False) -> np.ndarray:
-    """Threshold -> open -> close -> fill holes -> drop small blobs, same result as the scipy chain."""
+def _threshold_open_close(stack_f16: np.ndarray, threshold: float, cuda_available: bool) -> np.ndarray:
+    """Threshold -> 3x3 opening -> 3x3 closing (GPU / numba), before fill holes."""
     codes = stack_f16.view(np.uint16)
     thr = np.float32(np.float16(threshold))  # numpy compares a float16 array against a float16-rounded scalar
-    lut = f16_lut()
     if cuda_available:
-        mask = _gpu_threshold_open_close(codes, lut, thr)
-    else:
-        mask = _cpu_threshold_open_close(codes, lut, thr)
+        return _gpu_threshold_open_close(codes, f16_lut(), thr)
+    return _cpu_threshold_open_close(codes, f16_lut(), thr)
 
+
+def zone_mask(stack_f16: np.ndarray, threshold: float, th_small_obj: int, cuda_available: bool = False) -> np.ndarray:
+    """Threshold -> open -> close -> fill holes -> drop small blobs, same result as the scipy chain."""
+    mask = _threshold_open_close(stack_f16, threshold, cuda_available)
     with ThreadPoolExecutor(N_THREADS_FRAME_POOL) as pool:
         frames = list(pool.map(lambda frame: _fill_and_filter_frame(frame, th_small_obj), mask))
     return np.stack(frames)
+
+
+def _frame_flash_sizes(frame: np.ndarray) -> np.ndarray:
+    """Fill holes -> size (px) of every flash of one frame, labelled once."""
+    filled = _fill_holes(frame)
+    labels, n = ndimage.label(filled, structure=_CROSS)
+    return np.bincount(labels[filled])[1:] if n else np.zeros(0, dtype=np.int64)  # foreground px only
+
+
+def mask_flash_sizes(opened_closed: np.ndarray) -> np.ndarray:
+    """Fill holes + size (px) of every 4-connected flash of a threshold -> open -> close mask, frame by frame."""
+    with ThreadPoolExecutor(N_THREADS_FRAME_POOL) as pool:
+        sizes = list(pool.map(_frame_flash_sizes, opened_closed))
+    return np.concatenate(sizes)
+
+
+def flash_sizes(stack_f16: np.ndarray, threshold: float, cuda_available: bool = False) -> np.ndarray:
+    """Size (px) of every 4-connected flash of zone_mask(th_small_obj = 0), each frame labelled only once."""
+    return mask_flash_sizes(_threshold_open_close(stack_f16, threshold, cuda_available))
 
 
 # ===========================================================================

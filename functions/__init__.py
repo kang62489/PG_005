@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
     from .load_img_segs import load_img_segs
+    from .permutation import pixel_lags, surrogate_masks
     from .plot_results import (
         frame_zone_figures,
         plot_flow_panels,
@@ -108,6 +109,7 @@ __all__ = [
     "medial_from",
     "pair_flow",
     "perpendicular_of",
+    "pixel_lags",
     "plot_flow_panels",
     "plot_flow_streamlines",
     "frame_zone_figures",
@@ -134,6 +136,7 @@ __all__ = [
     "snap_ends",
     "spike_centered_avg",
     "spike_centered_median",
+    "surrogate_masks",
     "test_cuda",
     "write_cell_summary_xlsx",
     "write_stats_xlsx",
@@ -156,6 +159,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "get_memory_usage":    (".get_memory_use",                            "get_memory_usage"),
     "list_parser":         (".list_parser",                               "list_parser"),
     "load_img_segs":       (".load_img_segs",                             "load_img_segs"),
+    "pixel_lags":          (".permutation",                               "pixel_lags"),
+    "surrogate_masks":     (".permutation",                               "surrogate_masks"),
     "plot_spatiotemporal_summary": (".plot_results",                      "plot_spatiotemporal_summary"),
     "plot_flow_panels":    (".plot_results",                              "plot_flow_panels"),
     "plot_flow_streamlines": (".plot_results",                            "plot_flow_streamlines"),
