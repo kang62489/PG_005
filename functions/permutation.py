@@ -14,7 +14,7 @@ comes back. The threshold test reproduces the pipeline's float16 rounding of the
 
 Example:
     >>> lag_maps = (pixel_lags(z_f16.shape, seed) for seed in range(1000))
-    >>> for mask in surrogate_masks(z_f16, lag_maps, threshold, 4.0, 11, 0.05, 10, cuda_available=True):
+    >>> for mask in sur_flash_masks(z_f16, lag_maps, threshold, 4.0, 11, 0.05, 10, cuda_available=True):
     ...     sizes = mask_flash_sizes(mask)
 """
 
@@ -142,7 +142,7 @@ def _gpu_threshold_band(data, baseline, cut, tie_up, r0, mask) -> None:
     mask[t, r0 + px // w, px % w] = 1 if v > cut or (tie_up and v == cut) else 0
 
 
-def _gpu_surrogate_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold: float, kernel: np.ndarray,
+def _gpu_sur_flash_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold: float, kernel: np.ndarray,
                          lam: float, p: float, n_iter: int) -> Iterator[np.ndarray]:
     """z-stack uploaded once; per lag map: bands rotated -> blurred -> ALS -> thresholded, then open / close."""
     n_t, h, w = z_f16.shape
@@ -218,7 +218,7 @@ def _cpu_vblur(src: np.ndarray, kernel: np.ndarray, g0: int, r0: int, height: in
                 out[t, y, x] = val
 
 
-def _cpu_lagged_als(z_f16: np.ndarray, lags: np.ndarray, kernel: np.ndarray, lam: float, p: float,
+def _cpu_sur_als(z_f16: np.ndarray, lags: np.ndarray, kernel: np.ndarray, lam: float, p: float,
                     n_iter: int) -> np.ndarray:
     """ALS-corrected stack (float16, as *_BIEXP_ALS.tif) of the lag-shuffled stack, band by band."""
     n_t, h, w = z_f16.shape
@@ -241,16 +241,16 @@ def _cpu_lagged_als(z_f16: np.ndarray, lags: np.ndarray, kernel: np.ndarray, lam
     return out
 
 
-def _cpu_surrogate_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold: float, kernel: np.ndarray,
+def _cpu_sur_flash_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold: float, kernel: np.ndarray,
                          lam: float, p: float, n_iter: int) -> Iterator[np.ndarray]:
     """Per lag map: the float16 ALS stack (band by band), then zone_kernels' threshold -> open -> close."""
     for lags in lag_maps:
-        yield _threshold_open_close(_cpu_lagged_als(z_f16, lags, kernel, lam, p, n_iter), threshold, False)
+        yield _threshold_open_close(_cpu_sur_als(z_f16, lags, kernel, lam, p, n_iter), threshold, False)
 
 
 # --- 2c. Dispatch ----------------------------------------------------------
 
-def surrogate_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold: float, sigma: float, lam: float,
+def sur_flash_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold: float, sigma: float, lam: float,
                     p: float, n_iter: int, cuda_available: bool) -> Iterator[np.ndarray]:
     """Step 2: per lag map, the opened + closed threshold mask (T, H, W) of the shuffled -> blurred -> ALS stack."""
     if z_f16.shape[0] > MAX_T:
@@ -259,5 +259,5 @@ def surrogate_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold
     size = math.ceil(sigma * 6)
     kernel = _cpu_kernel(sigma, size + 1 - size % 2)  # same odd 6-sigma kernel as gaussian_blur_run
     if cuda_available:
-        return _gpu_surrogate_masks(z_f16, lag_maps, threshold, kernel, lam, p, n_iter)
-    return _cpu_surrogate_masks(z_f16, lag_maps, threshold, kernel, lam, p, n_iter)
+        return _gpu_sur_flash_masks(z_f16, lag_maps, threshold, kernel, lam, p, n_iter)
+    return _cpu_sur_flash_masks(z_f16, lag_maps, threshold, kernel, lam, p, n_iter)

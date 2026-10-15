@@ -15,7 +15,7 @@ Every new analysis or statistic should say which claim it supports.
 
 ## Story logic (2026-10-05) — replaces the three-claim framing below
 
-Full wording, decisions and TODOs: `docs/paper_discussion_2026-10-02.md`, Part A.
+Full wording, decisions and TODOs: `docs/paper/paper_discussion_2026-10-02.md`, Part A.
 
 | Step | Question | Answer | Old claim | Status |
 |---|---|---|---|---|

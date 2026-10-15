@@ -1,0 +1,43 @@
+#!/bin/bash
+#SBATCH --job-name=perm_test
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=kang.chu@oist.jp
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --nodelist=saion-gpu21
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=16G
+#SBATCH --time=08:00:00
+#SBATCH --array=0-102
+#SBATCH --output=/work/WickensU/kang/logs/perm_test_%A_%a.out
+#SBATCH --error=/work/WickensU/kang/logs/perm_test_%A_%a.err
+
+# Permutation test of the th_flash sizes (docs/permutation_test.md): one 10X GACh3.0 recording per array task
+# (--task_index = SLURM_ARRAY_TASK_ID, 103 recordings -> --array=0-102), 1000 surrogates each,
+# first pixel-wise lags (-> $OUT_ROOT/pixel/), then the 16 x 16 tile backup (-> $OUT_ROOT/tile16/).
+# Per folder: {stem}_th_flash_sizes.npz, {stem}_surrogates.csv (resumable: resubmit a task after a timeout),
+# summary.csv (th_small_obj_px = smallest size with p < 0.005, rounded up to 500 px; rebuilt by each finished task).
+# Test one task first: sbatch --array=0 run_permutation_test_on_saion.slm
+# GPU: ~8 GB (z-stack + masks + one band). 16G RAM: banded detrend peaks at ~9 GB (raw uint16 + float32 detrended),
+# surrogates at ~10 GB (float16 z-stack + its pixel-major copy + 2-3 masks of 1.5 GB).
+# ~1.5 min setup + 1000 x ~5.5 s per version locally (RTX 5070 Ti) -> ~3.1 h per task; 8 h leaves room for a slower
+# GPU (a timed-out task resumes from its {stem}_surrogates.csv when resubmitted).
+# Create the log folder once before submitting: mkdir -p /work/WickensU/kang/logs
+
+PROJECT=/home/k/kang-chu/PG_005
+PROC_LIST=$PROJECT/data/proc_20260922_000_saion.txt
+OUT_ROOT=/work/WickensU/kang/results/permutation
+
+export COLUMNS=200
+export PYTHONUNBUFFERED=1  # print() lines reach the .out log immediately
+
+for TILE in 1 16; do
+    $PROJECT/.venv/bin/python $PROJECT/permutation_test.py \
+        --proc_list $PROC_LIST \
+        --db $PROJECT/data/rec_data.db \
+        --exp_db $PROJECT/data/exp_info.db \
+        --obj 10X \
+        --tile $TILE \
+        --task_index $SLURM_ARRAY_TASK_ID \
+        --out_root $OUT_ROOT
+done

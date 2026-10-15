@@ -34,7 +34,7 @@ from skimage.measure import find_contours, regionprops
 
 # Local imports
 from classes.region_analyzer import PIXEL_SCALE
-from functions.fit_hist import fit_background
+from functions.fit_hist import fit_flash_background
 from functions.zone_kernels import footprint_traces, zone_mask
 
 console = Console()
@@ -107,7 +107,7 @@ class SpontaneousZoneAnalyzer:
     def detect(self) -> None:
         """Background threshold -> cleaned per-frame flash mask."""
         with timed("detect 1a threshold (histogram + fit)"):
-            self.bg_center, self.bg_sigma = fit_background(self.stack_f16, cuda_available=self.cuda_available)
+            self.bg_center, self.bg_sigma = fit_flash_background(self.stack_f16, cuda_available=self.cuda_available)
             self.threshold = float(self.bg_center + self.sigma_ratio * self.bg_sigma)
         console.log(f"  threshold (peak + {self.sigma_ratio} sigma) = {self.threshold:.5f}")
 
@@ -249,7 +249,7 @@ class SpontaneousZoneAnalyzer:
         return paths
 
 
-# STEP 1 -- DETECT lives in functions/: fit_hist.fit_background + zone_kernels.zone_mask
+# STEP 1 -- DETECT lives in functions/: fit_hist.fit_flash_background + zone_kernels.zone_mask
 
 # ===========================================================================
 #

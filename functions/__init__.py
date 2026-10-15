@@ -27,14 +27,14 @@ if TYPE_CHECKING:
         gauss_ready,
         raw_tiff_ready,
     )
-    from .fit_hist import find_background_threshold, fit_hist_sigma, img_zscore_convert
+    from .fit_hist import fit_zscore_background, img_zscore_convert
     from .flash_flow import compute_flow_pairs, pair_flow
     from .flow_pattern import fit_flow_pattern
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
     from .list_parser import list_parser
     from .load_img_segs import load_img_segs
-    from .permutation import pixel_lags, surrogate_masks
+    from .permutation import pixel_lags, sur_flash_masks
     from .plot_results import (
         frame_zone_figures,
         plot_flow_panels,
@@ -87,9 +87,8 @@ __all__ = [
     "compute_region_stats",
     "count_unique_cells",
     "find_ap_threshold",
-    "find_background_threshold",
     "fit_flow_pattern",
-    "fit_hist_sigma",
+    "fit_zscore_background",
     "gauss_exists",
     "gauss_ready",
     "gaussian_blur_run",
@@ -136,7 +135,7 @@ __all__ = [
     "snap_ends",
     "spike_centered_avg",
     "spike_centered_median",
-    "surrogate_masks",
+    "sur_flash_masks",
     "test_cuda",
     "write_cell_summary_xlsx",
     "write_stats_xlsx",
@@ -160,7 +159,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "list_parser":         (".list_parser",                               "list_parser"),
     "load_img_segs":       (".load_img_segs",                             "load_img_segs"),
     "pixel_lags":          (".permutation",                               "pixel_lags"),
-    "surrogate_masks":     (".permutation",                               "surrogate_masks"),
+    "sur_flash_masks":     (".permutation",                               "sur_flash_masks"),
     "plot_spatiotemporal_summary": (".plot_results",                      "plot_spatiotemporal_summary"),
     "plot_flow_panels":    (".plot_results",                              "plot_flow_panels"),
     "plot_flow_streamlines": (".plot_results",                            "plot_flow_streamlines"),
@@ -184,8 +183,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "compute_flow_pattern_stats": (".database_ops",                    "compute_flow_pattern_stats"),
     "get_excluded_recordings": (".database_ops",                       "get_excluded_recordings"),
     "get_cell_recording_status": (".database_ops",                     "get_cell_recording_status"),
-    "fit_hist_sigma":      (".fit_hist",                                   "fit_hist_sigma"),
-    "find_background_threshold": (".fit_hist",                            "find_background_threshold"),
+    "fit_zscore_background": (".fit_hist",                                 "fit_zscore_background"),
     "img_zscore_convert":  (".fit_hist",                                   "img_zscore_convert"),
     "spike_centered_avg":  (".spike_alignment",                           "spike_centered_avg"),
     "spike_centered_median": (".spike_alignment",                         "spike_centered_median"),

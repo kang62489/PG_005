@@ -1,6 +1,6 @@
 # Permutation test for flash sizes (`th_small_obj` from data)
 
-Created 2026-10-15. Script: `permutation_null.py` (root), kernels in `functions/permutation.py`.
+Created 2026-10-15. Script: `permutation_test.py` (root), kernels in `functions/permutation.py`.
 
 Goal: replace the hand-picked `th_small_obj = 5,000 px` with a size we can explain. That size is the one that
 chance alone almost never reaches.
@@ -11,8 +11,8 @@ chance alone almost never reaches.
 
 | term | meaning | example (2025_02_05-0006) |
 |---|---|---|
-| **th_flashes** | touching above-threshold (background peak + 2σ) pixels in one frame of the **real recording**, any size | 774,203 |
-| **surrogate** | one shuffled movie (every pixel's trace rotated in time by its own random lag), run through the same blur → ALS → threshold → detection | 1 seed = 1 surrogate |
+| **th_flashes** | touching above-threshold (background peak + 2σ) pixels in one frame of the **recording**, any size | 774,203 |
+| **surrogate** | one shuffled movie (every pixel's trace rotated in time by its own random lag), run through the same blur → ALS → threshold → detection | 1 sur_idx = 1 surrogate |
 | **sur_flashes** | touching above-threshold pixels in one frame of a **surrogate**, any size | ~704,000 per surrogate |
 | **cutoff** | a size read from the largest sur_flashes, proposed as the new `th_small_obj` | |
 | **qf_flashes** | th_flashes with size ≥ cutoff | |
@@ -20,7 +20,7 @@ chance alone almost never reaches.
 "Noise" is used only for the background σ of the threshold.
 
 ```
-real recording ──► th_flashes ──(size ≥ cutoff)──► qf_flashes
+recording      ──► th_flashes ──(size ≥ cutoff)──► qf_flashes
 surrogate      ──► sur_flashes ──► largest sur_flash per surrogate ──► cutoff
 ```
 
@@ -32,7 +32,7 @@ Goal: check that the flashes we detect (threshold + size removal) are **not form
 
 | | H₀ | H₁ |
 |---|---|---|
-| plain (paper / discussion) | A detected flash is **formed by chance**: its pixels are above threshold at the same moment only by coincidence. | A detected flash is a **real coordinated event**: neighbouring pixels are above threshold together more than chance allows. |
+| plain (paper / discussion) | A detected flash is **formed by chance**: its pixels are above threshold at the same moment only by coincidence. | A detected flash is a **coordinated event**: neighbouring pixels are above threshold together more than chance allows. |
 | operational (what the shuffle does) | Each pixel keeps its own activity, but its **timing has no relation** to its neighbours' timing. | Neighbouring pixels' timelines are **aligned**: they rise in the same frames. |
 
 The shuffle does **not** reorder frames. Each pixel's timeline is **rotated** by its own lag, so the order within a
@@ -40,7 +40,7 @@ pixel is kept and only its timing relative to the neighbours changes:
 
 ```
                  f1 f2 f3 f4 f5 f6
-real       A     0  0  5  6  0  0
+recording  A     0  0  5  6  0  0
            B     0  0  5  6  0  0      A, B, C rise in the same frames -> th_flash of 3 px
            C     0  0  5  6  0  0
 surrogate  A     0  0  5  6  0  0      lag 0
@@ -56,18 +56,18 @@ surrogate  A     0  0  5  6  0  0      lag 0
 | **test statistic** | size of a th_flash |
 | **reference distribution under H₀** | the largest sur_flash of each of N surrogates |
 | **p-value** | probability, if H₀ is true, of getting a flash this big or bigger anywhere in the movie |
-| **decision** | p < 0.05 → reject H₀ → **qf_flash** |
+| **decision** | p < 0.005 → reject H₀ → **qf_flash** |
 
 ### How a surrogate makes H₀ true
 
 1. Detrend + z-score the raw movie (as `img_proc.py`).
 2. **Shuffle:** give every pixel its own random lag and rotate its trace by it. With lag 300, frame 0 takes the value
    of frame 300.
-   - Each pixel keeps **all its own values** (same noise, same events, same drift shape).
+   - Each pixel keeps **all its own values** (same fluctuations, same events, same drift shape).
    - Neighbouring pixels are no longer active **at the same time** → spatial coordination is destroyed.
-3. Gaussian blur → ALS → threshold → open / close / fill holes → sur_flashes, exactly as for the real recording.
-   The **real** recording's threshold is used.
-   - The shuffle comes **before** the blur, so the blur rebuilds the smooth noise specks of a real movie.
+3. Gaussian blur → ALS → threshold → open / close / fill holes → sur_flashes, exactly as for the recording.
+   The **recording's own** threshold is used.
+   - The shuffle comes **before** the blur, so the blur rebuilds the smooth specks of the recording.
 
 ---
 
@@ -95,10 +95,10 @@ th_flash size ≥ th_small_obj   →   qf_flash
 
 - **α (alpha)** is the line chosen beforehand (here 0.005); **p** is computed from the data for each size.
   Rule: p < α → qf_flash.
-- Run settings (`permutation_null.py` defaults): N = 1000, α = 0.005 → at most 4 of the 1000 largest sur_flashes
+- Run settings (`permutation_test.py` defaults): N = 1000, α = 0.005 → at most 4 of the 1000 largest sur_flashes
   may reach the cutoff, so cutoff = 5th largest + 1 (p = 5/1001 = 0.004995).
 
-- **"+1"**: counts the real data as one more possible outcome under H₀. This is the standard way to make a Monte
+- **"+1"**: counts the recording as one more possible outcome under H₀. This is the standard way to make a Monte
   Carlo p-value valid (p is never exactly 0).
 - **Why N = 100**: the smallest possible p is 1 / (N + 1).
 
@@ -144,7 +144,7 @@ same idea at α = 0.05).
 | p < α | **reject H₀**: the flash is unlikely to come from uncoordinated pixels → evidence for coordinated release | "H₁ is proven" |
 | p ≥ α | **fail to reject H₀**: not enough evidence that the flash is more than chance | "H₀ is accepted", "the flash is random" |
 
-A small th_flash with p = 0.3 is not proven to be random. The test cannot tell it apart from chance; it may be a real
+A small th_flash with p = 0.3 is not proven to be random. The test cannot tell it apart from chance; it may be a coordinated
 but tiny event hidden among the sur_flash sizes.
 
 Example sentence: *"Flashes larger than th_small_obj were unlikely under the null hypothesis of temporally
@@ -173,7 +173,7 @@ sizes after blur + ALS.
   are at similar levels, so the seam should matter little.
 - A per-tile lag (16 × 16 px, the earlier scratch test, shuffled **after** ALS) gave lower cutoffs
   (2,345 / 2,789 / 2,623 px). A likely reason: tile edges cut sur_flashes apart (not verified).
-- `permutation_null.py` saves the cutoff, `th_small_obj_px` and the number of qf_flashes per recording
-  (`{stem}_cutoff.csv`, `summary.csv`), not a p-value per th_flash.
-- Saion: `run_permutation_on_saion.slm`, one 10X recording per array task, pixel-wise (`pixel/`) and
+- `permutation_test.py` saves `{stem}_th_flash_sizes.npz`, `{stem}_surrogates.csv` (`sur_idx`,
+  `largest_sur_flash_px`) and `summary.csv` (`recording`, `th_small_obj_px`), not a p-value per th_flash.
+- Saion: `run_permutation_test_on_saion.slm`, one 10X recording per array task, pixel-wise (`pixel/`) and
   16 × 16 tile backup (`tile16/`), N = 1000 each.

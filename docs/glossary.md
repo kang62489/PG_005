@@ -49,4 +49,4 @@ Terms used in the code and docs, after the 2026-10-08 rename (branch `major_refa
 
 ## 3. Not renamed
 
-- Dated records (`.claude/plans/`, `docs/paper_discussion_2026-10-02.md`, history in `docs/continue_from_here.md`) keep the old terms.
+- Dated records (`.claude/plans/`, `docs/paper/paper_discussion_2026-10-02.md`, history in `docs/continue_from_here.md`) keep the old terms.

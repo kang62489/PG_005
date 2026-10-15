@@ -7,7 +7,7 @@
 1. Load each stack with `tifffile.imread()`.
 2. `sample_tau()` fits bi-exponential curves to **500 randomly selected individual pixel traces**. It takes the median of the successful fits to obtain two decay times, `tau1` and `tau2`. These are pixels, not ROIs.
 3. `biexp_detrend()` uses those decay times to fit a baseline to **every pixel's** time trace, then subtracts the fitted baseline.
-4. `fit_hist_sigma()` pools the detrended values from the entire stack into a histogram. A Gaussian fit to the histogram's peak and left side estimates the background mean and sigma. `img_zscore_convert()` calculates `(detrended value − background mean) / background sigma`.
+4. `fit_zscore_background()` pools the detrended values from the entire stack into a histogram. A Gaussian fit to the histogram's peak and left side estimates the background mean and sigma. `img_zscore_convert()` calculates `(detrended value − background mean) / background sigma`.
 5. `gaussian_blur_run()` applies a two-dimensional Gaussian blur to each frame with **sigma = 4 pixels**.
 6. Save the result in the processed TIFF directory as `<original_stem>_BIEXP_GAUSS.tif`.
 
