@@ -1,3 +1,32 @@
+# Log of the project progress 2026-10-16 Fri 02:05
+Last working file: permutation_test.py
+Last working line: 89 (Step 1 -- select; start of the flow walk-through)
+
+# List of modified files (commit 05d68f6):
+- docs/ reorganised: docs/paper/ (paper discussion, results.md, plain_01-03, plain_side_notes.md) + docs/reference/
+- functions/fit_hist.py (SHARED / FIT 1 / FIT 2 layout)
+- functions/__init__.py, functions/permutation.py
+- permutation_null.py -> permutation_test.py
+- run_permutation_test_on_saion.slm, run_spontaneous_analysis_on_saion.slm, run_ach_domain_analysis_on_deigo.slm, docs/paper/scripts/run_flash_area_all_on_saion.slm (renamed)
+- img_proc.py, classes/sp_zone_analyzer.py, docs/paper/scripts/flash_area_all.py, docs/paper/plain_01/scripts/zscore_blur_figures.py (renamed fit names)
+- docs/permutation_test.md (no "real", p < 0.005, new export names)
+
+## Summary of current progress
+- docs/ cleaned: one folder per paper doc with flat figures/ scripts/ tables/; code docs in docs/reference/.
+- fit_hist.py: two fits named by purpose -- fit_zscore_background (detrended raw -> z-score, img_proc) and fit_flash_background (ALS -> center + 2 sigma threshold, spontaneous + permutation); find_background_threshold deleted; verified identical on 2025_06_11-0009.
+- Permutation exports agreed: {stem}_th_flash_sizes.npz, {stem}_surrogates.csv (sur_idx, largest_sur_flash_px), summary.csv (recording, th_small_obj_px); th_small_obj = p-value cutoff (alpha 0.005 -> 5th largest + 1), rounded up to 500 px. Test run (3 surrogates) OK.
+- Names fixed: get_flashes_above_threshold, save_largest_sur_flash, find_cutoff, N_SUR / --n_sur, sur_flash_masks, _cpu_sur_als; no "real" / "null" / "perm".
+
+## What should we do next? (TODOs)
+- **Re-check the permutation flow:** walk through permutation_test.py step by step (logic only), Steps 1-5, then fix.
+- **tile16 backup:** decide keep or drop in run_permutation_test_on_saion.slm.
+- **Split docs/permutation_test.md** after the rebuild: concepts -> knowledgebase, method -> docs/paper/.
+
+## Last Session Recap
+※ recap: Reorganised docs/, tidied fit_hist.py into two named fits, and renamed permutation_test.py names/exports (committed 05d68f6). Pending: step-by-step re-check of the permutation flow, tile16 decision, doc split.
+
+---
+
 # Log of the project progress 2026-10-13 Tue (before lunch)
 Last working file: docs/plain_02.md
 Last working line: ~251 (section "Follow-up: describing the flash sizes with an exponential distribution")

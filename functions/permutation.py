@@ -1,7 +1,7 @@
 """
 Surrogates for the permutation test (docs/permutation_test.md), CPU Numba JIT + CUDA GPU.
 
-  Step 1. Lags             : one random circular time lag per pixel, or per tile x tile tile (seeded)
+  Step 1. Lags             : one random circular time lag per pixel (seeded)
   Step 2. Surrogate masks  : z-stack -> every trace rotated by its lag -> Gaussian blur -> ALS -> threshold ->
                              3x3 opening -> 3x3 closing = one sur_flash mask per lag map
                              (= img_proc.py blur + als_correct.py ALS + zone_mask on a time-shuffled stack;
@@ -58,11 +58,10 @@ THREADS_3D = (32, 8, 1)       # threads per block of the (x, y, t) kernels
 #
 # ===========================================================================
 
-def pixel_lags(shape: tuple[int, int, int], seed: int, tile: int = 1) -> np.ndarray:
-    """Step 1: lag of every pixel, uniform in [0, T); all pixels of a tile x tile tile share one lag."""
+def pixel_lags(shape: tuple[int, int, int], seed: int) -> np.ndarray:
+    """Step 1: lag of every pixel, uniform in [0, T)."""
     n_t, h, w = shape
-    lags = np.random.default_rng(seed).integers(0, n_t, size=(-(-h // tile), -(-w // tile)), dtype=np.int32)
-    return np.ascontiguousarray(np.repeat(np.repeat(lags, tile, axis=0), tile, axis=1)[:h, :w])
+    return np.random.default_rng(seed).integers(0, n_t, size=(h, w), dtype=np.int32)
 
 
 # ===========================================================================

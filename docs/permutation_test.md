@@ -89,23 +89,28 @@ One movie has ~774,000 th_flashes, so that's ~774,000 tests at once.
 ```
 p(s) = (1 + number of surrogates whose largest sur_flash ≥ s) / (N + 1)
 cutoff = smallest size s with p(s) < α
-th_small_obj = cutoff rounded UP to 500 px      (rounding up only lowers p)
+th_small_obj = cutoff rounded UP to 100 px      (rounding up only lowers p)
 th_flash size ≥ th_small_obj   →   qf_flash
 ```
 
 - **α (alpha)** is the line chosen beforehand (here 0.005); **p** is computed from the data for each size.
   Rule: p < α → qf_flash.
-- Run settings (`permutation_test.py` defaults): N = 1000, α = 0.005 → at most 4 of the 1000 largest sur_flashes
-  may reach the cutoff, so cutoff = 5th largest + 1 (p = 5/1001 = 0.004995).
+- Run settings (`permutation_test.py` defaults): N = 200, α = 0.005 → none of the 200 largest sur_flashes may reach
+  the cutoff, so cutoff = largest + 1 (p = 1/201 = 0.00498). N = 200-399 all give this rule; N ≥ 400 allows 1
+  (2nd largest + 1), N = 1000 allows 4 (5th largest + 1).
+- Caveat of N = 200: the cutoff rests on one value (the largest of 200), so one high surrogate moves it
+  (2025_06_11-0009: largest 2,096 px, 2nd 2,011 px), and every qf_flash gets the same p = 0.00498.
 
 - **"+1"**: counts the recording as one more possible outcome under H₀. This is the standard way to make a Monte
   Carlo p-value valid (p is never exactly 0).
-- **Why N = 100**: the smallest possible p is 1 / (N + 1).
+- **Why N = 200**: the smallest possible p is 1 / (N + 1), and it must be < α.
 
 | surrogates (N) | smallest possible p |
 |---|---|
 | 20 | 1/21 = 0.048 (barely < 0.05) |
 | 100 | 1/101 = 0.0099 (cannot reach p < 0.005) |
+| 199 | 1/200 = 0.005 (equal, not < 0.005) |
+| 200 | 1/201 = 0.00498 |
 | 1000 | 1/1001 = 0.001 |
 
 ### Worked example (2025_02_05-0006, first 20 surrogates only, preliminary)
@@ -148,7 +153,7 @@ A small th_flash with p = 0.3 is not proven to be random. The test cannot tell i
 but tiny event hidden among the sur_flash sizes.
 
 Example sentence: *"Flashes larger than th_small_obj were unlikely under the null hypothesis of temporally
-uncoordinated pixels (p < 0.005, permutation test with 1000 time-lag surrogates per recording)."*
+uncoordinated pixels (p < 0.005, permutation test with 200 time-lag surrogates per recording)."*
 
 ---
 
@@ -171,9 +176,9 @@ sizes after blur + ALS.
   to be handled then.
 - The circular lag joins the end of a trace to its start (a "seam"). After biexp detrend + z-score, the two ends
   are at similar levels, so the seam should matter little.
-- A per-tile lag (16 × 16 px, the earlier scratch test, shuffled **after** ALS) gave lower cutoffs
-  (2,345 / 2,789 / 2,623 px). A likely reason: tile edges cut sur_flashes apart (not verified).
+- A per-tile lag (16 × 16 px) was tried and dropped. Shuffled **after** ALS (earlier scratch test) it gave lower
+  cutoffs (2,345 / 2,789 / 2,623 px); shuffled **before** blur + ALS (2026-10-16, N = 200) it gave higher cutoffs than
+  pixel-wise (0009: 5,967 vs 2,097 px; 0021: 1,334 vs 1,165 px; 0010: 2,178 vs 1,393 px).
 - `permutation_test.py` saves `{stem}_th_flash_sizes.npz`, `{stem}_surrogates.csv` (`sur_idx`,
   `largest_sur_flash_px`) and `summary.csv` (`recording`, `th_small_obj_px`), not a p-value per th_flash.
-- Saion: `run_permutation_test_on_saion.slm`, one 10X recording per array task, pixel-wise (`pixel/`) and
-  16 × 16 tile backup (`tile16/`), N = 1000 each.
+- Saion: `run_permutation_test_on_saion.slm`, one 10X recording per array task, pixel-wise, N = 200.

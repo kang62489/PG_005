@@ -6,13 +6,13 @@ Permutation test: are th_flashes bigger than chance? -> th_small_obj per recordi
   Step 2. th_flashes: threshold (Fit 2: peak + 2 sigma) + th_flash sizes of the *_BIEXP_ALS.tif
                       -> {stem}_th_flash_sizes.npz
   Step 3. Detrend   : img_proc.py's biexp detrend + z-score, in bands of rows -> float16 z-stack
-  Step 4. Surrogate : per sur_idx, every pixel's (or tile's) trace rotated by a random lag -> blur -> ALS ->
+  Step 4. Surrogate : per sur_idx, every pixel's trace rotated by a random lag -> blur -> ALS ->
                       the recording's threshold -> sur_flashes -> largest sur_flash -> {stem}_surrogates.csv (resumable)
   Step 5. Cutoff    : smallest size with p < alpha, rounded up = th_small_obj -> summary.csv
 
 p(s) = (1 + number of largest sur_flashes >= s) / (N + 1). The lag comes before the blur, so the blur rebuilds the
 smooth specks of a recording while neighbouring pixels no longer rise together.
-Output: {out_root}/pixel/ or {out_root}/tile{N}/
+Output: {out_root}/
 
 Usage:
     python permutation_test.py --proc_list data/proc_20260922_000.txt --stems 2025_06_11-0009 --max_new 5
@@ -61,7 +61,7 @@ from spontaneous_analysis import select_recordings
 # ===========================================================================
 
 ROOT = Path(__file__).resolve().parent
-OUT_ROOT = ROOT / "results" / "permutation"  # -> pixel/ or tile{N}/
+OUT_ROOT = ROOT / "results" / "permutation"
 
 # --- Step 1: select --------------------------------------------------------
 SENSOR = "GACh3.0"            # only this sensor (objective: --obj, default 10X)
@@ -74,9 +74,9 @@ ALS_LAM, ALS_P, ALS_N_ITER = 11, 0.05, 10  # als_correct.py defaults (used for e
 PROGRESS_EVERY = 50           # surrogates between progress / ETA / peak RAM lines
 
 # --- Step 5: cutoff --------------------------------------------------------
-N_SUR = 1000                  # surrogates per recording
+N_SUR = 200                   # surrogates per recording (200-399: cutoff = largest sur_flash + 1)
 ALPHA = 0.005                 # qf_flash: p < ALPHA; needs N_SUR >= 200 (smallest p = 1 / (N_SUR + 1))
-ROUND_PX = 500                # px: th_small_obj = cutoff rounded UP to this step (rounding up keeps p < ALPHA)
+ROUND_PX = 100                # px: th_small_obj = cutoff rounded UP to this step (rounding up keeps p < ALPHA)
 
 
 # ===========================================================================
@@ -250,7 +250,7 @@ def run_recording(name: str, als_path: Path, raw_dir: Path, out_dir: Path, args:
         print(f"  detrend + z-score {z_f16.shape} ({time.perf_counter() - t0:.0f} s), {len(surrogates)} surrogates "
               f"done, {len(sur_idx_todo)} to run")
         t0 = time.perf_counter()
-        lag_maps = (pixel_lags(z_f16.shape, sur_idx, args.tile) for sur_idx in sur_idx_todo)
+        lag_maps = (pixel_lags(z_f16.shape, sur_idx) for sur_idx in sur_idx_todo)
         sur_masks = sur_flash_masks(z_f16, lag_maps, threshold, SIGMA, ALS_LAM, ALS_P, ALS_N_ITER, _CUDA)
         n_before = len(surrogates)
         with ThreadPoolExecutor(1) as labeller:  # the CPU labels surrogate i while the GPU computes i + 1
@@ -309,7 +309,6 @@ def main() -> None:
     parser.add_argument("--obj", default="10X")
     parser.add_argument("--stems", nargs="*", default=[], help="raw tiff stems to run (default: all)")
     parser.add_argument("--task_index", type=int, help="run only the N-th selected recording (SLURM array task)")
-    parser.add_argument("--tile", type=int, default=1, help="lag shared by tile x tile pixels (1 = pixel-wise)")
     parser.add_argument("--n_sur", type=int, default=N_SUR, help="surrogates per recording")
     parser.add_argument("--alpha", type=float, default=ALPHA, help="qf_flash if p < alpha")
     parser.add_argument("--round_px", type=int, default=ROUND_PX, help="th_small_obj = cutoff rounded up to this")
@@ -322,11 +321,11 @@ def main() -> None:
     print(f"host {socket.gethostname()}, SLURM job {job}, CPUs: slurm {os.environ.get('SLURM_CPUS_PER_TASK', '-')} / "
           f"os.cpu_count {os.cpu_count()}, numba threads {numba_config.NUMBA_NUM_THREADS}, "
           f"label threads {N_THREADS_FRAME_POOL}")
-    out_dir = args.out_root / ("pixel" if args.tile == 1 else f"tile{args.tile}")
+    out_dir = args.out_root
     out_dir.mkdir(parents=True, exist_ok=True)
 
     rows, raw_dir = select(args)
-    print(f"{len(rows)} recording(s), tile {args.tile} -> {out_dir}")
+    print(f"{len(rows)} recording(s) -> {out_dir}")
     for name, als_path in rows:
         run_recording(name, als_path, raw_dir, out_dir, args)
     write_summary(out_dir, args)
