@@ -3,6 +3,8 @@ spontaneous_analysis.py  --  Spontaneous ACh flash -> zone analysis (10X, *_BIEX
 
   Step 1. Select  : proc list -> recordings with an ALS tiff; OBJ / SENSOR from rec_data.db, 10X only
   Step 2. Analyze : per recording, SpontaneousZoneAnalyzer detect -> group -> map
+                    (th_small_obj = the recording's own th_small_obj_px from
+                    {results_dir}/permutation/{OBJ}/removal_suggestion.csv; not listed -> OBJ median)
           Coverage: union of all recur_zones (NR zones excluded) inside the striatum / striatum area
                     (striatum outline from the Striatum Boundary export bd_{date}_{serial}.json; NaN if none)
   Step 3. Export  : per recording {stem}_ZONES.xlsx + {stem}_ZONE_MAPS.tif (z-scored RGB stack: max projection
@@ -49,7 +51,7 @@ from rich.console import Console
 
 # Local imports
 from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO, MIN_EVENTS_FOR_FREQ, timed
+from classes.sp_zone_analyzer import CROSSOVER_RATIO, MIN_EVENTS_FOR_FREQ, TH_SMALL_OBJ, timed
 from functions import (
     bd_export_path,
     check_cuda,
@@ -84,6 +86,8 @@ MAP_TITLE_WIDTH = 100  # characters per title line before the recur_zone / NR zo
 NR_COLOR = (0.85, 0.85, 0.85)  # NR zones (NR1, NR2, ...) on the zone maps: light gray
 MAP_WORKERS_MAX = 16  # auto worker count for zone-map rendering = usable CPUs, capped here (--map_workers overrides)
 MAP_CHUNK_PAGES = 8  # frame pages per pool task (each task builds its own Figure once)
+REMOVAL_SUGGESTION_CSV = "removal_suggestion.csv"  # permutation_test.py output: recording, th_small_obj_px
+ROUND_PX = 100  # px: OBJ-median th_small_obj rounded up to this step (same as permutation_test.ROUND_PX)
 
 
 # ===========================================================================
@@ -115,6 +119,29 @@ def select_recordings(proc_list_path: Path, db_path: Path, exp_db_path: Path, al
         selected.append({"raw_tiff_name": name, "proc_tiff_path": str(proc_tiff_path), "OBJ": obj, "SENSOR": sensor})
 
     return pl.DataFrame(selected)
+
+
+def removal_suggestion(results_dir: Path, obj: str) -> tuple[dict[str, int], int] | None:
+    """{recording: th_small_obj_px} + OBJ median (rounded up) from <results_dir>/permutation/{obj}/; None if missing."""
+    path = results_dir / "permutation" / obj / REMOVAL_SUGGESTION_CSV
+    if not path.exists():
+        return None
+    table = pd.read_csv(path)
+    median_px = int(np.ceil(table["th_small_obj_px"].median() / ROUND_PX) * ROUND_PX)
+    console.log(f"th_small_obj: {len(table)} {obj} recording(s) in {path.resolve()}, median {median_px:,} px")
+    return dict(zip(table["recording"], table["th_small_obj_px"].astype(int), strict=True)), median_px
+
+
+def th_small_obj_of(suggestions: dict, results_dir: Path, obj: str, raw_stem: str) -> tuple[int, str]:
+    """(th_small_obj px, source) of one recording: own value > OBJ median > TH_SMALL_OBJ (no file for this OBJ)."""
+    if obj not in suggestions:
+        suggestions[obj] = removal_suggestion(results_dir, obj)
+    if suggestions[obj] is None:
+        return TH_SMALL_OBJ, f"default, no {REMOVAL_SUGGESTION_CSV} for {obj}"
+    per_recording, median_px = suggestions[obj]
+    if raw_stem in per_recording:
+        return per_recording[raw_stem], "permutation"
+    return median_px, f"{obj} median, not in {REMOVAL_SUGGESTION_CSV}"
 
 
 # ===========================================================================
@@ -393,6 +420,8 @@ def _run_recordings(proc_list_path: Path, results_dir: Path, sigma: float, save_
 
     summary_rows: list[dict] = []
     pooled_zones: list[pd.DataFrame] = []
+    suggestions: dict = {}  # OBJ -> removal_suggestion(), loaded once per OBJ
+    flagged: list[tuple[str, str]] = []  # (stem, flag) of recordings without their own th_small_obj
 
     for i, row in enumerate(recordings.iter_rows(named=True), 1):
         entry_t0 = time.time()
@@ -403,12 +432,18 @@ def _run_recordings(proc_list_path: Path, results_dir: Path, sigma: float, save_
         # -------------------------------------------------------------------
         # Step 2. Analyze
         # -------------------------------------------------------------------
+        raw_stem = Path(row["raw_tiff_name"]).stem
+        th_small_obj, th_source = th_small_obj_of(suggestions, results_dir, row["OBJ"], raw_stem)
+        console.log(f"  th_small_obj {th_small_obj:,} px ({th_source})")
+        th_flag = "" if th_source == "permutation" else f"{th_small_obj} px, {th_source}"
+        if th_flag:
+            flagged.append((stem, th_flag))
         with timed("load   read tiff + float16 copy"):
             stack = tifffile.imread(proc_tiff_path)
-            analyzer = SpontaneousZoneAnalyzer(stack, obj=row["OBJ"], sigma_ratio=sigma, cuda_available=cuda_available)
+            analyzer = SpontaneousZoneAnalyzer(stack, obj=row["OBJ"], sigma_ratio=sigma, cuda_available=cuda_available,
+                                               th_small_obj=th_small_obj)
             del stack  # the analyzer keeps its float16 copy
         analyzer.run()
-        raw_stem = Path(row["raw_tiff_name"]).stem
         striatum = striatum_of(stbd, raw_stem, (analyzer.height, analyzer.width))
         striatum_outline = np.array(stbd[raw_stem]["striatum_outline_px"]) if striatum is not None else None
         axis_labels = direction_labels(stbd[raw_stem]["dorsal"], stbd[raw_stem]["medial"]) if raw_stem in stbd else None
@@ -444,6 +479,7 @@ def _run_recordings(proc_list_path: Path, results_dir: Path, sigma: float, save_
             "obj": row["OBJ"],
             "n_frames": analyzer.n_frames,
             "background_threshold": analyzer.threshold,
+            "th_small_obj_flag": th_flag,  # empty = own th_small_obj from removal_suggestion.csv
             "n_recur_zones": len(zone_stats),
             "n_non_recur_zone_type_1": int(non_recur_source.str.startswith("non_recur_zone_type_1").sum()),
             "n_non_recur_zone_type_2": int(non_recur_source.str.startswith("non_recur_zone_type_2").sum()),
@@ -476,6 +512,11 @@ def _run_recordings(proc_list_path: Path, results_dir: Path, sigma: float, save_
             pd.DataFrame(summary_rows).to_excel(writer, sheet_name="recordings", index=False)
             pooled.to_excel(writer, sheet_name="recur_zones", index=False)
         console.log(f"[green]saved[/green] {summary_path.resolve()}")
+    if flagged:
+        console.log(f"[yellow]{len(flagged)} recording(s) without their own th_small_obj "
+                    f"(column th_small_obj_flag):[/yellow]")
+        for stem, th_flag in flagged:
+            console.log(f"[yellow]  {stem}  {th_flag}[/yellow]")
 
 
 if __name__ == "__main__":

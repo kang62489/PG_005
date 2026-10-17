@@ -96,7 +96,7 @@ def _gpu_histogram_kernel(values: np.ndarray, counts: np.ndarray, n_bins: int, l
 def _gpu_histogram_counts(values: np.ndarray, n_bins: int, lo: float, hi: float, bin_width: float,
                           drop_outside: bool) -> np.ndarray:
     """Same counts as _cpu_histogram_counts, on the GPU."""
-    d_values = cuda.to_device(values.astype(np.float32))
+    d_values = cuda.to_device(values.astype(np.float32, copy=False))
     d_counts = cuda.to_device(np.zeros(n_bins, dtype=np.int64))
     threads = 256
     blocks = math.ceil(values.shape[0] / threads)
@@ -193,7 +193,7 @@ def _gpu_masked_sum_kernel(values: np.ndarray, threshold: float, sums: np.ndarra
     i = cuda.grid(1)
     if i >= values.shape[0]:
         return
-    v = values[i]
+    v = numba.float64(values[i])
     if v <= threshold:
         cuda.atomic.add(sums, 0, v)
         cuda.atomic.add(sums, 1, v * v)
@@ -202,7 +202,7 @@ def _gpu_masked_sum_kernel(values: np.ndarray, threshold: float, sums: np.ndarra
 
 def _gpu_masked_std(values: np.ndarray, threshold: float) -> float:
     """Same std as _cpu_masked_std, on the GPU."""
-    d_values = cuda.to_device(values.astype(np.float64))
+    d_values = cuda.to_device(values.astype(np.float32, copy=False))  # float64 only in the sums (kernel)
     d_sums = cuda.to_device(np.zeros(3, dtype=np.float64))
     threads = 256
     blocks = math.ceil(values.shape[0] / threads)

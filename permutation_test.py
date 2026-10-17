@@ -8,7 +8,7 @@ Permutation test: are th_flashes bigger than chance? -> th_small_obj per recordi
   Step 3. Detrend   : img_proc.py's biexp detrend + z-score, in bands of rows -> float16 z-stack
   Step 4. Surrogate : per sur_idx, every pixel's trace rotated by a random lag -> blur -> ALS ->
                       the recording's threshold -> sur_flashes -> largest sur_flash -> {stem}_surrogates.csv (resumable)
-  Step 5. Cutoff    : smallest size with p < alpha, rounded up = th_small_obj -> summary.csv
+  Step 5. Cutoff    : smallest size with p < alpha, rounded up = th_small_obj -> removal_suggestion.csv
 
 p(s) = (1 + number of largest sur_flashes >= s) / (N + 1). The lag comes before the blur, so the blur rebuilds the
 smooth specks of a recording while neighbouring pixels no longer rise together.
@@ -77,6 +77,7 @@ PROGRESS_EVERY = 50           # surrogates between progress / ETA / peak RAM lin
 N_SUR = 200                   # surrogates per recording (200-399: cutoff = largest sur_flash + 1)
 ALPHA = 0.005                 # qf_flash: p < ALPHA; needs N_SUR >= 200 (smallest p = 1 / (N_SUR + 1))
 ROUND_PX = 100                # px: th_small_obj = cutoff rounded UP to this step (rounding up keeps p < ALPHA)
+REMOVAL_SUGGESTION_CSV = "removal_suggestion.csv"  # recording, th_small_obj_px (read by spontaneous_analysis.py)
 
 
 # ===========================================================================
@@ -174,6 +175,7 @@ def save_largest_sur_flash(surrogates: pd.DataFrame, sur_idx: int, future: Futur
                            surrogates_path: Path) -> pd.DataFrame:
     """Step 4: largest sur_flash of surrogate sur_idx appended to {stem}_surrogates.csv.
 
+    Write + rename: other array tasks' write_removal_suggestion() may read the file at any moment.
     Log: gpu = lag map + GPU work + mask copy back, label = CPU fill holes + label,
     wait = main loop blocked on the labeller (> 0 -> the CPU, not the GPU, is the bottleneck).
     """
@@ -182,7 +184,9 @@ def save_largest_sur_flash(surrogates: pd.DataFrame, sur_idx: int, future: Futur
     wait_s = time.perf_counter() - t0
     row = {"sur_idx": sur_idx, "largest_sur_flash_px": int(sizes.max(initial=0))}
     surrogates = pd.concat([surrogates, pd.DataFrame([row])], ignore_index=True)
-    surrogates.to_csv(surrogates_path, index=False)
+    tmp_path = surrogates_path.with_name(f"{surrogates_path.name}.tmp")  # not matched by the *_surrogates.csv glob
+    surrogates.to_csv(tmp_path, index=False)
+    tmp_path.replace(surrogates_path)
     print(f"  surrogate {sur_idx}: {len(sizes):,} sur_flashes, largest {row['largest_sur_flash_px']:,} px | "
           f"gpu {gpu_s:.1f} s, label {label_s:.1f} s, wait {wait_s:.1f} s")
     return surrogates
@@ -229,7 +233,7 @@ def th_small_obj_px(largest_sur_flashes: np.ndarray, alpha: float, round_px: int
 
 # ===========================================================================
 #
-#   RUN -- steps 2-5 per recording, summary, entry point
+#   RUN -- steps 2-5 per recording, removal suggestion, entry point
 #
 # ===========================================================================
 
@@ -281,23 +285,29 @@ def run_recording(name: str, als_path: Path, raw_dir: Path, out_dir: Path, args:
           f"-> th_small_obj {th_small_obj} px, qf_flashes {n_qf}")
 
 
-def write_summary(out_dir: Path, args: argparse.Namespace) -> None:
-    """Step 5: summary.csv = th_small_obj_px of every finished {stem}_surrogates.csv.
+def write_removal_suggestion(out_dir: Path, args: argparse.Namespace) -> None:
+    """Step 5: removal_suggestion.csv = th_small_obj_px of every finished {stem}_surrogates.csv.
 
-    Write + rename: array tasks may finish at the same time.
+    Write + rename: array tasks may finish at the same time. An unreadable surrogates file (another task mid-write)
+    is skipped; the last finishing task rebuilds removal_suggestion.csv with every recording.
     """
     rows = []
     for path in sorted(out_dir.glob("*_surrogates.csv")):
-        largest_sur_flashes = pd.read_csv(path)["largest_sur_flash_px"].to_numpy()
+        try:
+            largest_sur_flashes = pd.read_csv(path)["largest_sur_flash_px"].to_numpy()
+        except (pd.errors.EmptyDataError, KeyError):
+            print(f"  removal_suggestion: skipped {path.name} (being written by another task)")
+            continue
         if len(largest_sur_flashes) >= args.n_sur:
             rows.append({"recording": path.name.removesuffix("_surrogates.csv"),
                          "th_small_obj_px": th_small_obj_px(largest_sur_flashes, args.alpha, args.round_px)})
     if not rows:
         return
-    tmp_path = out_dir / f"summary.{time.time_ns()}.tmp"
+    out_path = out_dir / REMOVAL_SUGGESTION_CSV
+    tmp_path = out_dir / f"removal_suggestion.{time.time_ns()}.tmp"
     pd.DataFrame(rows).to_csv(tmp_path, index=False)
-    tmp_path.replace(out_dir / "summary.csv")
-    print(f"saved {out_dir / 'summary.csv'} ({len(rows)} recordings)")
+    tmp_path.replace(out_path)
+    print(f"saved {out_path} ({len(rows)} recordings)")
 
 
 def main() -> None:
@@ -328,7 +338,7 @@ def main() -> None:
     print(f"{len(rows)} recording(s) -> {out_dir}")
     for name, als_path in rows:
         run_recording(name, als_path, raw_dir, out_dir, args)
-    write_summary(out_dir, args)
+    write_removal_suggestion(out_dir, args)
 
 
 if __name__ == "__main__":

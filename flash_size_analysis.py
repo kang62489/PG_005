@@ -2,7 +2,8 @@
 flash_size_analysis.py  --  Flash size per recording, detection only (no zones, no maps); for 40X / 60X.
 
   Step 1. Select : proc list -> recordings with an ALS tiff, OBJ in --objs (and SENSOR = --sensor, if given)
-  Step 2. Detect : SpontaneousZoneAnalyzer.detect() (background threshold + mask cleanup, blobs < TH_SMALL_OBJ out)
+  Step 2. Detect : SpontaneousZoneAnalyzer.detect() (background threshold + mask cleanup, blobs < th_small_obj out;
+                   th_small_obj from {results_dir}/permutation/{OBJ}/removal_suggestion.csv, as spontaneous_analysis.py)
   Step 3. Export : {results_dir}/flash_size/{stem}.csv, one row per flash (functions/flash_table.py):
                    recording, obj, sensor, frame, area_px, area_um2, bounding box, touches_edge.
                    Recordings with a CSV already there are skipped (resumable).
@@ -27,7 +28,7 @@ from classes import SpontaneousZoneAnalyzer
 from classes.sp_zone_analyzer import CROSSOVER_RATIO
 from functions import check_cuda
 from functions.flash_table import flash_table
-from spontaneous_analysis import select_recordings
+from spontaneous_analysis import select_recordings, th_small_obj_of
 
 console = Console()
 
@@ -63,6 +64,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), objs: list[st
         keep &= recordings["SENSOR"] == sensor
     recordings = recordings.filter(keep)
     console.log(f"{len(recordings)} recording(s) selected ({', '.join(objs)}{f', {sensor}' if sensor else ''})")
+    suggestions: dict = {}  # OBJ -> removal_suggestion(), loaded once per OBJ
 
     for i, row in enumerate(recordings.iter_rows(named=True), 1):
         stem = Path(row["proc_tiff_path"]).stem
@@ -73,8 +75,11 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), objs: list[st
         t0 = time.time()
 
         # Step 2. Detect
+        th_small_obj, th_source = th_small_obj_of(suggestions, results_dir, row["OBJ"],
+                                                  Path(row["raw_tiff_name"]).stem)
+        console.log(f"  {stem}: th_small_obj {th_small_obj:,} px ({th_source})")
         analyzer = SpontaneousZoneAnalyzer(tifffile.imread(row["proc_tiff_path"]), obj=row["OBJ"], sigma_ratio=sigma,
-                                           cuda_available=cuda_available)
+                                           cuda_available=cuda_available, th_small_obj=th_small_obj)
         analyzer.detect()
 
         # Step 3. Export

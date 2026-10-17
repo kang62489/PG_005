@@ -1,3 +1,84 @@
+# Log of the project progress 2026-10-16 Fri 14:20
+Last working file: output/test_centroid_cluster/silhouette_cut.py
+Last working line: 35 (STEM from CLI; silhouette sweep run on 0009, 2025_12_15-0010, 2026_01_08-0013)
+
+# List of modified files (not committed):
+- docs/hierarchical_clustering.md (new: method, worked examples, silhouette, results of 3 recordings)
+- output/test_centroid_cluster/centroid_cluster.py (scratch: flash centroid table -> average linkage -> dendrogram + cut scatter)
+- output/test_centroid_cluster/trace_corr_cluster.py (scratch: footprint-trace r -> 1 - r -> average linkage)
+- output/test_centroid_cluster/silhouette_cut.py (scratch: mean silhouette sweep over h, best-h scatter)
+- No pipeline code changed.
+
+## Summary of current progress
+- New grouping idea for spontaneous Step 2: one hierarchical clustering of all flashes of a recording, cut at h.
+  Two distances tested: centroid Euclidean (px) and footprint-trace 1 - r. Average linkage.
+- Exports per recording: {stem}_flash_centroids.csv (flash_id, frame_id, centroid_y, centroid_x) and
+  {stem}_flash_r.csv (n x n r); both load in Mathematica.
+- h picked by the mean silhouette (checked against sklearn). Best h / clusters / silhouette:
+  0009 (465 flashes): centroid 110 px / 13 / 0.676, trace r 0.68 / 9 / 0.812
+  2025_12_15-0010 (93): centroid 200 px / 5 / 0.697, trace r 0.88 / 12 / 0.797
+  2026_01_08-0013 (109): centroid 140 px / 12 / 0.700, trace r 0.67 / 12 / 0.790
+  2025_11_27-0021: 0 flashes at TH_SMALL_OBJ 5000 px.
+- Trace tree scores higher in all 3; curves have plateaus; best h varies per recording.
+- Cophenetic r (0009): centroid 0.809, trace 0.901. Silhouette is a separation score, not a p-value.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- (none of the earlier TODOs; this session was the new grouping test)
+
+## What should we do next? (TODOs)
+- **Wait for the 10X permutation result** (job 4763425): read th_small_obj per recording from
+  results/permutation/10X/summary.csv, then rerun the clustering tests with that removal size.
+- **Justify the cut height h**: best silhouette per recording vs fixed h vs physical size vs surrogate comparison.
+- **Centroid vs trace tree**: decide which distance the new grouping uses.
+- **Run 40X + 60X on Saion** (after 10X finishes):
+  sbatch --array=0-13%4 --export=ALL,OBJ=40X --nodelist=saion-gpu20 run_permutation_test_on_saion.slm
+  sbatch --array=0-58%4 --export=ALL,OBJ=60X --nodelist=saion-gpu20 run_permutation_test_on_saion.slm
+- **Split docs/permutation_test.md**: concepts -> docs/knowledgebase/, method -> docs/paper/.
+- **Largest sur_flash image**: export frame + position, or regenerate one surrogate by sur_idx.
+
+## Last Session Recap
+※ recap: Tested hierarchical clustering of flashes (centroid distance and trace 1 - r, average linkage) with silhouette-picked cuts on 3 10X recordings; documented in docs/hierarchical_clustering.md. Pending: 10X permutation result for the removal size, justify h, pick the distance.
+
+---
+
+# Log of the project progress 2026-10-16 Fri 14:00
+Last working file: run_permutation_test_on_saion.slm
+Last working line: 33 (OBJ=${OBJ:-10X}; 10X run submitted on Saion, 40X/60X next)
+
+# List of modified files (commit 1385152):
+- permutation_test.py (N_SUR 200, ROUND_PX 100, --tile removed, output straight to {out_root}/)
+- functions/permutation.py (pixel_lags without tile; same lags as before, verified 1,129 / 1,223 px)
+- run_permutation_test_on_saion.slm (one pixel-wise run; OBJ variable -> results/permutation/$OBJ/)
+- docs/permutation_test.md (N = 200 rule + caveat, 100 px rounding, tile dropped with both results)
+- output/test_permutation_run/plot_results.py (scratch, not in git)
+
+## Summary of current progress
+- Test runs (3 x 10X: 2025_06_11-0009, 2025_11_27-0021, 2025_12_15-0010) in output/test_permutation_run/{pixel,tile16}/ + figures/:
+  pixel N = 200, alpha 0.005 -> th_small_obj 2,100 / 1,200 / 1,400 px, qf_flashes 719 / 1 / 284.
+  The largest sur_flashes sit at the knee where the th_flash shoulder starts (0009, 0010); 0021 has no shoulder.
+- Tile 16 dropped: shuffled before blur + ALS it gave higher cutoffs than pixel-wise (0009: 5,967 vs 2,097 px).
+- N = 200 chosen (smallest N with p < 0.005; N = 200-399 -> cutoff = largest sur_flash + 1). Caveat: cutoff rests on one value.
+- Rounding: 100 px. Local speed ~2.9 s/surrogate, ~10 min/recording.
+- Saion: account caps 4 GPUs / 32 CPUs. 10X job 4763425 (--array=0-102%4 --nodelist=saion-gpu20), V100 ~4.4 s/surrogate
+  (CPU label step is the bottleneck), ~16 min/recording, ~7 h total -> /work/WickensU/kang/results/permutation/10X/.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- tile16 backup: dropped (code, .slm, docs).
+- Re-check of the permutation flow: Step 1 walked through; went straight to surrogate test runs.
+
+## What should we do next? (TODOs)
+- **Run 40X + 60X on Saion** (after 10X finishes):
+  sbatch --array=0-13%4 --export=ALL,OBJ=40X --nodelist=saion-gpu20 run_permutation_test_on_saion.slm
+  sbatch --array=0-58%4 --export=ALL,OBJ=60X --nodelist=saion-gpu20 run_permutation_test_on_saion.slm
+  (first log line should say 14 / 59 recordings)
+- **Split docs/permutation_test.md**: concepts -> docs/knowledgebase/, method -> docs/paper/.
+- **Largest sur_flash image**: export frame + position of the largest sur_flash, or regenerate one surrogate by sur_idx (seeded), to show it.
+
+## Last Session Recap
+※ recap: Tested permutation_test.py on 3 10X recordings, dropped the tile method, set N = 200 and 100 px rounding (commit 1385152), and submitted the 10X run on Saion (job 4763425, ~7 h). Pending: 40X/60X runs, doc split, largest sur_flash image.
+
+---
+
 # Log of the project progress 2026-10-16 Fri 02:05
 Last working file: permutation_test.py
 Last working line: 89 (Step 1 -- select; start of the flow walk-through)

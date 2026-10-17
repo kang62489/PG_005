@@ -20,7 +20,7 @@
 #   sbatch --array=0-58 --export=ALL,OBJ=60X run_permutation_test_on_saion.slm  (60X: 59 recordings, 1400 frames
 #                                                                                -> ~17 % more time and RAM)
 # Output: {stem}_th_flash_sizes.npz, {stem}_surrogates.csv (resumable: resubmit a task after a timeout),
-# summary.csv (th_small_obj_px = smallest size with p < 0.005, rounded up to 100 px; rebuilt by each finished task).
+# removal_suggestion.csv (th_small_obj_px = smallest size with p < 0.005, rounded up to 100 px; rebuilt by each finished task).
 # Test one task first: sbatch --array=0 run_permutation_test_on_saion.slm
 # GPU: ~8 GB (z-stack + masks + one band). 16G RAM: banded detrend peaks at ~9 GB (raw uint16 + float32 detrended),
 # surrogates at ~10 GB (float16 z-stack + its pixel-major copy + 2-3 masks of 1.5 GB).

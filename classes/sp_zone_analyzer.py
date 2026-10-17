@@ -57,7 +57,8 @@ def timed(label: str) -> Iterator[None]:
 # --- Step 1: detect --------------------------------------------------------
 # (histogram bins / percentile range / fit live in functions/fit_hist.py -- shared with img_proc)
 CROSSOVER_RATIO = 2.0         # threshold = background peak + this many fitted sigmas
-TH_SMALL_OBJ = 5000           # px: drop per-frame blobs smaller than this (noise speckle)
+TH_SMALL_OBJ = 5000           # px: default size removal; spontaneous_analysis.py passes each recording's own
+                              # th_small_obj_px from the permutation test (removal_suggestion.csv)
 
 # --- Step 2: group ---------------------------------------------------------
 MAX_FLASH_FRAC = 0.8          # frame fraction: drop larger merged flashes (over-exposed first frames)
@@ -85,7 +86,8 @@ class SpontaneousZoneAnalyzer:
     """
 
     def __init__(self, stack: np.ndarray, obj: str = "10X", fps: float = FRAME_RATE_HZ,
-                 sigma_ratio: float = CROSSOVER_RATIO, cuda_available: bool = False) -> None:
+                 sigma_ratio: float = CROSSOVER_RATIO, cuda_available: bool = False,
+                 th_small_obj: int = TH_SMALL_OBJ) -> None:
         self.stack_f16 = np.asarray(stack, dtype=np.float16)  # no copy when already float16
         self.n_frames, self.height, self.width = stack.shape
         self.obj = obj
@@ -93,6 +95,7 @@ class SpontaneousZoneAnalyzer:
         self.fps = fps
         self.sigma_ratio = sigma_ratio
         self.cuda_available = cuda_available
+        self.th_small_obj = th_small_obj
 
     def run(self) -> None:
         """All three steps in order."""
@@ -112,7 +115,7 @@ class SpontaneousZoneAnalyzer:
         console.log(f"  threshold (peak + {self.sigma_ratio} sigma) = {self.threshold:.5f}")
 
         with timed("detect 1b mask (open/close/fill/size)"):
-            self.mask = zone_mask(self.stack_f16, self.threshold, TH_SMALL_OBJ, self.cuda_available)
+            self.mask = zone_mask(self.stack_f16, self.threshold, self.th_small_obj, self.cuda_available)
 
     # -----------------------------------------------------------------------
     # Step 2. Group
@@ -120,7 +123,7 @@ class SpontaneousZoneAnalyzer:
 
     def group(self) -> None:
         """Per-frame flashes -> units (circle rule) -> best-r trace-corr groups + leftover units."""
-        # 2a. per-frame flashes (no lower size limit beyond the mask cleanup's TH_SMALL_OBJ)
+        # 2a. per-frame flashes (no lower size limit beyond the mask cleanup's th_small_obj)
         max_area = MAX_FLASH_FRAC * self.height * self.width
         with timed("group  2a connect flashes"):
             detections, self.footprints, giant = spatiotemporally_connect_flashes(
