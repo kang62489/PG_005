@@ -31,7 +31,7 @@ RAW_DIR = ROOT / "raw_tiffs"
 OUT_DIR = Path(__file__).resolve().parents[1] / "figures"
 RECORDINGS = ["2025_11_27-0005.tif", "2025_12_15-0013.tif", "2026_01_08-0012.tif"]
 FIG1_RECORDING = "2026_01_08-0012.tif"
-FPS = 20.0              # FRAME_RATE_HZ in classes/sp_zone_analyzer.py
+FPS = 20.0              # FRAME_RATE_HZ in classes/sre_analyzer.py
 ROI = 100               # ROI side (px)
 BLOCK = 25              # ROI search grid step (px); ROI = 4 x 4 blocks
 SKIP_FRAMES = 40        # ignore the first 2 s when looking for a flash peak

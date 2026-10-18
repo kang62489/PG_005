@@ -28,8 +28,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 # Local imports
-from classes import SpontaneousZoneAnalyzer  # noqa: E402
-from classes.sp_zone_analyzer import MAX_CENTROID_DEVIATION, track_centroids  # noqa: E402
+from classes import SREAnalyzer  # noqa: E402
+from classes.sre_analyzer import MAX_CENTROID_DEVIATION, track_centroids  # noqa: E402
 from functions import check_cuda  # noqa: E402
 
 # ===========================================================================
@@ -42,7 +42,7 @@ RECORDINGS = ["2025_06_11-0003", "2025_12_15-0012",  # all 10X; + top 5 by trace
               "2025_11_13-0042", "2025_11_13-0043", "2025_06_11-0013", "2026_01_08-0021", "2026_01_08-0036"]
 
 
-def group_distances(analyzer: SpontaneousZoneAnalyzer) ->tuple[pd.Series, pd.DataFrame]:
+def group_distances(analyzer: SREAnalyzer) ->tuple[pd.Series, pd.DataFrame]:
     """Distances between hotspot centroids in the same trace-corr group, and the centroids (for the map)."""
     centroids = track_centroids(analyzer.detections).set_index("joint_label")["mean_centroid"]
     dists, track_rows = [], []
@@ -80,7 +80,7 @@ def main() -> None:
     for rec in RECORDINGS:
         print(f"=== {rec} ===")
         stack = tifffile.imread(PROC_DIR / f"{rec}_BIEXP_ALS.tif")
-        analyzer = SpontaneousZoneAnalyzer(stack, obj="10X", cuda_available=cuda_available)
+        analyzer = SREAnalyzer(stack, obj="10X", cuda_available=cuda_available)
         del stack
         analyzer.detect()
         analyzer.group()

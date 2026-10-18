@@ -5,7 +5,7 @@ description: Behavior-identical neatness refactor of a PG_005 Python file (TODO 
 
 ## What this skill does
 
-Rewrites the layout of one file at a time so it reads like `classes/sp_zone_analyzer.py` (the reference style). **Behavior must not change:** same inputs give byte-identical outputs.
+Rewrites the layout of one file at a time so it reads like `classes/sre_analyzer.py` (the reference style). **Behavior must not change:** same inputs give byte-identical outputs.
 
 1. Show that this skill is triggered.
 2. Ask which file(s) to do, or propose an order if the user doesn't name one.
@@ -20,7 +20,7 @@ Rewrites the layout of one file at a time so it reads like `classes/sp_zone_anal
 
 | Item | Target |
 |---|---|
-| Module docstring | A 4-6 line step list: `Step 1. Name : what it does` (see `classes/sp_zone_analyzer.py` lines 1-12). Add an `Example:` block only if the file is a class/function module |
+| Module docstring | A 4-6 line step list: `Step 1. Name : what it does` (see `classes/sre_analyzer.py` lines 1-12). Add an `Example:` block only if the file is a class/function module |
 | Imports | `## Modules` header, then `# Standard library imports`, `# Third-party imports`, `# Local imports` groups |
 | Constants | One `CONFIG` banner block near the top, grouped by step with `# --- Step N: name ---` sub-headers, each constant with a short trailing comment and unit |
 | Banners | `# ====...` blocks with `#   CONFIG` / `#   STEP N -- NAME` titles; sub-blocks `# --- Na. name ---` |
@@ -41,7 +41,7 @@ Pick the run that exercises the file:
 | File touched | Run |
 |---|---|
 | spike-aligned pipeline (`ach_domain_analysis.py`, `classes/region_analyzer.py`, `classes/spike_reliability.py`, `classes/spatial_categorization.py`, `classes/abf_clip.py`, `functions/plot_results.py`, `functions/flash_flow.py`, ...) | `.venv/Scripts/python.exe ach_domain_analysis.py --ana_list <ana list>` |
-| spontaneous (`SRE_analysis.py`, `classes/sp_zone_analyzer.py`, `functions/fit_hist.py`, `functions/zone_kernels.py`) | `.venv/Scripts/python.exe SRE_analysis.py --proc_list <proc list> --results_dir <dir>` |
+| spontaneous (`SRE_analysis.py`, `classes/sre_analyzer.py`, `functions/fit_hist.py`) | `.venv/Scripts/python.exe SRE_analysis.py --proc_list <proc list> --results_dir <dir>` |
 
 - The reference and after runs go to `output/test*/before` and `output/test*/after` (a new free test number), **never** `results/`. Run in the foreground; the user watches.
 - Compare: MED / CAT / ZONE_MASK / ZONE_MAPS TIFFs (`np.array_equal`), `ZONES.npz` arrays, `results.db` rows (skip `timestamp`), and PNGs pixel-wise where titles didn't change. Reuse or extend `output/test5/compare_test5.py`.

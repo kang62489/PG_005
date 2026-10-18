@@ -4,8 +4,8 @@ Surrogates for the permutation test (docs/permutation_test.md), CPU Numba JIT + 
   Step 1. Lags             : one random circular time lag per pixel (seeded)
   Step 2. Surrogate masks  : z-stack -> every trace rotated by its lag -> Gaussian blur -> ALS -> threshold ->
                              3x3 opening -> 3x3 closing = one sur_flash mask per lag map
-                             (= img_proc.py blur + als_correct.py ALS + zone_mask on a time-shuffled stack;
-                             fill holes + sizes: zone_kernels.mask_flash_sizes, on the CPU)
+                             (= img_proc.py blur + als_correct.py ALS + flash_mask on a time-shuffled stack;
+                             fill holes + sizes: sre_analyzer.mask_flash_sizes, on the CPU)
 
 GPU: the z-stack is uploaded once, pixel-major (H, W, T), so rotating a pixel's trace is one contiguous read; each
 band of rows (+ blur halo) is rotated, blurred, ALS-corrected and thresholded on the GPU and only the 1-byte mask
@@ -31,9 +31,10 @@ from numba import cuda, njit, prange
 from numba.core.errors import NumbaPerformanceWarning
 
 # Local imports
+from classes.sre_analyzer import _gpu_dilate_kernel, _gpu_erode_kernel, _threshold_open_close, f16_lut
+
 from .als import MAX_T, _cpu_als_kernel, _gpu_als_kernel
 from .gaussian_blur import _cpu_kernel, _gpu_reflect_index, _reflect_index
-from .zone_kernels import _gpu_dilate_kernel, _gpu_erode_kernel, _threshold_open_close, f16_lut
 
 warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "40")
@@ -242,7 +243,7 @@ def _cpu_sur_als(z_f16: np.ndarray, lags: np.ndarray, kernel: np.ndarray, lam: f
 
 def _cpu_sur_flash_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold: float, kernel: np.ndarray,
                          lam: float, p: float, n_iter: int) -> Iterator[np.ndarray]:
-    """Per lag map: the float16 ALS stack (band by band), then zone_kernels' threshold -> open -> close."""
+    """Per lag map: the float16 ALS stack (band by band), then sre_analyzer's threshold -> open -> close."""
     for lags in lag_maps:
         yield _threshold_open_close(_cpu_sur_als(z_f16, lags, kernel, lam, p, n_iter), threshold, False)
 

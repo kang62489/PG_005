@@ -2,7 +2,7 @@
 flash_size_analysis.py  --  Flash size per recording, detection only (no zones, no maps); for 40X / 60X.
 
   Step 1. Select : proc list -> recordings with an ALS tiff, OBJ in --objs (and SENSOR = --sensor, if given)
-  Step 2. Detect : SpontaneousZoneAnalyzer.detect() (background threshold + mask cleanup, blobs < th_small_obj out;
+  Step 2. Detect : SREAnalyzer.detect() (background threshold + mask cleanup, blobs < th_small_obj out;
                    th_small_obj from {results_dir}/permutation/{OBJ}/removal_suggestion.csv, as SRE_analysis.py)
   Step 3. Export : {results_dir}/flash_size/{stem}.csv, one row per flash (functions/flash_table.py):
                    recording, obj, sensor, frame, area_px, area_um2, bounding box, touches_edge.
@@ -24,11 +24,11 @@ import tifffile
 from rich.console import Console
 
 # Local imports
-from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO
+from classes import SREAnalyzer
+from classes.sre_analyzer import CROSSOVER_RATIO
 from functions import check_cuda
 from functions.flash_table import flash_table
-from SRE_analysis import select_recordings, set_removal_suggestion
+from SRE_analysis import select_recordings, set_connect_radius, set_removal_suggestion
 
 console = Console()
 
@@ -65,7 +65,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), objs: list[st
     recordings = recordings.filter(keep)
     console.log(f"{len(recordings)} recording(s) selected ({', '.join(objs)}{f', {sensor}' if sensor else ''})")
     recordings = set_removal_suggestion(recordings, results_dir)  # th_small_obj of every recording, set once
-
+    recordings = set_connect_radius(recordings)  # connect_radius from th_small_obj, set once
     for i, row in enumerate(recordings.iter_rows(named=True), 1):
         stem = Path(row["proc_tiff_path"]).stem
         out_path = out_dir / f"{stem}.csv"
@@ -77,8 +77,9 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), objs: list[st
         # Step 2. Detect
         th_small_obj = row["th_small_obj"]
         console.log(f"  {stem}: th_small_obj {th_small_obj:,} px ({row['th_small_obj_flag'] or 'permutation'})")
-        analyzer = SpontaneousZoneAnalyzer(tifffile.imread(row["proc_tiff_path"]), obj=row["OBJ"], sigma_ratio=sigma,
-                                           cuda_available=cuda_available, th_small_obj=th_small_obj)
+        analyzer = SREAnalyzer(tifffile.imread(row["proc_tiff_path"]), obj=row["OBJ"], sigma_ratio=sigma,
+                               cuda_available=cuda_available, th_small_obj=th_small_obj,
+                               connect_radius=row["connect_radius"])
         analyzer.detect()
 
         # Step 3. Export

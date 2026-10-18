@@ -4,7 +4,7 @@ fig5_flash_corr.py  --  plain_02 Fig. 5: traces of three flashes and their r (0 
 
 Steps
 -----
-1. Run SpontaneousZoneAnalyzer on one recording (same settings as SRE_analysis.py).
+1. Run SREAnalyzer on one recording (same settings as SRE_analysis.py).
 2. Zone Z = the trace-corr recur_zone with the most units.
    A, B = the best-r flash pair between two units of Z in different events (= the r the pipeline uses).
    C = the largest flash of the largest recur_zone sharing 0 px with Z.
@@ -28,10 +28,9 @@ import numpy as np
 import tifffile
 from matplotlib.figure import Figure
 
-from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO
+from classes import SREAnalyzer
+from classes.sre_analyzer import CROSSOVER_RATIO, footprint_traces
 from functions import img_zscore_convert
-from functions.zone_kernels import footprint_traces
 from SRE_analysis import MAP_Z_MIN, _gray_range
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -49,8 +48,8 @@ def event_starts(frames: np.ndarray) -> np.ndarray:
 def main() -> None:
     """Steps 1-4."""
     print(_MSG)
-    analyzer = SpontaneousZoneAnalyzer(tifffile.imread(ROOT / "proc_tiffs" / f"{STEM}_BIEXP_ALS.tif"), obj="10X",
-                                       sigma_ratio=CROSSOVER_RATIO, cuda_available=_CUDA)
+    analyzer = SREAnalyzer(tifffile.imread(ROOT / "proc_tiffs" / f"{STEM}_BIEXP_ALS.tif"), obj="10X",
+                           sigma_ratio=CROSSOVER_RATIO, cuda_available=_CUDA)
     analyzer.run()
     det, fps = analyzer.detections.reset_index(drop=True), analyzer.fps
     traces = footprint_traces(analyzer.footprints, analyzer.stack_f16, _CUDA).astype(np.float32)

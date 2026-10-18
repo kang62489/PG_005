@@ -143,7 +143,7 @@ Other examples: `2025_06_11-0008` (8 zones → 7 groups inner / 6 furthest), `20
 
 ### Test: separated vs joined recordings of one slice
 
-Idea test only, not in the pipeline (`scripts/slice_concat.py`).
+Idea test only, not in the pipeline (`scripts/slice_concat.py`, removed 2026-10-18; restore from git history).
 
 1. Recordings with the same date + SLICE + site (AT) are used together.
 2. **Separated:** every recording is analyzed on its own, as in the pipeline.

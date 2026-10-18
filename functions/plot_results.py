@@ -28,6 +28,7 @@ import numpy as np
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.patches import Circle, Rectangle
+from scipy.cluster.hierarchy import dendrogram
 from scipy.ndimage import center_of_mass, maximum_filter
 from skimage.measure import find_contours
 
@@ -84,6 +85,7 @@ _INK_PRIMARY, _INK_SECONDARY, _INK_GRID, _SURFACE = "#0b0b0b", "#52514e", "#e4e3
 MONTAGE_ZONE_NCOLS = 6                  # contour montages: panels per row
 MONTAGE_NR_OUTLINE = (0.45, 0.45, 0.45)  # contour montages: NR zones dark gray, dashed
 MONTAGE_CIRCLE_TEXT = {"inner": "inner (nearest edge)", "far": "enclosing (farthest pixel)"}
+ZONE_MAP_TITLE_FS = 15                  # zone-map page titles (overview + frame pages); matplotlib default 12
 
 
 # ===========================================================================
@@ -976,8 +978,12 @@ def _draw_outline(ax: mpl.axes.Axes, mask: np.ndarray, **line_kw) -> list:
 
 
 def zone_colors(zone_ids: list[int]) -> dict[int, tuple]:
-    """Fixed tab20 color per zone id (sorted order), shared by the overlay and single-zone maps."""
-    palette = mpl.colormaps["tab20"].colors
+    """Fixed tab20 color per zone id (sorted order), shared by the overlay and single-zone maps.
+
+    The 10 dark tab20 colors first, then their 10 light partners, so neighbouring ids never share a hue.
+    """
+    tab20 = mpl.colormaps["tab20"].colors
+    palette = tab20[0::2] + tab20[1::2]
     return {z: palette[i % len(palette)] for i, z in enumerate(sorted(zone_ids))}
 
 
@@ -988,7 +994,7 @@ def _z_page(z_image: np.ndarray, vmin: float, vmax: float, title: str, um_per_px
     image = ax.imshow(z_image, cmap="gray", vmin=vmin, vmax=vmax)
     fig.colorbar(image, ax=ax, shrink=0.8, label="z")
     _add_scale_bar(um_per_px, ax, z_image.shape[1], z_image.shape[0])
-    ax.set_title(title)
+    ax.set_title(title, fontsize=ZONE_MAP_TITLE_FS)
     ax.axis("off")
     return fig, ax
 
@@ -1051,7 +1057,7 @@ def frame_zone_figures(pages, shape: tuple[int, int], zone_masks: dict[int | str
 
     for z_frame, frame_zone_ids, flash_mask, hatch_mask, title in pages:
         image.set_data(z_frame)
-        ax.set_title(title)
+        ax.set_title(title, fontsize=ZONE_MAP_TITLE_FS)
         for zone_id, artists in zone_artists.items():
             for artist in artists:
                 artist.set_visible(zone_id in frame_zone_ids)
@@ -1189,4 +1195,62 @@ def plot_zone_stats(zones, title: str) -> Figure:
         fig.text(0.5, -0.02, f"Hollow dots: {int(zones['high_freq_flag'].sum())} zones flagged high-frequency "
                  "(mean_freq_hz > 1 Hz, e.g. manually induced flashes) -- kept, not removed.",
                  ha="center", va="top", color=_INK_SECONDARY, fontsize=9)
+    return fig
+
+
+# --- 6c. Flash clustering (centroid tree -> K, trace tree cut at K) -------
+
+def plot_centroid_dendrogram(tree: np.ndarray, cut_h: float, n_clusters: int, title: str) -> Figure:
+    """Centroid-tree dendrogram (average linkage, px) with the best-silhouette cut line."""
+    fig = Figure(figsize=(16, 6), layout="constrained")
+    ax = fig.add_subplot()
+    dendrogram(tree, ax=ax, no_labels=True, color_threshold=cut_h if np.isfinite(cut_h) else None)
+    if np.isfinite(cut_h):
+        ax.axhline(cut_h, color="black", linestyle="--", linewidth=0.8)
+        ax.text(ax.get_xlim()[1], cut_h, f" best h {cut_h:g} px: {n_clusters} clusters", va="center", fontsize=10)
+    ax.set_title(title)
+    ax.set_xlabel("flashes (leaves)")
+    ax.set_ylabel("centroid distance (px)")
+    return fig
+
+
+def plot_silhouette_sweep(sweep, cut_h: float, title: str) -> Figure:
+    """Mean silhouette (left axis) + cluster count (right, log) vs the centroid-tree cut height h."""
+    fig = Figure(figsize=(8, 4.5), layout="constrained")
+    ax = fig.add_subplot()
+    ax.plot(sweep["cut_height"], sweep["mean_silhouette"], color="tab:blue")
+    if np.isfinite(cut_h):
+        best = sweep.loc[sweep["cut_height"] == cut_h].iloc[0]
+        ax.axvline(cut_h, color="tab:red", linestyle="--",
+                   label=f"best h {cut_h:g} px: silhouette {best['mean_silhouette']:.3f}, "
+                         f"{int(best['n_clusters'])} clusters")
+        ax.legend(fontsize=8, loc="lower right")
+    ax.set_xlabel("cut height h (px)")
+    ax.set_ylabel("mean silhouette", color="tab:blue")
+    ax.set_title(title)
+    count_ax = ax.twinx()
+    count_ax.plot(sweep["cut_height"], sweep["n_clusters"], color="tab:gray", linewidth=0.8)
+    count_ax.set_yscale("log")
+    count_ax.set_ylabel("clusters", color="tab:gray")
+    return fig
+
+
+def plot_cluster_scatter(centroids_yx: np.ndarray, flash_zone_ids: np.ndarray, colors: dict,
+                         shape: tuple[int, int], title: str) -> Figure:
+    """Flash centroids coloured by their cluster (= recur_zone, zone-map colours), zone id at each cluster's mean."""
+    fig = Figure(figsize=(7, 7.4), layout="constrained")
+    ax = fig.add_subplot()
+    ax.scatter(centroids_yx[:, 1], centroids_yx[:, 0], c=[colors[z] for z in flash_zone_ids], s=14,
+               edgecolors="black", linewidths=0.3)
+    for zone_id in colors:
+        members = centroids_yx[flash_zone_ids == zone_id]
+        if len(members):
+            ax.text(members[:, 1].mean(), members[:, 0].mean(), str(zone_id), fontsize=10, fontweight="bold",
+                    ha="center", va="center", bbox={"boxstyle": "round,pad=0.15", "fc": "white", "alpha": 0.7})
+    ax.set_xlim(0, shape[1])
+    ax.set_ylim(shape[0], 0)  # image orientation: y down
+    ax.set_aspect("equal")
+    ax.set_xlabel("centroid_x (px)")
+    ax.set_ylabel("centroid_y (px)")
+    ax.set_title(title)
     return fig

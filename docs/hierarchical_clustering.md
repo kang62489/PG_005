@@ -22,6 +22,9 @@ same-frame pieces within `CONNECT_RADIUS` merged; flashes > `MAX_FLASH_FRAC` of 
 
 Centroid = mean (y, x) of the flash's footprint pixels. Exported as `{stem}_flash_centroids.csv`.
 
+Pipeline now (2026-10-19): each recording's own th_small_obj (permutation test) and same-frame blobs joined
+within r = √(th_small_obj / π) (section 5), instead of 5,000 px and 75 px.
+
 Mathematica: `Import["..._flash_centroids.csv", "Dataset", "HeaderLines" -> 1]`.
 
 ---
@@ -110,7 +113,53 @@ The silhouette is a separation score, **not a p-value**. Other measures, for ref
 
 ---
 
-## 5. Results (10X GACh3.0, average linkage)
+## 5. Why the connect radius r = √(th_small_obj / π)
+
+Before clustering, same-frame blobs at most r apart are joined into one flash (`SRE_analysis.py` STEP 2,
+`set_connect_radius`).
+
+1. The permutation test gives th_small_obj: the largest blob size that also appears in the time-shuffled
+   surrogates. Blobs up to this size can arise by chance. (0009: th_small_obj = 2,100 px)
+2. A blob of that size, shaped as a circle, has radius r = √(th_small_obj / π).
+   (0009: √(2,100 / π) = 25.9 px -> 25 px, rounded to 5 px)
+3. If two blobs in the same frame are at most r apart, the gap between them is no wider than a chance-size
+   blob. A missing chance-size piece is enough to explain the gap, so the two blobs are treated as one flash.
+4. If the gap is wider than r, a chance-size piece cannot explain it, so the blobs stay separate flashes.
+
+Example, 0009 frame 916 (r = 25 px): gaps 10, 31 and 38.9 px -> only the 10 px pair joins -> 3 flashes.
+
+---
+
+## 6. How the cut height h is chosen, and why the silhouette
+
+How:
+1. Build the centroid tree of all flashes (Euclidean centroid distance, average linkage).
+2. Cut it at every h from 5 to 500 px in 5 px steps (100 cuts).
+3. For each cut, score every flash: a = mean distance to the flashes of its own cluster,
+   b = mean distance to the flashes of the nearest other cluster, s = (b − a) / max(a, b),
+   from −1 (wrong cluster) to +1 (tight and well separated); a flash alone in its cluster scores 0.
+4. Mean silhouette of the cut = mean of s over all flashes.
+5. Take the h with the highest mean silhouette (the first one, if several tie). The clusters at that h are
+   the zones. (0009: best h = 110 px -> 16 zones, mean silhouette 0.646)
+
+Why:
+- h sets how many zones there are; choosing h by hand would choose the zone count.
+- The mean silhouette asks directly what a zone should be: flashes close to their own zone and far from the
+  others. The highest score is the cut with the clearest separation.
+- It is computed per recording, so each recording gets the h that fits its own flashes.
+- Limits: it is a separation score, not a p-value; the curve can be flat over a range of h.
+
+Pipeline results (own th_small_obj, connect radius, zones = centroid-tree clusters):
+
+| recording | th_small_obj | r | flashes | best h | zones | mean silhouette |
+|---|---|---|---|---|---|---|
+| 2025_06_11-0009 | 2,100 px | 25 px | 609 | 110 px | 16 | 0.646 |
+| 2025_12_15-0010 | 1,400 px | 20 px | 208 | 145 px | 15 | 0.547 |
+| 2026_01_08-0013 | 1,300 px | 20 px | 213 | 100 px | 25 | 0.620 |
+
+---
+
+## 7. Results of the first test (10X GACh3.0, average linkage, th_small_obj 5,000 px, connect radius 75 px)
 
 | recording | flashes | centroid: best h | clusters | silhouette | trace: best 1 − r (r) | clusters | silhouette |
 |---|---|---|---|---|---|---|---|
@@ -134,14 +183,14 @@ Observations:
 
 ---
 
-## 6. Open question
+## 8. Open question
 
 How to justify h beyond "best silhouette per recording" (e.g. a fixed h across recordings, a physical size, or a
 surrogate comparison). Not decided.
 
 ---
 
-## 7. Files (`output/test_centroid_cluster/`)
+## 9. Files (`output/test_centroid_cluster/`)
 
 | file | content |
 |---|---|

@@ -4,7 +4,7 @@ outline_page.py  --  Preview of Jeff's idea: a 2nd zone-map page with all zone o
 
 Steps
 -----
-1. Run SpontaneousZoneAnalyzer on each example recording (same settings as SRE_analysis.py).
+1. Run SREAnalyzer on each example recording (same settings as SRE_analysis.py).
 2. Page 1 = current overview (plot_zone_overview, unchanged).
 3. Page 2 = NEW: every recur_zone as a colored outline (same colors as page 1), NR zones gray dashed,
    striatum outline black dashed, on white.
@@ -28,8 +28,8 @@ import tifffile
 from matplotlib.figure import Figure
 from matplotlib.image import imsave
 
-from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO
+from classes import SREAnalyzer
+from classes.sre_analyzer import CROSSOVER_RATIO
 from functions import direction_labels, img_zscore_convert, load_st_bd, plot_zone_overview, zone_colors
 from functions.plot_results import _label_zone
 from SRE_analysis import MAP_Z_MIN, NR_COLOR, _figure_to_rgb, _gray_range, striatum_of
@@ -81,8 +81,8 @@ def main() -> None:
     stbd = load_st_bd(STBD)["recordings"]
     for stem in STEMS:
         proc_path = ROOT / "proc_tiffs" / f"{stem}_BIEXP_ALS.tif"
-        analyzer = SpontaneousZoneAnalyzer(tifffile.imread(proc_path), obj="10X", sigma_ratio=CROSSOVER_RATIO,
-                                           cuda_available=_CUDA)
+        analyzer = SREAnalyzer(tifffile.imread(proc_path), obj="10X", sigma_ratio=CROSSOVER_RATIO,
+                               cuda_available=_CUDA)
         analyzer.run()
         shape = (analyzer.height, analyzer.width)
         striatum = striatum_of(stbd, stem, shape)

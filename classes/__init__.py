@@ -20,9 +20,9 @@ if TYPE_CHECKING:
         detect_flash,
     )
     from .results_exporter import ResultsExporter
-    from .sp_zone_analyzer import SpontaneousZoneAnalyzer
     from .spatial_categorization import SpatialCategorizer
     from .spike_reliability import SpikeReliabilityChecker
+    from .sre_analyzer import SREAnalyzer
 
 from .dialog_confirm import DialogConfirm
 from .dialog_get_path import DialogGetFile, DialogGetPath
@@ -42,7 +42,7 @@ __all__ = [
     "ResultsExporter",
     "SpatialCategorizer",
     "SpikeReliabilityChecker",
-    "SpontaneousZoneAnalyzer",
+    "SREAnalyzer",
     "compute_density_thresh",
     "compute_eps_px",
     "compute_window_px",
@@ -62,7 +62,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "ResultsExporter": (".results_exporter", "ResultsExporter"),
     "SpatialCategorizer": (".spatial_categorization", "SpatialCategorizer"),
     "SpikeReliabilityChecker": (".spike_reliability", "SpikeReliabilityChecker"),
-    "SpontaneousZoneAnalyzer": (".sp_zone_analyzer", "SpontaneousZoneAnalyzer"),
+    "SREAnalyzer": (".sre_analyzer", "SREAnalyzer"),
     "compute_density_thresh": (".region_analyzer", "compute_density_thresh"),
     "compute_eps_px": (".region_analyzer", "compute_eps_px"),
     "compute_window_px": (".region_analyzer", "compute_window_px"),

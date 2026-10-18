@@ -34,8 +34,8 @@ from scipy.spatial.distance import squareform
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 # Local imports
-from classes import SpontaneousZoneAnalyzer  # noqa: E402
-from classes.sp_zone_analyzer import (  # noqa: E402
+from classes import SREAnalyzer  # noqa: E402
+from classes.sre_analyzer import (  # noqa: E402
     CONNECT_RADIUS,
     MAX_CENTROID_DEVIATION,
     MAX_HOTSPOT_FRAC,
@@ -45,6 +45,7 @@ from classes.sp_zone_analyzer import (  # noqa: E402
     _readable_groups,
     _renumber,
     _union,
+    footprint_traces,
     group_tracks,
     second_grouping,
     spatiotemporally_connect_hotspots,
@@ -54,7 +55,6 @@ from classes.sp_zone_analyzer import (  # noqa: E402
 )
 from functions import check_cuda, img_zscore_convert, plot_zone_overview, zone_colors  # noqa: E402
 from functions.plot_results import _label_zone, _z_page, frame_zone_figures  # noqa: E402
-from functions.zone_kernels import footprint_traces  # noqa: E402
 from SRE_analysis import _figure_to_rgb, export_zone_maps  # noqa: E402
 
 # ===========================================================================
@@ -73,7 +73,7 @@ MIN_INSIDE = 0.95  # 3rd: zone A merges into zone B if shared px / A px >= this
 MIN_FIT = 0.90  # 4th: leftover unit joins a zone if its best hotspot has shared px / hotspot px >= this
 
 
-def unit_mask(analyzer: SpontaneousZoneAnalyzer, units: list) -> np.ndarray:
+def unit_mask(analyzer: SREAnalyzer, units: list) -> np.ndarray:
     """Union of all hotspot footprints of the given units."""
     mask = np.zeros((analyzer.height, analyzer.width), dtype=bool)
     for i in np.flatnonzero(analyzer.detections["joint_label"].isin(units).to_numpy()):
@@ -81,7 +81,7 @@ def unit_mask(analyzer: SpontaneousZoneAnalyzer, units: list) -> np.ndarray:
     return mask
 
 
-def fit_and_merge(analyzer: SpontaneousZoneAnalyzer) -> tuple[pd.DataFrame, pd.DataFrame]:
+def fit_and_merge(analyzer: SREAnalyzer) -> tuple[pd.DataFrame, pd.DataFrame]:
     """3rd: merge trace-corr zones inside others; 4th: leftovers -> best-fitting merged zone (fit >= MIN_FIT).
 
     Leftovers that fit no zone are isolated (analyzer.isolated_units); 5th: isolated units overlapping each other
@@ -191,7 +191,7 @@ def fit_and_merge(analyzer: SpontaneousZoneAnalyzer) -> tuple[pd.DataFrame, pd.D
     return pd.DataFrame(fit_rows), pd.DataFrame(merge_rows, columns=["merged", "into", "inside", "merged_px", "into_px"])
 
 
-def fit_merge_counts(analyzer: SpontaneousZoneAnalyzer, fit_log: pd.DataFrame, merge_log: pd.DataFrame) -> pd.DataFrame:
+def fit_merge_counts(analyzer: SREAnalyzer, fit_log: pd.DataFrame, merge_log: pd.DataFrame) -> pd.DataFrame:
     """Units and hotspots at each stage of the fit/merge version."""
     hotspots_per_unit = analyzer.detections.groupby("joint_label").size()
 
@@ -226,14 +226,14 @@ def fit_merge_counts(analyzer: SpontaneousZoneAnalyzer, fit_log: pd.DataFrame, m
     return pd.DataFrame(rows, columns=["stage", "n_groups", "n_units", "n_hotspots"])
 
 
-def fit_merge_title(analyzer: SpontaneousZoneAnalyzer, rec: str) -> str:
+def fit_merge_title(analyzer: SREAnalyzer, rec: str) -> str:
     """Two-line title for the fit/merge maps."""
     return (f"{rec} | circle + best-r + no 1% min + merge {MIN_INSIDE} + fit {MIN_FIT}\n"
             f"{len(analyzer.zone_masks)} zones ({int(analyzer.zones['source'].str.startswith('overlap').sum())} "
             f"from isolated overlap groups) | {len(analyzer.dropped_units)} single units dropped")
 
 
-def export_fit_merge_tiff(analyzer: SpontaneousZoneAnalyzer, rec: str, out_path: Path) -> int:
+def export_fit_merge_tiff(analyzer: SREAnalyzer, rec: str, out_path: Path) -> int:
     """Pipeline export_zone_maps layout + an all-contours page 2; hotspots of dropped units are outlined, no zone.
 
     Page 1 = all zones (fill), page 2 = all zone contours, then one page per detection frame. Returns page count.
@@ -290,7 +290,7 @@ def export_fit_merge_tiff(analyzer: SpontaneousZoneAnalyzer, rec: str, out_path:
     return n_pages
 
 
-def save_fit_merge_xlsx(analyzer: SpontaneousZoneAnalyzer, fit_log: pd.DataFrame, merge_log: pd.DataFrame,
+def save_fit_merge_xlsx(analyzer: SREAnalyzer, fit_log: pd.DataFrame, merge_log: pd.DataFrame,
                         path: Path) -> None:
     """counts, zone_stats, zones (members / fitted / merged), step5_overlap, step3_merge, step4_fit."""
     zones = analyzer.zones.rename(columns={"joint_labels": "track_ids"})
@@ -372,7 +372,7 @@ def group_tracks_best_r(detections: pd.DataFrame, footprints: list, stack_f16: n
     return trace_corr, proximity, isolated
 
 
-def group_with_circle(analyzer: SpontaneousZoneAnalyzer) -> None:
+def group_with_circle(analyzer: SREAnalyzer) -> None:
     """Pipeline step 2 with the circle rule in 2b; fills the same analyzer attributes as group()."""
     frame_px = analyzer.height * analyzer.width
     min_area = 0 if NO_MIN_FRAC else MIN_HOTSPOT_FRAC * frame_px
@@ -387,7 +387,7 @@ def group_with_circle(analyzer: SpontaneousZoneAnalyzer) -> None:
           f"{len(analyzer.isolated_tracks)} isolated")
 
 
-def grouping_counts(analyzer: SpontaneousZoneAnalyzer) -> pd.DataFrame:
+def grouping_counts(analyzer: SREAnalyzer) -> pd.DataFrame:
     """Units and hotspots at each grouping stage."""
     hotspots_per_unit = analyzer.detections.groupby("joint_label").size()
 
@@ -411,7 +411,7 @@ def grouping_counts(analyzer: SpontaneousZoneAnalyzer) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def save_xlsx(analyzer: SpontaneousZoneAnalyzer, path: Path) -> None:
+def save_xlsx(analyzer: SREAnalyzer, path: Path) -> None:
     """Same sheets as the pipeline's {stem}_ZONES.xlsx + a counts sheet first."""
     with pd.ExcelWriter(path) as writer:
         grouping_counts(analyzer).to_excel(writer, sheet_name="counts", index=False)
@@ -422,7 +422,7 @@ def save_xlsx(analyzer: SpontaneousZoneAnalyzer, path: Path) -> None:
             writer, sheet_name="isolated_tracks", index=False)
 
 
-def save_leftover_png(analyzer: SpontaneousZoneAnalyzer, rec: str, path: Path) -> None:
+def save_leftover_png(analyzer: SREAnalyzer, rec: str, path: Path) -> None:
     """Units left after trace-corr (proximity + isolated), drawn like the all-zones map, labelled by unit id."""
     leftover = ([u for labels in analyzer.proximity_groups["labels"] for u in labels]
                 + analyzer.isolated_tracks["joint_label"].tolist())
@@ -444,7 +444,7 @@ def save_leftover_png(analyzer: SpontaneousZoneAnalyzer, rec: str, path: Path) -
     fig.savefig(path, dpi=MAP_DPI)
 
 
-def leftover_vmax(analyzer: SpontaneousZoneAnalyzer) -> float:
+def leftover_vmax(analyzer: SREAnalyzer) -> float:
     """Same gray range top as the all-zones map: median of the hotspots' max z."""
     stack, center, sigma = analyzer.stack_f16, analyzer.bg_center, analyzer.bg_sigma
     det_frames = analyzer.detections["frame"].to_numpy()
@@ -453,7 +453,7 @@ def leftover_vmax(analyzer: SpontaneousZoneAnalyzer) -> float:
     return float(np.median(img_zscore_convert(det_raw_max, center, sigma)))
 
 
-def save_all_zones_png(analyzer: SpontaneousZoneAnalyzer, rec: str, path: Path) -> None:
+def save_all_zones_png(analyzer: SREAnalyzer, rec: str, path: Path) -> None:
     """Same drawing as page 1 of {stem}_ZONE_MAPS.tif (no striatum outline)."""
     stack, center, sigma = analyzer.stack_f16, analyzer.bg_center, analyzer.bg_sigma
     det_frames = analyzer.detections["frame"].to_numpy()
@@ -480,7 +480,7 @@ def main() -> None:
     for rec in RECORDINGS:
         print(f"=== {rec} ===")
         stack = tifffile.imread(PROC_DIR / f"{rec}_BIEXP_ALS.tif")
-        analyzer = SpontaneousZoneAnalyzer(stack, obj="10X", cuda_available=cuda_available)
+        analyzer = SREAnalyzer(stack, obj="10X", cuda_available=cuda_available)
         del stack
         analyzer.detect()
         group_with_circle(analyzer)

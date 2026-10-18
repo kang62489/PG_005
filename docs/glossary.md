@@ -43,7 +43,7 @@ Terms used in the code and docs, after the 2026-10-08 rename (branch `major_refa
 | **event** (`n_events`) | One run of consecutive active frames inside a recur_zone. |
 | **zone** | Any mapped region (recur_zone or NR zone). |
 | **NR zone** | Non-recurring zone; reference only, not in stats. |
-| `SpontaneousZoneAnalyzer`, `sp_zone_analyzer.py`, `{stem}_ZONES.xlsx` | File and class names keep "zone". |
+| `{stem}_ZONES.xlsx` | Output file names keep "zone" (class: `SREAnalyzer`, `sre_analyzer.py`). |
 
 ---
 

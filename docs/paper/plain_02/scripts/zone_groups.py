@@ -4,7 +4,7 @@ zone_groups.py  --  Zone-map idea: group recur_zones that share a centre, one pa
 
 Steps
 -----
-1. Run SpontaneousZoneAnalyzer (same settings as SRE_analysis.py); recur_zones only (NR zones ignored).
+1. Run SREAnalyzer (same settings as SRE_analysis.py); recur_zones only (NR zones ignored).
 2. Per recur_zone: centroid = centre of mass of its mask; circle centred on the centroid, radius by MODE:
    "inner" = distance to the zone's nearest edge (largest circle inside the zone, file *_zone_groups.png),
    "far" = distance to the zone's farthest pixel (circle enclosing the zone, file *_zone_groups_far.png).
@@ -31,8 +31,8 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Circle
 from scipy import ndimage
 
-from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO
+from classes import SREAnalyzer
+from classes.sre_analyzer import CROSSOVER_RATIO
 from functions import load_st_bd, zone_colors
 from SRE_analysis import MAP_DPI, striatum_of
 
@@ -105,8 +105,8 @@ def main() -> None:
     print(_MSG)
     stbd = load_st_bd(STBD)["recordings"]
     for stem in STEMS:
-        analyzer = SpontaneousZoneAnalyzer(tifffile.imread(ROOT / "proc_tiffs" / f"{stem}_BIEXP_ALS.tif"), obj="10X",
-                                           sigma_ratio=CROSSOVER_RATIO, cuda_available=_CUDA)
+        analyzer = SREAnalyzer(tifffile.imread(ROOT / "proc_tiffs" / f"{stem}_BIEXP_ALS.tif"), obj="10X",
+                               sigma_ratio=CROSSOVER_RATIO, cuda_available=_CUDA)
         analyzer.run()
         shape = (analyzer.height, analyzer.width)
         outline = (np.array(stbd[stem]["striatum_outline_px"]) if striatum_of(stbd, stem, shape) is not None

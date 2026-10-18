@@ -29,7 +29,7 @@ from matplotlib.figure import Figure
 from obj_coverage import clean_and_table  # runs check_cuda() before anything imports numba
 
 from classes.region_analyzer import PIXEL_SCALE
-from classes.sp_zone_analyzer import CONNECT_RADIUS, MAX_FLASH_FRAC, spatiotemporally_connect_flashes
+from classes.sre_analyzer import CONNECT_RADIUS, MAX_FLASH_FRAC, spatiotemporally_connect_flashes
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 SUMMARY_PATH = ROOT / "results" / "spontaneous" / "spontaneous_summary.xlsx"

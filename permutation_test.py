@@ -47,10 +47,9 @@ import tifffile
 from numba import config as numba_config
 
 # Local imports
-from classes.sp_zone_analyzer import CROSSOVER_RATIO
+from classes.sre_analyzer import CROSSOVER_RATIO, N_THREADS_FRAME_POOL, _threshold_open_close, mask_flash_sizes
 from functions import biexp_detrend, filelist_parser, fit_zscore_background, pixel_lags, sample_tau, sur_flash_masks
 from functions.fit_hist import fit_flash_background
-from functions.zone_kernels import N_THREADS_FRAME_POOL, _threshold_open_close, mask_flash_sizes
 from img_proc import SIGMA
 from SRE_analysis import select_recordings
 
@@ -116,7 +115,7 @@ def get_flashes_above_threshold(als_path: Path, out_path: Path) -> tuple[float, 
     bg_center, bg_sigma = fit_flash_background(stack, cuda_available=_CUDA)
     threshold = float(bg_center + CROSSOVER_RATIO * bg_sigma)
     t.append(time.perf_counter())
-    mask = _threshold_open_close(stack, threshold, _CUDA)  # = zone_kernels.flash_sizes, timed in two parts
+    mask = _threshold_open_close(stack, threshold, _CUDA)  # = sre_analyzer.flash_sizes, timed in two parts
     del stack
     t.append(time.perf_counter())
     sizes = mask_flash_sizes(mask)

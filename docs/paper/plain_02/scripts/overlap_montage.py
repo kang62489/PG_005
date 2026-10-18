@@ -4,7 +4,7 @@ overlap_montage.py  --  Preview: one panel per recur_zone with the zones it over
 
 Steps
 -----
-1. Run SpontaneousZoneAnalyzer (same settings as SRE_analysis.py).
+1. Run SREAnalyzer (same settings as SRE_analysis.py).
 2. Per recur_zone i: set = {i} + every zone (recur or NR) sharing >= MIN_OVERLAP_PX pixels with it.
 3. Identical sets -> one panel. Zones with no overlap -> all together in one "no overlap" panel.
 4. Montage PNG per recording (outline colors = page-1 colors, NR gray dashed, striatum black dashed).
@@ -26,8 +26,8 @@ import numpy as np
 import tifffile
 from matplotlib.figure import Figure
 
-from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO
+from classes import SREAnalyzer
+from classes.sre_analyzer import CROSSOVER_RATIO
 from functions import load_st_bd, zone_colors
 from functions.plot_results import _label_zone
 from SRE_analysis import MAP_DPI, striatum_of
@@ -82,8 +82,8 @@ def main() -> None:
     print(_MSG)
     stbd = load_st_bd(STBD)["recordings"]
     for stem in STEMS:
-        analyzer = SpontaneousZoneAnalyzer(tifffile.imread(ROOT / "proc_tiffs" / f"{stem}_BIEXP_ALS.tif"), obj="10X",
-                                           sigma_ratio=CROSSOVER_RATIO, cuda_available=_CUDA)
+        analyzer = SREAnalyzer(tifffile.imread(ROOT / "proc_tiffs" / f"{stem}_BIEXP_ALS.tif"), obj="10X",
+                               sigma_ratio=CROSSOVER_RATIO, cuda_available=_CUDA)
         analyzer.run()
         shape = (analyzer.height, analyzer.width)
         striatum_outline = (np.array(stbd[stem]["striatum_outline_px"])

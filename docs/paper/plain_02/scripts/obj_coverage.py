@@ -5,7 +5,7 @@ obj_coverage.py  --  plain_02 Figs. 1-2, part 1: flash masks + per-flash table a
 Steps
 -----
 1. Select: proc_20260922_000.txt -> recordings with an ALS tiff, OBJ 40X / 60X, SENSOR GACh3.0.
-2. Detect only (SpontaneousZoneAnalyzer.detect: background threshold + mask cleanup incl. blobs < TH_SMALL_OBJ px
+2. Detect only (SREAnalyzer.detect: background threshold + mask cleanup incl. blobs < TH_SMALL_OBJ px
    removed, no grouping; giant flashes still in).
 3. Flash = one 4-connected blob of one frame; coverage = blob area / frame area
    -> output/plain_02/per_recording/{stem}.csv (resumable), output/plain_02/edge/{stem}.csv (bounding boxes)
@@ -31,8 +31,8 @@ import pandas as pd
 import tifffile
 from scipy import ndimage
 
-from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO, TH_SMALL_OBJ
+from classes import SREAnalyzer
+from classes.sre_analyzer import CROSSOVER_RATIO, TH_SMALL_OBJ
 from SRE_analysis import select_recordings
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -81,8 +81,8 @@ def main() -> None:
         rec_csv = DATA_DIR / "per_recording" / f"{stem}.csv"
         if rec_csv.exists():
             continue
-        analyzer = SpontaneousZoneAnalyzer(tifffile.imread(row["proc_tiff_path"]), obj=row["OBJ"],
-                                           sigma_ratio=CROSSOVER_RATIO, cuda_available=_CUDA)
+        analyzer = SREAnalyzer(tifffile.imread(row["proc_tiff_path"]), obj=row["OBJ"],
+                               sigma_ratio=CROSSOVER_RATIO, cuda_available=_CUDA)
         analyzer.detect()
         mask, blobs = clean_and_table(analyzer.mask)  # pipeline already dropped < TH_SMALL_OBJ; this lists blobs
         edge = pd.DataFrame(blobs, columns=["frame", "area_px", "r0", "c0", "r1", "c1"])

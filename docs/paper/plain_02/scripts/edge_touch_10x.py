@@ -27,7 +27,7 @@ import tifffile  # noqa: E402
 from edge_touch import EDGE_PX  # noqa: E402
 
 from classes.region_analyzer import PIXEL_SCALE  # noqa: E402
-from classes.sp_zone_analyzer import CONNECT_RADIUS, MAX_FLASH_FRAC, spatiotemporally_connect_flashes  # noqa: E402
+from classes.sre_analyzer import CONNECT_RADIUS, MAX_FLASH_FRAC, spatiotemporally_connect_flashes  # noqa: E402
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 SUMMARY_PATH = ROOT / "results" / "spontaneous" / "spontaneous_summary.xlsx"

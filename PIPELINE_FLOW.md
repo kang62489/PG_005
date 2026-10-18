@@ -37,7 +37,7 @@ For the analysis-list run, the pipeline also saves `spikes/<analysis_list_name>_
 
 **Input:** `*_BIEXP_ALS.tif` stacks from a processing list. By default, it selects recordings marked **10X** in the recording database.
 
-1. `SpontaneousZoneAnalyzer` estimates a background threshold from the stack's value histogram and detects flashes in each frame.
+1. `SREAnalyzer` estimates a background threshold from the stack's value histogram and detects flashes in each frame.
 2. It connects detections across frames into tracks, then groups tracks by correlated traces or spatial proximity.
 3. It maps those groups into zones and calculates zone size and event statistics.
 4. Under `results/spontaneous/`, it saves per-recording `*_ZONES.xlsx` and `*_ZONE_MAPS.tif`, `footprints/*_ZONES.npz`, and `mask/*_ZONE_MASK.tif` (skipped with `--no_mask`). It also saves `spontaneous_summary.xlsx` across recordings.

@@ -44,7 +44,7 @@ from matplotlib.ticker import StrMethodFormatter
 from scipy import ndimage
 
 from classes.region_analyzer import PIXEL_SCALE
-from classes.sp_zone_analyzer import CROSSOVER_RATIO
+from classes.sre_analyzer import CROSSOVER_RATIO, flash_mask
 from functions.fit_hist import (
     FLASH_HIST_BINS,
     FLASH_HIST_RANGE_PCT,
@@ -52,7 +52,6 @@ from functions.fit_hist import (
     float16_code_counts,
     percentiles_from_counts,
 )
-from functions.zone_kernels import zone_mask
 from SRE_analysis import select_recordings
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -81,7 +80,7 @@ def global_histogram(stack: np.ndarray) -> dict:
 
 def flash_table(stack: np.ndarray, threshold: float) -> pd.DataFrame:
     """Steps 3-4: per-frame flashes of one recording, no lower size limit."""
-    mask = zone_mask(stack, threshold, 0, _CUDA)
+    mask = flash_mask(stack, threshold, 0, _CUDA)
     _, h, w = mask.shape
     parts = []
     for start in range(0, len(mask), CHUNK):  # labels in raster order = frame by frame, as per-frame labelling
