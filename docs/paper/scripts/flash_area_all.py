@@ -53,7 +53,7 @@ from functions.fit_hist import (
     percentiles_from_counts,
 )
 from functions.zone_kernels import zone_mask
-from spontaneous_analysis import select_recordings
+from SRE_analysis import select_recordings
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 PROC_LIST = ROOT / "data" / "proc_20260922_000.txt"

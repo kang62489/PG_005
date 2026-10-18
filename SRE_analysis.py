@@ -1,10 +1,11 @@
 """
-spontaneous_analysis.py  --  Spontaneous ACh flash -> zone analysis (10X, *_BIEXP_ALS.tif).
+SRE_analysis.py  --  Spontaneous ACh flash -> zone analysis (10X, *_BIEXP_ALS.tif).
 
-  Step 1. Select  : proc list -> recordings with an ALS tiff; OBJ / SENSOR from rec_data.db, 10X only
+  Step 1. Select  : proc list -> recordings with an ALS tiff (GAUSS with --use_gauss); OBJ / SENSOR from rec_data.db,
+                    10X only
   Step 2. Analyze : per recording, SpontaneousZoneAnalyzer detect -> group -> map
                     (th_small_obj = the recording's own th_small_obj_px from
-                    {results_dir}/permutation/{OBJ}/removal_suggestion.csv; not listed -> OBJ median)
+                    {results_dir}/permutation/{OBJ}/removal_suggestion.csv; not listed -> REMOVAL_FALLBACK[OBJ])
           Coverage: union of all recur_zones (NR zones excluded) inside the striatum / striatum area
                     (striatum outline from the Striatum Boundary export bd_{date}_{serial}.json; NaN if none)
   Step 3. Export  : per recording {stem}_ZONES.xlsx + {stem}_ZONE_MAPS.tif (z-scored RGB stack: max projection
@@ -20,8 +21,8 @@ Zone = any mapped region; recur_zone = recurring zone (the only ones in stats); 
 All outputs go to {results_dir}/spontaneous/.
 
 Usage:
-    python spontaneous_analysis.py --proc_list data/proc_20260924_000.txt
-        [--results_dir results] [--sigma 2.0] [--no_mask] [--all_obj] [--debug]
+    python SRE_analysis.py --proc_list data/proc_20260924_000.txt
+        [--results_dir results] [--use_gauss] [--sigma 2.0] [--no_mask] [--all_obj] [--debug]
         [--stbd data/bd_20260924_000.json]  (default: bd_{date}_{serial}.json next to the proc list)
         [--map_workers N]  (default: usable CPUs, max MAP_WORKERS_MAX; 1 = no pool)
 """
@@ -38,7 +39,6 @@ import time
 from collections import deque
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
-from contextlib import nullcontext
 from pathlib import Path
 
 # Third-party imports
@@ -50,19 +50,23 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from rich.console import Console
 
 # Local imports
-from classes import SpontaneousZoneAnalyzer
-from classes.sp_zone_analyzer import CROSSOVER_RATIO, MIN_EVENTS_FOR_FREQ, TH_SMALL_OBJ, timed
+from classes import SpontaneousZoneAnalyzer  # Step 2
+from classes.sp_zone_analyzer import (
+    CROSSOVER_RATIO,  # Step 2
+    MIN_EVENTS_FOR_FREQ,
+    timed,
+)
 from functions import (
     bd_export_path,
     check_cuda,
     direction_labels,
+    filelist_parser,  # Step 1
     frame_zone_figures,
     group_overlaps,
     group_zones,
     img_zscore_convert,
-    list_parser,
     load_st_bd,
-    lookup_rec_from_db,
+    lookup_rec_from_db,  # Step 1
     outline_mask,
     plot_zone_groups,
     plot_zone_overview,
@@ -78,8 +82,6 @@ console = Console()
 #
 # ===========================================================================
 
-TARGET_OBJ = "10X"
-PROC_SUFFIX = "_BIEXP_ALS.tif"
 MAP_DPI = 120
 MAP_Z_MIN = 1.0  # zone-map gray range starts at background peak + this many sigmas (black)
 MAP_TITLE_WIDTH = 100  # characters per title line before the recur_zone / NR zone list wraps
@@ -87,24 +89,216 @@ NR_COLOR = (0.85, 0.85, 0.85)  # NR zones (NR1, NR2, ...) on the zone maps: ligh
 MAP_WORKERS_MAX = 16  # auto worker count for zone-map rendering = usable CPUs, capped here (--map_workers overrides)
 MAP_CHUNK_PAGES = 8  # frame pages per pool task (each task builds its own Figure once)
 REMOVAL_SUGGESTION_CSV = "removal_suggestion.csv"  # permutation_test.py output: recording, th_small_obj_px
-ROUND_PX = 100  # px: OBJ-median th_small_obj rounded up to this step (same as permutation_test.ROUND_PX)
+REMOVAL_FALLBACK = {"10X": 1900, "40X": 1700, "60X": 1500}  # px: OBJ median th_small_obj_px (results/permutation/)
 
 
 # ===========================================================================
 #
-#   STEP 1 -- SELECT: proc list -> 10X ALS recordings with sensor info
+#   FLOW: The flow of the pipeline
 #
 # ===========================================================================
 
-def select_recordings(proc_list_path: Path, db_path: Path, exp_db_path: Path, all_obj: bool) -> pl.DataFrame:
-    """Rows of (raw_tiff_name, proc_tiff_path, OBJ, SENSOR) for recordings that pass the filters."""
-    table, io_dirs = list_parser(proc_list_path)
+# fn: run, Step 1 once, then per recording Step 2 -> 3 -> 4 -> 5, then the run summary.
+
+def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = CROSSOVER_RATIO,
+        save_mask: bool = True, all_obj: bool = False, debug: bool = False, cuda_available: bool = False,
+        db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db"),
+        stbd_path: Path | None = None, map_workers: int | None = None, use_gauss: bool = False) -> None:
+    """Run the spontaneous zone analysis (Steps 1-5) for every selected recording in a proc list.
+
+    stbd_path: Striatum Boundary export; None -> bd_{date}_{serial}.json next to the proc list.
+    map_workers: processes rendering the zone-map pages; None -> map_workers_auto(), 1 -> in this process.
+    use_gauss: read *_BIEXP_GAUSS.tif instead of *_BIEXP_ALS.tif.
+    """
+    run_t0 = time.time()
+    out_root = results_dir / "spontaneous"
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    # -----------------------------------------------------------------------
+    # Step 1. Input
+    # -----------------------------------------------------------------------
+    console.rule("[bold]Step 1 - Input")
+
+    recordings = select_recordings(proc_list_path, db_path, exp_db_path, all_obj,
+                                   GAUSS_SUFFIX if use_gauss else ALS_SUFFIX)
+    console.log(f"{len(recordings)} recording(s) selected from {proc_list_path.name}")
+
+    # -----------------------------------------------------------------------
+    # Step 2. Detection (set once, before the loop)
+    # -----------------------------------------------------------------------
+    # local fn: set_removal_suggestion() -- th_small_obj of every recording
+    recordings = set_removal_suggestion(recordings, results_dir)
+
+    # -----------------------------------------------------------------------
+    # Step 4. Characterization (set once, before the loop)
+    # -----------------------------------------------------------------------
+    # striatum outlines of the run (coverage; also drawn on the Step 5 maps)
+    stbd_path = stbd_path or bd_export_path(proc_list_path)
+    if stbd_path.exists():
+        stbd = load_st_bd(stbd_path)["recordings"]
+        console.log(f"striatum boundaries: {len(stbd)} recording(s) in {stbd_path.resolve()}")
+    else:
+        stbd = {}
+        console.log(f"[yellow]No striatum boundary file {stbd_path.resolve()} -- coverage NaN for all[/yellow]")
+
+    # -----------------------------------------------------------------------
+    # Step 5. Export (set once, before the loop)
+    # -----------------------------------------------------------------------
+    summary_rows: list[dict] = []  # one row per recording -> spontaneous_summary.xlsx
+    pooled_zones: list[pd.DataFrame] = []  # recur_zone tables of all recordings -> spontaneous_summary.xlsx
+
+    # local fn: open_map_pool() -- one pool for the whole run
+    pool, n_workers = open_map_pool(map_workers)
+
+    for i, row in enumerate(recordings.iter_rows(named=True), 1):
+        entry_t0 = time.time()
+        proc_tiff_path = Path(row["proc_tiff_path"])
+        stem = proc_tiff_path.stem
+        console.rule(f"[bold]{stem}  [{row['OBJ']}, {row['SENSOR']}]  [{i}/{len(recordings)}]")
+
+        # -------------------------------------------------------------------
+        # Step 2. Detection
+        # -------------------------------------------------------------------
+        raw_stem = Path(row["raw_tiff_name"]).stem
+        th_small_obj, th_flag = row["th_small_obj"], row["th_small_obj_flag"]
+        console.log(f"  th_small_obj {th_small_obj:,} px ({th_flag or 'permutation'})")
+
+        with timed("load   read tiff + float16 copy"):
+            stack = tifffile.imread(proc_tiff_path)
+            # imported class: SpontaneousZoneAnalyzer
+            analyzer = SpontaneousZoneAnalyzer(stack, obj=row["OBJ"], sigma_ratio=sigma, cuda_available=cuda_available,
+                                               th_small_obj=th_small_obj)
+            del stack  # the analyzer keeps its float16 copy
+
+        analyzer.detect()
+
+        # -------------------------------------------------------------------
+        # Step 3. Clustering (not sorted yet)
+        # -------------------------------------------------------------------
+        analyzer.group()
+        analyzer.map()
+
+        # -------------------------------------------------------------------
+        # Step 4. Characterization (not sorted yet)
+        # -------------------------------------------------------------------
+        striatum = striatum_of(stbd, raw_stem, (analyzer.height, analyzer.width))
+        striatum_outline = np.array(stbd[raw_stem]["striatum_outline_px"]) if striatum is not None else None
+        axis_labels = direction_labels(stbd[raw_stem]["dorsal"], stbd[raw_stem]["medial"]) if raw_stem in stbd else None
+
+        coverage = zone_coverage(analyzer.zone_masks, striatum, analyzer.um_per_px)
+        if striatum is not None:
+            console.log(f"  coverage {coverage['striatum_coverage']:.3f} ({len(analyzer.zone_masks)} recur_zones, "
+                        f"striatum {striatum.mean():.2f} of FOV)")
+
+        # -------------------------------------------------------------------
+        # Step 5. Export
+        # -------------------------------------------------------------------
+        with timed("export xlsx / npz" + (" / mask tif" if save_mask else "")):
+            paths = analyzer.save(out_root, stem, save_mask=save_mask, debug=debug)
+
+        map_path = out_root / f"{stem}_ZONE_MAPS.tif"
+        with timed("export zone-map TIFF"):
+            n_pages = export_zone_maps(analyzer, f"{stem}, {row['SENSOR']}", map_path, striatum_outline, axis_labels,
+                                       pool, n_workers)
+
+        with timed("export zone contours"):
+            montage_paths = export_zone_contours(analyzer, stem, out_root / "zone_contours", paths["xlsx"],
+                                                 striatum_outline)
+
+        for path in [*paths.values(), *montage_paths]:
+            console.log(f"[green]saved[/green] {path.resolve()}")
+        console.log(f"[green]saved[/green] {n_pages}-page zone-map TIFF ({map_path.stat().st_size / 1e6:.1f} MB) "
+                    f"-> {map_path.resolve()}")
+
+        zone_stats = analyzer.zone_stats  # recur_zones only; NR zones stay out of every stat
+        non_recur_source = analyzer.non_recur_zones["source"]
+        freq = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_freq_hz"]
+        period = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_period_s"]
+
+        summary_rows.append({
+            "recording": stem,
+            "sensor": row["SENSOR"],
+            "obj": row["OBJ"],
+            "n_frames": analyzer.n_frames,
+            "background_threshold": analyzer.threshold,
+            "th_small_obj_flag": th_flag,  # empty = own th_small_obj from removal_suggestion.csv
+            "n_recur_zones": len(zone_stats),
+            "n_non_recur_zone_type_1": int(non_recur_source.str.startswith("non_recur_zone_type_1").sum()),
+            "n_non_recur_zone_type_2": int(non_recur_source.str.startswith("non_recur_zone_type_2").sum()),
+            "n_dropped_units": len(analyzer.dropped_units),
+            "n_dropped_flashes": int(analyzer.detections["joint_label"].isin(analyzer.dropped_units).sum()),
+            "median_area_um2": float(zone_stats["area_um2"].median()),
+            "n_low_freq_recur_zones": int((zone_stats["n_events"] == 1).sum()),  # < 1 event per recording
+            "n_freq_recur_zones": len(freq),  # recur_zones with >= MIN_EVENTS_FOR_FREQ events, used below
+            "median_freq_hz": float(freq.median()),
+            "freq_q1_hz": float(freq.quantile(0.25)),
+            "freq_q3_hz": float(freq.quantile(0.75)),
+            "freq_cv": float(freq.std() / freq.mean()),
+            "median_period_s": float(period.median()),
+            **coverage,
+        })
+        pooled_zones.append(zone_stats.assign(recording=stem, sensor=row["SENSOR"]))
+
+        del analyzer, zone_stats  # free this recording's stack + mask (~4.7 GB) before the next one is read
+        gc.collect()
+        console.log(f"[bold magenta]{'entry total':<40} {time.time() - entry_t0:6.1f}s[/bold magenta]")
+
+    if pool is not None:
+        pool.shutdown()  # crash / Ctrl+C: Python's exit hook shuts the pool down
+
+    # -----------------------------------------------------------------------
+    # Step 5. Export (run summary)
+    # -----------------------------------------------------------------------
+    console.rule("[bold]Step 5 - Summary")
+
+    if summary_rows:
+        summary_path = out_root / "spontaneous_summary.xlsx"
+        pooled = pd.concat(pooled_zones, ignore_index=True)
+        pooled = pooled[["recording", "sensor", *[c for c in pooled.columns if c not in ("recording", "sensor")]]]
+        with pd.ExcelWriter(summary_path) as writer:
+            pd.DataFrame(summary_rows).to_excel(writer, sheet_name="recordings", index=False)
+            pooled.to_excel(writer, sheet_name="recur_zones", index=False)
+        console.log(f"[green]saved[/green] {summary_path.resolve()}")
+
+    flagged = recordings.filter(pl.col("th_small_obj_flag") != "") if not recordings.is_empty() else recordings
+    if not flagged.is_empty():
+        console.log(f"[yellow]{len(flagged)} recording(s) without their own th_small_obj "
+                    f"(column th_small_obj_flag):[/yellow]")
+        for proc_tiff_path, th_flag in flagged.select("proc_tiff_path", "th_small_obj_flag").iter_rows():
+            console.log(f"[yellow]  {Path(proc_tiff_path).stem}  {th_flag}[/yellow]")
+
+    console.rule(f"[dim]Total time: {time.time() - run_t0:.1f}s")
+
+
+# ===========================================================================
+#
+#   STEP 1: INPUT related local functions
+#
+# ===========================================================================
+
+# fn: select_recordings, parse file paths in the proc_list and then store them as polars dataframe for later use.
+
+TARGET_OBJ = "10X"
+ALS_SUFFIX = "_BIEXP_ALS.tif"  # default input
+GAUSS_SUFFIX = "_BIEXP_GAUSS.tif"  # input with --use_gauss
+
+
+def select_recordings(proc_list_path: Path, db_path: Path, exp_db_path: Path, all_obj: bool,
+                      suffix: str = ALS_SUFFIX) -> pl.DataFrame:
+    """Rows of (raw_tiff_name, proc_tiff_path, OBJ, SENSOR) for recordings that pass the filters.
+
+    suffix: processed tif read per recording, ALS_SUFFIX or GAUSS_SUFFIX.
+    """
+
+    # imported fn: filelist_parser()
+    table, io_dirs = filelist_parser(proc_list_path)
     proc_dir = Path(io_dirs["dir_proc_tiffs"])
 
+    # imported fn: lookup_rec_from_db()
     rec_info = lookup_rec_from_db(table.select("raw_tiff_name"), db_path, exp_db_path)
     selected: list[dict] = []
     for name in table["raw_tiff_name"].to_list():
-        proc_tiff_path = proc_dir / f"{Path(name).stem}{PROC_SUFFIX}"
+        proc_tiff_path = proc_dir / f"{Path(name).stem}{suffix}"
         match = rec_info.filter(pl.col("Filename") == name) if not rec_info.is_empty() else rec_info
         if match.is_empty():
             console.log(f"[yellow]Skipped {name}: not in rec_data.db[/yellow]")
@@ -121,34 +315,93 @@ def select_recordings(proc_list_path: Path, db_path: Path, exp_db_path: Path, al
     return pl.DataFrame(selected)
 
 
-def removal_suggestion(results_dir: Path, obj: str) -> tuple[dict[str, int], int] | None:
-    """{recording: th_small_obj_px} + OBJ median (rounded up) from <results_dir>/permutation/{obj}/; None if missing."""
-    path = results_dir / "permutation" / obj / REMOVAL_SUGGESTION_CSV
-    if not path.exists():
-        return None
-    table = pd.read_csv(path)
-    median_px = int(np.ceil(table["th_small_obj_px"].median() / ROUND_PX) * ROUND_PX)
-    console.log(f"th_small_obj: {len(table)} {obj} recording(s) in {path.resolve()}, median {median_px:,} px")
-    return dict(zip(table["recording"], table["th_small_obj_px"].astype(int), strict=True)), median_px
+# ===========================================================================
+#
+#   STEP 2: DETECTION related local functions
+#
+# ===========================================================================
 
+# fn: set_removal_suggestion, add th_small_obj of every recording (removal_suggestion.csv, else REMOVAL_FALLBACK)
+#     to the recordings dataframe, once before the loop.
 
-def th_small_obj_of(suggestions: dict, results_dir: Path, obj: str, raw_stem: str) -> tuple[int, str]:
-    """(th_small_obj px, source) of one recording: own value > OBJ median > TH_SMALL_OBJ (no file for this OBJ)."""
-    if obj not in suggestions:
-        suggestions[obj] = removal_suggestion(results_dir, obj)
-    if suggestions[obj] is None:
-        return TH_SMALL_OBJ, f"default, no {REMOVAL_SUGGESTION_CSV} for {obj}"
-    per_recording, median_px = suggestions[obj]
-    if raw_stem in per_recording:
-        return per_recording[raw_stem], "permutation"
-    return median_px, f"{obj} median, not in {REMOVAL_SUGGESTION_CSV}"
+def set_removal_suggestion(recordings: pl.DataFrame, results_dir: Path) -> pl.DataFrame:
+    """Add th_small_obj (px) + th_small_obj_flag to every recording, once before the loop.
+
+    th_small_obj = own th_small_obj_px from <results_dir>/permutation/{OBJ}/removal_suggestion.csv (flag empty),
+    else REMOVAL_FALLBACK[OBJ] (flag says why).
+    """
+    if recordings.is_empty():
+        return recordings
+    own: dict[tuple[str, str], int] = {}  # (OBJ, raw stem) -> th_small_obj_px
+    for obj in recordings["OBJ"].unique().sort().to_list():
+        path = results_dir / "permutation" / obj / REMOVAL_SUGGESTION_CSV
+        if not path.exists():
+            continue
+        table = pd.read_csv(path)
+        console.log(f"th_small_obj: {len(table)} {obj} recording(s) in {path.resolve()}")
+        own.update({(obj, stem): int(px) for stem, px in zip(table["recording"], table["th_small_obj_px"], strict=True)})
+
+    th_small_obj, flags = [], []
+    for name, obj in zip(recordings["raw_tiff_name"], recordings["OBJ"], strict=True):
+        key = (obj, Path(name).stem)
+        if key in own:
+            th_small_obj.append(own[key])
+            flags.append("")
+        else:
+            th_small_obj.append(REMOVAL_FALLBACK[obj])
+            flags.append(f"{REMOVAL_FALLBACK[obj]} px, {obj} fallback, not in {REMOVAL_SUGGESTION_CSV}")
+    return recordings.with_columns(pl.Series("th_small_obj", th_small_obj), pl.Series("th_small_obj_flag", flags))
 
 
 # ===========================================================================
 #
-#   STEP 2b -- COVERAGE: union of all recur_zones (NR zones excluded) inside the striatum / striatum area
+#   STEP 3 related local functions
 #
 # ===========================================================================
+
+# (none yet)
+
+
+# ===========================================================================
+#
+#   STEP 4 related local functions
+#
+# ===========================================================================
+
+# (none yet)
+
+
+# ===========================================================================
+#
+#   STEP 5 related local functions
+#
+# ===========================================================================
+
+# fn: map_workers_auto, worker count for the zone-map pool (usable CPUs, capped at MAP_WORKERS_MAX).
+# fn: open_map_pool, process pool that renders the zone-map pages for the whole run (None = in this process).
+
+def map_workers_auto() -> int:
+    """CPUs this process may use (the SLURM allocation on Linux, not the whole node), capped at MAP_WORKERS_MAX."""
+    n_cpu = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
+    return max(1, min(n_cpu, MAP_WORKERS_MAX))
+
+
+def open_map_pool(map_workers: int | None) -> tuple[ProcessPoolExecutor | None, int]:
+    """(pool, n_workers) for export_zone_maps; 'spawn': same on Linux / Windows, no fork of the numba / CUDA state."""
+    n_workers = map_workers or map_workers_auto()
+    console.log(f"zone-map rendering: {n_workers} worker(s)")
+    pool = ProcessPoolExecutor(n_workers, mp_context=mp.get_context("spawn")) if n_workers > 1 else None
+    return pool, n_workers
+
+
+# ===========================================================================
+#
+#   NOT SORTED YET (-> STEP 4)
+#
+# ===========================================================================
+
+# fn: striatum_of, striatum mask of one recording from the bd export.
+# fn: zone_coverage, recur_zone union (NR zones excluded) inside the striatum / striatum area.
 
 def striatum_of(stbd: dict[str, dict], raw_stem: str, shape: tuple[int, int]) -> np.ndarray | None:
     """Striatum mask of one recording from the bd export; None (+ warning) if missing or a different frame size."""
@@ -180,9 +433,14 @@ def zone_coverage(zone_masks: dict[int, np.ndarray], striatum: np.ndarray | None
 
 # ===========================================================================
 #
-#   STEP 3 -- EXPORT: zone-map TIFF stack
+#   NOT SORTED YET (-> STEP 5)
 #
 # ===========================================================================
+
+# fn: _figure_to_rgb, _gray_range, _thr_text, zone-map page helpers.
+# fn: _render_pages, _render_chunk, _render_pages_parallel, frame pages rendered in / out of the pool.
+# fn: export_zone_maps, write {stem}_ZONE_MAPS.tif.
+# fn: export_zone_contours, write zone_contours/*.png + overlap sheets in {stem}_ZONES.xlsx.
 
 def _figure_to_rgb(fig) -> np.ndarray:
     """Render a Figure at MAP_DPI -> (H, W, 3) uint8 RGB array."""
@@ -212,12 +470,6 @@ def _thr_text(analyzer: SpontaneousZoneAnalyzer) -> str:
 
 
 # --- 3a. page rendering (serial / process pool) ----------------------------
-
-
-def map_workers_auto() -> int:
-    """CPUs this process may use (the SLURM allocation on Linux, not the whole node), capped at MAP_WORKERS_MAX."""
-    n_cpu = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
-    return max(1, min(n_cpu, MAP_WORKERS_MAX))
 
 
 def _render_pages(specs, ctx: dict) -> Iterator[np.ndarray]:
@@ -370,159 +622,11 @@ def export_zone_contours(analyzer: SpontaneousZoneAnalyzer, stem: str, out_dir: 
     return paths
 
 
-# ===========================================================================
-#
-#   RUN
-#
-# ===========================================================================
-
-def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = CROSSOVER_RATIO,
-        save_mask: bool = True, all_obj: bool = False, debug: bool = False, cuda_available: bool = False,
-        db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db"),
-        stbd_path: Path | None = None, map_workers: int | None = None) -> None:
-    """Run the spontaneous zone analysis for every selected recording in a proc list.
-
-    stbd_path: Striatum Boundary export; None -> bd_{date}_{serial}.json next to the proc list.
-    map_workers: processes rendering the zone-map pages; None -> map_workers_auto(), 1 -> in this process.
-    """
-    run_t0 = time.time()
-    n_workers = map_workers or map_workers_auto()
-    console.log(f"zone-map rendering: {n_workers} worker(s)")
-    # one pool for the whole run ('spawn': same on Linux / Windows, no fork of the numba / CUDA state)
-    pool_ctx = (ProcessPoolExecutor(n_workers, mp_context=mp.get_context("spawn")) if n_workers > 1
-                else nullcontext())
-    with pool_ctx as pool:
-        _run_recordings(proc_list_path, results_dir, sigma, save_mask, all_obj, debug, cuda_available, db_path,
-                        exp_db_path, stbd_path, pool, n_workers)
-    console.rule(f"[dim]Total time: {time.time() - run_t0:.1f}s")
-
-
-def _run_recordings(proc_list_path: Path, results_dir: Path, sigma: float, save_mask: bool, all_obj: bool, debug: bool,
-                    cuda_available: bool, db_path: Path, exp_db_path: Path, stbd_path: Path | None,
-                    pool: ProcessPoolExecutor | None, n_workers: int) -> None:
-    """Steps 1-4 of run() (pool: zone-map renderer, None -> in this process)."""
-    out_root = results_dir / "spontaneous"
-    out_root.mkdir(parents=True, exist_ok=True)
-
-    # -----------------------------------------------------------------------
-    # Step 1. Select
-    # -----------------------------------------------------------------------
-    console.rule("[bold]Step 1 - Select")
-    recordings = select_recordings(proc_list_path, db_path, exp_db_path, all_obj)
-    console.log(f"{len(recordings)} recording(s) selected from {proc_list_path.name}")
-    stbd_path = stbd_path or bd_export_path(proc_list_path)
-    if stbd_path.exists():
-        stbd = load_st_bd(stbd_path)["recordings"]
-        console.log(f"striatum boundaries: {len(stbd)} recording(s) in {stbd_path.resolve()}")
-    else:
-        stbd = {}
-        console.log(f"[yellow]No striatum boundary file {stbd_path.resolve()} -- coverage NaN for all[/yellow]")
-
-    summary_rows: list[dict] = []
-    pooled_zones: list[pd.DataFrame] = []
-    suggestions: dict = {}  # OBJ -> removal_suggestion(), loaded once per OBJ
-    flagged: list[tuple[str, str]] = []  # (stem, flag) of recordings without their own th_small_obj
-
-    for i, row in enumerate(recordings.iter_rows(named=True), 1):
-        entry_t0 = time.time()
-        proc_tiff_path = Path(row["proc_tiff_path"])
-        stem = proc_tiff_path.stem
-        console.rule(f"[bold]{stem}  [{row['OBJ']}, {row['SENSOR']}]  [{i}/{len(recordings)}]")
-
-        # -------------------------------------------------------------------
-        # Step 2. Analyze
-        # -------------------------------------------------------------------
-        raw_stem = Path(row["raw_tiff_name"]).stem
-        th_small_obj, th_source = th_small_obj_of(suggestions, results_dir, row["OBJ"], raw_stem)
-        console.log(f"  th_small_obj {th_small_obj:,} px ({th_source})")
-        th_flag = "" if th_source == "permutation" else f"{th_small_obj} px, {th_source}"
-        if th_flag:
-            flagged.append((stem, th_flag))
-        with timed("load   read tiff + float16 copy"):
-            stack = tifffile.imread(proc_tiff_path)
-            analyzer = SpontaneousZoneAnalyzer(stack, obj=row["OBJ"], sigma_ratio=sigma, cuda_available=cuda_available,
-                                               th_small_obj=th_small_obj)
-            del stack  # the analyzer keeps its float16 copy
-        analyzer.run()
-        striatum = striatum_of(stbd, raw_stem, (analyzer.height, analyzer.width))
-        striatum_outline = np.array(stbd[raw_stem]["striatum_outline_px"]) if striatum is not None else None
-        axis_labels = direction_labels(stbd[raw_stem]["dorsal"], stbd[raw_stem]["medial"]) if raw_stem in stbd else None
-        coverage = zone_coverage(analyzer.zone_masks, striatum, analyzer.um_per_px)
-        if striatum is not None:
-            console.log(f"  coverage {coverage['striatum_coverage']:.3f} ({len(analyzer.zone_masks)} recur_zones, "
-                        f"striatum {striatum.mean():.2f} of FOV)")
-
-        # -------------------------------------------------------------------
-        # Step 3. Export
-        # -------------------------------------------------------------------
-        with timed("export xlsx / npz" + (" / mask tif" if save_mask else "")):
-            paths = analyzer.save(out_root, stem, save_mask=save_mask, debug=debug)
-        map_path = out_root / f"{stem}_ZONE_MAPS.tif"
-        with timed("export zone-map TIFF"):
-            n_pages = export_zone_maps(analyzer, f"{stem}, {row['SENSOR']}", map_path, striatum_outline, axis_labels,
-                                       pool, n_workers)
-        with timed("export zone contours"):
-            montage_paths = export_zone_contours(analyzer, stem, out_root / "zone_contours", paths["xlsx"],
-                                                 striatum_outline)
-        for path in [*paths.values(), *montage_paths]:
-            console.log(f"[green]saved[/green] {path.resolve()}")
-        console.log(f"[green]saved[/green] {n_pages}-page zone-map TIFF ({map_path.stat().st_size / 1e6:.1f} MB) "
-                    f"-> {map_path.resolve()}")
-
-        zone_stats = analyzer.zone_stats  # recur_zones only; NR zones stay out of every stat
-        non_recur_source = analyzer.non_recur_zones["source"]
-        freq = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_freq_hz"]
-        period = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_period_s"]
-        summary_rows.append({
-            "recording": stem,
-            "sensor": row["SENSOR"],
-            "obj": row["OBJ"],
-            "n_frames": analyzer.n_frames,
-            "background_threshold": analyzer.threshold,
-            "th_small_obj_flag": th_flag,  # empty = own th_small_obj from removal_suggestion.csv
-            "n_recur_zones": len(zone_stats),
-            "n_non_recur_zone_type_1": int(non_recur_source.str.startswith("non_recur_zone_type_1").sum()),
-            "n_non_recur_zone_type_2": int(non_recur_source.str.startswith("non_recur_zone_type_2").sum()),
-            "n_dropped_units": len(analyzer.dropped_units),
-            "n_dropped_flashes": int(analyzer.detections["joint_label"].isin(analyzer.dropped_units).sum()),
-            "median_area_um2": float(zone_stats["area_um2"].median()),
-            "n_low_freq_recur_zones": int((zone_stats["n_events"] == 1).sum()),  # < 1 event per recording
-            "n_freq_recur_zones": len(freq),  # recur_zones with >= MIN_EVENTS_FOR_FREQ events, used below
-            "median_freq_hz": float(freq.median()),
-            "freq_q1_hz": float(freq.quantile(0.25)),
-            "freq_q3_hz": float(freq.quantile(0.75)),
-            "freq_cv": float(freq.std() / freq.mean()),
-            "median_period_s": float(period.median()),
-            **coverage,
-        })
-        pooled_zones.append(zone_stats.assign(recording=stem, sensor=row["SENSOR"]))
-        del analyzer, zone_stats  # free this recording's stack + mask (~4.7 GB) before the next one is read
-        gc.collect()
-        console.log(f"[bold magenta]{'entry total':<40} {time.time() - entry_t0:6.1f}s[/bold magenta]")
-
-    # -----------------------------------------------------------------------
-    # Step 4. Summary
-    # -----------------------------------------------------------------------
-    console.rule("[bold]Step 4 - Summary")
-    if summary_rows:
-        summary_path = out_root / "spontaneous_summary.xlsx"
-        pooled = pd.concat(pooled_zones, ignore_index=True)
-        pooled = pooled[["recording", "sensor", *[c for c in pooled.columns if c not in ("recording", "sensor")]]]
-        with pd.ExcelWriter(summary_path) as writer:
-            pd.DataFrame(summary_rows).to_excel(writer, sheet_name="recordings", index=False)
-            pooled.to_excel(writer, sheet_name="recur_zones", index=False)
-        console.log(f"[green]saved[/green] {summary_path.resolve()}")
-    if flagged:
-        console.log(f"[yellow]{len(flagged)} recording(s) without their own th_small_obj "
-                    f"(column th_small_obj_flag):[/yellow]")
-        for stem, th_flag in flagged:
-            console.log(f"[yellow]  {stem}  {th_flag}[/yellow]")
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Spontaneous ACh flash -> zone analysis")
     parser.add_argument("--proc_list", required=True, type=Path, help="Proc list (proc_*.txt) naming the recordings")
     parser.add_argument("--results_dir", type=Path, default=Path("results"), help="Outputs go to <results_dir>/spontaneous/")
+    parser.add_argument("--use_gauss", action="store_true", help="Load *_GAUSS.tif instead of *_ALS.tif (default: ALS)")
     parser.add_argument("--sigma", type=float, default=CROSSOVER_RATIO,
                         help="Threshold = background peak + this many sigmas")
     parser.add_argument("--no_mask", action="store_true",
@@ -541,4 +645,4 @@ if __name__ == "__main__":
     _cuda_available, _cuda_msg = check_cuda()  # must run before anything imports numba
     console.log(_cuda_msg)
     run(args.proc_list, args.results_dir, args.sigma, not args.no_mask, args.all_obj,
-        args.debug, _cuda_available, args.db, args.exp_db, args.stbd, args.map_workers)
+        args.debug, _cuda_available, args.db, args.exp_db, args.stbd, args.map_workers, args.use_gauss)

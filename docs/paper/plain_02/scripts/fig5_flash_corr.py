@@ -4,7 +4,7 @@ fig5_flash_corr.py  --  plain_02 Fig. 5: traces of three flashes and their r (0 
 
 Steps
 -----
-1. Run SpontaneousZoneAnalyzer on one recording (same settings as spontaneous_analysis.py).
+1. Run SpontaneousZoneAnalyzer on one recording (same settings as SRE_analysis.py).
 2. Zone Z = the trace-corr recur_zone with the most units.
    A, B = the best-r flash pair between two units of Z in different events (= the r the pipeline uses).
    C = the largest flash of the largest recur_zone sharing 0 px with Z.
@@ -32,7 +32,7 @@ from classes import SpontaneousZoneAnalyzer
 from classes.sp_zone_analyzer import CROSSOVER_RATIO
 from functions import img_zscore_convert
 from functions.zone_kernels import footprint_traces
-from spontaneous_analysis import MAP_Z_MIN, _gray_range
+from SRE_analysis import MAP_Z_MIN, _gray_range
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 STEM = "2026_01_08-0012"

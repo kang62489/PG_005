@@ -4,7 +4,7 @@ overlap_montage.py  --  Preview: one panel per recur_zone with the zones it over
 
 Steps
 -----
-1. Run SpontaneousZoneAnalyzer (same settings as spontaneous_analysis.py).
+1. Run SpontaneousZoneAnalyzer (same settings as SRE_analysis.py).
 2. Per recur_zone i: set = {i} + every zone (recur or NR) sharing >= MIN_OVERLAP_PX pixels with it.
 3. Identical sets -> one panel. Zones with no overlap -> all together in one "no overlap" panel.
 4. Montage PNG per recording (outline colors = page-1 colors, NR gray dashed, striatum black dashed).
@@ -30,7 +30,7 @@ from classes import SpontaneousZoneAnalyzer
 from classes.sp_zone_analyzer import CROSSOVER_RATIO
 from functions import load_st_bd, zone_colors
 from functions.plot_results import _label_zone
-from spontaneous_analysis import MAP_DPI, striatum_of
+from SRE_analysis import MAP_DPI, striatum_of
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 STEMS = ["2025_06_11-0008", "2025_06_11-0003", "2026_01_08-0012"]

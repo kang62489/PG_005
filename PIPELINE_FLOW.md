@@ -33,7 +33,7 @@
 
 For the analysis-list run, the pipeline also saves `spikes/<analysis_list_name>_cells.xlsx` and writes a **Region Analysis Statistics** block back into the analysis-list text file. It appends a `[SKIPPED]` explanation for a recording with no usable spike segments or no significant ACh detection.
 
-## 4. Spontaneous flash analysis → `spontaneous_analysis.py`
+## 4. Spontaneous flash analysis → `SRE_analysis.py`
 
 **Input:** `*_BIEXP_ALS.tif` stacks from a processing list. By default, it selects recordings marked **10X** in the recording database.
 
@@ -42,4 +42,4 @@ For the analysis-list run, the pipeline also saves `spikes/<analysis_list_name>_
 3. It maps those groups into zones and calculates zone size and event statistics.
 4. Under `results/spontaneous/`, it saves per-recording `*_ZONES.xlsx` and `*_ZONE_MAPS.tif`, `footprints/*_ZONES.npz`, and `mask/*_ZONE_MASK.tif` (skipped with `--no_mask`). It also saves `spontaneous_summary.xlsx` across recordings.
 
-The main sequence is **raw TIFF → `img_proc.py` → `als_correct.py` → `ach_domain_analysis.py`**. `spontaneous_analysis.py` is a separate analysis route from the ALS-corrected TIFFs.
+The main sequence is **raw TIFF → `img_proc.py` → `als_correct.py` → `ach_domain_analysis.py`**. `SRE_analysis.py` is a separate analysis route from the ALS-corrected TIFFs.

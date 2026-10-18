@@ -19,7 +19,7 @@ import tifffile
 from rich.console import Console
 
 # Local application imports
-from functions import als_run, check_cuda, get_memory_usage, list_parser
+from functions import als_run, check_cuda, filelist_parser, get_memory_usage
 from img_proc import update_proc_list_gauss_exists
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -32,14 +32,14 @@ console = Console()
 
 def parse_proc_list(proc_list_path: Path) -> tuple[list[Path], Path]:
     """Return all existing *_GAUSS.tif paths and proc_dir from an updated proc list."""
-    table, io_dirs = list_parser(proc_list_path)
+    table, io_dirs = filelist_parser(proc_list_path)
     if "dir_proc_tiffs" not in io_dirs:
         msg = f"Missing dir_proc_tiffs in {proc_list_path}"
         raise ValueError(msg)
     proc_dir = Path(io_dirs["dir_proc_tiffs"])
 
     update_proc_list_gauss_exists(proc_list_path, proc_dir)
-    table, _io_dirs = list_parser(proc_list_path)  # re-read: gauss_exists just changed on disk
+    table, _io_dirs = filelist_parser(proc_list_path)  # re-read: gauss_exists just changed on disk
 
     gauss_paths: list[Path] = []
     seen_paths: set[Path] = set()

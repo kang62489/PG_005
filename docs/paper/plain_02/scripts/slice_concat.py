@@ -52,10 +52,10 @@ from classes.sp_zone_analyzer import (
     spatial_fit_zones,
     unit_mask,
 )
-from functions import group_zones, list_parser, load_st_bd, lookup_rec_from_db, plot_zone_groups, zone_colors
+from functions import filelist_parser, group_zones, load_st_bd, lookup_rec_from_db, plot_zone_groups, zone_colors
 from functions.plot_results import _outline_panel
 from functions.zone_kernels import footprint_traces
-from spontaneous_analysis import MAP_DPI, PROC_SUFFIX
+from SRE_analysis import ALS_SUFFIX, MAP_DPI
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 PROC_LIST = ROOT / "data" / "proc_20260922_000.txt"
@@ -70,12 +70,12 @@ MODES = (("inner", "TIGHT"), ("far", "LOOSE"))
 
 def select() -> list[tuple[str, Path]]:
     """Step 1: [(raw stem, ALS path)] of the slice / site, in recording order."""
-    table, io_dirs = list_parser(PROC_LIST)
+    table, io_dirs = filelist_parser(PROC_LIST)
     info = lookup_rec_from_db(table.select("raw_tiff_name"), DB, EXP_DB)
     info = info.filter(pl.col("Filename").str.starts_with(DATE) & (pl.col("SLICE") == SLICE)
                        & (pl.col("AT") == SITE) & (pl.col("OBJ") == OBJ)).sort("Filename")
     proc_dir = Path(io_dirs["dir_proc_tiffs"])
-    picked = [(Path(name).stem, proc_dir / f"{Path(name).stem}{PROC_SUFFIX}") for name in info["Filename"]]
+    picked = [(Path(name).stem, proc_dir / f"{Path(name).stem}{ALS_SUFFIX}") for name in info["Filename"]]
     return [(stem, path) for stem, path in picked if path.exists()]
 
 

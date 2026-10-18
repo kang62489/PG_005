@@ -93,9 +93,9 @@ class CtrlStBoundary:
 
     def _load_recordings(self, proc_list_path: Path) -> None:
         """Proc list -> every recording with its OBJ / SLICE from rec_data.db; saved ones start as confirmed."""
-        from functions import list_parser, load_st_bd, lookup_rec_from_db
+        from functions import filelist_parser, load_st_bd, lookup_rec_from_db
 
-        table, io_dirs = list_parser(proc_list_path)
+        table, io_dirs = filelist_parser(proc_list_path)
         raw_dir = Path(io_dirs["dir_raw_tiffs"])
         rec_info = lookup_rec_from_db(table.select("raw_tiff_name"), REC_DB_PATH, EXP_DB_PATH)
         info_by_name = {row["Filename"]: row for row in rec_info.iter_rows(named=True)} if not rec_info.is_empty() else {}

@@ -61,8 +61,8 @@ from functions import (
     compute_region_stats,
     count_unique_cells,
     dv_ml_direction,
+    filelist_parser,
     get_cell_recording_status,
-    list_parser,
     load_img_segs,
     load_st_bd,
     lookup_rec_from_db,
@@ -95,7 +95,7 @@ def parse_ana_list(
     Returns (entries, results_dir, detrend_mode, normalization); entries = ana-list columns +
     proc_tiff_path / raw_abf_path (*_ALS.tif if use_als else *_GAUSS.tif). OBJ is looked up by the caller.
     """
-    table, io_dirs = list_parser(ana_list_path)
+    table, io_dirs = filelist_parser(ana_list_path)
 
     missing = [k for k in ("dir_proc_tiffs", "dir_raw_abfs", "dir_results") if k not in io_dirs]
     if missing:

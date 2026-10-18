@@ -26,11 +26,11 @@ from rich.console import Console
 from functions import (
     biexp_detrend,
     check_cuda,
+    filelist_parser,
     fit_zscore_background,
     gaussian_blur_run,
     get_memory_usage,
     img_zscore_convert,
-    list_parser,
     sample_tau,
 )
 
@@ -54,7 +54,7 @@ def parse_proc_list(proc_list_path: Path) -> tuple[list[dict], Path, Path]:
         {"file": str, "proc": str, "mode": str}.
         Entries with do_processing == "SKIP" or detrend_mode == "NONE" are excluded.
     """
-    table, io_dirs = list_parser(proc_list_path)
+    table, io_dirs = filelist_parser(proc_list_path)
 
     missing = [k for k in ("dir_raw_tiffs", "dir_proc_tiffs") if k not in io_dirs]
     if missing:
@@ -87,7 +87,7 @@ def _refresh_gauss_row(row: dict[str, str], proc_dir: Path) -> dict[str, str]:
 
 def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
     """Rewrite gauss_exists, do_processing, and detrend_mode based on actual files in proc_dir."""
-    table, _io_dirs = list_parser(proc_list_path)
+    table, _io_dirs = filelist_parser(proc_list_path)
     refreshed_rows = iter(_refresh_gauss_row(row, proc_dir) for row in table.iter_rows(named=True))
 
     lines = proc_list_path.read_text().splitlines()

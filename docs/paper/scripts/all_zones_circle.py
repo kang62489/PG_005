@@ -55,7 +55,7 @@ from classes.sp_zone_analyzer import (  # noqa: E402
 from functions import check_cuda, img_zscore_convert, plot_zone_overview, zone_colors  # noqa: E402
 from functions.plot_results import _label_zone, _z_page, frame_zone_figures  # noqa: E402
 from functions.zone_kernels import footprint_traces  # noqa: E402
-from spontaneous_analysis import _figure_to_rgb, export_zone_maps  # noqa: E402
+from SRE_analysis import _figure_to_rgb, export_zone_maps  # noqa: E402
 
 # ===========================================================================
 #   CONFIG

@@ -259,7 +259,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MED flash size vs spontaneous recur_zone sizes (10X).")
     parser.add_argument("--db", required=True, type=Path, help="results.db of an ach_domain_analysis run")
     parser.add_argument("--spont_dir", type=Path, default=Path("results/spontaneous"),
-                        help="spontaneous_analysis output dir (ZONES.xlsx, footprints/, mask/)")
+                        help="SRE_analysis output dir (ZONES.xlsx, footprints/, mask/)")
     args = parser.parse_args()
 
     run(args.db, args.spont_dir)

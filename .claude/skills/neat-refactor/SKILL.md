@@ -41,7 +41,7 @@ Pick the run that exercises the file:
 | File touched | Run |
 |---|---|
 | spike-aligned pipeline (`ach_domain_analysis.py`, `classes/region_analyzer.py`, `classes/spike_reliability.py`, `classes/spatial_categorization.py`, `classes/abf_clip.py`, `functions/plot_results.py`, `functions/flash_flow.py`, ...) | `.venv/Scripts/python.exe ach_domain_analysis.py --ana_list <ana list>` |
-| spontaneous (`spontaneous_analysis.py`, `classes/sp_zone_analyzer.py`, `functions/fit_hist.py`, `functions/zone_kernels.py`) | `.venv/Scripts/python.exe spontaneous_analysis.py --proc_list <proc list> --results_dir <dir>` |
+| spontaneous (`SRE_analysis.py`, `classes/sp_zone_analyzer.py`, `functions/fit_hist.py`, `functions/zone_kernels.py`) | `.venv/Scripts/python.exe SRE_analysis.py --proc_list <proc list> --results_dir <dir>` |
 
 - The reference and after runs go to `output/test*/before` and `output/test*/after` (a new free test number), **never** `results/`. Run in the foreground; the user watches.
 - Compare: MED / CAT / ZONE_MASK / ZONE_MAPS TIFFs (`np.array_equal`), `ZONES.npz` arrays, `results.db` rows (skip `timestamp`), and PNGs pixel-wise where titles didn't change. Reuse or extend `output/test5/compare_test5.py`.

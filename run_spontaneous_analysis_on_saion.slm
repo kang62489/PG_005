@@ -26,7 +26,7 @@ RESULTS_DIR=/work/WickensU/kang/results
 
 export COLUMNS=200
 
-$PROJECT/.venv/bin/python $PROJECT/spontaneous_analysis.py \
+$PROJECT/.venv/bin/python $PROJECT/SRE_analysis.py \
     --proc_list $PROC_LIST \
     --results_dir $RESULTS_DIR \
     --db $PROJECT/data/rec_data.db \

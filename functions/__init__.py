@@ -27,12 +27,12 @@ if TYPE_CHECKING:
         gauss_ready,
         raw_tiff_ready,
     )
+    from .filelist_parser import filelist_parser
     from .fit_hist import fit_zscore_background, img_zscore_convert
     from .flash_flow import compute_flow_pairs, pair_flow
     from .flow_pattern import fit_flow_pattern
     from .gaussian_blur import gaussian_blur_run
     from .get_memory_use import get_memory_usage
-    from .list_parser import list_parser
     from .load_img_segs import load_img_segs
     from .permutation import pixel_lags, sur_flash_masks
     from .plot_results import (
@@ -68,8 +68,6 @@ if TYPE_CHECKING:
         snap_ends,
     )
     from .tau_estimate import sample_tau
-    from .test_cuda import test_cuda
-    from .xlsx_reader import get_picked_pairs
     from .xlsx_writer import write_cell_summary_xlsx, write_stats_xlsx
     from .zone_groups import group_overlaps, group_zones
 
@@ -95,13 +93,12 @@ __all__ = [
     "get_cell_recording_status",
     "get_excluded_recordings",
     "get_memory_usage",
-    "get_picked_pairs",
     "group_overlaps",
     "group_zones",
     "img_zscore_convert",
     "label_regions",
     "lateral_check",
-    "list_parser",
+    "filelist_parser",
     "load_img_segs",
     "load_st_bd",
     "lookup_rec_from_db",
@@ -136,7 +133,6 @@ __all__ = [
     "spike_centered_avg",
     "spike_centered_median",
     "sur_flash_masks",
-    "test_cuda",
     "write_cell_summary_xlsx",
     "write_stats_xlsx",
     "zone_colors",
@@ -156,7 +152,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "raw_tiff_ready":      (".file_status",                               "raw_tiff_ready"),
     "gaussian_blur_run":   (".gaussian_blur",                             "gaussian_blur_run"),
     "get_memory_usage":    (".get_memory_use",                            "get_memory_usage"),
-    "list_parser":         (".list_parser",                               "list_parser"),
+    "filelist_parser":     (".filelist_parser",                           "filelist_parser"),
     "load_img_segs":       (".load_img_segs",                             "load_img_segs"),
     "pixel_lags":          (".permutation",                               "pixel_lags"),
     "sur_flash_masks":     (".permutation",                               "sur_flash_masks"),
@@ -204,11 +200,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "region_at":           (".st_boundary",                               "region_at"),
     "lateral_check":       (".st_boundary",                               "lateral_check"),
     "sample_tau":          (".tau_estimate",                              "sample_tau"),
-    "get_picked_pairs":    (".xlsx_reader",                               "get_picked_pairs"),
     "write_cell_summary_xlsx": (".xlsx_writer",                           "write_cell_summary_xlsx"),
     "write_stats_xlsx":    (".xlsx_writer",                               "write_stats_xlsx"),
     "check_cuda":          (".check_cuda",                                "check_cuda"),
-    "test_cuda":           (".test_cuda",                                 "test_cuda"),
 }
 
 

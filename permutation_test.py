@@ -48,11 +48,11 @@ from numba import config as numba_config
 
 # Local imports
 from classes.sp_zone_analyzer import CROSSOVER_RATIO
-from functions import biexp_detrend, fit_zscore_background, list_parser, pixel_lags, sample_tau, sur_flash_masks
+from functions import biexp_detrend, filelist_parser, fit_zscore_background, pixel_lags, sample_tau, sur_flash_masks
 from functions.fit_hist import fit_flash_background
 from functions.zone_kernels import N_THREADS_FRAME_POOL, _threshold_open_close, mask_flash_sizes
 from img_proc import SIGMA
-from spontaneous_analysis import select_recordings
+from SRE_analysis import select_recordings
 
 # ===========================================================================
 #
@@ -77,7 +77,7 @@ PROGRESS_EVERY = 50           # surrogates between progress / ETA / peak RAM lin
 N_SUR = 200                   # surrogates per recording (200-399: cutoff = largest sur_flash + 1)
 ALPHA = 0.005                 # qf_flash: p < ALPHA; needs N_SUR >= 200 (smallest p = 1 / (N_SUR + 1))
 ROUND_PX = 100                # px: th_small_obj = cutoff rounded UP to this step (rounding up keeps p < ALPHA)
-REMOVAL_SUGGESTION_CSV = "removal_suggestion.csv"  # recording, th_small_obj_px (read by spontaneous_analysis.py)
+REMOVAL_SUGGESTION_CSV = "removal_suggestion.csv"  # recording, th_small_obj_px (read by SRE_analysis.py)
 
 
 # ===========================================================================
@@ -89,7 +89,7 @@ REMOVAL_SUGGESTION_CSV = "removal_suggestion.csv"  # recording, th_small_obj_px 
 
 def select(args: argparse.Namespace) -> tuple[list[tuple[str, Path]], Path]:
     """(raw tiff name, ALS tiff path) of the selected recordings, raw_dir."""
-    _, io_dirs = list_parser(args.proc_list)
+    _, io_dirs = filelist_parser(args.proc_list)
     recordings = select_recordings(args.proc_list, args.db, args.exp_db, True)
     recordings = recordings.filter((recordings["OBJ"] == args.obj) & (recordings["SENSOR"] == SENSOR))
     rows = [(name, Path(path)) for name, path in recordings.select("raw_tiff_name", "proc_tiff_path").iter_rows()

@@ -4,7 +4,7 @@ zone_groups.py  --  Zone-map idea: group recur_zones that share a centre, one pa
 
 Steps
 -----
-1. Run SpontaneousZoneAnalyzer (same settings as spontaneous_analysis.py); recur_zones only (NR zones ignored).
+1. Run SpontaneousZoneAnalyzer (same settings as SRE_analysis.py); recur_zones only (NR zones ignored).
 2. Per recur_zone: centroid = centre of mass of its mask; circle centred on the centroid, radius by MODE:
    "inner" = distance to the zone's nearest edge (largest circle inside the zone, file *_zone_groups.png),
    "far" = distance to the zone's farthest pixel (circle enclosing the zone, file *_zone_groups_far.png).
@@ -34,7 +34,7 @@ from scipy import ndimage
 from classes import SpontaneousZoneAnalyzer
 from classes.sp_zone_analyzer import CROSSOVER_RATIO
 from functions import load_st_bd, zone_colors
-from spontaneous_analysis import MAP_DPI, striatum_of
+from SRE_analysis import MAP_DPI, striatum_of
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 STEMS = ["2025_06_11-0008", "2025_06_11-0003", "2026_01_08-0012"]

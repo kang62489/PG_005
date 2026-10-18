@@ -1,5 +1,5 @@
 """
-zone_groups.py  --  Group recur_zones that share a centre, for the contour montages (spontaneous_analysis.py).
+zone_groups.py  --  Group recur_zones that share a centre, for the contour montages (SRE_analysis.py).
 
   Step 1. Circle   : per recur_zone, centre of mass + radius ("inner" = nearest edge, "far" = farthest pixel)
   Step 2. Groups   : smallest remaining zone = seed; zones whose centre lies inside its circle join its group

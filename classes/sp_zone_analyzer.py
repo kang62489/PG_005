@@ -57,7 +57,7 @@ def timed(label: str) -> Iterator[None]:
 # --- Step 1: detect --------------------------------------------------------
 # (histogram bins / percentile range / fit live in functions/fit_hist.py -- shared with img_proc)
 CROSSOVER_RATIO = 2.0         # threshold = background peak + this many fitted sigmas
-TH_SMALL_OBJ = 5000           # px: default size removal; spontaneous_analysis.py passes each recording's own
+TH_SMALL_OBJ = 5000           # px: default size removal; SRE_analysis.py passes each recording's own
                               # th_small_obj_px from the permutation test (removal_suggestion.csv)
 
 # --- Step 2: group ---------------------------------------------------------

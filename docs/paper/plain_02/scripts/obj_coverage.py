@@ -33,7 +33,7 @@ from scipy import ndimage
 
 from classes import SpontaneousZoneAnalyzer
 from classes.sp_zone_analyzer import CROSSOVER_RATIO, TH_SMALL_OBJ
-from spontaneous_analysis import select_recordings
+from SRE_analysis import select_recordings
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 PROC_LIST = ROOT / "data" / "proc_20260922_000.txt"

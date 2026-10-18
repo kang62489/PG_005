@@ -31,7 +31,7 @@ from xlsxwriter import Workbook  # noqa: E402
 
 from classes.abf_clip import AbfClip  # noqa: E402
 from functions.database_ops import lookup_rec_from_db  # noqa: E402
-from functions.list_parser import list_parser  # noqa: E402
+from functions.filelist_parser import filelist_parser  # noqa: E402
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 ANA_LIST = ROOT / "data" / "ana_20260922_000_deigo.txt"
@@ -72,7 +72,7 @@ def classify_stim(abf) -> tuple[str, int, int, int]:
 
 def load_recordings() -> pl.DataFrame:
     """Steps 1-2: one row per recording with cell keys, stim type, spikes used and rate."""
-    table, _ = list_parser(ANA_LIST)
+    table, _ = filelist_parser(ANA_LIST)
     cells = lookup_rec_from_db(table, REC_DB, EXP_DB).select("Filename", "OBJ", *CELL_KEYS)
     table = table.join(cells, left_on="raw_tiff_name", right_on="Filename", how="left")
 
