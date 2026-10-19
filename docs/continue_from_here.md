@@ -1,3 +1,45 @@
+# Log of the project progress 2026-10-19 Mon 15:35
+Last working file: functions/plot_results.py
+Last working line: 1307 (plot_cluster_scatter: padded convex-hull outlines + zone id above)
+
+# List of modified files (commit a7bcd09, all committed):
+- classes/hierarchical_clustering.py (new: HierarchicalClustering -- build_tree / best_silhouette / clustering / calculate_silhouette)
+- classes/recording_list.py (new: RecordingList -- table, dirs(), select(objs, sensor, suffix), set_removal_suggestion(), set_connect_radius())
+- functions/flash_mask.py, functions/footprint_traces.py (new: kernels moved out of classes/sre_analyzer.py)
+- classes/sre_analyzer.py (uses the 3 above; helpers became methods)
+- SRE_analysis.py, permutation_test.py, flash_size_analysis.py, img_proc.py, als_correct.py, ach_domain_analysis.py (read lists via RecordingList)
+- functions/fit_hist.py (CROSSOVER_RATIO moved here), functions/permutation.py
+- functions/plot_results.py (cluster scatter outlines; dendrogram cut-line text inside the axes)
+- neat-refactor layout (no step numbers in banners, # fn: index lines): plot_results, st_boundary, area_comparison, tvl1_flow,
+  region_analyzer, database_ops, flash_flow, cluster_kernels, permutation_test, flash_mask, footprint_traces, permutation
+- .claude/skills/neat-refactor/SKILL.md (rewritten), .claude/skills/file-structure/SKILL.md (new)
+
+## Summary of current progress
+- File-structure rules applied: shared code -> functions/ or a class in classes/; no script imports another script's local function.
+- SRE test (3 x 10X, output/test_neat_sre/before vs after): 36 / 36 output files identical after all refactors.
+- 12 comment-only files: code (AST) identical to the backup; ruff clean on all touched files.
+- RecordingList snapshot of every data/proc_*.txt / ana_*.txt: 47 / 57 identical; the 10 others are a pre-existing
+  crash of permutation_test.select on empty selections (crashes before and after).
+- Cluster scatter: number labels replaced by padded convex hulls in the zone colour, id above the outline;
+  dendrogram cut text moved inside (output/test_cluster_hull/spontaneous/clustering/).
+- Kang's commit note: some layouts are still not good, to re-fix later.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- Wait for the 10X permutation result: done (results/permutation/10X/removal_suggestion.csv, read by SRE_analysis.py).
+- Run 40X + 60X on Saion: done (results/permutation/40X/ and 60X/removal_suggestion.csv).
+- Justify the cut height h: done (checked by Kang, 2026-10-19).
+- Centroid vs trace tree: done (checked by Kang, 2026-10-19).
+- Split docs/permutation_test.md: done (checked by Kang, 2026-10-19).
+- Largest sur_flash image: done (checked by Kang, 2026-10-19).
+
+## What should we do next? (TODOs)
+- **Complete the Characterization block** of SRE_analysis.py (L199) + Kang's new analyses.
+
+## Last Session Recap
+※ recap: Restructured the SRE pipeline (HierarchicalClustering, RecordingList, flash_mask / footprint_traces modules), neat-refactored 13 files with identical outputs, and outlined clusters in the scatter (commit a7bcd09). Pending: justify h, centroid vs trace, doc split, sur_flash image.
+
+---
+
 # Log of the project progress 2026-10-16 Fri 14:20
 Last working file: output/test_centroid_cluster/silhouette_cut.py
 Last working line: 35 (STEM from CLI; silhouette sweep run on 0009, 2025_12_15-0010, 2026_01_08-0013)

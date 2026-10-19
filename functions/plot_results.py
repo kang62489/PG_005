@@ -1013,11 +1013,11 @@ def plot_med_kymographs(med: np.ndarray, um_per_pixel, frame_ms, title) -> Figur
 # fn: plot_zone_groups, all zones, then one panel per group (dotted = the seed's circle), then the largest zone of each
 #     group without / with NR zones.
 # fn: plot_zone_stats, zone area (log) and event frequency per sensor: every zone as a dot + median/IQR box.
-# fn: plot_cluster_dendrogram, tree dendrogram (y = distance_label in unit) with the best-silhouette cut line.
+# fn: plot_cluster_dendrogram, tree dendrogram (y = distance_label in unit) with the cut line.
 # fn: plot_silhouette_sweep, one panel per tree, side by side: mean silhouette (left axis) + cluster count (right, log)
-#     vs the cut height h.
-# fn: plot_cluster_scatter, one panel per tree, side by side: flash centroids coloured by their cluster (= recur_zone,
-#     zone-map colours), zone id at each cluster's mean.
+#     vs the cut height h, cut used + best-silhouette cut marked.
+# fn: plot_cluster_scatter, one panel per clustering, side by side: flash centroids coloured by their cluster
+#     (= recur_zone, zone-map colours), padded hull outline + zone id above it.
 
 # --- 6a. zone maps (-> spontaneous/{stem}_ZONE_MAPS.tif) -------------------
 
@@ -1259,18 +1259,20 @@ def plot_zone_stats(zones, title: str) -> Figure:
     return fig
 
 
-# --- 6c. Flash clustering (centroid / trace tree cut at the best silhouette) -
+# --- Flash clustering (centroid tree: acceleration cut, trace tree: best silhouette) ---
 
 def plot_cluster_dendrogram(tree: np.ndarray, cut_h: float, n_clusters: int, title: str,
-                            distance_label: str, unit: str) -> Figure:
-    """Tree dendrogram (y = distance_label in unit) with the best-silhouette cut line."""
+                            distance_label: str, unit: str, h_name: str = "best h") -> Figure:
+    """Tree dendrogram (y = distance_label in unit) with the cut line (h_name: "best h", "acceleration h")."""
     fig = Figure(figsize=(16, 6), layout="constrained")
     ax = fig.add_subplot()
-    dendrogram(tree, ax=ax, no_labels=True, color_threshold=cut_h if np.isfinite(cut_h) else None)
+    # fcluster keeps merges <= h inside clusters; dendrogram colours merges < color_threshold
+    dendrogram(tree, ax=ax, no_labels=True,
+               color_threshold=np.nextafter(cut_h, np.inf) if np.isfinite(cut_h) else None)
     if np.isfinite(cut_h):
         ax.axhline(cut_h, color="black", linestyle="--", linewidth=0.8)
         # inside the axes, right end, just above the line (outside it widened the figure's right margin)
-        ax.text(0.995, cut_h, f"best h {cut_h:g} {unit}: {n_clusters} clusters", transform=ax.get_yaxis_transform(),
+        ax.text(0.995, cut_h, f"{h_name} {cut_h:g} {unit}: {n_clusters} clusters", transform=ax.get_yaxis_transform(),
                 ha="right", va="bottom", fontsize=10, bbox={"boxstyle": "round,pad=0.15", "fc": "white", "ec": "none",
                                                             "alpha": 0.8})
     ax.set_title(title)
@@ -1282,17 +1284,20 @@ def plot_cluster_dendrogram(tree: np.ndarray, cut_h: float, n_clusters: int, tit
 def plot_silhouette_sweep(panels: list[dict]) -> Figure:
     """One panel per tree, side by side: mean silhouette (left axis) + cluster count (right, log) vs the cut height h.
 
-    panel keys: sweep (cut_height, n_clusters, mean_silhouette), cut_h, unit, title.
+    panel keys: sweep (cut_height, n_clusters, mean_silhouette), unit, title,
+    cuts = [{h_name, h, silhouette, n_clusters}, ...] (first = the cut used: red dashed; second: green dotted).
     """
+    cut_styles = (("tab:red", "--"), ("tab:green", ":"))
     fig = Figure(figsize=(8 * len(panels), 4.5), layout="constrained")
     for ax, panel in zip(fig.subplots(1, len(panels), squeeze=False)[0], panels, strict=True):
-        sweep, cut_h, unit = panel["sweep"], panel["cut_h"], panel["unit"]
+        sweep, unit = panel["sweep"], panel["unit"]
         ax.plot(sweep["cut_height"], sweep["mean_silhouette"], color="tab:blue")
-        if np.isfinite(cut_h):
-            best = sweep.loc[sweep["cut_height"] == cut_h].iloc[0]
-            ax.axvline(cut_h, color="tab:red", linestyle="--",
-                       label=f"best h {cut_h:g} {unit}: silhouette {best['mean_silhouette']:.3f}, "
-                             f"{int(best['n_clusters'])} clusters")
+        cuts = [cut for cut in panel["cuts"] if np.isfinite(cut["h"])]
+        for cut, (color, style) in zip(cuts, cut_styles, strict=False):
+            ax.axvline(cut["h"], color=color, linestyle=style,
+                       label=f"{cut['h_name']} {cut['h']:g} {unit}: silhouette {cut['silhouette']:.3f}, "
+                             f"{cut['n_clusters']} clusters")
+        if cuts:
             ax.legend(fontsize=8, loc="lower right")
         ax.set_xlabel(f"cut height h ({unit})")
         ax.set_ylabel("mean silhouette", color="tab:blue")
@@ -1305,7 +1310,7 @@ def plot_silhouette_sweep(panels: list[dict]) -> Figure:
 
 
 def plot_cluster_scatter(panels: list[dict], shape: tuple[int, int]) -> Figure:
-    """One panel per tree, side by side: flash centroids coloured by their cluster (= recur_zone, zone-map
+    """One panel per clustering, side by side: flash centroids coloured by their cluster (= recur_zone, zone-map
     colours), each cluster outlined by its padded convex hull, zone id just above the outline.
 
     panel keys: centroids_yx (n, 2), flash_zone_ids (n,), colors (zone id -> colour), title.

@@ -159,7 +159,111 @@ Pipeline results (own th_small_obj, connect radius, zones = centroid-tree cluste
 
 ---
 
-## 7. Results of the first test (10X GACh3.0, average linkage, th_small_obj 5,000 px, connect radius 75 px)
+## 7. Choosing h: elbow (gap rule and acceleration rule)
+
+Added 2026-10-19. Scratch scripts in `output/test_elbow_cut/` (section 11).
+
+### 7.1 Merge height M(k), read from the top of the tree
+
+M(k) = the h at which k clusters merge into k − 1 (the horizontal bar of that merge in the dendrogram).
+With average linkage, M(k) = mean distance between the two groups joined. To keep k clusters, cut anywhere
+between M(k + 1) and M(k).
+
+0009, centroid tree (609 flashes, own th_small_obj):
+
+| k | M(k) (px) | gap(k) = M(k) − M(k + 1) | accel(k) = gap(k) − gap(k + 1) |
+|---|---|---|---|
+| 2 | 526.9 | 33.7 | −72.1 |
+| 3 | 493.1 | **105.9** | 47.6 |
+| 4 | 387.2 | 58.2 | 28.6 |
+| 5 | 329.0 | 29.6 | −33.7 |
+| 6 | 299.4 | 63.4 | **58.6** |
+| 7 | 236.0 | 4.7 | −3.7 |
+| 8 | 231.3 | 8.4 | 3.2 |
+| 9 | 222.9 | 5.2 | −31.4 |
+| 10 | 217.7 | 36.6 | 30.0 |
+
+### 7.2 Empty stretch = gap(k)
+
+Raise h like a water level. Between M(k + 1) and M(k) nothing merges: in the dendrogram only vertical lines
+pass through this band, and the clustering stays at k clusters. The band height is gap(k).
+
+Toy example, flashes on a line, zone A = 0, 2, 4 px and zone B = 100, 102, 104 px:
+
+| merge | groups joined | height |
+|---|---|---|
+| 1, 2 | {0} + {2}, {100} + {102} | 2 |
+| 3, 4 | {0, 2} + {4}, {100, 102} + {104} | 3 |
+| 5 | zone A + zone B | **100** |
+
+- Inside a zone, flashes are packed, so each next merge costs only a little more (2 → 3): thin bands.
+- The first merge across zones needs h = 100: a tall band (97). The 2 clusters stay unchanged for any h from 3
+  to 100.
+
+Figure: `output/test_elbow_cut/0009_EMPTY_STRETCH.png` (0009 centroid tree, top 12 clusters, bands shaded).
+
+### 7.3 Gap rule: the tallest band
+
+k = argmax gap(k). 0009 centroid: gap(3) = 105.9 px → 3 clusters.
+
+Weak point: near the top of the tree the few remaining groups are always far apart, so every band there is tall
+and the rule tends to pick very few clusters (0010 trace_corr: k = 2).
+
+### 7.4 Acceleration rule: the band much taller than the one just below
+
+accel(k) = gap(k) − gap(k + 1) = M(k) − 2 M(k + 1) + M(k + 2); k = argmax over k = 2 … 40 (`K_MAX`);
+cut h = M(k + 1) (the lower edge of the band).
+
+0009 centroid:
+- k = 3: gap 105.9, but the band below is also tall (58.2) → steep top of the tree, accel 47.6.
+- k = 6: the band below is thin (gap(7) = 4.7 px), then 63.4 px of nothing → accel **58.6** → 6 clusters,
+  h = 236.0 px.
+
+Meaning: below the cut the clusters grow by absorbing close neighbours (pieces of the same zone); the next merge
+suddenly needs much more h (a clearly separate group). The largest accel = the h where this change from
+"building one zone" to "joining different zones" is most abrupt — like a sudden rise in the effort needed to merge.
+
+What "different" means depends on the tree:
+- centroid tree: only position, so farther apart in the image (with average linkage, also a more spread-out
+  group);
+- trace_corr tree: firing out of sync (1 − r), not distance.
+
+Limits:
+- Not a p-value; "largest" only compares the corners of the same tree.
+- Relative: a tall band stands out only because the bands below it are thin.
+- The runner-up can be close (0009 centroid: k = 6 58.6, k = 3 47.6, k = 10 30.0).
+- Only k = 2 … 40 is searched.
+
+### 7.5 Silhouette vs elbow
+
+| | silhouette | acceleration |
+|---|---|---|
+| looks at | each flash: own cluster vs nearest other | merge heights of the tree only |
+| picks | best separation score | sharpest corner of M(k) |
+| our data | many small clusters | fewer, larger clusters |
+
+3 × 10X recordings (own th_small_obj; `output/test_elbow_cut/elbow_summary.csv`):
+
+| recording | tree | silhouette k (h) | gap k | acceleration k (h, silhouette at that cut) |
+|---|---|---|---|---|
+| 2025_06_11-0009 | centroid | 16 (110 px) | 3 | 6 (236.0 px, 0.502) |
+| | trace_corr | 12 (0.35) | 8 | 8 (0.502, 0.720) |
+| 2025_12_15-0010 | centroid | 15 (145 px) | 5 | 5 (252.1 px, 0.526) |
+| | trace_corr | 7 (0.71) | 2 | 6 (0.728, 0.563) |
+| 2026_01_08-0013 | centroid | 25 (100 px) | 3 | 3 (397.8 px, 0.497) |
+| | trace_corr | 23 (0.48) | 9 | 10 (0.675, 0.525) |
+
+Kang (2026-10-19): the acceleration cut is closer to what one zone should be → use it for the centroid tree;
+keep the silhouette scores of both trees for the discussion with Jeff.
+
+Pipeline (2026-10-19): `sre_analyzer.CUT_RULES` = centroid "acceleration", trace_corr "silhouette"
+(`HierarchicalClustering(cut_rule=...)`, `ELBOW_K_MAX = 40`). The centroid zones / zone maps come from the
+acceleration cut; `{stem}_SILHOUETTE.png` marks both cuts and `{stem}_CLUSTERS.png` adds the centroid
+best-silhouette scatter (no zone maps). Test run: `output/test_accel_cut/`.
+
+---
+
+## 8. Results of the first test (10X GACh3.0, average linkage, th_small_obj 5,000 px, connect radius 75 px)
 
 | recording | flashes | centroid: best h | clusters | silhouette | trace: best 1 − r (r) | clusters | silhouette |
 |---|---|---|---|---|---|---|---|
@@ -183,14 +287,14 @@ Observations:
 
 ---
 
-## 8. Open question
+## 9. Open question
 
 How to justify h beyond "best silhouette per recording" (e.g. a fixed h across recordings, a physical size, or a
-surrogate comparison). Not decided.
+surrogate comparison). 2026-10-19: elbow / acceleration tested (section 7); centroid tree → acceleration cut.
 
 ---
 
-## 9. Files (`output/test_centroid_cluster/`)
+## 10. Files (`output/test_centroid_cluster/`)
 
 | file | content |
 |---|---|
@@ -200,3 +304,14 @@ surrogate comparison). Not decided.
 | `{stem}_trace_corr_dendrogram.png`, `{stem}_trace_corr_scatter.png` | trace tree, cuts r 0.95 / 0.9 / 0.8 / 0.5 |
 | `{stem}_silhouette_{centroid,trace_corr}.csv` | cut_height, n_clusters, mean_silhouette |
 | `{stem}_silhouette_vs_h.png`, `{stem}_silhouette_best_scatter.png` | silhouette sweep; clusters at the best h |
+
+---
+
+## 11. Files (`output/test_elbow_cut/`)
+
+| file | content |
+|---|---|
+| `elbow_cut.py` | both trees: silhouette k vs gap k vs acceleration k |
+| `elbow_summary.csv`, `{stem}_ELBOW.png` | per tree: k and h of each rule; M(k) vs k with the three k marked |
+| `acceleration_cut.py` | detection + both trees cut at the acceleration k, pipeline exporters (its `acceleration/` outputs were deleted 2026-10-19; the pipeline run `output/test_accel_cut/` replaces them) |
+| `empty_stretch_figure.py`, `0009_EMPTY_STRETCH.png` | 0009 centroid tree with the empty stretches shaded |

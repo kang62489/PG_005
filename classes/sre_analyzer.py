@@ -2,10 +2,11 @@
 Spontaneous ACh flash -> zone analysis for one deltaF/F0 stack.
 
   CLASS  SREAnalyzer             : detect() -> group_centroid() / group_trace() -> map(method) -> save_*()
-  BLOCK  SHARED HELPERS          : timed
+  BLOCK  SHARED HELPERS          : timed, cut_h_name
 
 Flash mask: functions/flash_mask.py; footprint traces: functions/footprint_traces.py;
-clustering (tree cut at the best-silhouette h): classes/hierarchical_clustering.py.
+clustering (centroid tree cut at the acceleration elbow, trace_corr tree at the best-silhouette h):
+classes/hierarchical_clustering.py.
 
 recur_zone = recurring zone (non-recurring zones are not defined for the clustering yet).
 
@@ -64,6 +65,8 @@ CONNECT_RADIUS = 25           # px: default same-frame join distance; SRE_analys
 CENTROID_CUT_PX = np.arange(5, 505, 5)  # px: centroid tree cut heights swept for the best mean silhouette
 TRACE_CUT_1MR = np.round(np.arange(0.01, 0.91, 0.01), 2)  # 1 - r: trace tree cut heights swept the same way
 TREE_UNITS = {"centroid": "px", "trace_corr": "1 - r"}  # unit of each tree's distance / cut height h
+CUT_RULES = {"centroid": "acceleration", "trace_corr": "silhouette"}  # cut of each tree (both keep the silhouette
+                                                                     # sweep + best-silhouette cut)
 
 # --- Zones + stats (map) --------------------------------------------------
 FRAME_RATE_HZ = 20            # imaging rate, converts frames -> seconds for recur_zone event stats
@@ -76,7 +79,8 @@ class SREAnalyzer:
     Results:
         bg_center, bg_sigma, threshold, mask, flashes, footprints     (detect)
         flashes["cluster_{method}"], detections (= flashes),
-        clusterings[method] = {"clusters", "cut", "tree", "sweep"}    (group_centroid / group_trace)
+        clusterings[method] = {"clusters", "cut", "cut_rule", "silhouette_cut", "silhouette_cluster_ids",
+                               "tree", "sweep"}    (group_centroid / group_trace)
         zone_method, zones (1 per cluster), zone_masks, zone_centroids, zone_stats   (map)
     """
 
@@ -92,7 +96,7 @@ class SREAnalyzer:
         self.cuda_available = cuda_available
         self.th_small_obj = th_small_obj
         self.connect_radius = connect_radius  # px: same-frame blobs this close are one flash
-        self.clusterings: dict[str, dict] = {}  # method ("centroid" / "trace_corr") -> its clusters, cut, tree, sweep
+        self.clusterings: dict[str, dict] = {}  # method ("centroid" / "trace_corr") -> its clusters, cuts, tree, sweep
 
     def run(self) -> None:
         """detect -> group_centroid -> map("centroid")."""
@@ -193,27 +197,19 @@ class SREAnalyzer:
     # -----------------------------------------------------------------------
 
     def group_centroid(self) -> None:
-        """Flash centroids -> Euclidean distance (px) -> HierarchicalClustering (tree cut at the best-silhouette h) ->
-        flashes["cluster_centroid"] + clusterings["centroid"]."""
+        """Flash centroids -> Euclidean distance (px) -> HierarchicalClustering (tree cut at the acceleration elbow,
+        CUT_RULES) -> flashes["cluster_centroid"] + clusterings["centroid"]."""
         n = len(self.flashes)
         with timed("group  centroid distance + tree + silhouette sweep"):
             distance = (squareform(pdist(self.flashes[["centroid_y", "centroid_x"]].to_numpy())) if n > 1
                         else np.zeros((n, n)))
-            hc = HierarchicalClustering(distance, CENTROID_CUT_PX)
+            hc = HierarchicalClustering(distance, CENTROID_CUT_PX, cut_rule=CUT_RULES["centroid"])
             hc.run()
-
-        cut = hc.cut
-        self.flashes["cluster_centroid"] = hc.cluster_ids
-        clusters = (self.flashes.groupby("cluster_centroid")
-                    .agg(labels=("joint_label", list), frames=("frame", sorted))
-                    .reset_index().rename(columns={"cluster_centroid": "group"}))
-        self.clusterings["centroid"] = {"clusters": clusters, "cut": cut, "tree": hc.tree, "sweep": hc.sweep}
-        console.log(f"  {n} flashes -> centroid tree cut at best h {cut['h']:g} px: {cut['n_clusters']} clusters, "
-                    f"silhouette {cut['silhouette']:.3f}")
+        self.store_clustering("centroid", hc)
 
     def group_trace(self, footprint_path: Path) -> None:
         """Flash footprints (save_flash_footprints npz) -> trace = mean z-score over the footprint, every frame ->
-        1 - r (Pearson, zero lag) -> HierarchicalClustering (tree cut at the best-silhouette h) ->
+        1 - r (Pearson, zero lag) -> HierarchicalClustering (cut per CUT_RULES: best-silhouette h) ->
         flashes["cluster_trace_corr"] + clusterings["trace_corr"]."""
         n = len(self.flashes)
         with timed("group  trace_corr traces + r + tree + silhouette sweep"):
@@ -223,17 +219,28 @@ class SREAnalyzer:
             if n > 1:
                 distance = 1 - np.corrcoef(footprint_traces(footprints, self.stack_f16, self.cuda_available))
                 np.fill_diagonal(distance, 0)
-            hc = HierarchicalClustering(distance, TRACE_CUT_1MR)
+            hc = HierarchicalClustering(distance, TRACE_CUT_1MR, cut_rule=CUT_RULES["trace_corr"])
             hc.run()
+        self.store_clustering("trace_corr", hc)
 
-        cut = hc.cut
-        self.flashes["cluster_trace_corr"] = hc.cluster_ids
-        clusters = (self.flashes.groupby("cluster_trace_corr")
+    def store_clustering(self, method: str, hc: HierarchicalClustering) -> None:
+        """flashes["cluster_{method}"] + clusterings[method] = {clusters, cut, cut_rule, silhouette_cut,
+        silhouette_cluster_ids, tree, sweep}; log the cut (and the best-silhouette cut if another rule cut)."""
+        cut, silhouette_cut, unit = hc.cut, hc.silhouette_cut, TREE_UNITS[method]
+        column = f"cluster_{method}"
+        self.flashes[column] = hc.cluster_ids
+        clusters = (self.flashes.groupby(column)
                     .agg(labels=("joint_label", list), frames=("frame", sorted))
-                    .reset_index().rename(columns={"cluster_trace_corr": "group"}))
-        self.clusterings["trace_corr"] = {"clusters": clusters, "cut": cut, "tree": hc.tree, "sweep": hc.sweep}
-        console.log(f"  {n} flashes -> trace_corr tree cut at best h {cut['h']:g} 1 - r: {cut['n_clusters']} "
-                    f"clusters, silhouette {cut['silhouette']:.3f}")
+                    .reset_index().rename(columns={column: "group"}))
+        self.clusterings[method] = {"clusters": clusters, "cut": cut, "cut_rule": hc.cut_rule,
+                                    "silhouette_cut": silhouette_cut,
+                                    "silhouette_cluster_ids": hc.silhouette_cluster_ids,
+                                    "tree": hc.tree, "sweep": hc.sweep}
+        console.log(f"  {len(self.flashes)} flashes -> {method} tree cut at {cut_h_name(hc.cut_rule)} "
+                    f"{cut['h']:g} {unit}: {cut['n_clusters']} clusters, silhouette {cut['silhouette']:.3f}")
+        if hc.cut_rule != "silhouette":
+            console.log(f"    (best silhouette: h {silhouette_cut['h']:g} {unit}, {silhouette_cut['n_clusters']} "
+                        f"clusters, silhouette {silhouette_cut['silhouette']:.3f})")
 
     # -----------------------------------------------------------------------
     # map: clusters of one method = recur_zones, masks, centroids, stats
@@ -359,10 +366,11 @@ class SREAnalyzer:
     def cluster_counts(self) -> pd.DataFrame:
         """Flashes, the tree cut and the recur_zones of the last map(method) (the xlsx counts sheet): one row per item."""
         method = self.zone_method
-        cut = self.clusterings[method]["cut"]
+        clustering = self.clusterings[method]
+        cut = clustering["cut"]
         rows = [
             ("flashes (8-connected blobs)", len(self.flashes)),
-            (f"{method} tree: best h ({TREE_UNITS[method]})", cut["h"]),
+            (f"{method} tree: {cut_h_name(clustering['cut_rule'])} ({TREE_UNITS[method]})", cut["h"]),
             (f"{method} tree: mean silhouette", cut["silhouette"]),
             ("clusters K", cut["n_clusters"]),
             ("recur_zones (= clusters)", len(self.zones)),
@@ -378,6 +386,12 @@ class SREAnalyzer:
 # ===========================================================================
 
 # fn: timed, log one timed sub-step: '<label>  12.3s'.
+# fn: cut_h_name, name of a cut height in logs / tables / plots: "best h" or "acceleration h".
+
+def cut_h_name(cut_rule: str) -> str:
+    """'best h' for the silhouette rule, else '{cut_rule} h' (e.g. 'acceleration h')."""
+    return "best h" if cut_rule == "silhouette" else f"{cut_rule} h"
+
 
 @contextmanager
 def timed(label: str) -> Generator[None, None, None]:
