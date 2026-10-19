@@ -47,11 +47,11 @@ import tifffile
 from numba import config as numba_config
 
 # Local imports
-from classes.sre_analyzer import CROSSOVER_RATIO, N_THREADS_FRAME_POOL, _threshold_open_close, mask_flash_sizes
-from functions import biexp_detrend, filelist_parser, fit_zscore_background, pixel_lags, sample_tau, sur_flash_masks
-from functions.fit_hist import fit_flash_background
+from classes.recording_list import RecordingList
+from functions import biexp_detrend, fit_zscore_background, pixel_lags, sample_tau, sur_flash_masks
+from functions.fit_hist import CROSSOVER_RATIO, fit_flash_background
+from functions.flash_mask import N_THREADS_FRAME_POOL, _threshold_open_close, mask_flash_sizes
 from img_proc import SIGMA
-from SRE_analysis import select_recordings
 
 # ===========================================================================
 #
@@ -62,17 +62,17 @@ from SRE_analysis import select_recordings
 ROOT = Path(__file__).resolve().parent
 OUT_ROOT = ROOT / "results" / "permutation"
 
-# --- Step 1: select --------------------------------------------------------
+# --- select ----------------------------------------------------------------
 SENSOR = "GACh3.0"            # only this sensor (objective: --obj, default 10X)
 
-# --- Step 3: detrend -------------------------------------------------------
+# --- detrend ---------------------------------------------------------------
 BAND_ROWS = 128               # rows per detrend / z-score band (peak RAM ~9 GB instead of ~15 GB)
 
-# --- Step 4: surrogate -----------------------------------------------------
+# --- surrogate -------------------------------------------------------------
 ALS_LAM, ALS_P, ALS_N_ITER = 11, 0.05, 10  # als_correct.py defaults (used for every *_BIEXP_ALS.tif)
 PROGRESS_EVERY = 50           # surrogates between progress / ETA / peak RAM lines
 
-# --- Step 5: cutoff --------------------------------------------------------
+# --- cutoff ----------------------------------------------------------------
 N_SUR = 200                   # surrogates per recording (200-399: cutoff = largest sur_flash + 1)
 ALPHA = 0.005                 # qf_flash: p < ALPHA; needs N_SUR >= 200 (smallest p = 1 / (N_SUR + 1))
 ROUND_PX = 100                # px: th_small_obj = cutoff rounded UP to this step (rounding up keeps p < ALPHA)
@@ -81,31 +81,36 @@ REMOVAL_SUGGESTION_CSV = "removal_suggestion.csv"  # recording, th_small_obj_px 
 
 # ===========================================================================
 #
-#   STEP 1 -- SELECT
+#   SELECT
 #
 # ===========================================================================
+
+# fn: select, (raw tiff name, ALS tiff path) of the selected recordings, raw_dir.
 
 
 def select(args: argparse.Namespace) -> tuple[list[tuple[str, Path]], Path]:
     """(raw tiff name, ALS tiff path) of the selected recordings, raw_dir."""
-    _, io_dirs = filelist_parser(args.proc_list)
-    recordings = select_recordings(args.proc_list, args.db, args.exp_db, True)
-    recordings = recordings.filter((recordings["OBJ"] == args.obj) & (recordings["SENSOR"] == SENSOR))
+    recording_list = RecordingList(args.proc_list, "proc", args.db, args.exp_db)
+    recordings = recording_list.select(objs=[args.obj], sensor=SENSOR)
     rows = [(name, Path(path)) for name, path in recordings.select("raw_tiff_name", "proc_tiff_path").iter_rows()
             if not args.stems or Path(name).stem in args.stems]
     if args.task_index is not None:
         rows = rows[args.task_index:args.task_index + 1]
-    return rows, Path(io_dirs["dir_raw_tiffs"])
+    (raw_dir,) = recording_list.dirs("dir_raw_tiffs")
+    return rows, raw_dir
 
 
 # ===========================================================================
 #
-#   STEP 2 -- TH_FLASHES
+#   TH_FLASHES
 #
 # ===========================================================================
+
+# fn: get_flashes_above_threshold, th_flashes (cached in {stem}_th_flash_sizes.npz): threshold of the recording +
+#     th_flash sizes.
 
 def get_flashes_above_threshold(als_path: Path, out_path: Path) -> tuple[float, np.ndarray]:
-    """Step 2 (cached in {stem}_th_flash_sizes.npz): threshold of the recording + th_flash sizes."""
+    """th_flashes (cached in {stem}_th_flash_sizes.npz): threshold of the recording + th_flash sizes."""
     if out_path.exists():
         with np.load(out_path) as cached:
             return float(cached["threshold"]), cached["sizes"]
@@ -115,7 +120,7 @@ def get_flashes_above_threshold(als_path: Path, out_path: Path) -> tuple[float, 
     bg_center, bg_sigma = fit_flash_background(stack, cuda_available=_CUDA)
     threshold = float(bg_center + CROSSOVER_RATIO * bg_sigma)
     t.append(time.perf_counter())
-    mask = _threshold_open_close(stack, threshold, _CUDA)  # = sre_analyzer.flash_sizes, timed in two parts
+    mask = _threshold_open_close(stack, threshold, _CUDA)  # + mask_flash_sizes below, timed in two parts
     del stack
     t.append(time.perf_counter())
     sizes = mask_flash_sizes(mask)
@@ -128,12 +133,14 @@ def get_flashes_above_threshold(als_path: Path, out_path: Path) -> tuple[float, 
 
 # ===========================================================================
 #
-#   STEP 3 -- DETREND
+#   DETREND
 #
 # ===========================================================================
 
+# fn: detrend_zscore, detrend: img_proc.py's bi-exp detrend + stack-wide z-score, band by band (float16).
+
 def detrend_zscore(raw_path: Path) -> np.ndarray:
-    """Step 3: img_proc.py's bi-exp detrend + stack-wide z-score, band by band (float16)."""
+    """Detrend: img_proc.py's bi-exp detrend + stack-wide z-score, band by band (float16)."""
     t = [time.perf_counter()]
     img = tifffile.imread(raw_path)
     t.append(time.perf_counter())
@@ -160,19 +167,24 @@ def detrend_zscore(raw_path: Path) -> np.ndarray:
 
 # ===========================================================================
 #
-#   STEP 4 -- SURROGATE
+#   SURROGATE
 #
 # ===========================================================================
 
+# fn: timed_flash_sizes, surrogate (labeller thread): mask_flash_sizes + its run time (s).
+# fn: save_largest_sur_flash, surrogate: largest sur_flash of surrogate sur_idx appended to {stem}_surrogates.csv.
+# fn: peak_ram, peak resident memory of this process (Linux only).
+# fn: print_progress, surrogate: progress, mean time per surrogate, ETA and peak RAM every PROGRESS_EVERY surrogates.
+
 def timed_flash_sizes(mask: np.ndarray) -> tuple[np.ndarray, float]:
-    """Step 4 (labeller thread): mask_flash_sizes + its run time (s)."""
+    """Surrogate (labeller thread): mask_flash_sizes + its run time (s)."""
     t0 = time.perf_counter()
     return mask_flash_sizes(mask), time.perf_counter() - t0
 
 
 def save_largest_sur_flash(surrogates: pd.DataFrame, sur_idx: int, future: Future, gpu_s: float,
                            surrogates_path: Path) -> pd.DataFrame:
-    """Step 4: largest sur_flash of surrogate sur_idx appended to {stem}_surrogates.csv.
+    """Surrogate: largest sur_flash of surrogate sur_idx appended to {stem}_surrogates.csv.
 
     Write + rename: other array tasks' write_removal_suggestion() may read the file at any moment.
     Log: gpu = lag map + GPU work + mask copy back, label = CPU fill holes + label,
@@ -199,7 +211,7 @@ def peak_ram() -> str:
 
 
 def print_progress(n_done: int, n_todo: int, t0: float) -> None:
-    """Step 4: progress, mean time per surrogate, ETA and peak RAM every PROGRESS_EVERY surrogates."""
+    """Surrogate: progress, mean time per surrogate, ETA and peak RAM every PROGRESS_EVERY surrogates."""
     if n_done % PROGRESS_EVERY:
         return
     elapsed = time.perf_counter() - t0
@@ -210,12 +222,16 @@ def print_progress(n_done: int, n_todo: int, t0: float) -> None:
 
 # ===========================================================================
 #
-#   STEP 5 -- CUTOFF
+#   CUTOFF
 #
 # ===========================================================================
 
+# fn: find_cutoff, cutoff: smallest size s with p(s) = (1 + #largest sur_flashes >= s) / (N + 1) < alpha (None if N too
+#     small).
+# fn: th_small_obj_px, cutoff: cutoff rounded UP to round_px (rounding up keeps p < alpha).
+
 def find_cutoff(largest_sur_flashes: np.ndarray, alpha: float) -> int | None:
-    """Step 5: smallest size s with p(s) = (1 + #largest sur_flashes >= s) / (N + 1) < alpha (None if N too small).
+    """Cutoff: smallest size s with p(s) = (1 + #largest sur_flashes >= s) / (N + 1) < alpha (None if N too small).
 
     At most k largest sur_flashes may reach s, k = the largest integer with (1 + k) / (N + 1) < alpha
     -> s = (k + 1)-th largest + 1  (e.g. N = 1000, alpha = 0.005: k = 4, s = 5th largest + 1).
@@ -225,19 +241,24 @@ def find_cutoff(largest_sur_flashes: np.ndarray, alpha: float) -> int | None:
 
 
 def th_small_obj_px(largest_sur_flashes: np.ndarray, alpha: float, round_px: int) -> int | None:
-    """Step 5: cutoff rounded UP to round_px (rounding up keeps p < alpha)."""
+    """Cutoff: cutoff rounded UP to round_px (rounding up keeps p < alpha)."""
     cutoff = find_cutoff(largest_sur_flashes, alpha)
     return math.ceil(cutoff / round_px) * round_px if cutoff else None
 
 
 # ===========================================================================
 #
-#   RUN -- steps 2-5 per recording, removal suggestion, entry point
+#   RUN -- th_flashes -> cutoff per recording, removal suggestion, entry point
 #
 # ===========================================================================
 
+# fn: run_recording, th_flashes -> detrend -> surrogate -> cutoff for one recording.
+# fn: write_removal_suggestion, cutoff: removal_suggestion.csv = th_small_obj_px of every finished
+#     {stem}_surrogates.csv.
+# fn: main, select -> th_flashes -> detrend -> surrogate -> cutoff for every selected recording.
+
 def run_recording(name: str, als_path: Path, raw_dir: Path, out_dir: Path, args: argparse.Namespace) -> None:
-    """Steps 2-5 for one recording."""
+    """th_flashes -> detrend -> surrogate -> cutoff for one recording."""
     stem = Path(name).stem
     t0 = time.perf_counter()
     threshold, th_flash_sizes = get_flashes_above_threshold(als_path,out_dir / f"{stem}_th_flash_sizes.npz")
@@ -285,7 +306,7 @@ def run_recording(name: str, als_path: Path, raw_dir: Path, out_dir: Path, args:
 
 
 def write_removal_suggestion(out_dir: Path, args: argparse.Namespace) -> None:
-    """Step 5: removal_suggestion.csv = th_small_obj_px of every finished {stem}_surrogates.csv.
+    """Cutoff: removal_suggestion.csv = th_small_obj_px of every finished {stem}_surrogates.csv.
 
     Write + rename: array tasks may finish at the same time. An unreadable surrogates file (another task mid-write)
     is skipped; the last finishing task rebuilds removal_suggestion.csv with every recording.
@@ -310,7 +331,7 @@ def write_removal_suggestion(out_dir: Path, args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    """Steps 1-5 for every selected recording."""
+    """select -> th_flashes -> detrend -> surrogate -> cutoff for every selected recording."""
     parser = argparse.ArgumentParser(description="Time-lag permutation test of the th_flash sizes")
     parser.add_argument("--proc_list", required=True, type=Path, help="Path to proc list file (proc_*.txt)")
     parser.add_argument("--db", type=Path, default=ROOT / "data" / "rec_data.db")

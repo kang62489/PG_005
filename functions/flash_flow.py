@@ -27,15 +27,17 @@ from functions.tvl1_flow import optical_flow_tvl1_numba
 #
 # ===========================================================================
 
-# --- Step 2: pairs ---------------------------------------------------------
+# --- pairs ---------------------------------------------------------
 FLOW_OFFSETS = [(-1, 0), (0, 1), (1, 2), (2, 3), (3, 4)]  # (from, to) frame offsets from the spike
 
 
 # ===========================================================================
 #
-#   STEP 1 -- FLOW
+#   FLOW
 #
 # ===========================================================================
+
+# fn: pair_flow, (v, u, keep): TV-L1 flow of the raw frame pair; keep = union of both frames' CAT-bright pixels.
 
 
 def pair_flow(
@@ -49,9 +51,13 @@ def pair_flow(
 
 # ===========================================================================
 #
-#   STEP 2 -- PAIRS
+#   PAIRS
 #
 # ===========================================================================
+
+# fn: _offset_label, frame offset -> label: 0 -> 'spike', 2 -> 'spike+2', -1 -> 'spike-1'.
+# fn: compute_flow_pairs, one {label, offset_from, offset_to, idx_from, idx_to, u, v, keep_mask} dict per in-range
+#     FLOW_OFFSETS pair.
 
 
 def _offset_label(offset: int) -> str:

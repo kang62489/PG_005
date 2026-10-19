@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from .permutation import pixel_lags, sur_flash_masks
     from .plot_results import (
         frame_zone_figures,
-        plot_centroid_dendrogram,
+        plot_cluster_dendrogram,
         plot_cluster_scatter,
         plot_flow_panels,
         plot_flow_streamlines,
@@ -109,7 +109,7 @@ __all__ = [
     "pair_flow",
     "perpendicular_of",
     "pixel_lags",
-    "plot_centroid_dendrogram",
+    "plot_cluster_dendrogram",
     "plot_cluster_scatter",
     "plot_flow_panels",
     "plot_flow_streamlines",
@@ -174,7 +174,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "plot_zone_overview":  (".plot_results",                              "plot_zone_overview"),
     "plot_zone_stats":     (".plot_results",                              "plot_zone_stats"),
     "frame_zone_figures":  (".plot_results",                              "frame_zone_figures"),
-    "plot_centroid_dendrogram": (".plot_results",                         "plot_centroid_dendrogram"),
+    "plot_cluster_dendrogram": (".plot_results",                          "plot_cluster_dendrogram"),
     "plot_cluster_scatter": (".plot_results",                             "plot_cluster_scatter"),
     "plot_silhouette_sweep": (".plot_results",                            "plot_silhouette_sweep"),
     "plot_zone_groups":    (".plot_results",                              "plot_zone_groups"),

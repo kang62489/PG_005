@@ -21,9 +21,16 @@ from numba import njit
 
 # ===========================================================================
 #
-#   STEP 1 -- OPEN + CLOSE  (square window, separable)
+#   OPEN + CLOSE  (square window, separable)
 #
 # ===========================================================================
+
+# fn: _row_pass, 1-D window pass along each row: erode = all True (window leaving the frame -> False), else any True.
+# fn: _col_pass, same as _row_pass along each column, swept row by row with one running count per column (contiguous
+#     reads).
+# fn: _square_morph, binary erosion / dilation with a full (2r+1)^2 square, border value 0 (a clipped window never
+#     counts full).
+# fn: binary_open_close_square, opening then closing (erode, dilate, dilate, erode) with a full (2r+1) x (2r+1) square.
 
 
 @njit(cache=True, nogil=True)
@@ -84,9 +91,12 @@ def binary_open_close_square(mask: np.ndarray, radius: int) -> np.ndarray:
 
 # ===========================================================================
 #
-#   STEP 2 -- EPS ZONE  (exact squared Euclidean distance transform)
+#   EPS ZONE  (exact squared Euclidean distance transform)
 #
 # ===========================================================================
+
+# fn: within_distance, true where the Euclidean distance to the nearest True pixel of mask is <= radius (mask must have
+#     a True).
 
 
 @njit(cache=True, nogil=True)

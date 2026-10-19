@@ -37,14 +37,14 @@ from skimage.measure import approximate_polygon, find_contours, label
 #
 # ===========================================================================
 
-# --- Step 1: orientation ---
+# --- orientation ---
 DIRECTIONS = ("up", "right", "down", "left")  # clockwise order on the image
 UNIT_VECTORS = {"up": (0, -1), "right": (1, 0), "down": (0, 1), "left": (-1, 0)}  # (x, y), y grows downwards
 
-# --- Step 2: preview ---
+# --- preview ---
 PREVIEW_FRAMES = 50  # frames averaged from the start of the raw TIFF (~0.25 s to read)
 
-# --- Step 3: boundary ---
+# --- boundary ---
 POINTS_PER_SEGMENT = 20  # curve samples between two neighbouring anchors
 CATMULL_ROM_ALPHA = 0.5  # centripetal: no loops / overshoot with uneven anchor spacing
 SNAP_PX = 30  # a line end this close to the frame edge / another line is extended to touch it
@@ -52,19 +52,25 @@ END_DIRECTION_POINTS = 5  # the end direction is taken over this many points
 MIN_REGION_PX = 100  # px: smaller pieces don't count as regions (a curve looping on itself, ~20 px)
 MIN_CENTROID_FRAC = 0.05  # cross-check skipped if the centroids differ by < 5 % of the frame along ML
 
-# --- Step 5: export ---
+# --- export ---
 OUTLINE_TOLERANCE_PX = 0.5  # outline simplification: max deviation from the pixel border (px)
 
-# --- Step 6: re-edit ---
+# --- re-edit ---
 ANCHOR_TOLERANCE_PX = 2.0  # export without anchors: outline -> anchors, max deviation (px); ~12 anchors per line
 SEED_DOWNSAMPLE = 8  # the rebuilt striatum seed is placed on an 8x smaller mask (a full-size one takes ~0.27 s)
 
 
 # ===========================================================================
 #
-#   STEP 1 -- ORIENTATION: dorsal + hemisphere -> medial
+#   ORIENTATION: dorsal + hemisphere -> medial
 #
 # ===========================================================================
+
+# fn: hemisphere_of, '3L' -> 'L', '2R' -> 'R', anything else (e.g.
+# fn: perpendicular_of, the two directions at 90° to dorsal (the possible medial choices).
+# fn: medial_from, L slice -> dorsal turned 90° clockwise, R slice -> counter-clockwise (dorsal up + L -> right).
+# fn: direction_labels, (x label, y label) naming the anatomy at each image side, e.g.
+# fn: dv_ml_direction, image angle (0 = right, 90 = up) -> (nearest pole, tilt <= 45°, adjacent pole it tilts toward).
 
 def hemisphere_of(slice_label: str | None) -> str | None:
     """'3L' -> 'L', '2R' -> 'R', anything else (e.g. '3', None) -> None."""
@@ -120,9 +126,11 @@ def dv_ml_direction(angle_deg: float, dorsal_vec: list, medial_vec: list) -> tup
 
 # ===========================================================================
 #
-#   STEP 2 -- PREVIEW: mean of the first pages of a raw TIFF
+#   PREVIEW: mean of the first pages of a raw TIFF
 #
 # ===========================================================================
+
+# fn: raw_preview, mean of the first n_frames pages -> (H, W) float32.
 
 def raw_preview(raw_tiff_path: Path, n_frames: int = PREVIEW_FRAMES) -> np.ndarray:
     """Mean of the first n_frames pages -> (H, W) float32."""
@@ -133,9 +141,20 @@ def raw_preview(raw_tiff_path: Path, n_frames: int = PREVIEW_FRAMES) -> np.ndarr
 
 # ===========================================================================
 #
-#   STEP 3 -- BOUNDARY: anchors -> curve -> snapped line -> regions -> checks
+#   BOUNDARY: anchors -> curve -> snapped line -> regions -> checks
 #
 # ===========================================================================
+
+# fn: _cr_segment, centripetal Catmull-Rom from p1 to p2 (Barry-Goldman form), POINTS_PER_SEGMENT samples, p2 excluded.
+# fn: anchor_curve, smooth curve through every anchor (M, 2); the end tangents follow the first / last anchor pair.
+# fn: rasterize_lines, bool (H, W) mask of the line pixels (8-connected chains, so they block 4-connected regions).
+# fn: _extend_end, walk from end along direction for up to SNAP_PX px; the point where it leaves the frame or hits
+#     another line.
+# fn: snap_ends, extend both ends of a line to the frame edge or another line, if within SNAP_PX.
+# fn: label_regions, regions the lines cut the frame into: (labels, 0 on line pixels; number of regions >=
+#     MIN_REGION_PX).
+# fn: region_at, bool mask of the region containing seed (x, y); None if no seed, on a line, or a too-small region.
+# fn: lateral_check, cortex must lie lateral (opposite of medial) to the striatum; returns a warning text or None.
 
 # --- 3a. anchors -> curve ---
 
@@ -250,9 +269,13 @@ def lateral_check(striatum: np.ndarray, cortex: np.ndarray, medial: str) -> str 
 
 # ===========================================================================
 #
-#   STEP 4 -- STORAGE: data/st_bd_draft.json
+#   STORAGE: data/st_bd_draft.json
 #
 # ===========================================================================
+
+# fn: load_st_bd, {stem: entry}; empty if the file does not exist yet.
+# fn: save_st_bd, write sorted by key, [x, y] pairs on one line, via a temp file so a crash never leaves a half-written
+#     JSON.
 
 _XY_PAIR = re.compile(r"\[\s*(-?[\d.]+),\s*(-?[\d.]+)\s*\]")  # an indented [x, y] pair spread over 4 lines
 
@@ -272,9 +295,17 @@ def save_st_bd(path: Path, data: dict[str, dict]) -> None:
 
 # ===========================================================================
 #
-#   STEP 5 -- EXPORT: draft entries -> data/bd_{date}_{serial}.json
+#   EXPORT: draft entries -> data/bd_{date}_{serial}.json
 #
 # ===========================================================================
+
+# fn: bd_export_path, proc_20260922_000.txt (or ..._saion.txt) -> <same folder>/bd_20260922_000.json.
+# fn: striatum_mask, rebuild the striatum mask of a draft entry: anchors -> snapped lines -> region at the striatum
+#     seed.
+# fn: mask_outline, outer border of a bool mask as a closed polygon (N, 2) x / y, simplified to OUTLINE_TOLERANCE_PX.
+# fn: outline_mask, closed outline (N, 2) x / y -> bool mask; the reader's side of mask_outline().
+# fn: export_entry, draft entry -> exported entry: orientation labels + (x, y) unit vectors, and the striatum outline
+#     (10X).
 
 # --- 5a. file name + mask <-> outline ---
 
@@ -331,9 +362,16 @@ def export_entry(entry: dict) -> dict:
 
 # ===========================================================================
 #
-#   STEP 6 -- RE-EDIT: exported entry -> draft entry (popup "Load bd file")
+#   RE-EDIT: exported entry -> draft entry (popup "Load bd file")
 #
 # ===========================================================================
+
+# fn: outline_to_anchors, boundary lines of a striatum outline as anchors: the runs of outline points off the frame
+#     edge, simplified.
+# fn: _deepest_point, [x, y] of the striatum pixel farthest from its border, found on a SEED_DOWNSAMPLE-times smaller
+#     mask (fast).
+# fn: draft_from_export, exported entry -> draft entry; anchors / seeds are taken as saved, or rebuilt from the outline
+#     if missing.
 
 def outline_to_anchors(outline: np.ndarray, shape: tuple[int, int]) -> list[np.ndarray]:
     """Boundary lines of a striatum outline as anchors: the runs of outline points off the frame edge, simplified."""

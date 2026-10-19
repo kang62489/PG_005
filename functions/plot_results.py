@@ -30,6 +30,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Circle, Rectangle
 from scipy.cluster.hierarchy import dendrogram
 from scipy.ndimage import center_of_mass, maximum_filter
+from scipy.spatial import ConvexHull
 from skimage.measure import find_contours
 
 # Local imports
@@ -49,7 +50,7 @@ from functions.flow_pattern import FLOW_PATTERN_BLOCK, block_mean
 #
 # ===========================================================================
 
-# --- Step 1: spatial -------------------------------------------------------
+# --- spatial -------------------------------------------------------
 # Cluster fill/outline colors, cycled by cluster index (red, green, blue, orange, purple)
 CLUSTER_RGBA = [
     (0.91, 0.30, 0.24, 0.45),
@@ -59,7 +60,7 @@ CLUSTER_RGBA = [
     (0.61, 0.35, 0.71, 0.45),
 ]
 
-# --- Step 2: flow ----------------------------------------------------------
+# --- flow ----------------------------------------------------------
 FLOW_QUIVER_STEP = 24         # px between drawn arrows
 FLOW_AUTO_ARROW_FRAC = 0.9    # auto scale: each panel's p95 arrow is this fraction of FLOW_QUIVER_STEP
 FLOW_STREAM_DENSITY = 2.5     # matplotlib streamplot density
@@ -71,13 +72,13 @@ FLOW_SCALE_BAR_FS = 12        # scale-bar text font size
 FLOW_CROSSHAIR_FS = 11        # 0/90/180/270° crosshair label font size
 FLOW_MED_Z_LOW = 1.0          # MED rows: gray range starts at baseline + this many sigmas (black)
 
-# --- Step 3: reliability ---------------------------------------------------
+# --- reliability ---------------------------------------------------
 MONTAGE_NCOLS = 8                                     # panels per montage row
 MONTAGE_MAX_ROWS = 4                                  # rows per montage page
 MONTAGE_PAGE_SIZE = MONTAGE_NCOLS * MONTAGE_MAX_ROWS  # segments per PNG, before starting a new one
 VM_WINDOW_MS = 50                                     # ± ms around each trace's own peak
 
-# --- Step 6: spontaneous ---------------------------------------------------
+# --- spontaneous ---------------------------------------------------
 # Fixed color per sensor (color follows the entity, never its rank); validated all-pairs
 # with the dataviz palette validator. Unknown sensors fall back to neutral gray.
 SENSOR_COLORS = {"GACh3.0": "#2a78d6", "iAChSnFR": "#eb6834", "rACh1h": "#1baf7a"}
@@ -86,6 +87,7 @@ MONTAGE_ZONE_NCOLS = 6                  # contour montages: panels per row
 MONTAGE_NR_OUTLINE = (0.45, 0.45, 0.45)  # contour montages: NR zones dark gray, dashed
 MONTAGE_CIRCLE_TEXT = {"inner": "inner (nearest edge)", "far": "enclosing (farthest pixel)"}
 ZONE_MAP_TITLE_FS = 15                  # zone-map page titles (overview + frame pages); matplotlib default 12
+CLUSTER_HULL_PAD_PX = 12                # cluster scatter: outline = convex hull of the flash centroids, padded by this
 
 
 # ===========================================================================
@@ -93,6 +95,8 @@ ZONE_MAP_TITLE_FS = 15                  # zone-map page titles (overview + frame
 #   SHARED -- SCALE BAR
 #
 # ===========================================================================
+
+# fn: _add_scale_bar, lime scale bar (~20% of the image width, rounded to a nice µm value) in the bottom-right corner.
 
 
 def _add_scale_bar(
@@ -150,9 +154,17 @@ def _add_scale_bar(
 
 # ===========================================================================
 #
-#   STEP 1 -- SPATIAL  (-> spatial/)
+#   SPATIAL  (-> spatial/)
 #
 # ===========================================================================
+
+# fn: plot_spatiotemporal_summary, 3 rows: density-gated flash-area trace (why the critical frame was picked) +
+#     spike-4..spike+4 CAT panels (cluster shading on spike and spike+1) + overlaid Vm of every segment.
+# fn: _plot_frame_panel, one frame's categorized image with a stats title.
+# fn: _format_flash_area_line, 'flashes: <µm²> (<%>)' for the spike / spike+1 panel titles; None for other panels (no
+#     label_frame).
+# fn: _draw_cluster_shading, translucent per-cluster fill (DBSCAN label map) + centroid cross and index label.
+# fn: _draw_decay_fit, dashed exponential decay curve over the post-peak flash-area trace, with tau/R² in the label.
 
 
 def plot_spatiotemporal_summary(
@@ -393,9 +405,27 @@ def _draw_decay_fit(
 
 # ===========================================================================
 #
-#   STEP 2 -- FLOW  (-> flow/)
+#   FLOW  (-> flow/)
 #
 # ===========================================================================
+
+# fn: _med_z_display, MED as z (trimmed baseline mean / std of the pre-spike frames) + gray range (FLOW_MED_Z_LOW,
+#     upper).
+# fn: _add_med_z_colorbar, gray colorbar for the MED z rows.
+# fn: _draw_flow_quivers, gray background (MED frame or CAT mask, shown over value_range) + red auto-scaled arrows at
+#     the grid points in `draw` + scale bar.
+# fn: plot_flow_panels, one column per flow pair; rows: striatum arrows on MED z, CAT-mask arrows on the CAT mask,
+#     striatum speed (µm/s).
+# fn: _draw_flow_streamlines, gray background (MED frame or CAT mask, shown over value_range) + red streamlines
+#     (block-averaged flow; only blocks touching `region`, all blocks if None) + scale bar.
+# fn: _crosshair_labels, arm label per image side: D / V / M / L from the bd entry's "dorsal" / "medial", else 0° / 90°
+#     / 180° / 270°.
+# fn: _draw_angle_crosshair, dashed crosshair at the frame centre with a label at each arm end (arm_labels: image side
+#     -> text).
+# fn: _pattern_title, ' · source' / ' · sink' / ' · anisotropic L 25° D' (DV / ML, else ' · anisotropic 295°'); '' if
+#     unfitted.
+# fn: plot_flow_streamlines, one column per flow pair; rows: striatum streamlines on MED z, CAT-mask streamlines on the
+#     CAT mask (title = CAT-fit pattern).
 
 # --- 2-shared. MED z display range -----------------------------------------
 
@@ -632,9 +662,15 @@ def plot_flow_streamlines(
 
 # ===========================================================================
 #
-#   STEP 3 -- RELIABILITY  (-> reliability/)
+#   RELIABILITY  (-> reliability/)
 #
 # ===========================================================================
+
+# fn: plot_segment_reliability_montage, one panel per raw segment: bright mask + cluster shading, green (detected) / red
+#     border, winning frame.
+# fn: _mean_sd, '-2.4 ± 0.7' (or '+5.6 ± 0.7' when signed); SD is 0 for a single value.
+# fn: plot_vm_success_vs_failure, 1x2 Vm overlay: detected (left) vs failed (right) segments, each trace peak-aligned at
+#     t=0.
 
 # --- 3a. per-segment detection montage (*_RELIABILITY.png) -----------------
 
@@ -781,9 +817,11 @@ def plot_vm_success_vs_failure(
 
 # ===========================================================================
 #
-#   STEP 4 -- SPIKES  (-> spikes/)
+#   SPIKES  (-> spikes/)
 #
 # ===========================================================================
+
+# fn: plot_spike_detection_summary, full-length Vm trace (s) with picked / skipped / collapsed spikes marked.
 
 
 def plot_spike_detection_summary(
@@ -839,9 +877,13 @@ def plot_spike_detection_summary(
 
 # ===========================================================================
 #
-#   STEP 5 -- PROTOTYPES  (prototype_*.py only; not used by the pipeline or GUI)
+#   PROTOTYPES  (prototype_*.py only; not used by the pipeline or GUI)
 #
 # ===========================================================================
+
+# fn: plot_full_stack_kymographs, full-duration, whole-image band means and peak positions, without time crops.
+# fn: plot_wave_persistence, plot observed directional runs against block-shuffled peak trajectories.
+# fn: plot_med_kymographs, band-average unmodified MED intensities across the entire image.
 
 # --- 5a. kymographs / wave persistence -------------------------------------
 
@@ -954,9 +996,28 @@ def plot_med_kymographs(med: np.ndarray, um_per_pixel, frame_ms, title) -> Figur
 
 # ===========================================================================
 #
-#   STEP 6 -- SPONTANEOUS  (-> spontaneous/)
+#   SPONTANEOUS  (-> spontaneous/)
 #
 # ===========================================================================
+
+# fn: _label_zone, zone id in a black circle at the zone centroid (row, col).
+# fn: _draw_outline, zone outline (0.5 level, x = col, y = row) as plain lines; returns the Line2D artists.
+# fn: zone_colors, fixed tab20 color per zone id (sorted order), shared by the overlay and single-zone maps.
+# fn: _z_page, gray z-score image on the shared (vmin, vmax) scale + 'z' colorbar + scale bar.
+# fn: plot_zone_overview, all zones as translucent fills (largest painted first so small zones stay on top) over the z
+#     image.
+# fn: frame_zone_figures, one frame per page: contours of the zones hit in this frame + thin white outline of the
+#     frame's flashes (those in hatch_mask, e.g.
+# fn: _outline_panel, zone outlines on white, drawn in list order (largest first = bottom); NR zones gray dashed.
+# fn: _montage, panels: (ids, title, extra kwargs for _outline_panel) -> Figure, at most MONTAGE_ZONE_NCOLS per row.
+# fn: plot_zone_groups, all zones, then one panel per group (dotted = the seed's circle), then the largest zone of each
+#     group without / with NR zones.
+# fn: plot_zone_stats, zone area (log) and event frequency per sensor: every zone as a dot + median/IQR box.
+# fn: plot_cluster_dendrogram, tree dendrogram (y = distance_label in unit) with the best-silhouette cut line.
+# fn: plot_silhouette_sweep, one panel per tree, side by side: mean silhouette (left axis) + cluster count (right, log)
+#     vs the cut height h.
+# fn: plot_cluster_scatter, one panel per tree, side by side: flash centroids coloured by their cluster (= recur_zone,
+#     zone-map colours), zone id at each cluster's mean.
 
 # --- 6a. zone maps (-> spontaneous/{stem}_ZONE_MAPS.tif) -------------------
 
@@ -1198,59 +1259,80 @@ def plot_zone_stats(zones, title: str) -> Figure:
     return fig
 
 
-# --- 6c. Flash clustering (centroid tree -> K, trace tree cut at K) -------
+# --- 6c. Flash clustering (centroid / trace tree cut at the best silhouette) -
 
-def plot_centroid_dendrogram(tree: np.ndarray, cut_h: float, n_clusters: int, title: str) -> Figure:
-    """Centroid-tree dendrogram (average linkage, px) with the best-silhouette cut line."""
+def plot_cluster_dendrogram(tree: np.ndarray, cut_h: float, n_clusters: int, title: str,
+                            distance_label: str, unit: str) -> Figure:
+    """Tree dendrogram (y = distance_label in unit) with the best-silhouette cut line."""
     fig = Figure(figsize=(16, 6), layout="constrained")
     ax = fig.add_subplot()
     dendrogram(tree, ax=ax, no_labels=True, color_threshold=cut_h if np.isfinite(cut_h) else None)
     if np.isfinite(cut_h):
         ax.axhline(cut_h, color="black", linestyle="--", linewidth=0.8)
-        ax.text(ax.get_xlim()[1], cut_h, f" best h {cut_h:g} px: {n_clusters} clusters", va="center", fontsize=10)
+        # inside the axes, right end, just above the line (outside it widened the figure's right margin)
+        ax.text(0.995, cut_h, f"best h {cut_h:g} {unit}: {n_clusters} clusters", transform=ax.get_yaxis_transform(),
+                ha="right", va="bottom", fontsize=10, bbox={"boxstyle": "round,pad=0.15", "fc": "white", "ec": "none",
+                                                            "alpha": 0.8})
     ax.set_title(title)
     ax.set_xlabel("flashes (leaves)")
-    ax.set_ylabel("centroid distance (px)")
+    ax.set_ylabel(f"{distance_label} ({unit})")
     return fig
 
 
-def plot_silhouette_sweep(sweep, cut_h: float, title: str) -> Figure:
-    """Mean silhouette (left axis) + cluster count (right, log) vs the centroid-tree cut height h."""
-    fig = Figure(figsize=(8, 4.5), layout="constrained")
-    ax = fig.add_subplot()
-    ax.plot(sweep["cut_height"], sweep["mean_silhouette"], color="tab:blue")
-    if np.isfinite(cut_h):
-        best = sweep.loc[sweep["cut_height"] == cut_h].iloc[0]
-        ax.axvline(cut_h, color="tab:red", linestyle="--",
-                   label=f"best h {cut_h:g} px: silhouette {best['mean_silhouette']:.3f}, "
-                         f"{int(best['n_clusters'])} clusters")
-        ax.legend(fontsize=8, loc="lower right")
-    ax.set_xlabel("cut height h (px)")
-    ax.set_ylabel("mean silhouette", color="tab:blue")
-    ax.set_title(title)
-    count_ax = ax.twinx()
-    count_ax.plot(sweep["cut_height"], sweep["n_clusters"], color="tab:gray", linewidth=0.8)
-    count_ax.set_yscale("log")
-    count_ax.set_ylabel("clusters", color="tab:gray")
+def plot_silhouette_sweep(panels: list[dict]) -> Figure:
+    """One panel per tree, side by side: mean silhouette (left axis) + cluster count (right, log) vs the cut height h.
+
+    panel keys: sweep (cut_height, n_clusters, mean_silhouette), cut_h, unit, title.
+    """
+    fig = Figure(figsize=(8 * len(panels), 4.5), layout="constrained")
+    for ax, panel in zip(fig.subplots(1, len(panels), squeeze=False)[0], panels, strict=True):
+        sweep, cut_h, unit = panel["sweep"], panel["cut_h"], panel["unit"]
+        ax.plot(sweep["cut_height"], sweep["mean_silhouette"], color="tab:blue")
+        if np.isfinite(cut_h):
+            best = sweep.loc[sweep["cut_height"] == cut_h].iloc[0]
+            ax.axvline(cut_h, color="tab:red", linestyle="--",
+                       label=f"best h {cut_h:g} {unit}: silhouette {best['mean_silhouette']:.3f}, "
+                             f"{int(best['n_clusters'])} clusters")
+            ax.legend(fontsize=8, loc="lower right")
+        ax.set_xlabel(f"cut height h ({unit})")
+        ax.set_ylabel("mean silhouette", color="tab:blue")
+        ax.set_title(panel["title"])
+        count_ax = ax.twinx()
+        count_ax.plot(sweep["cut_height"], sweep["n_clusters"], color="tab:gray", linewidth=0.8)
+        count_ax.set_yscale("log")
+        count_ax.set_ylabel("clusters", color="tab:gray")
     return fig
 
 
-def plot_cluster_scatter(centroids_yx: np.ndarray, flash_zone_ids: np.ndarray, colors: dict,
-                         shape: tuple[int, int], title: str) -> Figure:
-    """Flash centroids coloured by their cluster (= recur_zone, zone-map colours), zone id at each cluster's mean."""
-    fig = Figure(figsize=(7, 7.4), layout="constrained")
-    ax = fig.add_subplot()
-    ax.scatter(centroids_yx[:, 1], centroids_yx[:, 0], c=[colors[z] for z in flash_zone_ids], s=14,
-               edgecolors="black", linewidths=0.3)
-    for zone_id in colors:
-        members = centroids_yx[flash_zone_ids == zone_id]
-        if len(members):
-            ax.text(members[:, 1].mean(), members[:, 0].mean(), str(zone_id), fontsize=10, fontweight="bold",
-                    ha="center", va="center", bbox={"boxstyle": "round,pad=0.15", "fc": "white", "alpha": 0.7})
-    ax.set_xlim(0, shape[1])
-    ax.set_ylim(shape[0], 0)  # image orientation: y down
-    ax.set_aspect("equal")
-    ax.set_xlabel("centroid_x (px)")
-    ax.set_ylabel("centroid_y (px)")
-    ax.set_title(title)
+def plot_cluster_scatter(panels: list[dict], shape: tuple[int, int]) -> Figure:
+    """One panel per tree, side by side: flash centroids coloured by their cluster (= recur_zone, zone-map
+    colours), each cluster outlined by its padded convex hull, zone id just above the outline.
+
+    panel keys: centroids_yx (n, 2), flash_zone_ids (n,), colors (zone id -> colour), title.
+    """
+    # every centroid replaced by a ring of CLUSTER_HULL_PAD_PX: the hull is padded + rounded, and 1-2 flashes
+    # still give an outline (circle / capsule)
+    angles = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+    ring_xy = CLUSTER_HULL_PAD_PX * np.column_stack([np.cos(angles), np.sin(angles)])
+    fig = Figure(figsize=(7 * len(panels), 7.4), layout="constrained")
+    for ax, panel in zip(fig.subplots(1, len(panels), squeeze=False)[0], panels, strict=True):
+        centroids_yx, flash_zone_ids, colors = panel["centroids_yx"], panel["flash_zone_ids"], panel["colors"]
+        ax.scatter(centroids_yx[:, 1], centroids_yx[:, 0], c=[colors[z] for z in flash_zone_ids], s=14,
+                   edgecolors="black", linewidths=0.3)
+        for zone_id in colors:
+            members = centroids_yx[flash_zone_ids == zone_id]
+            if not len(members):
+                continue
+            ring_points = (members[:, ::-1][:, None, :] + ring_xy[None]).reshape(-1, 2)  # (x, y)
+            outline = ring_points[ConvexHull(ring_points).vertices]
+            ax.fill(outline[:, 0], outline[:, 1], fill=False, edgecolor=colors[zone_id], linewidth=1.2)
+            top_x, top_y = outline[np.argmin(outline[:, 1])]  # image orientation: smallest y = top
+            ax.text(top_x, top_y, str(zone_id), color=colors[zone_id], fontsize=9, fontweight="bold",
+                    ha="center", va="bottom")
+        ax.set_xlim(0, shape[1])
+        ax.set_ylim(shape[0], 0)  # image orientation: y down
+        ax.set_aspect("equal")
+        ax.set_xlabel("centroid_x (px)")
+        ax.set_ylabel("centroid_y (px)")
+        ax.set_title(panel["title"])
     return fig

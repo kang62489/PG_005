@@ -26,12 +26,12 @@ from skimage.transform import pyramid_reduce
 #
 # ===========================================================================
 
-# --- Step 1: pyramid -------------------------------------------------------
+# --- pyramid -------------------------------------------------------
 PYRAMID_DOWNSCALE = 2  # size ratio between pyramid levels
 PYRAMID_NLEVEL = 10    # max number of levels
 PYRAMID_MIN_SIZE = 16  # px: smallest allowed level side
 
-# --- Step 3: solve ---------------------------------------------------------
+# --- solve ---------------------------------------------------------
 ATTACHMENT = 15.0      # data-term weight (lambda); smaller -> smoother flow
 TIGHTNESS = 0.3        # coupling between data and regularization terms (theta)
 NUM_WARP = 5           # warps of the moving frame per level
@@ -42,9 +42,11 @@ REG_NUM_ITER = 2       # dual projection steps per component (fixed in skimage)
 
 # ===========================================================================
 #
-#   STEP 1 -- PYRAMID
+#   PYRAMID
 #
 # ===========================================================================
+
+# fn: _get_pyramid, coarse-to-fine image pyramid (coarsest first), same calls as skimage _get_pyramid.
 
 
 def _get_pyramid(img: np.ndarray) -> list[np.ndarray]:
@@ -62,9 +64,13 @@ def _get_pyramid(img: np.ndarray) -> list[np.ndarray]:
 
 # ===========================================================================
 #
-#   STEP 2 -- WARP  (bilinear, edge mode + gradient / rho_0 terms)
+#   WARP  (bilinear, edge mode + gradient / rho_0 terms)
 #
 # ===========================================================================
+
+# fn: _warp_bilinear, out[i, j] = moving sampled at (i + flow[0], j + flow[1]); coordinates clamped to the frame (edge
+#     mode).
+# fn: _grad_terms, grad = np.gradient(warped); ni = |grad|^2 (0 -> 1); rho0 = warped - ref - grad .
 
 
 @njit(parallel=True, cache=True, nogil=True)
@@ -122,9 +128,17 @@ def _grad_terms(
 
 # ===========================================================================
 #
-#   STEP 3 -- SOLVE  (data term + dual projection)
+#   SOLVE  (data term + dual projection)
 #
 # ===========================================================================
+
+# fn: _data_step, in-place thresholding step of the data term (skimage: flow_auxiliary update).
+# fn: _proj_step, proj = (proj - dt * grad(flow_c)) / (1 + f1 * |grad(flow_c)|); forward differences, 0 on the last
+#     row/col.
+# fn: _div_step, flow_c = flow_aux + div(proj) (backward differences).
+# fn: _sq_diff_sum, sum of (a - b)^2 over all elements (float64 accumulator).
+# fn: _tvl1_level, one pyramid level of skimage _tvl1 (2-D, prefilter=False); flow (2, H, W) is updated in place and
+#     returned.
 
 
 @njit(parallel=True, cache=True, nogil=True)
@@ -224,9 +238,14 @@ def _tvl1_level(ref: np.ndarray, moving: np.ndarray, flow: np.ndarray) -> np.nda
 
 # ===========================================================================
 #
-#   STEP 4 -- RESIZE  (+ coarse-to-fine driver)
+#   RESIZE  (+ coarse-to-fine driver)
 #
 # ===========================================================================
+
+# fn: _resize_flow, nearest-neighbour upscale of (2, h, w) flow to shape, values multiplied by the scale factor (as
+#     skimage).
+# fn: optical_flow_tvl1_numba, (2, H, W) float32 flow (v, u) -- drop-in for skimage optical_flow_tvl1 with default
+#     parameters.
 
 
 def _resize_flow(flow: np.ndarray, shape: tuple[int, int]) -> np.ndarray:

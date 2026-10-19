@@ -28,9 +28,13 @@ console = Console()
 
 # ===========================================================================
 #
-#   STEP 1 -- LOOKUP: rec_data.db rows (+ ANIMAL_ID from exp_info.db)
+#   LOOKUP: rec_data.db rows (+ ANIMAL_ID from exp_info.db)
 #
 # ===========================================================================
+
+# fn: _sort_rec_columns, drop IGNORE_COLUMNS, then reorder the rest by ColumnSorter group priority.
+# fn: populate_animal_id_values, fill missing ANIMAL_ID values using the DOR -> Animal_ID mapping in exp_info.db.
+# fn: lookup_rec_from_db, batch-query rec_data.db and compile the results into a single DataFrame.
 
 def _sort_rec_columns(df: pl.DataFrame) -> pl.DataFrame:
     """Drop IGNORE_COLUMNS, then reorder the rest by ColumnSorter group priority.
@@ -165,9 +169,17 @@ def lookup_rec_from_db(table: pl.DataFrame, db_path: Path, exp_db_path: Path) ->
 
 # ===========================================================================
 #
-#   STEP 2 -- STATS: results.db experiments / flow_pairs
+#   STATS: results.db experiments / flow_pairs
 #
 # ===========================================================================
+
+# fn: _geomean_geostd, geometric mean and geometric std factor (multiplicative) for a polars Series.
+# fn: _read_experiments, read the full experiments table from results.db into a polars DataFrame.
+# fn: get_excluded_recordings, recordings/cells with no detected cluster -- the ones compute_region_stats() excludes.
+# fn: _filter_by_run_keys, keep only rows whose (exp_date, img_serial) pair is in run_keys.
+# fn: get_cell_recording_status, per-recording cluster detection status, for building per-cell file lists.
+# fn: compute_region_stats, summary statistics per metric, averaged per unique cell.
+# fn: compute_flow_pattern_stats, pooled flow-pair pattern counts per objective (pairs without a label are left out).
 
 def _geomean_geostd(series: pl.Series) -> tuple[float | None, float | None]:
     """Geometric mean and geometric std factor (multiplicative) for a polars Series.
@@ -351,9 +363,11 @@ def compute_flow_pattern_stats(
 
 # ===========================================================================
 #
-#   STEP 3 -- CELLS
+#   CELLS
 #
 # ===========================================================================
+
+# fn: count_unique_cells, reduce ref_df rows to one row per unique cell, listing each cell's filenames.
 
 def count_unique_cells(ref_df: pl.DataFrame) -> pl.DataFrame:
     """Reduce ref_df rows to one row per unique cell, listing each cell's filenames.

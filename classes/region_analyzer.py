@@ -39,13 +39,13 @@ PIXEL_SCALE = {  # pixel/µm per objective
     "60X": 4.5,
 }
 
-# --- Step 1: detect --------------------------------------------------------
+# --- detect --------------------------------------------------------
 EPS_UM = 50.0                # µm: inter-varicosity gap -> dilation disk radius for clustering
 MIN_CLUSTER_FRACTION = 0.05  # keep clusters holding at least this fraction of the bright pixels
 WINDOW_PX_BY_OBJ = {"10X": 201, "40X": 201, "60X": 201}          # local-density window size
 DENSITY_THRESH_BY_OBJ = {"10X": 0.1, "40X": 0.025, "60X": 0.016}  # min local bright density
 
-# --- Step 2: decay fit -----------------------------------------------------
+# --- decay fit -----------------------------------------------------
 MIN_DECAY_FIT_FRAMES = 3     # fewer post-peak frames -> fit skipped
 MIN_DECAY_FIT_RANGE = 1e-6   # flatter post-peak trace -> fit skipped
 MIN_DECAY_FIT_R2 = 0.8       # lower R² -> lasting time reported as None
@@ -55,15 +55,15 @@ class RegionAnalyzer:
     """Critical-frame flash clusters, flash-area decay, and (on request) flash flow.
 
     Results after construction:
-        critical_frame_idx, significant, label_frame, centroids      (step 1)
-        flash_area_um2, decay_* fields                               (step 2)
-        clusters, spike_frame_clusters, spike_plus1_frame_clusters   (step 3)
+        critical_frame_idx, significant, label_frame, centroids      (detect)
+        flash_area_um2, decay_* fields                               (area)
+        clusters, spike_frame_clusters, spike_plus1_frame_clusters   (report)
     After compute_flow():
-        flow_pairs                                                   (step 4)
+        flow_pairs                                                   (flow)
     """
 
     def __init__(self, cat_stack: np.ndarray, med_stack: np.ndarray, spike_frame_idx: int, obj: str = "10X") -> None:
-        """Run steps 1-3 on one segment (flow is on request: compute_flow()).
+        """Run detect -> area -> report on one segment (flow is on request: compute_flow()).
 
         Args:
             cat_stack: (frames, H, W) categorized frames (CATEGORY_BRIGHT = bright).
@@ -87,7 +87,7 @@ class RegionAnalyzer:
         window_px = compute_window_px(obj)
         density_thresh = compute_density_thresh(obj)
 
-        # --- Step 1. Detect: critical frame ---
+        # --- Detect: critical frame ---
         (
             self.critical_frame_idx,
             self.significant,
@@ -96,7 +96,7 @@ class RegionAnalyzer:
             self.n_raw_clusters,
         ) = self._detect_critical_frame(cat_stack, med_stack, spike_frame_idx, eps_px, window_px, density_thresh)
 
-        # --- Step 2. Area: flash area trace -> decay fit ---
+        # --- Area: flash area trace -> decay fit ---
         self.flash_area_um2 = self._compute_flash_area_trace(cat_stack, eps_px, window_px, density_thresh)
         peak_search_end = min(self.spike_frame_idx + 2, len(self.flash_area_um2))
         self.decay_peak_frame_idx = self.spike_frame_idx + int(
@@ -106,7 +106,7 @@ class RegionAnalyzer:
             self.flash_area_um2, self.decay_peak_frame_idx
         )
 
-        # --- Step 3. Report: critical-frame clusters + spike / spike+1 cluster sizes ---
+        # --- Report: critical-frame clusters + spike / spike+1 cluster sizes ---
         self.clusters = self._build_clusters()
         (
             self.spike_frame_label_frame,
@@ -117,9 +117,12 @@ class RegionAnalyzer:
 
     # =======================================================================
     #
-    #   STEP 1 -- DETECT
+    #   DETECT
     #
     # =======================================================================
+
+    # fn: _detect_critical_frame, detect_flash() over [spike, spike+1] -> (critical_frame_idx, significant, label_frame,
+    #     centroids, n_raw).
 
     def _detect_critical_frame(
         self,
@@ -143,9 +146,11 @@ class RegionAnalyzer:
 
     # =======================================================================
     #
-    #   STEP 2 -- AREA
+    #   AREA
     #
     # =======================================================================
+
+    # fn: _compute_flash_area_trace, density-gated kept-cluster area (µm²) per frame, for the decay-tau fit.
 
     def _compute_flash_area_trace(
         self, cat_stack: np.ndarray, eps_px: int, window_px: int, density_thresh: float
@@ -164,9 +169,16 @@ class RegionAnalyzer:
 
     # =======================================================================
     #
-    #   STEP 3 -- REPORT
+    #   REPORT
     #
     # =======================================================================
+
+    # fn: _build_clusters, critical-frame clusters as {centroid, R_lat_px, R_lat_um} (R = enclosing radius, display
+    #     only).
+    # fn: _report_frame_clusters, clusters of the spike frame and spike+1 frame, each on its own (spike+1 fields None if
+    #     out of range).
+    # fn: _cluster_report_for_frame, density-gated clusters for one frame, as {cluster_id, centroid, area_px, area_um2}
+    #     dicts.
 
     def _build_clusters(self) -> list[dict]:
         """Critical-frame clusters as {centroid, R_lat_px, R_lat_um} (R = enclosing radius, display only)."""
@@ -231,9 +243,12 @@ class RegionAnalyzer:
 
     # =======================================================================
     #
-    #   STEP 4 -- FLOW
+    #   FLOW
     #
     # =======================================================================
+
+    # fn: compute_flow, TV-L1 flow pairs + CAT keep masks around the spike (see functions/flash_flow.py), each with a
+    #     "pattern" dict (source / sink / anisotropic, functions/flow_pattern.py); stored as flow_pairs.
 
     def compute_flow(self, cat_stack: np.ndarray, med_stack: np.ndarray) -> list[dict]:
         """TV-L1 flow pairs + CAT keep masks around the spike (see functions/flash_flow.py), each with a
@@ -248,6 +263,13 @@ class RegionAnalyzer:
     #   UNITS + RESULTS
     #
     # =======================================================================
+
+    # fn: _px_to_um, length in px -> µm.
+    # fn: _area_to_um2, area in px -> µm².
+    # fn: get_results, critical-frame, spike / spike+1, and decay results (decay fields None when not significant).
+    # fn: get_summary, summary for the critical frame.
+    # fn: get_lasting_time_ms, decay tau in ms, or None when the fit was skipped/failed or R² < MIN_DECAY_FIT_R2.
+    # fn: get_export_data, data for export (contours and internal fields stripped by exporter).
 
     def _px_to_um(self, pixels: float) -> float:
         """Length in px -> µm."""
@@ -304,9 +326,21 @@ class RegionAnalyzer:
 
 # ===========================================================================
 #
-#   STEP 1 -- DETECT: density-gated clustering (shared with SpikeReliabilityChecker)
+#   DETECT: density-gated clustering (shared with SpikeReliabilityChecker)
 #
 # ===========================================================================
+
+# fn: compute_area_pct, B%: percentage of bright pixels per frame (diagnostic only).
+# fn: compute_eps_px, EPS_UM in pixels for this objective (dilation disk radius).
+# fn: compute_window_px, local-density window size (px) for this objective.
+# fn: compute_density_thresh, min local bright-pixel density for a flash, for this objective.
+# fn: detect_flash, earliest candidate frame with an accepted density-gated cluster wins.
+# fn: _run_density_gated_cluster_seeker, cluster only bright pixels in a locally dense neighborhood, then grow clusters
+#     back to their full blobs.
+# fn: _run_cluster_seeker, cluster bright pixels: dilate by eps_px (distance transform) -> connected components -> size
+#     filter.
+# fn: _weighted_centroid, intensity-weighted centroid (pulled toward the brightest sub-region); plain mean if no
+#     weights.
 
 
 def compute_area_pct(stack: np.ndarray) -> np.ndarray:
@@ -438,9 +472,12 @@ def _weighted_centroid(rows: np.ndarray, cols: np.ndarray, z_frame: np.ndarray |
 
 # ===========================================================================
 #
-#   STEP 2 -- AREA: single-exponential decay fit
+#   AREA: single-exponential decay fit
 #
 # ===========================================================================
+
+# fn: _decay_model, single-exponential decay: amplitude * exp(-t/tau).
+# fn: fit_decay_tau, fit amplitude * exp(-t/tau) from peak_frame_idx onward (t=0 at the peak, falling side only).
 
 
 def _decay_model(t: np.ndarray, amplitude: float, tau: float) -> np.ndarray:
@@ -484,9 +521,11 @@ def fit_decay_tau(signal: np.ndarray, peak_frame_idx: int) -> tuple[float | None
 
 # ===========================================================================
 #
-#   STEP 3 -- REPORT: enclosing radius (display only)
+#   REPORT: enclosing radius (display only)
 #
 # ===========================================================================
+
+# fn: cluster_radius, enclosing-circle radius (px) of one cluster, capped at the centroid's distance to the frame edge.
 
 
 def cluster_radius(label_frame: np.ndarray, centroid: tuple[float, float], cluster_k: int) -> float:

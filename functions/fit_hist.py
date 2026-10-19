@@ -36,6 +36,7 @@ FLASH_HIST_BINS = 512               # histogram bins over the percentile range
 FLASH_HIST_RANGE_PCT = (0.1, 99.9)  # histogram spans these percentiles, so rare outliers can't widen the bins
 FLASH_SMOOTH_FRAC = 0.05            # Savitzky-Golay window = this fraction of the histogram range
 FLASH_SIGMA_SEED = 0.0016           # initial sigma guess for the fixed-mean fit
+CROSSOVER_RATIO = 2.0               # flash threshold = background peak + this many fitted sigmas
 
 
 # ===========================================================================

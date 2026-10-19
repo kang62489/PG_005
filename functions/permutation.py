@@ -5,7 +5,7 @@ Surrogates for the permutation test (docs/permutation_test.md), CPU Numba JIT + 
   Step 2. Surrogate masks  : z-stack -> every trace rotated by its lag -> Gaussian blur -> ALS -> threshold ->
                              3x3 opening -> 3x3 closing = one sur_flash mask per lag map
                              (= img_proc.py blur + als_correct.py ALS + flash_mask on a time-shuffled stack;
-                             fill holes + sizes: sre_analyzer.mask_flash_sizes, on the CPU)
+                             fill holes + sizes: flash_mask.mask_flash_sizes, on the CPU)
 
 GPU: the z-stack is uploaded once, pixel-major (H, W, T), so rotating a pixel's trace is one contiguous read; each
 band of rows (+ blur halo) is rotated, blurred, ALS-corrected and thresholded on the GPU and only the 1-byte mask
@@ -31,9 +31,8 @@ from numba import cuda, njit, prange
 from numba.core.errors import NumbaPerformanceWarning
 
 # Local imports
-from classes.sre_analyzer import _gpu_dilate_kernel, _gpu_erode_kernel, _threshold_open_close, f16_lut
-
 from .als import MAX_T, _cpu_als_kernel, _gpu_als_kernel
+from .flash_mask import _gpu_dilate_kernel, _gpu_erode_kernel, _threshold_open_close, f16_lut
 from .gaussian_blur import _cpu_kernel, _gpu_reflect_index, _reflect_index
 
 warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
@@ -46,7 +45,7 @@ os.environ.setdefault("NUMBA_CUDA_LOG_LEVEL", "40")
 #
 # ===========================================================================
 
-# --- Step 2: surrogate masks -----------------------------------------------
+# --- surrogate masks -------------------------------------------------------
 BAND_ROWS = 64                # output rows per band (+ blur halo above / below)
 TILE = 32                     # lag kernel: 32 frames x 32 columns per block, transposed through shared memory
 TILE_PAD = 33                 # TILE + 1: no shared-memory bank conflicts on the transposed read
@@ -55,21 +54,41 @@ THREADS_3D = (32, 8, 1)       # threads per block of the (x, y, t) kernels
 
 # ===========================================================================
 #
-#   STEP 1 -- LAGS
+#   LAGS
 #
 # ===========================================================================
 
+# fn: pixel_lags, lags: lag of every pixel, uniform in [0, T).
+
 def pixel_lags(shape: tuple[int, int, int], seed: int) -> np.ndarray:
-    """Step 1: lag of every pixel, uniform in [0, T)."""
+    """Lags: lag of every pixel, uniform in [0, T)."""
     n_t, h, w = shape
     return np.random.default_rng(seed).integers(0, n_t, size=(h, w), dtype=np.int32)
 
 
 # ===========================================================================
 #
-#   STEP 2 -- SURROGATE MASKS
+#   SURROGATE MASKS
 #
 # ===========================================================================
+
+# fn: _f16_cut, float16(v) > float16(threshold) <=> v > cut (or v == cut if that tie rounds up, round-half-to-even).
+# fn: _gpu_lag_band, out[t, y, x] = z[(t + lag) % T] of pixel (g0 + y, x); reads along t and writes along x, both
+#     coalesced.
+# fn: _gpu_hblur, out[t, y, x] = horizontal blur of src, reflect at the frame edge.
+# fn: _gpu_vblur, out[t, y, x] = vertical blur of frame row r0 + y, read from src (rows g0 ..), reflect at the frame
+#     edge.
+# fn: _gpu_threshold_band, mask[t, r0 + y, x] = float16(data - baseline) > float16(threshold), band pixel px = y * W +
+#     x.
+# fn: _gpu_sur_flash_masks, z-stack uploaded once; per lag map: bands rotated -> blurred -> ALS -> thresholded, then
+#     open / close.
+# fn: _cpu_lag_hblur, lag + horizontal blur of rows g0 .., parallel over frames.
+# fn: _cpu_vblur, mirrors _gpu_vblur, parallel over frames.
+# fn: _cpu_sur_als, ALS-corrected stack (float16, as *_BIEXP_ALS.tif) of the lag-shuffled stack, band by band.
+# fn: _cpu_sur_flash_masks, per lag map: the float16 ALS stack (band by band), then sre_analyzer's threshold -> open ->
+#     close.
+# fn: sur_flash_masks, surrogate masks: per lag map, the opened + closed threshold mask (T, H, W) of the shuffled ->
+#     blurred -> ALS stack.
 
 def _f16_cut(threshold: float) -> tuple[np.float32, bool]:
     """float16(v) > float16(threshold)  <=>  v > cut (or v == cut if that tie rounds up, round-half-to-even)."""
@@ -79,7 +98,7 @@ def _f16_cut(threshold: float) -> tuple[np.float32, bool]:
     return cut, bool(above.view(np.uint16) % 2 == 0)
 
 
-# --- 2a. GPU (bands of rows, one thread per pixel / frame) ------------------
+# --- GPU (bands of rows, one thread per pixel / frame) ----------------------
 
 @cuda.jit
 def _gpu_lag_band(codes_px, lut, lags, g0, out) -> None:
@@ -182,7 +201,7 @@ def _gpu_sur_flash_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], thre
         yield d_a.copy_to_host().view(np.bool_)
 
 
-# --- 2b. CPU (numba, bands of rows, parallel over frames) ------------------
+# --- CPU (numba, bands of rows, parallel over frames) ----------------------
 
 @njit(parallel=True, cache=True)
 def _cpu_lag_hblur(codes: np.ndarray, lut: np.ndarray, lags: np.ndarray, kernel: np.ndarray, g0: int,
@@ -248,11 +267,11 @@ def _cpu_sur_flash_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], thre
         yield _threshold_open_close(_cpu_sur_als(z_f16, lags, kernel, lam, p, n_iter), threshold, False)
 
 
-# --- 2c. Dispatch ----------------------------------------------------------
+# --- Dispatch --------------------------------------------------------------
 
 def sur_flash_masks(z_f16: np.ndarray, lag_maps: Iterable[np.ndarray], threshold: float, sigma: float, lam: float,
                     p: float, n_iter: int, cuda_available: bool) -> Iterator[np.ndarray]:
-    """Step 2: per lag map, the opened + closed threshold mask (T, H, W) of the shuffled -> blurred -> ALS stack."""
+    """Surrogate masks: per lag map, the opened + closed threshold mask (T, H, W) of the shuffled -> blurred -> ALS stack."""
     if z_f16.shape[0] > MAX_T:
         msg = f"T={z_f16.shape[0]} exceeds MAX_T={MAX_T} of the ALS kernel"
         raise ValueError(msg)

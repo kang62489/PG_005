@@ -54,6 +54,7 @@ from classes import (
     SpikeReliabilityChecker,
 )
 from classes.abf_clip import MIN_SET_INTERVAL_FRAMES
+from classes.recording_list import RecordingList
 from classes.region_analyzer import PIXEL_SCALE
 from functions import (
     bd_export_path,
@@ -61,7 +62,6 @@ from functions import (
     compute_region_stats,
     count_unique_cells,
     dv_ml_direction,
-    filelist_parser,
     get_cell_recording_status,
     load_img_segs,
     load_st_bd,
@@ -95,15 +95,9 @@ def parse_ana_list(
     Returns (entries, results_dir, detrend_mode, normalization); entries = ana-list columns +
     proc_tiff_path / raw_abf_path (*_ALS.tif if use_als else *_GAUSS.tif). OBJ is looked up by the caller.
     """
-    table, io_dirs = filelist_parser(ana_list_path)
-
-    missing = [k for k in ("dir_proc_tiffs", "dir_raw_abfs", "dir_results") if k not in io_dirs]
-    if missing:
-        msg = f"Missing footer keys in {ana_list_path}: {', '.join(missing)}"
-        raise ValueError(msg)
-    proc_dir = Path(io_dirs["dir_proc_tiffs"])
-    raw_abfs_dir = Path(io_dirs["dir_raw_abfs"])
-    results_dir = Path(io_dirs["dir_results"])
+    recording_list = RecordingList(ana_list_path, "ana")
+    table = recording_list.table
+    proc_dir, raw_abfs_dir, results_dir = recording_list.dirs("dir_proc_tiffs", "dir_raw_abfs", "dir_results")
 
     exist_col = "als_exist" if use_als else "gauss_exist"
     suffix = "_ALS.tif" if use_als else "_GAUSS.tif"

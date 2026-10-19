@@ -23,10 +23,10 @@ import tifffile
 from rich.console import Console
 
 # Local application imports
+from classes.recording_list import RecordingList
 from functions import (
     biexp_detrend,
     check_cuda,
-    filelist_parser,
     fit_zscore_background,
     gaussian_blur_run,
     get_memory_usage,
@@ -54,18 +54,12 @@ def parse_proc_list(proc_list_path: Path) -> tuple[list[dict], Path, Path]:
         {"file": str, "proc": str, "mode": str}.
         Entries with do_processing == "SKIP" or detrend_mode == "NONE" are excluded.
     """
-    table, io_dirs = filelist_parser(proc_list_path)
-
-    missing = [k for k in ("dir_raw_tiffs", "dir_proc_tiffs") if k not in io_dirs]
-    if missing:
-        msg = f"Missing {', '.join(missing)} in {proc_list_path}"
-        raise ValueError(msg)
-    raw_dir = Path(io_dirs["dir_raw_tiffs"])
-    proc_dir = Path(io_dirs["dir_proc_tiffs"])
+    recording_list = RecordingList(proc_list_path, "proc")
+    raw_dir, proc_dir = recording_list.dirs("dir_raw_tiffs", "dir_proc_tiffs")
 
     entries = [
         {"file": row["raw_tiff_name"], "proc": row["do_processing"], "mode": row["detrend_mode"]}
-        for row in table.iter_rows(named=True)
+        for row in recording_list.table.iter_rows(named=True)
         if row["do_processing"] != "SKIP" and row["detrend_mode"] != "NONE"
     ]
 
@@ -87,7 +81,7 @@ def _refresh_gauss_row(row: dict[str, str], proc_dir: Path) -> dict[str, str]:
 
 def update_proc_list_gauss_exists(proc_list_path: Path, proc_dir: Path) -> None:
     """Rewrite gauss_exists, do_processing, and detrend_mode based on actual files in proc_dir."""
-    table, _io_dirs = filelist_parser(proc_list_path)
+    table = RecordingList(proc_list_path, "proc").table
     refreshed_rows = iter(_refresh_gauss_row(row, proc_dir) for row in table.iter_rows(named=True))
 
     lines = proc_list_path.read_text().splitlines()

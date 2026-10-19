@@ -1,20 +1,16 @@
 """
 SRE_analysis.py  --  Spontaneous ACh flash -> zone analysis (10X, *_BIEXP_ALS.tif).
 
-  Step 1. Select  : proc list -> recordings with an ALS tiff (GAUSS with --use_gauss); OBJ / SENSOR from rec_data.db,
-                    10X only
-  Step 2. Analyze : per recording, SREAnalyzer detect -> group -> map
-                    (th_small_obj = the recording's own th_small_obj_px from
-                    {results_dir}/permutation/{OBJ}/removal_suggestion.csv; not listed -> REMOVAL_FALLBACK[OBJ])
-          Coverage: union of all recur_zones inside the striatum / striatum area
-                    (striatum outline from the Striatum Boundary export bd_{date}_{serial}.json; NaN if none)
-  Step 3. Export  : per recording {stem}_ZONES.xlsx + {stem}_ZONE_MAPS.tif (z-scored RGB stack: max projection
-                    + recur_zones + striatum outline, then one page per detection frame;
-                    frame pages rendered on a process pool, --map_workers)
-                    + footprints/{stem}_ZONES.npz + mask/{stem}_FLASH_MASK.tif (off with --no_mask)
-                    + zone_contours/{stem}_ZONE_CONTOURS_TIGHT.png (inner circle) / _LOOSE.png (furthest circle):
-                      zone outlines on white -- all zones, one panel per group, largest of each group
-  Step 4. Summary : spontaneous_summary.xlsx (one row per recording + pooled recur_zone table)
+  Step 1. Input            : proc list -> 10X recordings in rec_data.db with their *_BIEXP_ALS.tif (RecordingList;
+                             GAUSS with --use_gauss, all OBJ with --all_obj)
+  Step 2. Detection        : th_small_obj (removal_suggestion.csv, else REMOVAL_FALLBACK) + connect_radius
+                             -> SREAnalyzer.detect() -> footprints/{stem}_FLASH_FOOTPRINTS.npz
+  Step 3. Clustering       : centroid tree + trace_corr tree, each cut at its best-silhouette h -> map(method)
+  Step 4. Characterization : striatum outline + axis labels from bd_{date}_{serial}.json (coverage: commented out)
+  Step 5. Export           : per method {stem}_{METHOD}_ZONES.xlsx, footprints/{stem}_{METHOD}_ZONES.npz,
+                             clustering/{stem}_{METHOD}_DENDROGRAM.png, {stem}_{METHOD}_ZONE_MAPS.tif
+                             (pages rendered on a process pool, --map_workers);
+                             clustering/{stem}_SILHOUETTE.png + _CLUSTERS.png; mask/{stem}_FLASH_MASK.tif (--no_mask)
 
 recur_zone = recurring zone (non-recurring zones are not defined for the clustering yet).
 
@@ -32,7 +28,6 @@ Usage:
 import argparse
 import gc
 import itertools
-import math
 import multiprocessing as mp
 import os
 import textwrap
@@ -44,38 +39,35 @@ from pathlib import Path
 
 # Third-party imports
 import numpy as np
-import pandas as pd
 import polars as pl
 import tifffile
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from rich.console import Console
 
 # Local imports
-from classes import SREAnalyzer  # Step 2
+from classes import SREAnalyzer  # detection
+from classes.recording_list import ALS_SUFFIX, RecordingList  # input
 from classes.sre_analyzer import (
-    CROSSOVER_RATIO,  # Step 2
-    MIN_EVENTS_FOR_FREQ,
-    timed,  # Step 2, Step 5
+    TREE_UNITS,  # export
+    timed,  # detection, export
 )
+
+# from classes.sre_analyzer import MIN_EVENTS_FOR_FREQ  # run summary (commented out for now)
 from functions import (
     bd_export_path,
     check_cuda,
     direction_labels,
-    filelist_parser,  # Step 1
     frame_zone_figures,
-    group_overlaps,
-    group_zones,
     img_zscore_convert,
     load_st_bd,
-    lookup_rec_from_db,  # Step 1
     outline_mask,
-    plot_centroid_dendrogram,  # Step 5
-    plot_cluster_scatter,  # Step 5
-    plot_silhouette_sweep,  # Step 5
-    plot_zone_groups,
+    plot_cluster_dendrogram,  # export
+    plot_cluster_scatter,  # export
+    plot_silhouette_sweep,  # export
     plot_zone_overview,
     zone_colors,
 )
+from functions.fit_hist import CROSSOVER_RATIO  # detection
 
 console = Console()
 
@@ -91,9 +83,9 @@ MAP_Z_MIN = 1.0  # zone-map gray range starts at background peak + this many sig
 MAP_TITLE_WIDTH = 80  # characters per title line before the recur_zone list wraps (titles at ZONE_MAP_TITLE_FS)
 MAP_WORKERS_MAX = 16  # auto worker count for zone-map rendering = usable CPUs, capped here (--map_workers overrides)
 MAP_CHUNK_PAGES = 8  # frame pages per pool task (each task builds its own Figure once)
-REMOVAL_SUGGESTION_CSV = "removal_suggestion.csv"  # permutation_test.py output: recording, th_small_obj_px
-REMOVAL_FALLBACK = {"10X": 1900, "40X": 1700, "60X": 1500}  # px: OBJ median th_small_obj_px (results/permutation/)
-CONNECT_ROUND_PX = 5  # px: connect radius sqrt(th_small_obj / pi) rounded to the nearest multiple of this
+CLUSTER_METHODS = ("centroid", "trace_corr")  # clusterings; each gets its own zones + {stem}_{METHOD}_* exports
+TARGET_OBJ = "10X"  # recordings analyzed (--all_obj: all)
+GAUSS_SUFFIX = "_BIEXP_GAUSS.tif"  # input with --use_gauss (default: ALS_SUFFIX)
 
 
 # ===========================================================================
@@ -102,13 +94,13 @@ CONNECT_ROUND_PX = 5  # px: connect radius sqrt(th_small_obj / pi) rounded to th
 #
 # ===========================================================================
 
-# fn: run, Step 1 once, then per recording Step 2 -> 3 -> 4 -> 5, then the run summary.
+# fn: run, input once, then per recording detection -> clustering -> characterization -> export, then the run summary.
 
 def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float = CROSSOVER_RATIO,
         save_mask: bool = True, all_obj: bool = False, debug: bool = False, cuda_available: bool = False,
         db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db"),
         stbd_path: Path | None = None, map_workers: int | None = None, use_gauss: bool = False) -> None:
-    """Run the spontaneous zone analysis (Steps 1-5) for every selected recording in a proc list.
+    """Run input -> detection -> clustering -> characterization -> export for every recording in a proc list.
 
     stbd_path: Striatum Boundary export; None -> bd_{date}_{serial}.json next to the proc list.
     map_workers: processes rendering the zone-map pages; None -> map_workers_auto(), 1 -> in this process.
@@ -119,26 +111,28 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
     out_root.mkdir(parents=True, exist_ok=True)
 
     # -----------------------------------------------------------------------
-    # Step 1. Input
+    # Input
     # -----------------------------------------------------------------------
-    console.rule("[bold]Step 1 - Input")
+    console.rule("[bold]Input")
 
-    recordings = select_recordings(proc_list_path, db_path, exp_db_path, all_obj,
-                                   GAUSS_SUFFIX if use_gauss else ALS_SUFFIX)
+    # imported class: RecordingList -- proc list -> recordings in rec_data.db with their tiff, 10X only (--all_obj: all)
+    recording_list = RecordingList(proc_list_path, "proc", db_path, exp_db_path)
+    recordings = recording_list.select(objs=None if all_obj else [TARGET_OBJ],
+                                       suffix=GAUSS_SUFFIX if use_gauss else ALS_SUFFIX)
     console.log(f"{len(recordings)} recording(s) selected from {proc_list_path.name}")
 
     # -----------------------------------------------------------------------
-    # Step 2. Detection (set once, before the loop)
+    # Detection (set once, before the loop)
     # -----------------------------------------------------------------------
-    # local fn: set_removal_suggestion() -- th_small_obj of every recording
-    recordings = set_removal_suggestion(recordings, results_dir)
-    # local fn: set_connect_radius() -- connect_radius of every recording, from its th_small_obj
-    recordings = set_connect_radius(recordings)
+    # class method: set_removal_suggestion() -- th_small_obj of every recording
+    recordings = recording_list.set_removal_suggestion(recordings, results_dir)
+    # class method: set_connect_radius() -- connect_radius of every recording, from its th_small_obj
+    recordings = recording_list.set_connect_radius(recordings)
 
     # -----------------------------------------------------------------------
-    # Step 4. Characterization (set once, before the loop)
+    # Characterization (set once, before the loop)
     # -----------------------------------------------------------------------
-    # striatum outlines of the run (coverage; also drawn on the Step 5 maps)
+    # striatum outlines of the run (coverage; also drawn on the zone maps)
     stbd_path = stbd_path or bd_export_path(proc_list_path)
     if stbd_path.exists():
         stbd = load_st_bd(stbd_path)["recordings"]
@@ -148,10 +142,11 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         console.log(f"[yellow]No striatum boundary file {stbd_path.resolve()} -- coverage NaN for all[/yellow]")
 
     # -----------------------------------------------------------------------
-    # Step 5. Export (set once, before the loop)
+    # Export (set once, before the loop)
     # -----------------------------------------------------------------------
-    summary_rows: list[dict] = []  # one row per recording -> spontaneous_summary.xlsx
-    lst_recur_zones: list[pd.DataFrame] = []  # recur_zone tables of all recordings -> spontaneous_summary.xlsx
+    # run summary (spontaneous_summary.xlsx): commented out for now, not in the planned exports
+    # summary_rows: list[dict] = []  # one row per recording -> spontaneous_summary.xlsx
+    # lst_recur_zones: list[pd.DataFrame] = []  # recur_zone tables of all recordings -> spontaneous_summary.xlsx
 
     # local fn: open_map_pool() -- one pool for the whole run
     pool, n_workers = open_map_pool(map_workers)
@@ -164,7 +159,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         console.rule(f"[bold]{proc_stem}  [{row['OBJ']}, {row['SENSOR']}]  [{i}/{len(recordings)}]")
 
         # -------------------------------------------------------------------
-        # Step 2. Detection
+        # Detection
         # -------------------------------------------------------------------
         th_small_obj, th_flag = row["th_small_obj"], row["th_small_obj_flag"]
         console.log(f"  th_small_obj {th_small_obj:,} px ({th_flag or 'permutation'}), "
@@ -181,77 +176,96 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         # (same-frame blobs <= connect_radius apart joined)
         analyzer.detect()
 
-        # -------------------------------------------------------------------
-        # Step 3. Clustering (not sorted yet)
-        # -------------------------------------------------------------------
-        analyzer.group()
-        analyzer.map()
+        # class method: save_flash_footprints() -- footprints/{stem}_FLASH_FOOTPRINTS.npz (all flashes; group_trace input)
+        footprint_path = analyzer.save_flash_footprints(out_root, proc_stem)
+        console.log(f"[green]saved[/green] {footprint_path.resolve()}")
 
         # -------------------------------------------------------------------
-        # Step 4. Characterization (not sorted yet)
+        # Clustering
         # -------------------------------------------------------------------
+        # class method: group_centroid() -- centroid Euclidean distance tree cut at its best-silhouette h
+        analyzer.group_centroid()
+        # class method: group_trace() -- footprint traces from the npz, 1 - r (Pearson, zero lag) tree cut the same way
+        analyzer.group_trace(footprint_path)
+
+        # -------------------------------------------------------------------
+        # Export (both clusterings)
+        # -------------------------------------------------------------------
+        # class method: save_flashes() -- mask/{stem}_FLASH_MASK.tif, debug: {stem}_FLASHES.csv
+        with timed("export mask tif / flashes csv"):
+            paths = list(analyzer.save_flashes(out_root, proc_stem, save_mask=save_mask, debug=debug).values())
+
+        # -------------------------------------------------------------------
+        # Characterization (not sorted yet)
+        # -------------------------------------------------------------------
+        # striatum outline + axis labels: drawn on the zone maps
         striatum = striatum_of(stbd, raw_stem, (analyzer.height, analyzer.width))
         striatum_outline = np.array(stbd[raw_stem]["striatum_outline_px"]) if striatum is not None else None
         axis_labels = direction_labels(stbd[raw_stem]["dorsal"], stbd[raw_stem]["medial"]) if raw_stem in stbd else None
 
-        coverage = zone_coverage(analyzer.zone_masks, striatum, analyzer.um_per_px)
-        if striatum is not None:
-            console.log(f"  coverage {coverage['striatum_coverage']:.3f} ({len(analyzer.zone_masks)} recur_zones, "
-                        f"striatum {striatum.mean():.2f} of FOV)")
+        for method in CLUSTER_METHODS:
+            tag = method.upper()
 
-        # -------------------------------------------------------------------
-        # Step 5. Export
-        # -------------------------------------------------------------------
-        # class method: save() -- {stem}_ZONES.xlsx (counts, recur_zones, recur_zone_stats),
-        # footprints/{stem}_ZONES.npz (zone + flash footprints), mask/{stem}_FLASH_MASK.tif, debug: {stem}_FLASHES.csv
-        with timed("export xlsx / npz" + (" / mask tif" if save_mask else "")):
-            paths = analyzer.save(out_root, proc_stem, save_mask=save_mask, debug=debug)
+            # Clustering. class method: map() -- clusters of this method = recur_zones (masks, centroids, stats)
+            analyzer.map(method)
 
-        # local fn: export_cluster_figures() -- clustering/{stem}_CENTROID_DENDROGRAM / _SILHOUETTE / _CLUSTERS.png
-        with timed("export clustering figures"):
-            cluster_paths = export_cluster_figures(analyzer, proc_stem, out_root / "clustering")
+            # Characterization. coverage of the striatum: commented out for now, not in the planned exports
+            # coverage = zone_coverage(analyzer.zone_masks, striatum, analyzer.um_per_px)
+            # if striatum is not None:
+            #     console.log(f"  coverage {coverage['striatum_coverage']:.3f} ({len(analyzer.zone_masks)} "
+            #                 f"recur_zones, striatum {striatum.mean():.2f} of FOV)")
 
-        # local fn: export_zone_maps() -- {stem}_ZONE_MAPS.tif: all zones, then zone 1 frames, zone 2 frames, ...
-        map_path = out_root / f"{proc_stem}_ZONE_MAPS.tif"
-        with timed("export zone-map TIFF"):
-            n_pages = export_zone_maps(analyzer, f"{proc_stem}, {row['SENSOR']}", map_path, striatum_outline,
-                                       axis_labels, pool, n_workers)
+            # Export. class method: save_zones() -- {stem}_{METHOD}_ZONES.xlsx (counts, recur_zones,
+            # recur_zone_stats), footprints/{stem}_{METHOD}_ZONES.npz (zone footprints + contours)
+            with timed(f"export {method} xlsx / npz"):
+                paths += list(analyzer.save_zones(out_root, proc_stem).values())
 
-        # local fn: export_zone_contours() -- TIGHT / LOOSE regroup the zones (old grouping, not in the plan yet)
-        with timed("export zone contours"):
-            montage_paths = export_zone_contours(analyzer, proc_stem, out_root / "zone_contours", paths["xlsx"],
-                                                 striatum_outline)
+            # Export. local fn: export_dendrogram() -- clustering/{stem}_{METHOD}_DENDROGRAM.png
+            with timed(f"export {method} dendrogram"):
+                paths += export_dendrogram(analyzer, proc_stem, out_root / "clustering")
 
-        for path in [*paths.values(), *cluster_paths, *montage_paths]:
+            # Export. local fn: export_zone_maps() -- {stem}_{METHOD}_ZONE_MAPS.tif: all zones, then zone 1 frames,
+            # zone 2 frames, ...
+            map_path = out_root / f"{proc_stem}_{tag}_ZONE_MAPS.tif"
+            with timed(f"export {method} zone-map TIFF"):
+                n_pages = export_zone_maps(analyzer, f"{proc_stem}, {row['SENSOR']}, {method} tree", map_path,
+                                           striatum_outline, axis_labels, pool, n_workers)
+            console.log(f"[green]saved[/green] {n_pages}-page {method} zone-map TIFF "
+                        f"({map_path.stat().st_size / 1e6:.1f} MB) -> {map_path.resolve()}")
+
+            # Export. run summary row: commented out for now, not in the planned exports
+            # zone_stats = analyzer.zone_stats
+            # freq = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_freq_hz"]
+            # period = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_period_s"]
+            # summary_rows.append({
+            #     "recording": proc_stem,
+            #     "sensor": row["SENSOR"],
+            #     "obj": row["OBJ"],
+            #     "n_frames": analyzer.n_frames,
+            #     "background_threshold": analyzer.threshold,
+            #     "th_small_obj_flag": th_flag,  # empty = own th_small_obj from removal_suggestion.csv
+            #     "n_recur_zones": len(zone_stats),
+            #     "median_area_um2": float(zone_stats["area_um2"].median()),
+            #     "n_low_freq_recur_zones": int((zone_stats["n_events"] == 1).sum()),  # < 1 event per recording
+            #     "n_freq_recur_zones": len(freq),  # recur_zones with >= MIN_EVENTS_FOR_FREQ events, used below
+            #     "median_freq_hz": float(freq.median()),
+            #     "freq_q1_hz": float(freq.quantile(0.25)),
+            #     "freq_q3_hz": float(freq.quantile(0.75)),
+            #     "freq_cv": float(freq.std() / freq.mean()),
+            #     "median_period_s": float(period.median()),
+            #     **coverage,
+            # })
+            # lst_recur_zones.append(zone_stats.assign(recording=proc_stem, sensor=row["SENSOR"]))
+
+        # Export. local fn: export_cluster_comparison() -- clustering/{stem}_SILHOUETTE.png / _CLUSTERS.png:
+        # centroid tree | trace_corr tree side by side
+        with timed("export silhouette / cluster comparison"):
+            paths += export_cluster_comparison(analyzer, proc_stem, out_root / "clustering")
+
+        for path in paths:
             console.log(f"[green]saved[/green] {path.resolve()}")
-        console.log(f"[green]saved[/green] {n_pages}-page zone-map TIFF ({map_path.stat().st_size / 1e6:.1f} MB) "
-                    f"-> {map_path.resolve()}")
 
-        zone_stats = analyzer.zone_stats
-        freq = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_freq_hz"]
-        period = zone_stats.loc[zone_stats["n_events"] >= MIN_EVENTS_FOR_FREQ, "mean_period_s"]
-
-        summary_rows.append({
-            "recording": proc_stem,
-            "sensor": row["SENSOR"],
-            "obj": row["OBJ"],
-            "n_frames": analyzer.n_frames,
-            "background_threshold": analyzer.threshold,
-            "th_small_obj_flag": th_flag,  # empty = own th_small_obj from removal_suggestion.csv
-            "n_recur_zones": len(zone_stats),
-            "median_area_um2": float(zone_stats["area_um2"].median()),
-            "n_low_freq_recur_zones": int((zone_stats["n_events"] == 1).sum()),  # < 1 event per recording
-            "n_freq_recur_zones": len(freq),  # recur_zones with >= MIN_EVENTS_FOR_FREQ events, used below
-            "median_freq_hz": float(freq.median()),
-            "freq_q1_hz": float(freq.quantile(0.25)),
-            "freq_q3_hz": float(freq.quantile(0.75)),
-            "freq_cv": float(freq.std() / freq.mean()),
-            "median_period_s": float(period.median()),
-            **coverage,
-        })
-        lst_recur_zones.append(zone_stats.assign(recording=proc_stem, sensor=row["SENSOR"]))
-
-        del analyzer, zone_stats  # free this recording's stack + mask (~4.7 GB) before the next one is read
+        del analyzer  # free this recording's stack + mask (~4.7 GB) before the next one is read
         gc.collect()
         console.log(f"[bold magenta]{'entry total':<40} {time.time() - entry_t0:6.1f}s[/bold magenta]")
 
@@ -259,18 +273,18 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         pool.shutdown()  # crash / Ctrl+C: Python's exit hook shuts the pool down
 
     # -----------------------------------------------------------------------
-    # Step 5. Export (run summary)
+    # Export (run summary): commented out for now, not in the planned exports
     # -----------------------------------------------------------------------
-    console.rule("[bold]Step 5 - Summary")
-
-    if summary_rows:
-        summary_path = out_root / "spontaneous_summary.xlsx"
-        pooled = pd.concat(lst_recur_zones, ignore_index=True)
-        pooled = pooled[["recording", "sensor", *[c for c in pooled.columns if c not in ("recording", "sensor")]]]
-        with pd.ExcelWriter(summary_path) as writer:
-            pd.DataFrame(summary_rows).to_excel(writer, sheet_name="recordings", index=False)
-            pooled.to_excel(writer, sheet_name="recur_zones", index=False)
-        console.log(f"[green]saved[/green] {summary_path.resolve()}")
+    # console.rule("[bold]Summary")
+    #
+    # if summary_rows:
+    #     summary_path = out_root / "spontaneous_summary.xlsx"
+    #     pooled = pd.concat(lst_recur_zones, ignore_index=True)
+    #     pooled = pooled[["recording", "sensor", *[c for c in pooled.columns if c not in ("recording", "sensor")]]]
+    #     with pd.ExcelWriter(summary_path) as writer:
+    #         pd.DataFrame(summary_rows).to_excel(writer, sheet_name="recordings", index=False)
+    #         pooled.to_excel(writer, sheet_name="recur_zones", index=False)
+    #     console.log(f"[green]saved[/green] {summary_path.resolve()}")
 
     flagged = recordings.filter(pl.col("th_small_obj_flag") != "") if not recordings.is_empty() else recordings
     if not flagged.is_empty():
@@ -284,104 +298,25 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
 
 # ===========================================================================
 #
-#   STEP 1: INPUT related local functions
+#   INPUT related local functions
 #
 # ===========================================================================
 
-# fn: select_recordings, parse file paths in the proc_list and then store them as polars dataframe for later use.
-
-TARGET_OBJ = "10X"
-ALS_SUFFIX = "_BIEXP_ALS.tif"  # default input
-GAUSS_SUFFIX = "_BIEXP_GAUSS.tif"  # input with --use_gauss
-
-
-def select_recordings(proc_list_path: Path, db_path: Path, exp_db_path: Path, all_obj: bool,
-                      suffix: str = ALS_SUFFIX) -> pl.DataFrame:
-    """Rows of (raw_tiff_name, proc_tiff_path, OBJ, SENSOR) for recordings that pass the filters.
-
-    suffix: processed tif read per recording, ALS_SUFFIX or GAUSS_SUFFIX.
-    """
-
-    # imported fn: filelist_parser()
-    table, io_dirs = filelist_parser(proc_list_path)
-    proc_dir = Path(io_dirs["dir_proc_tiffs"])
-
-    # imported fn: lookup_rec_from_db()
-    rec_info = lookup_rec_from_db(table.select("raw_tiff_name"), db_path, exp_db_path)
-    selected: list[dict] = []
-    for name in table["raw_tiff_name"].to_list():
-        proc_tiff_path = proc_dir / f"{Path(name).stem}{suffix}"
-        match = rec_info.filter(pl.col("Filename") == name) if not rec_info.is_empty() else rec_info
-        if match.is_empty():
-            console.log(f"[yellow]Skipped {name}: not in rec_data.db[/yellow]")
-            continue
-        obj, sensor = match["OBJ"].item(), match["SENSOR"].item()
-        if not proc_tiff_path.exists():
-            console.log(f"[yellow]Skipped {name}: {proc_tiff_path.name} not found[/yellow]")
-            continue
-        if obj != TARGET_OBJ and not all_obj:
-            console.log(f"[yellow]Skipped {name}: OBJ={obj} (only {TARGET_OBJ})[/yellow]")
-            continue
-        selected.append({"raw_tiff_name": name, "proc_tiff_path": str(proc_tiff_path), "OBJ": obj, "SENSOR": sensor})
-
-    return pl.DataFrame(selected)
+# (none yet: the proc list is read by classes/recording_list.RecordingList)
 
 
 # ===========================================================================
 #
-#   STEP 2: DETECTION related local functions
+#   DETECTION related local functions
 #
 # ===========================================================================
 
-# fn: set_removal_suggestion, add th_small_obj of every recording (removal_suggestion.csv, else REMOVAL_FALLBACK)
-#     to the recordings dataframe, once before the loop.
-# fn: set_connect_radius, add connect_radius = sqrt(th_small_obj / pi) in CONNECT_ROUND_PX steps, once before the loop.
-
-def set_removal_suggestion(recordings: pl.DataFrame, results_dir: Path) -> pl.DataFrame:
-    """Add th_small_obj (px) + th_small_obj_flag to every recording, once before the loop.
-
-    th_small_obj = own th_small_obj_px from <results_dir>/permutation/{OBJ}/removal_suggestion.csv (flag empty),
-    else REMOVAL_FALLBACK[OBJ] (flag says why).
-    """
-    if recordings.is_empty():
-        return recordings
-    own: dict[tuple[str, str], int] = {}  # (OBJ, raw stem) -> th_small_obj_px
-    for obj in recordings["OBJ"].unique().sort().to_list():
-        path = results_dir / "permutation" / obj / REMOVAL_SUGGESTION_CSV
-        if not path.exists():
-            continue
-        table = pd.read_csv(path)
-        console.log(f"th_small_obj: {len(table)} {obj} recording(s) in {path.resolve()}")
-        own.update({(obj, stem): int(px) for stem, px in zip(table["recording"], table["th_small_obj_px"], strict=True)})
-
-    th_small_obj, flags = [], []
-    for name, obj in zip(recordings["raw_tiff_name"], recordings["OBJ"], strict=True):
-        key = (obj, Path(name).stem)
-        if key in own:
-            th_small_obj.append(own[key])
-            flags.append("")
-        else:
-            th_small_obj.append(REMOVAL_FALLBACK[obj])
-            flags.append(f"{REMOVAL_FALLBACK[obj]} px, {obj} fallback, not in {REMOVAL_SUGGESTION_CSV}")
-    return recordings.with_columns(pl.Series("th_small_obj", th_small_obj), pl.Series("th_small_obj_flag", flags))
-
-
-def set_connect_radius(recordings: pl.DataFrame) -> pl.DataFrame:
-    """Add connect_radius (px): same-frame blobs this close are one flash.
-
-    = radius of a circle of th_small_obj px (the largest chance-size piece from the permutation test), rounded to
-    the nearest CONNECT_ROUND_PX, e.g. th_small_obj 2,100 px -> 25.9 -> 25 px.
-    """
-    if recordings.is_empty():
-        return recordings
-    radius = [CONNECT_ROUND_PX * round(math.sqrt(th / math.pi) / CONNECT_ROUND_PX) for th in recordings["th_small_obj"]]
-    return recordings.with_columns(pl.Series("connect_radius", radius))
-
+# (none yet: th_small_obj + connect_radius are set by classes/recording_list.RecordingList)
 
 
 # ===========================================================================
 #
-#   STEP 3 related local functions
+#   CLUSTERING related local functions
 #
 # ===========================================================================
 
@@ -390,7 +325,7 @@ def set_connect_radius(recordings: pl.DataFrame) -> pl.DataFrame:
 
 # ===========================================================================
 #
-#   STEP 4 related local functions
+#   CHARACTERIZATION related local functions
 #
 # ===========================================================================
 
@@ -399,13 +334,15 @@ def set_connect_radius(recordings: pl.DataFrame) -> pl.DataFrame:
 
 # ===========================================================================
 #
-#   STEP 5 related local functions
+#   EXPORT related local functions
 #
 # ===========================================================================
 
 # fn: map_workers_auto, worker count for the zone-map pool (usable CPUs, capped at MAP_WORKERS_MAX).
 # fn: open_map_pool, process pool that renders the zone-map pages for the whole run (None = in this process).
-# fn: export_cluster_figures, write clustering/{stem}_CENTROID_DENDROGRAM.png, _SILHOUETTE.png, _CLUSTERS.png.
+# fn: _has_sweep, True if a method's tree has a silhouette sweep (>= 3 flashes).
+# fn: export_dendrogram, write clustering/{stem}_{METHOD}_DENDROGRAM.png.
+# fn: export_cluster_comparison, write clustering/{stem}_SILHOUETTE.png + _CLUSTERS.png (both trees side by side).
 
 def map_workers_auto() -> int:
     """CPUs this process may use (the SLURM allocation on Linux, not the whole node), capped at MAP_WORKERS_MAX."""
@@ -421,28 +358,56 @@ def open_map_pool(map_workers: int | None) -> tuple[ProcessPoolExecutor | None, 
     return pool, n_workers
 
 
-def export_cluster_figures(analyzer: SREAnalyzer, stem: str, out_dir: Path) -> list[Path]:
-    """Centroid-tree dendrogram, silhouette sweep and cluster scatter -> 3 PNGs; none if < 3 flashes (no sweep)."""
-    if analyzer.centroid_tree is None or analyzer.silhouette_sweep.empty:
+def _has_sweep(analyzer: SREAnalyzer, method: str) -> bool:
+    """True if the tree of this method exists and has a silhouette sweep (>= 3 flashes)."""
+    clustering = analyzer.clusterings[method]
+    return clustering["tree"] is not None and not clustering["sweep"].empty
+
+
+def export_dendrogram(analyzer: SREAnalyzer, stem: str, out_dir: Path) -> list[Path]:
+    """Dendrogram of the last map(method) -> clustering/{stem}_{METHOD}_DENDROGRAM.png; none if < 3 flashes."""
+    method = analyzer.zone_method
+    if not _has_sweep(analyzer, method):
         return []
     out_dir.mkdir(parents=True, exist_ok=True)
-    cut = analyzer.cluster_cut
-    n_flashes = len(analyzer.flashes)
-    flash_zone_ids = analyzer.flashes["cluster"].to_numpy() + 1  # zone_id = cluster + 1 (map(): 1 zone per cluster)
-    figures = {
-        "CENTROID_DENDROGRAM": plot_centroid_dendrogram(
-            analyzer.centroid_tree, cut["centroid_h_px"], cut["n_clusters"],
-            f"{stem}: {n_flashes} flashes, centroid Euclidean distance, average linkage"),
-        "SILHOUETTE": plot_silhouette_sweep(analyzer.silhouette_sweep, cut["centroid_h_px"],
-                                            f"{stem}: centroid tree, mean silhouette vs h"),
-        "CLUSTERS": plot_cluster_scatter(
-            analyzer.flashes[["centroid_y", "centroid_x"]].to_numpy(), flash_zone_ids,
-            zone_colors(list(analyzer.zone_masks)), (analyzer.height, analyzer.width),
-            f"{stem}: {cut['n_clusters']} clusters\n(centroid tree cut at h {cut['centroid_h_px']:g} px, "
-            f"silhouette {cut['centroid_silhouette']:.3f})"),
-    }
+    clustering = analyzer.clusterings[method]
+    cut = clustering["cut"]
+    distance_label = {"centroid": "centroid Euclidean distance",
+                      "trace_corr": "footprint-trace 1 - r (Pearson)"}[method]
+    fig = plot_cluster_dendrogram(clustering["tree"], cut["h"], cut["n_clusters"],
+                                  f"{stem}: {len(analyzer.flashes)} flashes, {distance_label}, average linkage",
+                                  distance_label, TREE_UNITS[method])
+    path = out_dir / f"{stem}_{method.upper()}_DENDROGRAM.png"
+    fig.savefig(path, dpi=MAP_DPI)
+    return [path]
+
+
+def export_cluster_comparison(analyzer: SREAnalyzer, stem: str, out_dir: Path) -> list[Path]:
+    """Both trees side by side (CLUSTER_METHODS order) -> clustering/{stem}_SILHOUETTE.png (silhouette sweeps) +
+    {stem}_CLUSTERS.png (cluster scatters, zone-map colours); trees without a sweep (< 3 flashes) are left out."""
+    methods = [method for method in CLUSTER_METHODS if _has_sweep(analyzer, method)]
+    if not methods:
+        return []
+    out_dir.mkdir(parents=True, exist_ok=True)
+    centroids_yx = analyzer.flashes[["centroid_y", "centroid_x"]].to_numpy()
+    sweeps, scatters = [], []
+    for method in methods:
+        clustering = analyzer.clusterings[method]
+        cut, unit = clustering["cut"], TREE_UNITS[method]
+        sweeps.append({"sweep": clustering["sweep"], "cut_h": cut["h"], "unit": unit,
+                       "title": f"{method} tree: mean silhouette vs h"})
+        scatters.append({
+            "centroids_yx": centroids_yx,
+            "flash_zone_ids": analyzer.flashes[f"cluster_{method}"].to_numpy() + 1,  # zone_id = cluster + 1
+            "colors": zone_colors(list(range(1, cut["n_clusters"] + 1))),  # = that method's zone-map colours
+            "title": f"{method} tree: {cut['n_clusters']} clusters\n(cut at h {cut['h']:g} {unit}, "
+                     f"silhouette {cut['silhouette']:.3f})",
+        })
+    figures = {"SILHOUETTE": plot_silhouette_sweep(sweeps), "CLUSTERS": plot_cluster_scatter(
+        scatters, (analyzer.height, analyzer.width))}
     paths = []
     for suffix, fig in figures.items():
+        fig.suptitle(f"{stem}: {len(analyzer.flashes)} flashes")
         paths.append(out_dir / f"{stem}_{suffix}.png")
         fig.savefig(paths[-1], dpi=MAP_DPI)
     return paths
@@ -450,7 +415,7 @@ def export_cluster_figures(analyzer: SREAnalyzer, stem: str, out_dir: Path) -> l
 
 # ===========================================================================
 #
-#   NOT SORTED YET (-> STEP 4)
+#   NOT SORTED YET (-> CHARACTERIZATION)
 #
 # ===========================================================================
 
@@ -487,14 +452,13 @@ def zone_coverage(zone_masks: dict[int, np.ndarray], striatum: np.ndarray | None
 
 # ===========================================================================
 #
-#   NOT SORTED YET (-> STEP 5)
+#   NOT SORTED YET (-> EXPORT)
 #
 # ===========================================================================
 
 # fn: _figure_to_rgb, _gray_range, _thr_text, zone-map page helpers.
 # fn: _render_pages, _render_chunk, _render_pages_parallel, frame pages rendered in / out of the pool.
-# fn: export_zone_maps, write {stem}_ZONE_MAPS.tif.
-# fn: export_zone_contours, write zone_contours/*.png + overlap sheets in {stem}_ZONES.xlsx.
+# fn: export_zone_maps, write {stem}_{METHOD}_ZONE_MAPS.tif.
 
 def _figure_to_rgb(fig) -> np.ndarray:
     """Render a Figure at MAP_DPI -> (H, W, 3) uint8 RGB array."""
@@ -523,7 +487,7 @@ def _thr_text(analyzer: SREAnalyzer) -> str:
             f"{analyzer.threshold:.3f}")
 
 
-# --- 3a. page rendering (serial / process pool) ----------------------------
+# --- page rendering (serial / process pool) --------------------------------
 
 
 def _render_pages(specs, ctx: dict) -> Iterator[np.ndarray]:
@@ -577,7 +541,7 @@ def _render_pages_parallel(specs, ctx: dict, pool: ProcessPoolExecutor, n_worker
         yield from pending.popleft().result()
 
 
-# --- 3b. TIFF stack ---------------------------------------------------------
+# --- TIFF stack -------------------------------------------------------------
 
 
 def export_zone_maps(analyzer: SREAnalyzer, title_tag: str, out_path: Path,
@@ -641,33 +605,6 @@ def export_zone_maps(analyzer: SREAnalyzer, title_tag: str, out_path: Path,
     tifffile.imwrite(out_path, frame_pages(), shape=(n_pages, *first.shape), dtype=np.uint8, photometric="rgb",
                      compression="zlib")  # pages streamed one at a time: one series (pages, H, W, 3)
     return n_pages
-
-
-# --- 3c. contour montages ---------------------------------------------------
-
-
-def export_zone_contours(analyzer: SREAnalyzer, stem: str, out_dir: Path, xlsx_path: Path,
-                         striatum_outline: np.ndarray | None = None) -> list[Path]:
-    """Zone-group contour montages, TIGHT (inner circle) / LOOSE (furthest circle), + overlap of the group-largest
-    zones as sheets overlap_tight / overlap_loose of xlsx_path.
-
-    Returns the PNG paths; none if there are no recur_zones.
-    """
-    masks, nr_masks = analyzer.zone_masks, {}  # plot_zone_groups' NR layer: no NR zones any more
-    shape = (analyzer.height, analyzer.width)
-    paths, sheets = [], {}
-    for mode, suffix in (("inner", "TIGHT"), ("far", "LOOSE")):
-        groups, circles = group_zones(masks, mode)
-        sheets[f"overlap_{suffix.lower()}"] = group_overlaps(masks, groups, analyzer.um_per_px)
-        if masks:
-            out_dir.mkdir(parents=True, exist_ok=True)
-            paths.append(out_dir / f"{stem}_ZONE_CONTOURS_{suffix}.png")
-            plot_zone_groups(masks, nr_masks, groups, circles, mode, stem, shape, striatum_outline).savefig(
-                paths[-1], dpi=MAP_DPI)
-    with pd.ExcelWriter(xlsx_path, mode="a", engine="openpyxl") as writer:
-        for name, table in sheets.items():
-            table.to_excel(writer, sheet_name=name, index=False)
-    return paths
 
 
 if __name__ == "__main__":

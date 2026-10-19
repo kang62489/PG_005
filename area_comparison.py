@@ -44,16 +44,16 @@ console = Console()
 #
 # ===========================================================================
 
-# --- Step 1: MED -----------------------------------------------------------
+# --- MED -----------------------------------------------------------
 TARGET_OBJ = "10X"  # spontaneous recur_zones exist for 10X only
 
-# --- Step 2: recur_zones --------------------------------------------------
+# --- recur_zones --------------------------------------------------
 SPONT_SUFFIX = "_BIEXP_ALS"  # {recording}{suffix}_ZONES.xlsx / .npz / _FLASH_MASK.tif
 
-# --- Step 3: match ---------------------------------------------------------
+# --- match ---------------------------------------------------------
 MATCH_MAX_DIST_PX = 50  # px (~67 µm at 10X): MED centroid -> nearest recur_zone centroid; farther = no match
 
-# --- Step 4: groups --------------------------------------------------------
+# --- groups --------------------------------------------------------
 GROUP_NAMES = {"A": "estim_induced MED", "B": "spontaneous MED",  # Groups sheet "description" column
                "C": "unmatched recur_zones"}
 PAIRS = [("A", "C"), ("B", "C"), ("A", "B")]  # Mann-Whitney U pairs, two-sided, raw p
@@ -61,9 +61,11 @@ PAIRS = [("A", "C"), ("B", "C"), ("A", "B")]  # Mann-Whitney U pairs, two-sided,
 
 # ===========================================================================
 #
-#   STEP 1 -- MED: larger of spike / spike+1 frame, size + centroid
+#   MED: larger of spike / spike+1 frame, size + centroid
 #
 # ===========================================================================
+
+# fn: med_flash, one MED row: the larger of the spike / spike+1 frame (total flash area) and its pixel centroid.
 
 
 def med_flash(row: dict, db_dir: Path) -> dict:
@@ -96,9 +98,13 @@ def med_flash(row: dict, db_dir: Path) -> dict:
 
 # ===========================================================================
 #
-#   STEP 2 -- RECUR_ZONES: median / mean per-frame area + footprint centroid
+#   RECUR_ZONES: median / mean per-frame area + footprint centroid
 #
 # ===========================================================================
+
+# fn: zone_frames, recur_zone id -> its unique active frames (1-based), from the 'recur_zones' sheet.
+# fn: zone_sizes, per recur_zone of one recording: n_frames, median / mean per-frame area (µm²), footprint centroid;
+#     plus one event row per (recur_zone, active frame) with that frame's area.
 
 
 def zone_frames(xlsx_path: Path) -> dict[int, list[int]]:
@@ -143,9 +149,12 @@ def zone_sizes(recording: str, spont_dir: Path, um2_per_px: float) -> tuple[list
 
 # ===========================================================================
 #
-#   STEP 3 -- MATCH: MED flash -> nearest recur_zone of the same recording
+#   MATCH: MED flash -> nearest recur_zone of the same recording
 #
 # ===========================================================================
+
+# fn: match_zone, matched_recur_zone_id / match_dist_px / recur_zone_median_um2 of the nearest recur_zone centroid (None
+#     if none < MATCH_MAX_DIST_PX).
 
 
 def match_zone(med: dict, zones: list[dict]) -> dict:
@@ -167,9 +176,13 @@ def match_zone(med: dict, zones: list[dict]) -> dict:
 
 # ===========================================================================
 #
-#   STEP 4 -- GROUPS: A / B / C areas, summary + pairwise Mann-Whitney
+#   GROUPS: A / B / C areas, summary + pairwise Mann-Whitney
 #
 # ===========================================================================
+
+# fn: group_areas, A / B = MED area_um2 by flash_origin; C = median_area_um2 of recur_zones not matched to a MED.
+# fn: group_stats, per-group n / median / IQR rows, and one Mann-Whitney U row per PAIRS entry (skipped if a group is
+#     empty).
 
 
 def group_areas(med_rows: list[dict], zone_rows: list[dict]) -> dict[str, np.ndarray]:
@@ -207,6 +220,8 @@ def group_stats(areas: dict[str, np.ndarray]) -> tuple[list[dict], list[dict]]:
 #   RUN
 #
 # ===========================================================================
+
+# fn: run, MED rows -> recur_zone rows for the same recordings -> area_comparison.xlsx next to the DB.
 
 
 def run(db_path: Path, spont_dir: Path) -> Path:

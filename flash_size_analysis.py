@@ -25,10 +25,10 @@ from rich.console import Console
 
 # Local imports
 from classes import SREAnalyzer
-from classes.sre_analyzer import CROSSOVER_RATIO
+from classes.recording_list import RecordingList
 from functions import check_cuda
+from functions.fit_hist import CROSSOVER_RATIO
 from functions.flash_table import flash_table
-from SRE_analysis import select_recordings, set_connect_radius, set_removal_suggestion
 
 console = Console()
 
@@ -51,21 +51,18 @@ DEFAULT_OBJS = ["40X", "60X"]  # 10X flashes come from SRE_analysis.py
 def run(proc_list_path: Path, results_dir: Path = Path("results"), objs: list[str] | None = None,
         sensor: str | None = None, sigma: float = CROSSOVER_RATIO, cuda_available: bool = False,
         db_path: Path = Path("data/rec_data.db"), exp_db_path: Path = Path("data/exp_info.db")) -> None:
-    """Steps 1-3 for every selected recording in a proc list."""
+    """Select -> detect -> export for every selected recording in a proc list."""
     run_t0 = time.time()
     out_dir = results_dir / "flash_size"
     out_dir.mkdir(parents=True, exist_ok=True)
     objs = objs or DEFAULT_OBJS
 
-    # Step 1. Select
-    recordings = select_recordings(proc_list_path, db_path, exp_db_path, all_obj=True)
-    keep = recordings["OBJ"].is_in(objs)
-    if sensor is not None:
-        keep &= recordings["SENSOR"] == sensor
-    recordings = recordings.filter(keep)
+    # Select
+    recording_list = RecordingList(proc_list_path, "proc", db_path, exp_db_path)
+    recordings = recording_list.select(objs=objs, sensor=sensor)
     console.log(f"{len(recordings)} recording(s) selected ({', '.join(objs)}{f', {sensor}' if sensor else ''})")
-    recordings = set_removal_suggestion(recordings, results_dir)  # th_small_obj of every recording, set once
-    recordings = set_connect_radius(recordings)  # connect_radius from th_small_obj, set once
+    recordings = recording_list.set_removal_suggestion(recordings, results_dir)  # th_small_obj of every recording
+    recordings = recording_list.set_connect_radius(recordings)  # connect_radius from th_small_obj, set once
     for i, row in enumerate(recordings.iter_rows(named=True), 1):
         stem = Path(row["proc_tiff_path"]).stem
         out_path = out_dir / f"{stem}.csv"
@@ -74,7 +71,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), objs: list[st
             continue
         t0 = time.time()
 
-        # Step 2. Detect
+        # Detect
         th_small_obj = row["th_small_obj"]
         console.log(f"  {stem}: th_small_obj {th_small_obj:,} px ({row['th_small_obj_flag'] or 'permutation'})")
         analyzer = SREAnalyzer(tifffile.imread(row["proc_tiff_path"]), obj=row["OBJ"], sigma_ratio=sigma,
@@ -82,7 +79,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), objs: list[st
                                connect_radius=row["connect_radius"])
         analyzer.detect()
 
-        # Step 3. Export
+        # Export
         _, table = flash_table(analyzer.mask, analyzer.um_per_px)
         table.insert(0, "sensor", row["SENSOR"])
         table.insert(0, "obj", row["OBJ"])
