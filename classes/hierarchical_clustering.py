@@ -1,6 +1,6 @@
 """
 Hierarchical clustering of flashes, cut at the best mean silhouette or at the acceleration elbow
-(SREAnalyzer.group_centroid / group_trace).
+(SREAnalyzer.group_z_peak / group_trace).
 
   Step 1. build_tree       : flash x flash distance -> average-linkage tree (n - 1 merges)
   Step 2. best_silhouette  : cut the tree at every h of the sweep -> mean silhouette -> best h (first of the maximum)
@@ -10,7 +10,7 @@ Hierarchical clustering of flashes, cut at the best mean silhouette or at the ac
                              (best-silhouette clusters kept too: silhouette_cut, silhouette_cluster_ids)
 
 Example:
-    >>> hc = HierarchicalClustering(distance, CENTROID_CUT_PX, cut_rule="acceleration")
+    >>> hc = HierarchicalClustering(distance, Z_PEAK_CUT_PX, cut_rule="acceleration")
     >>> hc.run()
     >>> hc.cluster_ids, hc.cut, hc.silhouette_cut, hc.tree, hc.sweep
 """

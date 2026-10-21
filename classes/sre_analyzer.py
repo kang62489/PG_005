@@ -1,11 +1,11 @@
 """
 Spontaneous ACh flash -> zone analysis for one deltaF/F0 stack.
 
-  CLASS  SREAnalyzer             : detect() -> group_centroid() / group_trace() -> map(method) -> save_*()
+  CLASS  SREAnalyzer             : detect() -> group_z_peak() / group_trace() -> map(method) -> save_*()
   BLOCK  SHARED HELPERS          : timed, cut_h_name
 
 Flash mask: functions/flash_mask.py; footprint traces: functions/footprint_traces.py;
-clustering (centroid tree cut at the acceleration elbow, trace_corr tree at the best-silhouette h):
+clustering (z_peak tree and trace_corr tree, both cut at the best-silhouette h):
 classes/hierarchical_clustering.py.
 
 recur_zone = recurring zone (non-recurring zones are not defined for the clustering yet).
@@ -14,7 +14,7 @@ Example:
     >>> analyzer = SREAnalyzer(stack, obj="10X")
     >>> analyzer.detect()
     >>> footprint_path = analyzer.save_flash_footprints(out_dir, stem)
-    >>> analyzer.group_centroid()
+    >>> analyzer.group_z_peak()
     >>> analyzer.group_trace(footprint_path)
     >>> analyzer.map("trace_corr")
     >>> analyzer.save_zones(out_dir, stem)
@@ -62,11 +62,11 @@ CONNECT_RADIUS = 25           # px: default same-frame join distance; SRE_analys
                               # (sqrt(th_small_obj / pi) in 5 px steps)
 
 # --- Clustering (group) ---------------------------------------------------
-CENTROID_CUT_PX = np.arange(5, 505, 5)  # px: centroid tree cut heights swept for the best mean silhouette
+Z_PEAK_CUT_PX = np.arange(5, 505, 5)  # px: z_peak tree cut heights swept for the best mean silhouette
 TRACE_CUT_1MR = np.round(np.arange(0.01, 0.91, 0.01), 2)  # 1 - r: trace tree cut heights swept the same way
-TREE_UNITS = {"centroid": "px", "trace_corr": "1 - r"}  # unit of each tree's distance / cut height h
-CUT_RULES = {"centroid": "acceleration", "trace_corr": "silhouette"}  # cut of each tree (both keep the silhouette
-                                                                     # sweep + best-silhouette cut)
+TREE_UNITS = {"z_peak": "px", "trace_corr": "1 - r"}  # unit of each tree's distance / cut height h
+CUT_RULES = {"z_peak": "silhouette", "trace_corr": "silhouette"}  # cut of each tree ("acceleration": elbow; both
+                                                                   # keep the silhouette sweep + best-silhouette cut)
 
 # --- Zones + stats (map) --------------------------------------------------
 FRAME_RATE_HZ = 20            # imaging rate, converts frames -> seconds for recur_zone event stats
@@ -80,7 +80,7 @@ class SREAnalyzer:
         bg_center, bg_sigma, threshold, mask, flashes, footprints     (detect)
         flashes["cluster_{method}"], detections (= flashes),
         clusterings[method] = {"clusters", "cut", "cut_rule", "silhouette_cut", "silhouette_cluster_ids",
-                               "tree", "sweep"}    (group_centroid / group_trace)
+                               "tree", "sweep"}    (group_z_peak / group_trace)
         zone_method, zones (1 per cluster), zone_masks, zone_centroids, zone_stats   (map)
     """
 
@@ -96,13 +96,13 @@ class SREAnalyzer:
         self.cuda_available = cuda_available
         self.th_small_obj = th_small_obj
         self.connect_radius = connect_radius  # px: same-frame blobs this close are one flash
-        self.clusterings: dict[str, dict] = {}  # method ("centroid" / "trace_corr") -> its clusters, cuts, tree, sweep
+        self.clusterings: dict[str, dict] = {}  # method ("z_peak" / "trace_corr") -> its clusters, cuts, tree, sweep
 
     def run(self) -> None:
-        """detect -> group_centroid -> map("centroid")."""
+        """detect -> group_z_peak -> map("z_peak")."""
         self.detect()
-        self.group_centroid()
-        self.map("centroid")
+        self.group_z_peak()
+        self.map("z_peak")
 
     # -----------------------------------------------------------------------
     # detect: background threshold -> flash mask -> flashes (close blobs joined)   (functions/flash_mask.py)
@@ -122,7 +122,8 @@ class SREAnalyzer:
         # per-frame flashes = 8-connected blobs, blobs <= connect_radius apart joined
         max_area = MAX_FLASH_FRAC * self.height * self.width
         with timed("detect label flashes"):
-            self.flashes, self.footprints, giant = self.label_flashes(self.mask, max_area, self.connect_radius)
+            self.flashes, self.footprints, giant = self.label_flashes(self.mask, self.stack_f16, max_area,
+                                                                      self.connect_radius)
         self.detections = self.flashes  # zones / stats / maps read the flashes as "detections"
         console.log(f"  {len(self.flashes)} flashes (same-frame blobs <= {self.connect_radius} px apart joined)")
         if giant:
@@ -130,12 +131,13 @@ class SREAnalyzer:
                         f"in frames {[frame for frame, _ in giant]}[/yellow]")
 
     @staticmethod
-    def label_flashes(mask: np.ndarray, max_area: float,
+    def label_flashes(mask: np.ndarray, stack: np.ndarray, max_area: float,
                       connect_radius: float) -> tuple[pd.DataFrame, list, list[tuple[int, int]]]:
         """Per frame: 8-connected blobs, blobs <= connect_radius apart joined, keep area <= max_area;
-        joint_label unique over the recording.
+        joint_label unique over the recording. z peak = the footprint pixel of the largest z in its frame
+        (z = (value - bg_center) / bg_sigma, so the largest value).
 
-        Returns (flashes table: frame (1-based), joint_label, centroid_y, centroid_x, area; footprints;
+        Returns (flashes table: frame (1-based), joint_label, z_peak_y, z_peak_x, area; footprints;
         dropped giants [(frame 1-based, area)]).
         """
         flash_props, footprints, dropped = [], [], []
@@ -150,11 +152,12 @@ class SREAnalyzer:
                     dropped.append((frame_id + 1, len(coords)))
                     continue
                 footprints.append(coords)
+                peak_y, peak_x = coords[int(np.argmax(stack[frame_id, coords[:, 0], coords[:, 1]]))]
                 flash_props.append({"frame": frame_id + 1, "joint_label": int(label) + label_offset,
-                                    "centroid_y": float(coords[:, 0].mean()), "centroid_x": float(coords[:, 1].mean()),
+                                    "z_peak_y": float(peak_y), "z_peak_x": float(peak_x),
                                     "area": len(coords)})
             label_offset += n_frame_labels
-        columns = ["frame", "joint_label", "centroid_y", "centroid_x", "area"]
+        columns = ["frame", "joint_label", "z_peak_y", "z_peak_x", "area"]
         return pd.DataFrame(flash_props, columns=columns), footprints, dropped
 
     @staticmethod
@@ -193,19 +196,27 @@ class SREAnalyzer:
         return path
 
     # -----------------------------------------------------------------------
-    # group_centroid / group_trace: flashes -> clusters      (classes/hierarchical_clustering.py)
+    # group_z_peak / group_trace: flashes -> clusters      (classes/hierarchical_clustering.py)
     # -----------------------------------------------------------------------
 
-    def group_centroid(self) -> None:
-        """Flash centroids -> Euclidean distance (px) -> HierarchicalClustering (tree cut at the acceleration elbow,
-        CUT_RULES) -> flashes["cluster_centroid"] + clusterings["centroid"]."""
+    def group_z_peak(self) -> None:
+        """Flash z peaks -> Euclidean distance (px) -> HierarchicalClustering (cut per CUT_RULES: best-silhouette h)
+        -> flashes["cluster_z_peak"] + clusterings["z_peak"]; the acceleration-elbow cut of the same tree is kept
+        for the clustering/ plots (clusterings["z_peak"]["acceleration_cut"], ["acceleration_cluster_ids"])."""
         n = len(self.flashes)
-        with timed("group  centroid distance + tree + silhouette sweep"):
-            distance = (squareform(pdist(self.flashes[["centroid_y", "centroid_x"]].to_numpy())) if n > 1
+        with timed("group  z_peak distance + tree + silhouette sweep"):
+            distance = (squareform(pdist(self.flashes[["z_peak_y", "z_peak_x"]].to_numpy())) if n > 1
                         else np.zeros((n, n)))
-            hc = HierarchicalClustering(distance, CENTROID_CUT_PX, cut_rule=CUT_RULES["centroid"])
+            hc = HierarchicalClustering(distance, Z_PEAK_CUT_PX, cut_rule=CUT_RULES["z_peak"])
             hc.run()
-        self.store_clustering("centroid", hc)
+            elbow = HierarchicalClustering(distance, Z_PEAK_CUT_PX, cut_rule="acceleration")
+            elbow.run()
+        self.store_clustering("z_peak", hc)
+        if CUT_RULES["z_peak"] != "acceleration":
+            self.clusterings["z_peak"]["acceleration_cut"] = elbow.cut
+            self.clusterings["z_peak"]["acceleration_cluster_ids"] = elbow.cluster_ids
+            console.log(f"    (acceleration h: {elbow.cut['h']:g} {TREE_UNITS['z_peak']}, {elbow.cut['n_clusters']} "
+                        f"clusters, silhouette {elbow.cut['silhouette']:.3f})")
 
     def group_trace(self, footprint_path: Path) -> None:
         """Flash footprints (save_flash_footprints npz) -> trace = mean z-score over the footprint, every frame ->
@@ -273,12 +284,12 @@ class SREAnalyzer:
 
     def find_zone_centroids(self) -> dict[int, tuple[float, float]]:
         """zone id -> mean (y, x) of its member units' centroids."""
-        track_xy = self.detections.groupby("joint_label")[["centroid_y", "centroid_x"]].mean()
+        track_xy = self.detections.groupby("joint_label")[["z_peak_y", "z_peak_x"]].mean()
         centroids: dict[int, tuple[float, float]] = {}
         for row in self.zones.itertuples():
             members = track_xy.loc[track_xy.index.intersection(row.joint_labels)]
             if not members.empty:
-                centroids[row.zone_id] = (float(members["centroid_y"].mean()), float(members["centroid_x"].mean()))
+                centroids[row.zone_id] = (float(members["z_peak_y"].mean()), float(members["z_peak_x"].mean()))
         return centroids
 
     def zone_stats_table(self) -> pd.DataFrame:
@@ -320,7 +331,7 @@ class SREAnalyzer:
     # -----------------------------------------------------------------------
 
     def save_flashes(self, out_dir: Path, stem: str, save_mask: bool = True, debug: bool = False) -> dict[str, Path]:
-        """Write mask/{stem}_FLASH_MASK.tif (save_mask) + debug: {stem}_FLASHES.csv (cluster_centroid,
+        """Write mask/{stem}_FLASH_MASK.tif (save_mask) + debug: {stem}_FLASHES.csv (cluster_z_peak,
         cluster_trace_corr columns)."""
         paths = {}
         if save_mask:  # 1200 x 1024 x 1024 uint8 = 1.26 GB raw -> zlib

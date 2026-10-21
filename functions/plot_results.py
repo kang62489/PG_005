@@ -1259,7 +1259,7 @@ def plot_zone_stats(zones, title: str) -> Figure:
     return fig
 
 
-# --- Flash clustering (centroid tree: acceleration cut, trace tree: best silhouette) ---
+# --- Flash clustering (z_peak tree, trace tree: best silhouette) ---
 
 def plot_cluster_dendrogram(tree: np.ndarray, cut_h: float, n_clusters: int, title: str,
                             distance_label: str, unit: str, h_name: str = "best h") -> Figure:
@@ -1337,7 +1337,7 @@ def plot_cluster_scatter(panels: list[dict], shape: tuple[int, int]) -> Figure:
         ax.set_xlim(0, shape[1])
         ax.set_ylim(shape[0], 0)  # image orientation: y down
         ax.set_aspect("equal")
-        ax.set_xlabel("centroid_x (px)")
-        ax.set_ylabel("centroid_y (px)")
+        ax.set_xlabel("z_peak_x (px)")
+        ax.set_ylabel("z_peak_y (px)")
         ax.set_title(panel["title"])
     return fig
