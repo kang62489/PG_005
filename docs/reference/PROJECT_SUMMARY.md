@@ -1,895 +1,183 @@
 # ACID - Analyzer for Cholinergic Influence Domain
 
-**Project Code**: PG_005
+**Project code**: PG_005. **Updated**: 2026-10-22 (rewritten from the code; the June version described `im_dynamics.py` /
+`batch_process.py`, now in `archive/`).
 
-## Project Overview
-
-**ACID** is an imaging analysis platform for studying neurotransmitter release dynamics. The system performs **acetylcholine (ACh) imaging analysis** with two main workflows:
-1. **Image Preprocessing**: Raw TIFF stack preprocessing (detrending, Gaussian filtering)
-2. **Spike-Aligned Analysis**: Spike-centered imaging analysis with spatial categorization to identify chemical release distribution patterns
+Keep this file and `DEPENDENCY_DIAGRAM.md` current: update both whenever a `.py` file is added, removed, renamed or
+moved, or a pipeline's flow changes (`CLAUDE.md`, Documentation).
 
 ---
 
-## File Structure
+## 1. Overview
+
+ACh imaging (GRAB-ACh / GACh3.0, iAChSnFR) of striatal slices with a patched cholinergic interneuron (ChI).
+
+| Part | Question | Entry point |
+|---|---|---|
+| Preprocessing | clean ΔF/F₀ z-stacks from raw TIFFs | `img_proc.py` → `als_correct.py` |
+| Spike-aligned (MED) | what one ChI spike releases | `ach_domain_analysis.py` |
+| Spontaneous (SRE) | where ACh is released again and again (recur_zones) | `permutation_test.py` → `SRE_analysis.py` |
+| Side analyses | flash sizes per objective, MED vs recur_zone size | `flash_size_analysis.py`, `area_comparison.py` |
+| GUI | pick recordings, run preprocessing / spike-aligned analysis, draw striatum boundaries | `main.py` |
+
+Terms (flash, recur_zone, th_small_obj, sur_flash, ...): `docs/glossary.md`.
+
+---
+
+## 2. Pipelines
+
+Every pipeline reads its recordings through `classes/recording_list.RecordingList` (a `proc_*.txt` / `ana_*.txt` list
+from `data/`, joined with `data/rec_data.db` / `data/exp_info.db`).
+
+### 2.1 `img_proc.py` — preprocessing (BIEXP)
+
+Raw TIFF → `sample_tau` (bi-exp τ from 500 random pixels) → `biexp_detrend` (per-pixel baseline, ΔF/F₀) →
+`fit_zscore_background` + `img_zscore_convert` (stack-wide z-score) → `gaussian_blur_run` (σ = 4 px) →
+`proc_tiffs/{stem}_BIEXP_GAUSS.tif` (float16).
+
+### 2.2 `als_correct.py` — slow-fluctuation removal
+
+`*_BIEXP_GAUSS.tif` → `als_run` (per-pixel asymmetric least squares baseline, CPU / CUDA) → subtract →
+`proc_tiffs/{stem}_BIEXP_ALS.tif`. The ALS files are the input of every analysis below.
+
+### 2.3 `ach_domain_analysis.py` — spike-aligned analysis
+
+| Step | Code | Output |
+|---|---|---|
+| Clip | `AbfClip`: spikes in the ABF → one image / Vm segment per spike | `spikes/*_spike_analysis.png` |
+| Reliability | `SpikeReliabilityChecker`: does each segment show its own flash? | `reliability/*_RELIABILITY.png`, `*_VM_SUCCESS_FAIL.png` |
+| Median | `spike_centered_median` of the detected segments (MED) | `median/*_MED.tif` |
+| Categorize | `SpatialCategorizer`: bright / background per frame (baseline mean + 2.0 σ) | `categorized/*_CAT.tif` |
+| Region + Flow | `RegionAnalyzer`: clusters, flash area decay, TV-L1 flow, flow pattern (DV / ML from the striatum boundary) | `spatial/*_SPATIAL.png`, `flow/*_FLOW.png`, `*_STREAMLINES.png` |
+| Export | `ResultsExporter` → `results.db` (experiments + flow_pairs); stats sheets | `{ana_list}_cells.xlsx` |
+
+### 2.4 `permutation_test.py` — th_small_obj per recording
+
+Is a th_flash bigger than chance? Time-shifted surrogates (per-pixel random lag before blur + ALS) → largest
+sur_flash per surrogate → smallest size with p < α = **th_small_obj** →
+`results/permutation/{OBJ}/removal_suggestion.csv`. Method: `docs/permutation_test.md`. Runs on Saion
+(`run_permutation_test_on_saion.slm`).
+
+### 2.5 `SRE_analysis.py` — spontaneous release events → recur_zones
+
+| Step | Code | Output (`{results_dir}/spontaneous/`) |
+|---|---|---|
+| Input | 10X recordings with a `*_BIEXP_ALS.tif`; own th_small_obj from `removal_suggestion.csv` | — |
+| Detection | `SREAnalyzer.detect`: background threshold (peak + 2 σ), flash mask (`functions/flash_mask`), every 8-connected blob of a frame = one flash (`JOIN_SAME_FRAME = False`) | `footprints/{stem}_FLASH_FOOTPRINTS.npz`, `mask/{stem}_FLASH_MASK.tif` |
+| Clustering | `SREAnalyzer.group_trace`: footprint traces (`functions/footprint_traces`) → 1 − r (Pearson) → `HierarchicalClustering` (average linkage, cut at the best mean silhouette) | `clustering/{stem}_TRACE_CORR_DENDROGRAM.png`, `{stem}_SILHOUETTE.png`, `{stem}_CLUSTERS.png` (z peaks + correlation map) |
+| Zones | `SREAnalyzer.map("trace_corr")`: each cluster = one recur_zone (union of footprints, event stats) | `{stem}_TRACE_CORR_ZONES.xlsx`, `footprints/{stem}_TRACE_CORR_ZONES.npz`, `{stem}_TRACE_CORR_ZONE_MAPS.tif` |
+| Characterization | striatum outline + axis labels from `bd_*.json` (coverage commented out) | on the zone maps |
+
+The z_peak tree (`group_z_peak`) is kept in the class but not run (`CLUSTER_METHODS`). Method and decisions:
+`docs/hierarchical_clustering.md` (§12 for the current setup).
+
+### 2.6 Side analyses
+
+- `flash_size_analysis.py`: `SREAnalyzer.detect` only, for 40X / 60X → `results/flash_size/{stem}.csv` (one row per
+  flash, `functions/flash_table`).
+- `area_comparison.py`: MED flash area (results.db) vs spontaneous recur_zone sizes of the same field →
+  `area_comparison.xlsx`. Reads the old `{stem}_ZONES.xlsx` layout of `results/spontaneous/`.
+- `prototype_*.py`: exploratory (full-stack waves, MED kymographs, peak tracking); not part of the pipelines.
+
+---
+
+## 3. File structure
 
 ```
 PG_005/
-├── main.py                          # GUI entry point (ACID - PySide6 QMainWindow)
-├── img_proc.py                      # Main script: Image preprocessing (MOV/BIEXP/BOTH modes)
-├── im_dynamics.py                   # Main script: Spike-triggered ACh analysis (interactive)
-├── batch_process.py                 # Batch processor: Process all picked pairs
-├── test_batch.py                    # Test batch processor: Process specific date
-│
-├── [Archived Scripts — archive/]
-├── archive/im_preprocess.py         # Old MOV-only preprocessing (superseded by img_proc.py)
-├── archive/run_biexp_detrend.py     # Old standalone biexp script (superseded by img_proc.py)
-├── archive/cpu_binning.py           # Unused spatial binning
-├── archive/kmeans.py                # Unused K-means helpers
-│
-├── views/                           # GUI view layer (PySide6 widget layouts)
-│   ├── __init__.py
-│   ├── view_dor_query.py            # Tab: Query by DOR
-│   ├── view_data_selector.py        # Tab: Data Selector
-│   ├── view_img_proc.py             # Tab: Image Processing (pick list, console output)
-│   └── view_als_cal.py              # Tab: ALS Correction (ALS config, 5 MplCanvas)
-│
-├── controllers/                     # GUI controller layer (signals + business logic)
-│   ├── __init__.py
-│   ├── ctrl_dor_query.py            # Controller: DOR Query tab
-│   ├── ctrl_data_selector.py        # Controller: Data Selector tab
-│   ├── ctrl_img_proc.py             # Controller: Image Processing tab
-│   │                                #   - pick list loading, file status check
-│   │                                #   - export_proc_list() → proc_YYYYMMDD_NNN.txt
-│   │                                #   - start_processing(): BackgroundWorker(use_emitter=True)
-│   │                                #   - _on_progress(dict) → routes to form fields
-│   └── ctrl_als_cal.py              # Controller: ALS Correction tab (ROI test + batch run)
+├── main.py                     GUI entry point (ACID)
+├── img_proc.py                 preprocessing: biexp detrend + z-score + Gaussian blur -> *_BIEXP_GAUSS.tif
+├── als_correct.py              ALS slow-fluctuation removal -> *_BIEXP_ALS.tif
+├── ach_domain_analysis.py      spike-aligned analysis (MED, CAT, regions, flow) -> results.db + figures
+├── permutation_test.py         surrogate test -> th_small_obj per recording
+├── SRE_analysis.py             spontaneous flashes -> trace_corr recur_zones
+├── flash_size_analysis.py      flash sizes per recording (40X / 60X)
+├── area_comparison.py          MED flash vs recur_zone sizes
+├── prototype_*.py              exploratory scripts (3)
+├── run_*_on_saion.slm / run_ach_domain_analysis_on_deigo.slm   HPC jobs (OIST Saion / Deigo)
 │
 ├── classes/
-│   ├── __init__.py                  # Lazy imports (_LAZY_IMPORTS + __getattr__)
-│   ├── bk_worker.py                 # BackgroundWorker(QThread) — runs fn(*args, **kwargs); work_done Signal()
-│   ├── dialog_confirm.py            # DialogConfirm
-│   ├── dialog_get_path.py           # DialogGetFile, DialogGetPath
-│   ├── helper_cell_dropdown.py      # CellDropdownDelegate (editable dropdown cells)
-│   ├── helper_checkable_dropdown.py # CheckableDropdown
-│   ├── model_from_dataframe.py      # ModelFromDataFrame (Qt table model for polars)
-│   ├── plot_results.py              # MplCanvas + interactive Qt viewers
-│   ├── abf_clip.py                  # ABF data clipping + spike detection utilities
-│   ├── spatial_categorization.py    # SpatialCategorizer class
-│   ├── region_analyzer.py           # RegionAnalyzer class (area, centroid, contours)
-│   ├── results_exporter.py          # ResultsExporter (SQLite + TIFF + PNG exporter)
-│   └── archived_methods.py          # Archived: dbscan, region_growing
+│   ├── recording_list.py       RecordingList: list file + databases -> recordings, th_small_obj, connect_radius
+│   ├── abf_clip.py             AbfClip: spike detection + per-spike image / Vm segments
+│   ├── spike_reliability.py    SpikeReliabilityChecker: per-segment flash check
+│   ├── spatial_categorization.py  SpatialCategorizer: bright / background (connected / watershed / morphological)
+│   ├── region_analyzer.py      RegionAnalyzer: clusters, area, decay, TV-L1 flow, flow pattern; PIXEL_SCALE
+│   ├── results_exporter.py     ResultsExporter: results.db + TIFF / PNG layout (keep its filename rules)
+│   ├── sre_analyzer.py         SREAnalyzer: detect -> group_trace (/ group_z_peak) -> map -> save_*
+│   ├── hierarchical_clustering.py  HierarchicalClustering: average-linkage tree, silhouette / acceleration cut
+│   ├── wave_profiles.py        strip profiles + persistence test (prototype_full_als_waves.py)
+│   ├── mpl_canvas.py           MplCanvas (GUI plots)
+│   ├── archived_methods.py     archived categorization methods
+│   └── GUI helpers             bk_worker (BackgroundWorker), dialog_* , helper_* dropdowns, model_from_dataframe
 │
-├── functions/
-│   ├── __init__.py                  # Lazy imports for all heavy functions
-│   ├── xlsx_reader.py               # Read metadata from REC_*.xlsx files
-│   │
-│   ├── [Hardware/CUDA]
-│   │   ├── check_cuda.py            # check_cuda() → (bool, str): CUDA status + log messages (numba imported lazily inside function)
-│   │   ├── test_cuda.py             # Test CUDA functionality
-│   │   └── get_memory_use.py        # Memory usage monitoring
-│   │
-│   ├── [Preprocessing — unified CPU+GPU]
-│   │   ├── detrend.py               # MOV + BIEXP detrend → ΔF/F₀ output (Numba JIT + CUDA kernels)
-│   │   ├── gaussian_blur.py         # Separable 2D Gaussian blur (Numba JIT + CUDA)
-│   │   ├── tau_estimate.py          # Bi-exp tau estimation (scipy curve_fit, 500 pixels)
-│   │   └── als.py                   # ALS slow-fluctuation estimation (Thomas algorithm, CPU NumPy + CUDA GPU)
-│   │
-│   └── [Analysis]
-│       ├── kmeans.py                            # K-means clustering
-│       ├── spike_alignment.py                   # Spike-aligned median/mean
-│       └── imaging_segments_zscore_normalization.py  # Z-score normalization
+├── functions/                  lazy-imported via functions/__init__.py (_LAZY_IMPORTS)
+│   ├── preprocessing           detrend, tau_estimate, gaussian_blur, als, fit_hist (histogram fits, z-score)
+│   ├── spontaneous             flash_mask, footprint_traces, permutation, flash_table, zone_groups
+│   ├── spike-aligned           spike_alignment, load_img_segs, ap_threshold, cluster_kernels, flash_flow,
+│   │                           tvl1_flow, flow_pattern
+│   ├── plots                   plot_results (headless Figures for every pipeline)
+│   ├── data / files            filelist_parser, database_ops, file_status, xlsx_writer, st_boundary
+│   └── hardware                check_cuda (call before anything imports numba), get_memory_use
 │
-├── utils/
-│   └── params.py                    # Path constants (BASE_DIR, MODELS_DIR, etc.) + UISizes
+├── controllers/ + views/       GUI (one ctrl_* / view_* pair per window, see section 4)
+├── utils/params.py             paths (data/, results/, proc_tiffs/, ...), UISizes, ColumnSorter
+├── styles/styles.qss           Qt stylesheet (currently not applied)
+├── archive/                    retired scripts (im_dynamics, batch_process, test_batch, kmeans, xlsx_reader, ...)
 │
-├── docs/
-│   ├── continue_from_here.md        # Session progress log (current TODOs)
-│   ├── glossary.md                  # Terminology
-│   ├── knowledgebase/               # Concepts, terms, principles
-│   ├── resolved_problems/           # Solved bugs + fixes
-│   ├── reference/                   # Code/architecture docs (this file, DEPENDENCY_DIAGRAM, DATABASE_STRUCTURE, ...)
-│   └── paper/                       # Paper discussion, results, plain_01-03 (each with figures/ scripts/ tables/)
-│
-├── data/                            # Pick lists + proc lists
-│   ├── pick_YYYYMMDD_NNN.txt        # Pick lists (selected TIFFs + paired ABF)
-│   └── proc_YYYYMMDD_NNN.txt        # Proc lists (dir paths + PROC/MODE per entry)
-│
-├── scripts/
-│   ├── migrate_database.py          # Database migration script (completed 2026-02-10)
-│   └── __init__.py
-│
-├── raw_tiffs/                       # Raw TIFF stacks (input)
-├── raw_abfs/                        # ABF files (electrophysiology input)
-├── proc_tiffs/                      # Preprocessed TIFFs (*_MOV_GAUSS.tif, *_BIEXP_GAUSS.tif)
-├── results/                         # Analysis results
-│   ├── results.db                   # SQLite database (optimized, <1 MB)
-│   ├── results_backup.db            # Pre-migration backup (680 MB)
-│   ├── export_experiment_to_excel.py # Export to Excel script
-│   └── files/                       # Flat directory: all TIFFs and PNGs
-└── rec_summary/                     # Recording summary Excel files (REC_YYYY_MM_DD.xlsx)
+├── data/                       pick_/proc_/ana_*.txt lists, rec_data.db, exp_info.db, bd_*.json (striatum boundaries)
+├── raw_tiffs/, raw_abfs/       inputs
+├── proc_tiffs/                 *_BIEXP_GAUSS.tif, *_BIEXP_ALS.tif
+├── results/                    formal outputs (spontaneous/, permutation/{OBJ}/, flash_size/, median/, ... results.db)
+├── output/                     test runs only (output/test_*)
+└── docs/                       see section 6
 ```
 
 ---
 
-## Workflow 1: Image Preprocessing
+## 4. GUI (`main.py`)
 
-**Script**: `img_proc.py`  — driven by a `proc_YYYYMMDD_NNN.txt` proc list
+A main window (`view_main` / `ctrl_main`) with the DOR list and one button per pop-out window:
 
-```
-proc_brief_*_checked.txt
-      ↓
-  Parse entries: [filename, PROC, MODE]
-      ↓
-  For each file, route by MODE:
-  ┌──────────┬──────────┬──────────┐
-  ↓          ↓          ↓          ↓
- MOV       BIEXP      BOTH       NONE
-  ↓          ↓          ↓
-  Detrend → Gaussian Blur
-  ↓
-  Save: *_MOV_GAUSS.tif (float16, Gaussian-blurred ΔF/F₀)
-        *_BIEXP_GAUSS.tif (float16, Gaussian-blurred ΔF/F₀)
-```
+| Window | Controller / view | Does |
+|---|---|---|
+| Query by DOR (+ Log View) | `ctrl_dor_query` / `view_dor_query` | experiment info per date of recording |
+| Data Selector | `ctrl_data_selector` / `view_data_selector` | pick recordings → pick list (`DialogPickList`) |
+| Image Processing | `ctrl_img_proc` / `view_img_proc` | proc list, file status, runs `img_proc.run` on a `BackgroundWorker` |
+| ALS Correction | `ctrl_als_correct` / `view_als_correct` | ALS test on an ROI + runs `als_correct.run` |
+| Spike-aligned Analysis | `ctrl_align_spike` / `view_align_spike` | runs `ach_domain_analysis.run` |
+| Striatum Boundary | `ctrl_st_boundary` / `view_st_boundary` | slice orientation + 10X striatum outline → `bd_*.json` |
 
-### Processing Steps
-
-1. **MOV detrend**: Centred moving-average → ΔF/F₀: `(raw - trend) / trend` (window=101 frames)
-2. **BIEXP detrend**: Bi-exponential baseline fit per pixel → ΔF/F₀: `(raw - trend) / trend`
-3. **Gaussian Filtering**: Spatial smoothing of the ΔF/F₀ signal (see below)
-
-### Gaussian Filtering for ACh Signal Extraction
-
-Fluorescence images of acetylcholine (ACh) release exhibit substantial high-frequency noise arising from photon shot noise and camera readout noise, which obscures the underlying ACh release signals. To extract spatially coherent ACh signals, we apply Gaussian filtering.
-
-**Why Gaussian filtering works:**
-
-Gaussian filtering performs a spatially weighted average centered on each pixel, with weights following a 2D Gaussian distribution. This operation exploits the fundamental difference between signal and noise:
-
-- **Noise**: Spatially uncorrelated (random per pixel). When weighted-averaged, random values cancel out.
-- **Signal**: Spatially coherent—neighboring pixels detecting the same ACh release event show correlated intensity changes because ACh diffuses from physical release sites, creating spatial concentration gradients.
-
-**Parameter selection (σ):**
-
-The critical parameter σ determines the spatial scale of averaging:
-- Features smaller than σ are attenuated
-- Features larger than σ are preserved
-
-Selection rule based on **spatial autocorrelation**:
-```
-noise_correlation_length < σ < signal_correlation_length
-```
-
-| Component | Correlation Length | Basis |
-|-----------|-------------------|-------|
-| Noise | ~1-2 pixels | Camera/shot noise is uncorrelated |
-| Signal | >50 pixels | ACh release sites are cellular-scale |
-
-**Example at 60X (0.22 µm/pixel):**
-```
-σ = 6 pixels = 1.3 µm
-
-Noise correlation:  ~0.2-0.4 µm (1-2 pixels)
-Signal correlation: >10 µm (cellular-scale ACh release)
-
-0.4 µm < 1.3 µm < 10 µm  ✓
-```
-
-This ensures effective noise suppression without distorting the spatial extent or morphology of ACh release regions.
-
-### Data Transformations
-
-| Stage | Shape | Data Type |
-|-------|-------|-----------|
-| Load | (n_frames, height, width) | uint16 |
-| Processing | (n_frames, height, width) | float32 |
-| Save (GAUSS TIF — ΔF/F₀ Gaussian-blurred) | (n_frames, height, width) | float16 |
-| Save (CAL TIF — ALS slow-fluc corrected) | (n_frames, height, width) | float16 |
-| Save (analysis results) | (n_frames, height, width) | float32 (zscore), uint8 (categorized) |
+Signals: `dor_changed` (DOR query → data selector), `pick_confirmed` (data selector → image processing).
 
 ---
 
-## Workflow 2: Spike-Aligned Analysis
+## 5. Key methods (short)
 
-**Script**: `im_dynamics.py`
+- **Gaussian blur σ**: noise correlation length (1–2 px) < σ < signal correlation length (cellular scale); σ = 4 px.
+- **Spike-aligned median**: per pixel, median over segments, e.g. [2.0, 2.1, 15.0, 1.9, 2.0] → 2.0 (mean 4.6).
+- **Flash threshold** (SRE, permutation): Gaussian fit to the left side of the pixel-value histogram, threshold =
+  peak + 2 σ (`functions/fit_hist.CROSSOVER_RATIO`).
+- **th_small_obj**: blobs smaller than this are removed from the flash mask; from the permutation test.
+- **trace_corr clustering**: 1 − r of footprint traces, average linkage, h at the best mean silhouette
+  (`docs/hierarchical_clustering.md`).
 
-```
-Processed TIFF + ABF (electrophysiology)
-              ↓
-        Load & Align Data (AbfClip)
-              ↓
-        Detect Spikes (scipy.signal.find_peaks)
-              ↓
-        Extract Image Segments Around Spikes
-              ↓
-        Z-Score Normalization (baseline = pre-spike frames)
-              ↓
-        Spike-Aligned Median (robust to outliers)
-              ↓
-        Spatial Categorization (SpatialCategorizer)
-              ↓
-        Region Analysis (RegionAnalyzer)
-              ↓
-        Export Results (ResultsExporter)
-              ↓
-        Output: SQLite DB + TIFF (zscore + categorized) + PNG figures
-```
-
-### Key Analysis Functions
-
-#### Spike-Centered Processing
-- Aligns image segments by spike frame (center alignment)
-- Two functions: `spike_centered_median()` and `spike_centered_avg()`
-- Median removes outliers → cleaner ACh signal
-
-```python
-from functions.spike_alignment import spike_centered_median, spike_centered_avg
-
-# Use median for robust averaging (recommended)
-avg_segment = spike_centered_median(lst_segments)
-
-# Or use mean (sensitive to outliers)
-avg_segment = spike_centered_avg(lst_segments)
-```
-
-#### `SpatialCategorizer` - Spatial Analysis
-- 3 methods: connected, watershed, morphological
-- 4 threshold methods: manual, multiotsu, li_double, otsu_double
-- Global thresholding across all frames
-
-```python
-from classes.spatial_categorization import SpatialCategorizer
-
-# Use factory methods - each shows only relevant parameters
-categorizer = SpatialCategorizer.connected(min_region_size=30)
-categorizer = SpatialCategorizer.watershed(min_region_size=20, min_distance=5)
-categorizer = SpatialCategorizer.morphological(kernel_size=5)
-
-# Fit the categorizer
-categorizer.fit(avg_segment)
-
-# Get results
-results = categorizer.get_results()
-# Returns: source_frames, categorized_frames, frame_regions, thresholds_used, method, threshold_method
-
-# With manual thresholds
-categorizer = SpatialCategorizer.connected(
-    threshold_method="manual",
-    threshold_dim=0.5,
-    threshold_bright=1.5,
-)
-```
-
-#### `RegionAnalyzer` - Post-Categorization Analysis
-- Calculates region properties: area, centroid, bounding box
-- Extracts contours for visualization
-- Supports pixel-to-micrometer conversion for objectives (10X, 40X, 60X)
-
-```python
-from classes.spatial_categorization import SpatialCategorizer
-from classes.region_analyzer import RegionAnalyzer
-
-# Step 1: Categorize
-categorizer = SpatialCategorizer.morphological()
-categorizer.fit(image_segment)
-
-# Step 2: Analyze regions
-analyzer = RegionAnalyzer(obj="10X", min_area=20)
-analyzer.fit(categorizer.categorized_frames)
-
-# Get results
-results = analyzer.get_results()
-# results["bright_regions"][frame_idx] = [{area_pixels, area_um2, centroid, bbox, label}, ...]
-# results["bright_contours"][frame_idx] = [contour_array, ...]
-
-summary = analyzer.get_summary()
-# Returns: n_frames, total_dim_regions, total_bright_regions, area stats
-
-# Draw contours on plot
-import matplotlib.pyplot as plt
-fig, ax = plt.subplots()
-ax.imshow(categorizer.categorized_frames[0], cmap="gray")
-for contour in results["bright_contours"][0]:
-    ax.plot(contour[:, 1], contour[:, 0], 'r-', linewidth=2)
-plt.show()
-```
-
-### Pixel Scaling Factors
-
-| Objective | pixel/um | um/pixel |
-|-----------|----------|----------|
+| Objective | px / µm | µm / px |
+|---|---|---|
 | 10X | 0.75 | 1.333 |
 | 40X | 3.0 | 0.333 |
 | 60X | 4.5 | 0.222 |
 
 ---
 
-## Workflow 3: Batch Processing
-
-**Scripts**: `batch_process.py`, `test_batch.py`
-
-```
-Excel Metadata (rec_summary/*.xlsx)
-              ↓
-        Read Picked Pairs
-              ↓
-        Filter by Date (test_batch only)
-              ↓
-        Check Existing Results (SQLite)
-              ↓
-        ┌─────┴─────┐
-        ↓           ↓
-   Preprocess   Analysis Only
-    Images      (--analysis-only)
-        ↓           ↓
-        └─────┬─────┘
-              ↓
-        For Each Pair:
-          - Analyze (analyze_pair)
-          - Export to DB
-          - Generate PNG plots
-              ↓
-        Summary Report
-```
-
-### Batch Scripts
-
-**batch_process.py** - Process ALL experiments:
-```bash
-python batch_process.py                # Full processing
-python batch_process.py --analysis-only # Skip preprocessing
-```
-
-**test_batch.py** - Process SPECIFIC date:
-```bash
-python test_batch.py                   # Show available dates
-python test_batch.py 2025_12_15        # Process one date
-python test_batch.py 2025_12_15 --limit 5  # Process first 5 pairs
-python test_batch.py 2025_12_15 --analysis-only  # Skip preprocessing
-```
-
-### Excel Metadata Format
-
-REC_*.xlsx files in `rec_summary/`:
-
-| Filename | PAIRED_ABF | OBJ | PICK | SLICE | AT |
-|----------|------------|-----|------|-------|-----|
-| 2025_12_15-0026.tif | 23 | 10X | ✓ | 1 | A1 |
-| 2025_12_15-0027.tif | 24 | 10X | ✓ | 1 | A2 |
-
-- Only rows with PICK column filled are processed
-- SLICE and AT are optional metadata
-- Multiple ABF column names supported (`PAIRED_ABF`, `ABF_NUMBER`, `ABF_SERIAL_NUMBER`, etc.)
-
-### Performance Timing
-
-```
-⏱️  categorization: 0.234s | region analysis: 0.156s | total: 0.390s
-```
-- Cyan: labels
-- Yellow: individual times
-- Green: total time
-
----
-
-## Key Algorithms
-
-### Spike-Aligned Median
-
-**Purpose**: Find consistent signal across spike events, filter outliers
-
-```
-Pixel (y,x) at frame 5 across N segments:
-  Seg1: 2.0, Seg2: 2.1, Seg3: 15.0 (outlier), Seg4: 1.9, Seg5: 2.0
-
-  Mean:   (2.0 + 2.1 + 15.0 + 1.9 + 2.0) / 5 = 4.6  ← contaminated
-  Median: [1.9, 2.0, 2.0, 2.1, 15.0] → 2.0           ← robust
-```
-
-### Center Alignment Formula
-
-Segments of different lengths aligned by their center (spike frame):
-
-```python
-target_center = target_frames // 2
-seg_center = n_frames // 2
-start = target_center - seg_center
-```
-
-### Two-Pass Thresholding (li_double, otsu_double)
-
-1. **Pass 1**: Separate background from signal (Li/Otsu on all pixels)
-2. **Pass 2**: Separate dim from bright (Li/Otsu on signal pixels only)
-
----
-
-## External Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| numpy, scipy | Array operations, signal processing |
-| imageio | TIFF I/O |
-| matplotlib | Plotting |
-| polars | Data tables (replaced pandas 2026-04) |
-| scikit-image | Image processing, thresholding, morphology |
-| scikit-learn | K-means clustering |
-| numba, numba.cuda | JIT compilation, GPU kernels |
-| PySide6 | Qt GUI for interactive plots |
-| pyabf | ABF file reader |
-| rich | Console formatting, progress bars |
-
----
-
-## Post-Processing with RegionAnalyzer
-
-After spatial categorization, use `RegionAnalyzer` for region analysis:
-
-```python
-from classes.spatial_categorization import SpatialCategorizer
-from classes.region_analyzer import RegionAnalyzer
-
-# Categorize
-categorizer = SpatialCategorizer.morphological()
-categorizer.fit(image_segment)
-
-# Analyze regions with pixel scaling
-analyzer = RegionAnalyzer(obj="10X", min_area=50)
-analyzer.fit(categorizer.categorized_frames)
-
-# Get per-frame results
-frame_result = analyzer.get_frame_results(0)
-for region in frame_result["bright_regions"]:
-    print(f"Area: {region['area_um2']:.2f} um², Centroid: {region['centroid']}")
-
-# Get summary across all frames
-summary = analyzer.get_summary()
-print(f"Total bright regions: {summary['total_bright_regions']}")
-print(f"Mean bright area: {summary['bright_area_um2_mean']:.2f} um²")
-```
-
-### SpatialCategorizer vs RegionAnalyzer: Understanding the Pipeline
-
-These two classes work **sequentially** and serve **different purposes**:
-
-**🔵 SpatialCategorizer** - Pixel Classification (Step 1)
-- **Input**: Raw/processed image segments (float32 intensity values)
-- **Output**: Categorized frames (uint8: 0=background, 1=dim, 2=bright)
-- **Purpose**: Label each pixel based on intensity and spatial connectivity
-- **Methods**: 3 spatial algorithms (connected/watershed/morphological)
-- **Thresholding**: 4 auto-threshold methods (manual/multiotsu/li_double/otsu_double)
-
-**🟢 RegionAnalyzer** - Region Measurement (Step 2)
-- **Input**: Categorized frames from SpatialCategorizer (uint8: 0/1/2)
-- **Output**: Region properties (area, centroid, contours, bbox)
-- **Purpose**: Extract quantitative measurements from labeled regions
-- **Features**: Connected component analysis, pixel scaling (10X/40X/60X)
-- **No thresholding**: Uses pre-categorized data from Step 1
-
-**Pipeline Flow:**
-```
-Raw Image (float32) → [SpatialCategorizer] → Categorized (0/1/2) → [RegionAnalyzer] → Measurements
-```
-
-**Data Export Comparison:**
-
-| Module | get_export_data() Returns |
-|--------|---------------------------|
-| SpatialCategorizer | `categorized_frames` (2D arrays), `threshold_method` |
-| RegionAnalyzer | `region_summary` (stats), `region_data` (areas, centroids, bbox), `objective`, `um_per_pixel` |
-
-**Shared Constants:**
-Both modules define `CATEGORY_DIM=1` and `CATEGORY_BRIGHT=2`. This is **intentional** for communication between modules, not redundant code.
-
-### Categorical vs Labeled Images
-
-| Type | Values | Example |
-|------|--------|---------|
-| Categorical | 0=background, 1=dim, 2=bright | All dim pixels = 1 |
-| Labeled | Unique ID per connected region | Two dim regions = 1, 2 |
-
-Use `skimage.measure.label()` to convert categorical → labeled for regionprops.
-
----
-
-## Quick Reference
-
-### Run Preprocessing
-```bash
-python img_proc.py --proc_list data/proc_20260512_002.txt
-```
-
-### Run Spike-Triggered Analysis
-```bash
-python im_dynamics.py
-```
-
-### SpatialCategorizer Factory Methods
-
-| Method | Parameters | Description |
-|--------|------------|-------------|
-| `.connected()` | `min_region_size` | Connected component labeling |
-| `.watershed()` | `min_region_size`, `min_distance` | Watershed segmentation |
-| `.morphological()` | `kernel_size` | Morphological operations |
-
-All methods also accept: `threshold_method`, `global_threshold`, `threshold_dim`, `threshold_bright`
-
-### RegionAnalyzer Methods
-
-| Method | Returns |
-|--------|---------|
-| `.fit(categorized_frames)` | self (for chaining) |
-| `.get_frame_results(idx)` | dict with dim/bright regions and contours |
-| `.get_results()` | dict with all per-frame data |
-| `.get_summary()` | dict with aggregated statistics |
-| `.pixel_to_um(pixels)` | distance in micrometers |
-| `.area_pixel_to_um2(area)` | area in um² |
-
-### Threshold Methods
-
-| Method | Description |
-|--------|-------------|
-| manual | User-specified thresholds |
-| multiotsu | Multi-level Otsu |
-| li_double | Two-pass Li thresholding |
-| otsu_double | Two-pass Otsu thresholding |
-
----
-
-## Export Workflow
-
-### Data Export Structure
-
-All analysis results are saved in a flat `results/files/` directory:
-
-```
-results/
-├── results.db                                        # SQLite database with metadata
-└── files/
-    ├── {date}-img{img}-abf{abf}_zscore.tif           # Spike-centered median (float32)
-    ├── {date}-img{img}-abf{abf}_categorized.tif      # Categorized frames (uint8: 0=bg, 1=dim, 2=bright)
-    ├── {date}-img{img}-abf{abf}_spatial_plot.png     # Spatial distribution figure
-    └── {date}-img{img}-abf{abf}_region_plot.png      # Region detail figure
-```
-
-The `_categorized.tif` is a uint8 multi-frame TIFF suitable for **ImageJ overlay** on red fluorescence images:
-- `0` = background, `1` = dim, `2` = bright
-- Use `Image > Adjust > Threshold` (set to 1-2 for dim+bright, 2-2 for bright only) to create a selection overlay
-
-### Using get_export_data()
-
-Each analysis class provides a `get_export_data()` method for easy export:
-
-```python
-from classes import AbfClip, SpatialCategorizer, RegionAnalyzer, ResultsExporter
-
-# Step 1: Load and process data
-abf_clip = AbfClip(exp_date="2025_12_15", abf_serial="0034", img_serial="0042")
-categorizer = SpatialCategorizer.morphological(threshold_method="otsu_double")
-categorizer.fit(spike_centered_median_segment)
-analyzer = RegionAnalyzer(obj="10X")
-analyzer.fit(categorizer.categorized_frames)
-
-# Step 2: Export all results
-exporter = ResultsExporter()
-exp_dir = exporter.export_all(
-    **abf_clip.get_export_data(),        # Experiment metadata
-    **categorizer.get_export_data(),     # Categorized frames + threshold method
-    **analyzer.get_export_data(),        # Region analysis + summary statistics
-    zscore_stack=med_img_segment_zscore,
-)
-
-# Step 3: Export figures (prefixed filenames → results/files/)
-exp_prefix = f"{EXP_DATE}-img{IMG_SERIAL}-abf{ABF_SERIAL}"
-exporter.export_figure(exp_dir, plt_spatial.grab(), filename=f"{exp_prefix}_spatial_plot.png")
-exporter.export_figure(exp_dir, plt_region.grab(), filename=f"{exp_prefix}_region_plot.png")
-```
-
-### SQLite Database Schema
-
-The `results.db` file contains experiment metadata (optimized 2026-02-10):
-
-| Column | Type | Description |
-|--------|------|-------------|
-| exp_date | TEXT | Experiment date (YYYY_MM_DD) |
-| abf_serial | TEXT | ABF file serial number |
-| img_serial | TEXT | Image file serial number |
-| timestamp | TEXT | Analysis timestamp (ISO format) |
-| objective | TEXT | Microscope objective (10X, 40X, 60X) |
-| um_per_pixel | REAL | Pixel scale factor |
-| threshold_method | TEXT | Threshold method used |
-| n_spikes_detected | INTEGER | Total spikes found |
-| n_spikes_analyzed | INTEGER | Spikes included in analysis |
-| n_frames | INTEGER | Number of frames in segment |
-| total_dim_regions | INTEGER | Total dim regions found |
-| total_bright_regions | INTEGER | Total bright regions found |
-| region_analysis | TEXT | JSON with **largest regions only** (optimized) |
-| data_dir | TEXT | Relative path to data directory |
-| SLICE | INTEGER | Slice number (from Excel metadata) |
-| AT | TEXT | Cell/site identifier (from Excel metadata) |
-| centroid_y | REAL | Spike frame centroid Y (pixels) |
-| centroid_x | REAL | Spike frame centroid X (pixels) |
-| x_span_pixels | REAL | Spike frame X span (pixels) |
-| y_span_pixels | REAL | Spike frame Y span (pixels) |
-| x_span_um | REAL | Spike frame X span (µm) |
-| y_span_um | REAL | Spike frame Y span (µm) |
-
-**Note**: Database optimized to store only largest regions per frame in `region_analysis`, reducing size from 680 MB to <1 MB while retaining essential data. See `doc/DATABASE_STRUCTURE.md` for details.
-
-### Exporting to Excel
-
-Export the database to Excel format for easy analysis and sharing:
-
-```bash
-python results/export_experiment_to_excel.py
-```
-
-**Output**: `results/experiment_table.xlsx` with 3 sheets:
-- **experiments** - All experiment records with metadata (SLICE, AT, summary stats)
-- **dim_largest** - Largest dim regions across all experiments
-- **bright_largest** - Largest bright regions across all experiments
-
----
-
-## Understanding Thresholding Methods
-
-All automatic threshold methods find the best value to separate background from signal.
-
-### Otsu: Maximize Between-Class Variance
-
-```
-pixels = [1, 2, 2, 3, 3, 7, 8, 8, 9, 9]
-
-For threshold t=3:
-  c0 = [1,2,2,3,3]  (5 pixels, mean=2.2)
-  c1 = [7,8,8,9,9]  (5 pixels, mean=8.2)
-
-  w0 = 5/10 = 0.5,  w1 = 5/10 = 0.5
-
-  variance = w0 * w1 * (mu0 - mu1)²
-           = 0.5 * 0.5 * (2.2 - 8.2)²
-           = 9.0  ← maximum! → best threshold
-```
-
-### Li: Minimize Cross-Entropy
-
-```
-Cross-entropy = information loss when replacing pixels with class mean
-Lower = better fit
-
-For threshold t=3:
-  ce = -sum(pixels * log(class_mean))
-
-Pick threshold with MINIMUM cross-entropy
-```
-
-### Yen: Maximize Entropic Correlation
-
-```
-Finds threshold where both classes have good "spread" (entropy)
-Prefers balanced class sizes (50/50 split)
-```
-
----
-
-## Understanding Spatial Categorization Methods
-
-All three methods share the same thresholds (thresh_dim, thresh_bright).
-They differ in HOW they use those thresholds.
-
-### Example Image (5x5, z-scored)
-
-```
-    0.1  0.2  0.3  0.2  0.1
-    0.2  0.8  1.2  0.8  0.2
-    0.3  1.2  2.0  1.2  0.3
-    0.2  0.8  1.2  0.8  0.2
-    0.1  0.2  0.3  0.2  0.1
-
-thresh_dim = 0.5,  thresh_bright = 1.5
-```
-
----
-
-### Method 1: MORPHOLOGICAL
-
-**Order: Threshold pixels → Clean up shapes**
-
-```
-Step 1: Apply thresholds directly to each pixel
-        pixel > 1.5 → bright (2)
-        pixel > 0.5 → dim (1)
-        else → background (0)
-
-    0    0    0    0    0
-    0    1    1    1    0       (0.8, 1.2, 0.8 > 0.5 → dim)
-    0    1    2    1    0       (2.0 > 1.5 → bright)
-    0    1    1    1    0
-    0    0    0    0    0
-
-Step 2: Cleanup with erosion/dilation
-        - erosion: shrink regions (removes small noise)
-        - dilation: expand back (fills small holes)
-
-        Tunable parameter: kernel_size (default=3)
-        Larger kernel = more aggressive cleanup
-```
-
-**Key feature:** Each pixel categorized individually, then shapes cleaned.
-
----
-
-### Method 2: CONNECTED
-
-**Order: Threshold → Find connected regions → Categorize each region by mean**
-
-```
-Step 1: Create binary mask (pixels > thresh_dim)
-    0    0    0    0    0
-    0    1    1    1    0
-    0    1    1    1    0
-    0    1    1    1    0
-    0    0    0    0    0
-
-Step 2: Find connected regions (scipy.ndimage.label)
-    0    0    0    0    0
-    0    A    A    A    0       All connected = one region "A"
-    0    A    A    A    0
-    0    A    A    A    0
-    0    0    0    0    0
-
-Step 3: Calculate mean intensity of region A
-    pixels = [0.8, 1.2, 0.8, 1.2, 2.0, 1.2, 0.8, 1.2, 0.8]
-    mean = 1.1
-
-Step 4: Categorize ENTIRE region by mean
-    1.1 > 1.5 (thresh_bright)?  NO
-    1.1 > 0.5 (thresh_dim)?     YES → dim (1)
-
-Result:
-    0    0    0    0    0
-    0    1    1    1    0
-    0    1    1    1    0       ← ALL dim (even 2.0 pixel!)
-    0    1    1    1    0
-    0    0    0    0    0
-```
-
-**Key feature:** Whole region gets same category based on mean.
-**Limitation:** Bright pixels "eaten" if connected to many dim pixels.
-
----
-
-### Method 3: WATERSHED
-
-**Order: Threshold → Distance transform → Find peaks → Flood fill → Categorize**
-
-#### Example: Two blobs separated by a gap
-
-```
-Original image (z-scores):
-col:  0    1    2    3    4    5    6    7    8
-
-      0    0    0    0    0    0    0    0    0
-      0  1.5  1.2  0.8  0    0.7  1.1  1.6  0
-      0  1.8  1.5  1.0  0    0.9  1.4  1.8  0
-      0  1.4  1.1  0.7  0    0.6  1.0  1.5  0
-      0    0    0    0    0    0    0    0    0
-
-         [  Blob A  ]       [  Blob B  ]
-
-thresh_dim = 0.5
-```
-
-#### Step 1: Create mask (pixels > 0.5)
-
-```
-      0    0    0    0    0    0    0    0    0
-      0    1    1    1    0    1    1    1    0
-      0    1    1    1    0    1    1    1    0
-      0    1    1    1    0    1    1    1    0
-      0    0    0    0    0    0    0    0    0
-```
-
-#### Step 2: Distance transform
-
-For each `1`, count minimum steps to reach nearest `0`.
-
-- Edge pixels (directly touching 0): distance = 1
-- Center pixel (2 steps from nearest 0): distance = 2
-
-```
-      0    0    0    0    0    0    0    0    0
-      0    1    1    1    0    1    1    1    0
-      0    1    2    1    0    1    2    1    0
-      0    1    1    1    0    1    1    1    0
-      0    0    0    0    0    0    0    0    0
-              ↑                   ↑
-           peak A              peak B
-           col 2               col 6
-```
-
-#### Step 3: Find peaks and `min_distance` parameter
-
-Peaks = local maxima. Here: peak A (col 2) and peak B (col 6).
-
-**Distance between peaks = 6 - 2 = 4 pixels**
-
-`min_distance` = tunable parameter = "minimum distance required to be separate"
-
-```
-min_distance=3:  Is 4 ≥ 3?  YES → Keep BOTH peaks → 2 regions
-min_distance=5:  Is 4 ≥ 5?  NO  → Keep ONE peak  → 1 region (merged)
-```
-
-The algorithm:
-1. Find ALL local maxima (peaks)
-2. Filter out peaks that are closer than `min_distance`
-3. Remaining peaks become seeds
-
-#### Step 4: Invert distance (multiply by -1)
-
-Watershed fills from LOW to HIGH. We want to start from centers, so invert:
-
-```
-Distance:                      -Distance:
-0    0    0    0    0          0    0    0    0    0
-0    1    1    1    0          0   -1   -1   -1    0
-0    1    2    1    0    →     0   -1   -2   -1    0
-0    1    1    1    0          0   -1   -1   -1    0
-0    0    0    0    0          0    0    0    0    0
-
-Now center (-2) is LOWEST = "valley" where water starts
-```
-
-#### Step 5: Flood from seeds (water rising)
-
-```
-Level -2: Only seeds are wet
-      .    .    .    .    .    .    .    .    .
-      .    .    .    .    .    .    .    .    .
-      .    .    A    .    .    .    B    .    .
-      .    .    .    .    .    .    .    .    .
-
-Level -1: Water spreads to neighbors with value -1
-      .    .    .    .    .    .    .    .    .
-      .    A    A    A    .    B    B    B    .
-      .    A    A    A    .    B    B    B    .
-      .    A    A    A    .    B    B    B    .
-
-Level 0: Stops at mask boundary
-      Final: Two separate regions A and B
-```
-
-**MEETING RULE:** When water from two different seeds meet,
-a "watershed line" (boundary) is created. Each side = separate region.
-
-#### Step 6: Categorize each region by mean
-
-Same as connected method - calculate mean of original pixels in each region.
-
-#### Tuning `min_distance`
-
-| min_distance | Effect |
-|--------------|--------|
-| Small (3-5) | Sensitive, finds small blobs, might over-segment |
-| Medium (10) | Default, balanced |
-| Large (15-20) | Only finds big blobs, merges small ones |
-
-```python
-# Tune in code:
-categorizer = SpatialCategorizer(method="watershed", min_distance=5)
-```
-
----
-
-## Summary: When to Use Each Method
-
-| Method | Best For | Limitation |
-|--------|----------|------------|
-| **Morphological** | Simple cleanup, preserving bright spots | No region analysis |
-| **Connected** | Fast, simple blobs | Merges touching regions |
-| **Watershed** | Separating touching blobs | More complex, slower |
-
----
-
----
-
-*Last updated: 2026-06-10 Session 19 (startup optimization: numba deferred in check_cuda.py + als.py; tifffile/als_run deferred in ctrl_als_correct.py; C90 removed from ruff; ruff migrated to uv shim)*
+## 6. Docs
+
+| Path | Content |
+|---|---|
+| `docs/continue_from_here.md` | session log + TODOs (project-tracker) |
+| `docs/glossary.md` | terms |
+| `docs/hierarchical_clustering.md`, `docs/permutation_test.md` | method notes |
+| `docs/reference/` | this file, `DEPENDENCY_DIAGRAM.md`, `DATABASE_STRUCTURE.md`, notes |
+| `docs/knowledgebase/` | concepts, techniques |
+| `docs/resolved_problems/` | solved bugs |
+| `docs/paper/` | paper drafts (`plain_0X/` with figures / scripts / tables), discussion |
+| `PIPELINE_FLOW.md`, `RESULTS_GUIDE.md` (root) | pipeline walk-through; guide to the results in `results/` |

@@ -1,3 +1,48 @@
+# Log of the project progress 2026-10-22 Thu 10:55
+Last working file: SRE_analysis.py
+Last working line: 405 (export_cluster_comparison: trace_corr zones at the z peaks | correlation map)
+
+# List of modified files (not committed; Kang commits later):
+- SRE_analysis.py (CONFIG sub-headers; JOIN_SAME_FRAME = False -> connect_radius 0; CLUSTER_METHODS = ("trace_corr",),
+  group_z_peak kept but not run; CLUSTERS.png: z-peak panel + correlation-map panel per cut)
+- classes/sre_analyzer.py (label_flashes skips join_close_blobs at connect_radius 0; group_trace keeps
+  clusterings["trace_corr"]["distance"] = 1 - r) (<- Break here)
+- functions/plot_results.py (new correlation_map_xy = classical MDS of 1 - r; plot_cluster_scatter: distance key ->
+  correlation map, all panels the frame's size; CLUSTER_MAP_PAD_FRAC)
+- docs/hierarchical_clustering.md (notes in sections 1 / 5 / 9, new section 12), docs/glossary.md (flash definition)
+- docs/permutation_test.md, docs/paper/plain_side_notes.md, docs/paper/plain_01/plain_01.md,
+  docs/knowledgebase/paper_claims.md (spontaneous_analysis.py -> SRE_analysis.py; claims: zones now trace_corr clusters)
+- docs/paper/plain_02/plain_02.md (note above "Grouping steps": old grouping, text still to be rewritten)
+- docs/reference/PROJECT_SUMMARY.md + DEPENDENCY_DIAGRAM.md (rewritten from the code; last content update was 2026-06-10)
+- PIPELINE_FLOW.md (§4 = permutation -> SRE trace_corr flow; §3 cells.xlsx line), RESULTS_GUIDE.md (note: old run)
+- CLAUDE.md (Documentation 3-4: read / keep the two reference files current; rule lost in 03e6251, 2026-03-02)
+- .claude/skills/project-tracker/SKILL.md (wrap-up docs check over all markdown)
+
+## Summary of current progress
+- Jaccard discussed: max J of 2 flashes = small area / big area, so a small flash inside a big one scores low.
+- Independent blobs (no connect radius), 4 x 10X (output/test_sre_independent/): z_peak best-silhouette cut too
+  coarse (2-4 clusters); trace_corr separates touching vs far same-frame pairs (0004: 49% vs 7%).
+- Decisions (Kang): trace_corr + average linkage + best silhouette is the clustering; z_peak code kept, not run;
+  CLUSTERS.png = trace_corr zones at the z peaks | correlation map (option A). Pearson stays (vs Spearman).
+- Sorted 1 - r heatmap (option B) only previewed, not added. Permutation h tried (circular time shifts, closest
+  surrogate pair -> h ~ 0 from lucky equal lags) and dropped; test folder deleted.
+- trace_corr default, 4 x 10X (output/test_sre_trace_default/): 0012 10 zones (h 0.70), 0004 14 (0.36),
+  11_13-0012 6 (0.48), 11_08-0028 7 (0.26).
+- Neat-refactor of today's parts: before vs after 16 / 16 files identical (output/test_neat_sre_1022/); ruff clean.
+
+## Completed TODOs/Tasks (before new wrap-up)
+- Neat-refactor of the touched files: done (identical outputs).
+- trace_corr as the default clustering: done.
+
+## What should we do next? (TODOs)
+- **Complete the Characterization block** of SRE_analysis.py + Kang's new analyses.
+- **Fix the reliability analysis.**
+
+## Last Session Recap
+※ recap: SRE_analysis now treats every blob as a flash and clusters by trace_corr (best silhouette) only, with a correlation-map scatter; permutation h dropped; neat-refactor verified identical. Pending: commit, Characterization block, reliability fix.
+
+---
+
 # Log of the project progress 2026-10-19 Mon 15:35
 Last working file: functions/plot_results.py
 Last working line: 1307 (plot_cluster_scatter: padded convex-hull outlines + zone id above)

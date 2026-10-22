@@ -4,6 +4,8 @@ The project is consist of two main parts: image preprocessing (detrend, gaussian
 ## Documentation
 1. When create new markdown files (except README.md), always save them to the `docs/` folder. If `docs/` does not exist, create one.
 2. Always put the markdown plans created by plan mode in the `.claude/plans/` folder. If `plans/` does not exist, create one.
+3. `docs/reference/PROJECT_SUMMARY.md` (pipelines, files, GUI) and `docs/reference/DEPENDENCY_DIAGRAM.md` (who imports what) describe the current project. Read them to get into the project.
+4. Update both, and `PIPELINE_FLOW.md` if a pipeline's steps change, whenever a `.py` file is added, removed, renamed or moved, or a pipeline's flow / outputs change. Checked at every wrap-up (project-tracker).
 
 ## Answering Questions
 1. Try using step-by-step approach to answer the questions.

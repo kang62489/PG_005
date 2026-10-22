@@ -1,6 +1,6 @@
 ---
 keywords: paper, claims, spontaneous, zones, coverage, synchrony, not in phase, single neuron, single spike, flash size, area comparison, locality, wave, flow, anisotropic, source, sink
-files_referenced: spontaneous_analysis.py, classes/sp_zone_analyzer.py, ach_domain_analysis.py, classes/region_analyzer.py, area_comparison.py
+files_referenced: SRE_analysis.py, classes/sre_analyzer.py, ach_domain_analysis.py, classes/region_analyzer.py, area_comparison.py
 related: zone_analysis_speedup_techniques.md
 ---
 
@@ -35,7 +35,8 @@ Full wording, decisions and TODOs: `docs/paper/paper_discussion_2026-10-02.md`, 
 
 ## Claim 1 — Spontaneous ACh forms local zones that cover the striatum, but not in phase ("not in phase" dropped; now story step 2)
 
-- **Pipeline:** `spontaneous_analysis.py` (10X only), output in `results/spontaneous/`
+- **Pipeline:** `SRE_analysis.py` (10X only), output in `results/spontaneous/` (zones = trace_corr clusters since
+  2026-10-22, `docs/hierarchical_clustering.md` §12; the evidence below is from the old grouping)
 - **Measures:** zones per recording, zone area, event frequency, striatum coverage (needs `--stbd data/bd_20260922_000.json`)
 - **Evidence so far (saion job 4734460, 105 recordings):**
   - 70 / 105 recordings have zones, 1,330 zones in total

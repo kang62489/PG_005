@@ -1,5 +1,9 @@
 # DEPENDENCY_DIAGRAM
 
+Who calls what, per pipeline (local imports only). **Updated**: 2026-10-22, rewritten from the imports in the code
+(the June version showed `im_dynamics.py` / `batch_process.py`, now in `archive/`). Update together with
+`PROJECT_SUMMARY.md` whenever a `.py` file is added, removed, renamed or moved.
+
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                  ACID                                        ║
@@ -7,451 +11,141 @@
 ║                       PROJECT DEPENDENCY DIAGRAM                             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         WORKFLOW 0: GUI (main.py)                           │
-└─────────────────────────────────────────────────────────────────────────────┘
+DATA FLOW
+━━━━━━━━━
+raw_tiffs/*.tif ──► img_proc.py ──► *_BIEXP_GAUSS.tif ──► als_correct.py ──► *_BIEXP_ALS.tif
+                                                                                  │
+               ┌──────────────────────────────┬───────────────────────────────────┼───────────────────────┐
+               ▼                              ▼                                   ▼                       ▼
+   ach_domain_analysis.py          permutation_test.py ──► removal_suggestion.csv ──► SRE_analysis.py   flash_size_analysis.py
+   (+ raw_abfs/*.abf)              (Saion)                  (th_small_obj)            │                 (40X / 60X)
+               │                                                                      │
+               ▼                                                                      ▼
+   results.db + median/ categorized/                                     results/spontaneous/
+   spatial/ flow/ reliability/ spikes/                                   (TRACE_CORR zones, maps, clustering/)
+               │                                                                      │
+               └──────────────────────────► area_comparison.py ◄──────────────────────┘
 
-main.py (QMainWindow + QTabWidget)
-  ├── Tab: Image Processing
-  │     ├── ViewImgProc        (views/view_img_proc.py)
-  │     └── CtrlImgProc        (controllers/ctrl_img_proc.py)
-  │           ├── load_pick_list()      → ModelFromDataFrame + CellDropdownDelegate
-  │           ├── check_file_status()   → QFileSystemWatcher (RAW_TIFFS_DIR, PROC_TIFFS_DIR)
-  │           ├── export_proc_list()    → writes proc_YYYYMMDD_NNN.txt to data/
-  │           └── start_processing()
-  │                 ├── check_cuda()              → (bool, str)  [functions/check_cuda.py]
-  │                 └── BackgroundWorker(use_emitter=True) → runs img_proc.run(emitter=...)
-  │                       └── proc_msgs Signal(object) → _on_progress(dict) →
-  │                             le_curret_total / le_mode / le_processing_file / le_processing_step
-  │
-  ├── Tab: ALS Correction
-  │     ├── ViewAlsCorrect     (views/view_als_correct.py)
-  │     │     └── 5x MplCanvas in QStackedLayout
-  │     └── CtrlAlsCorrect     (controllers/ctrl_als_correct.py)
-  │           ├── on_run_als_test() → BackgroundWorker → _als_test()
-  │           │     └── [deferred] import tifffile; from functions import als_run
-  │           ├── on_run_correct()  → BackgroundWorker(use_emitter=True) → als_correct.run()
-  │           │     └── proc_msgs → _on_correct_progress() → form fields
-  │           └── cb_switch_roi.activated → lo_als_plot.setCurrentIndex()
-  │
-  ├── Tab: Query by DOR
-  │     ├── ViewDorQuery / CtrlDorQuery
-  │     └── emits dor_changed → CtrlDataSelector.on_dor_changed
-  │
-  └── Tab: Data Selector
-        ├── ViewDataSelector / CtrlDataSelector
-        └── responds to dor_changed signal
-
-classes/bk_worker.py
-  └── BackgroundWorker(QThread)
-        ├── __init__(fn, *args, use_emitter=False, **kwargs)
-        ├── run() → fn(*args, **kwargs) or fn(*args, **kwargs, emitter=proc_msgs.emit)
-        ├── work_done = Signal()         ← renamed from 'finished' to avoid QThread.finished conflict
-        └── proc_msgs = Signal(object)  ← emits dicts {"type": "progress"|"step", ...}
+List files (data/pick_*, proc_*, ana_*.txt) + data/rec_data.db + data/exp_info.db
+  └─► classes/recording_list.RecordingList ── read by every pipeline
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         WORKFLOW 1: IMAGE PREPROCESSING                     │
+│                         GUI (main.py)                                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-┌──────────────────────────────────────┐
-│  img_proc.py                         │  ← Main Script (CLI: --proc_list proc_*.txt)
-│  ──────────────────────────────────  │
-│  - Parse proc_YYYYMMDD_NNN.txt       │
-│  - Route by MODE: MOV/BIEXP/BOTH     │
-│  - sample_tau → biexp_detrend        │
-│  - mov_detrend → gaussian_blur_run   │
-│  - Save results                      │
-└───────────┬──────────────────────────┘
-            │
-            ├──────────────────────────┐
-            │                          │
-            ▼                          ▼
-┌───────────────────────┐  ┌──────────────────────────┐
-│  Hardware Checks      │  │  Image Processing        │
-│  ───────────────      │  │  ────────────────        │
-│  functions/           │  │  functions/              │
-│  ├─ check_cuda()      │  │  ├─ mov_detrend()        │
-│  ├─ test_cuda()       │  │  ├─ biexp_detrend()      │
-│  └─ get_memory_usage()│  │  ├─ sample_tau()         │
-└───────────────────────┘  │  ├─ align_to_min()       │
-                            │  └─ gaussian_blur_run()  │
-                            └───────────┬──────────────┘
-                                        │
-                         ┌──────────────┴──────────────┐
-                         │                             │
-                         ▼                             ▼
-             ┌─────────────────────┐      ┌─────────────────────┐
-             │  GPU (@cuda.jit)    │      │  CPU (@jit)         │
-             │  detrend.py:        │      │  detrend.py:        │
-             │  ├─ _gpu_mov        │      │  ├─ _cpu_mov        │
-             │  └─ _gpu_biexp      │      │  └─ _cpu_biexp      │
-             │  gaussian_blur.py:  │      │  gaussian_blur.py:  │
-             │  └─ _gpu_gaussian   │      │  └─ _cpu_gaussian   │
-             │     _blur           │      │     _blur           │
-             └─────────────────────┘      └─────────────────────┘
+main.py
+  ├─► views:       ViewMain, ViewDorQuery, ViewDataSelector, ViewImgProc, ViewAlsCorrect, ViewAlignSpike, ViewStBoundary
+  ├─► controllers: CtrlMain (pop-out buttons), CtrlDorQuery, CtrlDataSelector, CtrlImgProc, CtrlAlsCorrect,
+  │                CtrlAlignSpike, CtrlStBoundary
+  └─► utils:       APP_STATUS_MESSAGE, UISizes
 
-Output (img_proc.py): *_MOV_GAUSS.tif, *_BIEXP_GAUSS.tif  (float16, Gaussian-blurred ΔF/F₀)
-Output (als_cal.py):  *_CAL.tif  (float16, raw GAUSS − ALS slow fluctuation)
+  CtrlDorQuery.dor_changed ──► CtrlDataSelector.on_dor_changed
+  CtrlDataSelector.pick_confirmed ──► CtrlImgProc.load_pick_list (+ opens the Image Processing window)
+
+  CtrlImgProc     ─► BackgroundWorker ─► img_proc.run            (deferred import)
+                  ─► functions.file_status (als_exists, gauss_exists, raw_tiff_ready, build_*_index), check_cuda
+  CtrlAlsCorrect  ─► BackgroundWorker ─► als_correct.run         (deferred import)
+                  ─► img_proc.parse_proc_list, update_proc_list_gauss_exists
+  CtrlAlignSpike  ─► BackgroundWorker ─► ach_domain_analysis.run (deferred import)
+                  ─► functions.file_status (abf_ready, als_ready, gauss_ready, build_*_index)
+  CtrlStBoundary  ─► BackgroundWorker, functions.st_boundary     → data/bd_*.json, data/st_bd_draft.json
+  CtrlDataSelector ─► DialogPickList;  views ─► CheckableDropdown, UISizes
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     WORKFLOW 2: SPIKE-ALIGNED ANALYSIS                      │
-│                           (Interactive - im_dynamics.py)                    │
+│                         PREPROCESSING                                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-┌────────────────────────────────┐
-│  im_dynamics.py                │  ← Main Script
-│  ────────────────────────────  │
-│  - Load processed TIFF + ABF   │
-│  - Detect spikes (AbfClip)     │
-│  - Extract image segments      │
-│  - Z-score normalization       │
-│  - Spike-aligned median        │
-│  - Spatial categorization      │
-│  - Region analysis             │
-│  - Export results (SQLite+TIFF) │
-│  - Visualization (Qt)          │
-└──────────────┬─────────────────┘
-               │
-   ┌───────────┼───────────┬───────────────────┐
-   │           │           │                   │
-   ▼           ▼           ▼                   ▼
-┌────────────┐ ┌──────────┐ ┌─────────────────┐ ┌─────────────────────┐
-│  classes/  │ │ Spike-   │ │ Z-Score         │ │ Spatial             │
-│ PlotResults│ │ Triggered│ │ Normalization   │ │ Categorization      │
-│ ─────────  │ │ Average  │ │ ─────────────── │ │ ─────────────────── │
-│ Interactive│ │ ──────── │ │ functions/      │ │ functions/          │
-│ Qt viewer  │ │ functions│ │ imaging_        │ │ spatial_            │
-│            │ │ spike_   │ │ segments_       │ │ categorization.py   │
-│            │ │ centered_│ │ zscore_         │ │                     │
-│            │ │ processes│ │ normalization.py│ │ SpatialCategorizer  │
-└────────────┘ │ .py      │ └─────────────────┘ │ ├─ 3 methods        │
-               │          │                     │ ├─ 4 threshold      │
-               │ Functions│                     │ │   methods         │
-               │ ├─ mean  │                     │ ├─ fit()            │
-               │ └─ median│                     │ ├─ plot()           │
-               └──────────┘                     │ └─ show()           │
-                                                └─────────────────────┘
-
-Output: Figures + Statistics for ACh release analysis
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     WORKFLOW 3: BATCH PROCESSING                            │
-│                     (Automated - batch_process.py / test_batch.py)          │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────┐
-│  batch_process.py              │  ← Main Batch Processor (ALL pairs)
-│  test_batch.py                 │  ← Test Batch Processor (specific date)
-│  ────────────────────────────  │
-│  - Read Excel metadata         │
-│  - Filter by date (test only)  │
-│  - Check existing results      │
-│  - Preprocess images           │
-│  - Analyze all pairs           │
-│  - Export to SQLite + files    │
-│  - Generate PNG plots          │
-│  - Performance timing          │
-└──────────────┬─────────────────┘
-               │
-   ┌───────────┼───────────┬───────────────────┐
-   │           │           │                   │
-   ▼           ▼           ▼                   ▼
-┌────────────┐ ┌──────────┐ ┌─────────────────┐ ┌─────────────────────┐
-│ functions/ │ │ Workflow │ │ Same Analysis   │ │ ResultsExporter     │
-│ xlsx_reader│ │ Control  │ │ Pipeline as     │ │ ─────────────────── │
-│ ─────────  │ │ ──────── │ │ im_dynamics.py  │ │ SQLite + TIFF + PNG │
-│ Read Excel │ │ - Skip   │ │ ─────────────── │ │                     │
-│ Get SLICE, │ │   logic  │ │ - AbfClip       │ │ New Columns:        │
-│ AT, pairs  │ │ - Timing │ │ - Z-score norm  │ │ - SLICE, AT         │
-│            │ │ - Error  │ │ - Categorizer   │ │ - centroid_x/y      │
-│            │ │   handling│ │ - RegionAnalyzer│ │ - x/y_span_*        │
-└────────────┘ └──────────┘ └─────────────────┘ └─────────────────────┘
-
-Input:  rec_summary/REC_*.xlsx (Excel metadata with PICK column)
-Output: results/results.db + results/files/ (same as im_dynamics.py)
-
-Timing:  ⏱️  categorization: 0.234s | region analysis: 0.156s | total: 0.390s
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              CLASSES MODULE                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-classes/
-├── __init__.py
-├── plot_results.py
-│    ├── MplCanvas         ← Matplotlib canvas for Qt
-│    ├── PlotResults       ← Interactive spike detection viewer
-│    ├── PlotSegs          ← Segment viewer
-│    ├── PlotSpatialDist   ← Spatial categorization overview
-│    └── PlotRegion        ← Detailed region viewer with contours
-│
-├── abf_clip.py
-│    └── AbfClip           ← ABF data clipping + spike detection
-│
-├── spatial_categorization.py  ← STEP 1: Pixel Classification
-│    └── SpatialCategorizer
-│         ├── INPUT:  Image segments (float32 intensity values)
-│         ├── OUTPUT: Categorized frames (uint8: 0/1/2)
-│         ├── METHODS: connected, watershed, morphological
-│         ├── THRESHOLD_METHODS: manual, multiotsu, li_double, otsu_double
-│         ├── fit()            → Categorize image segment
-│         ├── get_results()    → Return categorized data
-│         └── get_export_data()→ categorized_frames + threshold_method
-│                │
-│                └─────────────┐
-│                              │
-├── region_analyzer.py  ← STEP 2: Region Measurement
-│    └── RegionAnalyzer       ▼
-│         ├── INPUT:  Categorized frames from SpatialCategorizer (0/1/2)
-│         ├── OUTPUT: Region properties (area, centroid, contours, bbox)
-│         ├── fit()               → Analyze categorized frames
-│         ├── get_results()       → Per-frame region data + contours
-│         ├── get_summary()       → Aggregate statistics
-│         ├── get_frame_results() → Single frame results
-│         ├── get_export_data()   → region_summary + region_data
-│         └── Supports 10X, 40X, 60X pixel scaling (um² conversion)
-│
-└── results_exporter.py
-     └── ResultsExporter
-          ├── export_all()     → Save TIFF (zscore+categorized), update SQLite
-          ├── export_figure()  → Save window screenshot
-          └── Output: results/results.db + results/files/{prefix}_*.tif/png
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             FUNCTIONS MODULE                                │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-functions/
-│
-├── __init__.py  ← Exports all functions with conditional CUDA imports
-├── xlsx_reader.py  ← Read experiment metadata from REC_*.xlsx
-│    └── get_picked_pairs() → Returns list of {exp_date, img_serial, abf_serial, objective, SLICE, AT}
-│
-├── [Hardware/CUDA]
-│   ├── check_cuda.py          → Verify CUDA availability (numba imported lazily inside check_cuda())
-│   ├── test_cuda.py           → Test CUDA with sample kernel
-│   └── get_memory_use.py      → Memory usage monitoring
-│
-├── [Preprocessing — unified CPU+GPU]
-│   ├── detrend.py             → MOV (@jit _cpu_mov, @cuda.jit _gpu_mov)
-│   │                             BIEXP (@jit _cpu_biexp, @cuda.jit _gpu_biexp)
-│   │                             output: ΔF/F₀ = (raw - trend) / trend
-│   ├── gaussian_blur.py       → Separable 2D Gaussian (@jit CPU + @cuda.jit GPU)
-│   ├── tau_estimate.py        → sample_tau() — scipy curve_fit on 500 random pixels
-│   └── als.py                 → als_cal_run() — per-pixel ALS slow-fluctuation estimation
-│                                 _cpu_als(): NumPy vectorised Thomas algorithm
-│                                 _gpu_als_kernel(): @cuda.jit, one thread per pixel
-│                                 _gpu_als(): CUDA driver (reshape, allocate, launch, copy back)
-│
-└── [Analysis]
-    ├── kmeans.py              → K-means clustering suite (archived)
-    │    ├── prepare_frame_for_kmeans()
-    │    ├── apply_kmeans_to_frame()
-    │    ├── calculate_cluster_areas()
-    │    ├── visualize_clustering_results()
-    │    ├── process_segment_kmeans()
-    │    ├── process_segment_kmeans_concatenated()
-    │    ├── concatenate_frames_horizontally()
-    │    └── split_concatenated_result()
-    │
-    ├── spike_alignment.py  → Spike-aligned processing
-    │    ├── spike_centered_median()  (robust to outliers)
-    │    └── spike_centered_avg()     (mean, sensitive to outliers)
-    │
-    └── imaging_segments_zscore_normalization.py
-         └── Z-score normalization using pre-spike baseline
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           DATA FLOW DIAGRAM                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-[RAW DATA]
-│
-├─→ Raw TIFF Stack (raw_images/*.tif)
-│
-├─→ ABF File (raw_abfs/*.abf) - Electrophysiology data
-│
-└─→ Recording summaries (rec_summary/*.xlsx) - Experiment metadata
-    │
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ STEP 1: Image Preprocessing (im_preprocess.py)                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-│
-├─→ Load: imageio.volread() → uint16 array (n_frames, height, width)
-│
-├─→ Detrend: Remove baseline drift (moving average subtraction)
-│
-├─→ Gaussian Blur (σ=6): Extract spatially coherent ACh signals
-│    • Noise (spatially uncorrelated) → cancels out via weighted averaging
-│    • Signal (spatially coherent) → preserved across neighboring pixels
-│    • Selection: noise_corr_length < σ < signal_corr_length
-│    •   Example@60X: 0.4 µm < 1.3 µm < 10 µm ✓
-│
-└─→ Save: *_Cal.tif, *_Gauss.tif
-    │
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ STEP 2: Spike-Aligned Analysis (im_dynamics.py)                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-│
-├─→ Load processed TIFF + ABF
-│
-├─→ Detect Spikes: scipy.signal.find_peaks()
-│
-├─→ Segment Images: Extract frames around each spike
-│
-├─→ Z-Score Normalization: (frame - baseline_mean) / baseline_std
-│    └─→ Baseline = all frames before spike
-│
-├─→ Spike-Aligned Median: Align segments by center, compute median
-│    └─→ Robust to outliers (random bright spots removed)
-│
-├─→ STEP 1: Spatial Categorization (SpatialCategorizer)
-│    │   Purpose: Classify pixels into categories (0/1/2)
-│    ├─→ Input:  Image segments (float32 z-score values)
-│    ├─→ Process: Automatic thresholding (li_double, otsu_double, etc.)
-│    │            + Spatial connectivity (connected/watershed/morphological)
-│    │            + Min region size filtering
-│    └─→ Output: Categorized frames (uint8: 0=bg, 1=dim, 2=bright)
-│                │
-│                ▼
-├─→ STEP 2: Region Analysis (RegionAnalyzer)
-│    │   Purpose: Extract quantitative measurements from categorized regions
-│    ├─→ Input:  Categorized frames from SpatialCategorizer (0/1/2)
-│    ├─→ Process: Connected component labeling (skimage.measure.label)
-│    │            + Region property calculation (skimage.measure.regionprops)
-│    │            + Contour extraction (skimage.measure.find_contours)
-│    │            + Pixel scaling (pixels → µm²)
-│    └─→ Output: Region properties (area, centroid, bbox, contours)
-│                 + Summary statistics (counts, means, stds)
-│
-├─→ Export Results: Save to disk (ResultsExporter)
-│    │
-│    ├─→ collect export data using get_export_data():
-│    │    • abf_clip.get_export_data() → experiment IDs + ABF segments
-│    │    • categorizer.get_export_data() → categorized frames + threshold method
-│    │    • analyzer.get_export_data() → region analysis + summary stats
-│    │
-│    ├─→ exporter.export_all() saves:
-│    │    • SQLite: metadata + summaries (results/results.db)
-│    │    • TIFF: {prefix}_zscore.tif (float32), {prefix}_categorized.tif (uint8)
-│    │
-│    └─→ exporter.export_figure() saves:
-│         • PNG: {prefix}_spatial_plot.png, {prefix}_region_plot.png
-│
-└─→ Visualization: Interactive Qt windows
-    ├─→ PlotPeaks: View spike detection on voltage trace
-    ├─→ PlotSegs: Browse individual spike segments
-    ├─→ PlotSpatialDist: Overview of categorization with overlay traces
-    └─→ PlotRegion: Frame-by-frame detail with region contours
-
-[OUTPUTS]
-│
-├─→ results/results.db           (SQLite database - experiment metadata)
-├─→ results/files/               (flat directory, all experiments)
-│    ├─→ {prefix}_zscore.tif        (spike-centered median, float32)
-│    ├─→ {prefix}_categorized.tif   (0=bg, 1=dim, 2=bright, uint8 — ImageJ overlay)
-│    ├─→ {prefix}_spatial_plot.png  (PlotSpatialDist screenshot)
-│    └─→ {prefix}_region_plot.png   (PlotRegion screenshot)
-├─→ processed_images/            (*_Cal.tif, *_Gauss.tif from preprocessing)
-└─→ Interactive figures (PlotPeaks, PlotSegs, PlotSpatialDist, PlotRegion)
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         IMPORT RELATIONSHIPS                                │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-External Dependencies:
-━━━━━━━━━━━━━━━━━━━━━━
-• numpy, scipy          → Array operations, signal processing
-• imageio               → TIFF I/O
-• matplotlib            → Plotting
-• polars                → Data tables (replaced pandas 2026-04)
-• scikit-image          → Image processing, thresholding, morphology
-• scikit-learn          → K-means algorithm
-• numba, numba.cuda     → JIT compilation, GPU kernels
-• PySide6               → Qt GUI for interactive plots
-• pyabf                 → ABF file reader
-• rich                  → Console formatting, progress bars
-
-Internal Dependencies:
-━━━━━━━━━━━━━━━━━━━━━━
 img_proc.py
-  └─→ functions (check_cuda, get_memory_usage,
-                 mov_detrend, biexp_detrend, align_to_min,
-                 sample_tau, gaussian_blur_run)
+  ├─► classes.RecordingList
+  └─► functions: sample_tau (tau_estimate), biexp_detrend (detrend), fit_zscore_background + img_zscore_convert
+                 (fit_hist), gaussian_blur_run (gaussian_blur), check_cuda, get_memory_usage
 
-als_cal.py
-  └─→ functions (als_cal_run, check_cuda, get_memory_usage)
+als_correct.py
+  ├─► classes.RecordingList
+  ├─► functions: als_run (als), check_cuda, get_memory_usage
+  └─► img_proc.update_proc_list_gauss_exists
 
-im_dynamics.py
-  ├─→ classes
-  │    ├─→ AbfClip
-  │    ├─→ PlotPeaks, PlotSegs, PlotSpatialDist, PlotRegion
-  │    ├─→ SpatialCategorizer
-  │    ├─→ RegionAnalyzer
-  │    └─→ ResultsExporter
-  └─→ functions
-       ├─→ spike_alignment (spike_centered_median)
-       └─→ imaging_segments_zscore_normalization (img_seg_zscore_norm)
+  every CPU/GPU module: @jit / @cuda.jit kernels + a dispatch function (check_cuda() first, before numba is imported)
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    KEY ALGORITHMS                                           │
+│                         SPIKE-ALIGNED (ach_domain_analysis.py)              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-1. SPIKE-ALIGNED MEDIAN
-   ─────────────────────
-   Purpose: Find consistent signal, filter outliers
+ach_domain_analysis.py
+  ├─► classes.RecordingList
+  ├─► classes.AbfClip ─────────────────► functions.plot_results (plot_spike_detection_summary)
+  ├─► classes.SpikeReliabilityChecker ─► classes.region_analyzer, classes.results_exporter,
+  │                                       classes.spatial_categorization, functions.plot_results
+  ├─► classes.SpatialCategorizer ──────► functions.cluster_kernels
+  ├─► classes.RegionAnalyzer ──────────► classes.spatial_categorization (CATEGORY_BRIGHT),
+  │                                       functions.cluster_kernels, functions.flash_flow ─► functions.tvl1_flow,
+  │                                       functions.flow_pattern
+  ├─► classes.ResultsExporter                                  → results.db, median/, categorized/, figures
+  └─► functions: load_img_segs, spike_centered_median (spike_alignment), lookup_rec_from_db +
+                 compute_region_stats + compute_flow_pattern_stats + count_unique_cells +
+                 get_cell_recording_status (database_ops), load_st_bd + bd_export_path + outline_mask +
+                 dv_ml_direction (st_boundary), plot_spatiotemporal_summary + plot_flow_panels +
+                 plot_flow_streamlines (plot_results), write_stats_xlsx + write_cell_summary_xlsx (xlsx_writer)
 
-   Example (one pixel across 5 segments):
-     Values: [2.0, 2.1, 15.0, 1.9, 2.0]
-     Mean:   4.6  ← contaminated by outlier
-     Median: 2.0  ← robust, true signal
-
-2. CENTER ALIGNMENT
-   ─────────────────
-   Segments of different lengths aligned by spike frame:
-
-     target_center = target_frames // 2
-     seg_center = n_frames // 2
-     start = target_center - seg_center
-
-3. TWO-PASS THRESHOLDING (li_double, otsu_double)
-   ────────────────────────────────────────────────
-   Pass 1: Li/Otsu on all pixels → separates background
-   Pass 2: Li/Otsu on signal pixels → separates dim/bright
+functions.plot_results ─► classes.region_analyzer, classes.spatial_categorization, functions.ap_threshold,
+                          functions.flow_pattern
 
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│              ARCHIVED SCRIPTS (archive/ — reference only)                   │
+│                         SPONTANEOUS (permutation_test.py, SRE_analysis.py)  │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-archive/run_als_1d.py
-  └─→ scipy.sparse / scipy.sparse.linalg → ALS baseline on 1-D Excel trace
+permutation_test.py
+  ├─► functions.check_cuda (first)
+  ├─► classes.RecordingList
+  ├─► functions: biexp_detrend, sample_tau, fit_zscore_background, fit_flash_background (fit_hist),
+  │              flash_mask (_threshold_open_close, mask_flash_sizes), pixel_lags + sur_flash_masks (permutation)
+  └─► img_proc.SIGMA
+  functions.permutation ─► functions.als, functions.flash_mask, functions.gaussian_blur (kernels)
 
-archive/run_biexp_detrend.py
-  └─→ Original standalone biexp script (superseded by img_proc.py + functions/detrend.py)
+SRE_analysis.py
+  ├─► classes.RecordingList (select, set_removal_suggestion, set_connect_radius)
+  ├─► classes.SREAnalyzer (+ TREE_UNITS, cut_h_name, timed)
+  │     ├─► functions.fit_hist (fit_flash_background, CROSSOVER_RATIO)       detect
+  │     ├─► functions.flash_mask                                             detect
+  │     ├─► functions.footprint_traces ─► functions.flash_mask (f16_lut)     group_trace
+  │     ├─► classes.HierarchicalClustering                                   group_trace (/ group_z_peak, not run)
+  │     └─► classes.region_analyzer (PIXEL_SCALE)
+  └─► functions: check_cuda, img_zscore_convert (fit_hist), load_st_bd + bd_export_path + direction_labels +
+                 outline_mask (st_boundary), plot_cluster_dendrogram + plot_silhouette_sweep +
+                 plot_cluster_scatter (+ correlation_map_xy) + plot_zone_overview + frame_zone_figures +
+                 zone_colors (plot_results)
 
-archive/im_preprocess.py
-  └─→ Original MOV-only pipeline (superseded by img_proc.py)
+flash_size_analysis.py
+  ├─► classes.RecordingList, classes.SREAnalyzer (detect only)
+  └─► functions: check_cuda, CROSSOVER_RATIO (fit_hist), flash_table
 
-archive/cpu_binning.py, archive/kmeans.py
-  └─→ Unused analysis helpers
+area_comparison.py
+  ├─► classes.RegionAnalyzer (PIXEL_SCALE)
+  └─► functions: write_stats_xlsx, database_ops._read_experiments
+  reads results.db + results/spontaneous/{stem}_ZONES.xlsx (old layout)
 
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Generated: 2026-01-15
-Updated: 2026-06-10 Session 19 (startup fix: numba deferred in check_cuda.py + als.py;
-         tifffile/als_run deferred in ctrl_als_correct.py; corrected ALS tab controller name)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         SHARED                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+classes.RecordingList ─► functions.filelist_parser, functions.database_ops (lookup_rec_from_db)
+functions.database_ops ─► utils.ColumnSorter
+functions/__init__.py   lazy imports (_LAZY_IMPORTS + __getattr__); classes/__init__.py the same
+utils/params.py         paths (BASE_DIR, MODELS_DIR = data/, RESULTS_DIR, RAW_/PROC_TIFFS_DIR, ...), UISizes
+
+Prototypes (not pipelines)
+  prototype_full_als_waves.py ─► classes.wave_profiles, functions.plot_results
+  prototype_med_kymographs.py ─► functions.plot_results
+  prototype_peak_tracking.py
+
+docs/paper/**/scripts/*.py  paper figures; several import names that no longer exist
+                            (SREAnalyzer.run z_peak flow, spatiotemporally_connect_flashes, NR zones)
+
+External: numpy, scipy, numba (+ CUDA), tifffile, polars, pandas, matplotlib, scikit-image, pyabf, PySide6, rich,
+          openpyxl
 ```

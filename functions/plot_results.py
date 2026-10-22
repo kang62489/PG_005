@@ -7,7 +7,8 @@ Headless matplotlib export figures (plain Figure objects, no PySide6; the GUI ca
   Step 3. Reliability : per-segment detection montage + Vm success vs failure  (-> reliability/)
   Step 4. Spikes      : full-length Vm with picked / skipped / collapsed spikes  (-> spikes/)
   Step 5. Prototypes  : kymographs / wave persistence used only by prototype_*.py
-  Step 6. Spontaneous : zone overlay / single-zone maps + per-sensor zone stats  (-> spontaneous/)
+  Step 6. Spontaneous : zone overlay / single-zone maps + per-sensor zone stats  (-> spontaneous/);
+                        clustering: dendrogram, silhouette sweep, cluster scatter / correlation map  (-> clustering/)
 
 Example:
     >>> fig = plot_flow_panels(med_stack, flow_pairs, title_info, frame_duration_ms, spike_frame_idx, striatum)
@@ -88,6 +89,8 @@ MONTAGE_NR_OUTLINE = (0.45, 0.45, 0.45)  # contour montages: NR zones dark gray,
 MONTAGE_CIRCLE_TEXT = {"inner": "inner (nearest edge)", "far": "enclosing (farthest pixel)"}
 ZONE_MAP_TITLE_FS = 15                  # zone-map page titles (overview + frame pages); matplotlib default 12
 CLUSTER_HULL_PAD_PX = 12                # cluster scatter: outline = convex hull of the flash centroids, padded by this
+CLUSTER_MAP_PAD_FRAC = 0.012            # correlation map: hull padding as a fraction of the map's widest span
+                                        # (= 12 px on a 1024 px frame)
 
 
 # ===========================================================================
@@ -1016,8 +1019,9 @@ def plot_med_kymographs(med: np.ndarray, um_per_pixel, frame_ms, title) -> Figur
 # fn: plot_cluster_dendrogram, tree dendrogram (y = distance_label in unit) with the cut line.
 # fn: plot_silhouette_sweep, one panel per tree, side by side: mean silhouette (left axis) + cluster count (right, log)
 #     vs the cut height h, cut used + best-silhouette cut marked.
-# fn: plot_cluster_scatter, one panel per clustering, side by side: flash centroids coloured by their cluster
-#     (= recur_zone, zone-map colours), padded hull outline + zone id above it.
+# fn: correlation_map_xy, classical MDS of a 1 - r matrix: 2-D positions (dot distance ~ 1 - r) + fraction kept.
+# fn: plot_cluster_scatter, one panel per clustering, side by side: flashes at their z peaks, or on the correlation
+#     map (distance key), coloured by their cluster (= recur_zone, zone-map colours), padded hull + zone id.
 
 # --- 6a. zone maps (-> spontaneous/{stem}_ZONE_MAPS.tif) -------------------
 
@@ -1309,35 +1313,64 @@ def plot_silhouette_sweep(panels: list[dict]) -> Figure:
     return fig
 
 
-def plot_cluster_scatter(panels: list[dict], shape: tuple[int, int]) -> Figure:
-    """One panel per clustering, side by side: flash centroids coloured by their cluster (= recur_zone, zone-map
-    colours), each cluster outlined by its padded convex hull, zone id just above the outline.
+def correlation_map_xy(distance: np.ndarray) -> tuple[np.ndarray, float]:
+    """Classical MDS of a 1 - r matrix: (n, 2) positions whose distances approximate 1 - r, and the fraction of the
+    distance structure the 2 axes keep (top 2 eigenvalues / all positive eigenvalues)."""
+    n = len(distance)
+    centering = np.eye(n) - 1 / n
+    gram = -0.5 * centering @ (distance ** 2) @ centering
+    eigvals, eigvecs = np.linalg.eigh(gram)
+    order = np.argsort(eigvals)[::-1]
+    eigvals, eigvecs = eigvals[order], eigvecs[:, order]
+    top = np.clip(eigvals[:2], 0, None)
+    kept_frac = float(top.sum() / eigvals[eigvals > 0].sum()) if (eigvals > 0).any() else 0.0
+    return eigvecs[:, :2] * np.sqrt(top), kept_frac
 
-    panel keys: centroids_yx (n, 2), flash_zone_ids (n,), colors (zone id -> colour), title.
+
+def plot_cluster_scatter(panels: list[dict], shape: tuple[int, int]) -> Figure:
+    """One panel per clustering, side by side: flashes coloured by their cluster (= recur_zone, zone-map colours),
+    each cluster outlined by its padded convex hull, zone id just above the outline.
+
+    panel keys: centroids_yx (n, 2), flash_zone_ids (n,), colors (zone id -> colour), title;
+    optional distance (n, n) 1 - r: flashes placed by correlation_map_xy instead of their z peaks (correlation map,
+    dot distance ~ 1 - r).
     """
-    # every centroid replaced by a ring of CLUSTER_HULL_PAD_PX: the hull is padded + rounded, and 1-2 flashes
-    # still give an outline (circle / capsule)
     angles = np.linspace(0, 2 * np.pi, 16, endpoint=False)
-    ring_xy = CLUSTER_HULL_PAD_PX * np.column_stack([np.cos(angles), np.sin(angles)])
-    fig = Figure(figsize=(7 * len(panels), 7.4), layout="constrained")
+    unit_ring = np.column_stack([np.cos(angles), np.sin(angles)])
+    fig = Figure(figsize=(7 * len(panels), 8), layout="constrained")
     for ax, panel in zip(fig.subplots(1, len(panels), squeeze=False)[0], panels, strict=True):
-        centroids_yx, flash_zone_ids, colors = panel["centroids_yx"], panel["flash_zone_ids"], panel["colors"]
-        ax.scatter(centroids_yx[:, 1], centroids_yx[:, 0], c=[colors[z] for z in flash_zone_ids], s=14,
+        flash_zone_ids, colors = panel["flash_zone_ids"], panel["colors"]
+        if "distance" in panel:
+            points_xy, kept_frac = correlation_map_xy(panel["distance"])
+            pad = CLUSTER_MAP_PAD_FRAC * np.ptp(points_xy, axis=0).max()
+            title = f"{panel['title']}\ncorrelation map: dot distance ~ 1 - r (2-D keeps {kept_frac:.0%})"
+        else:
+            points_xy, pad, title = panel["centroids_yx"][:, ::-1], CLUSTER_HULL_PAD_PX, panel["title"]
+        ax.scatter(points_xy[:, 0], points_xy[:, 1], c=[colors[z] for z in flash_zone_ids], s=14,
                    edgecolors="black", linewidths=0.3)
+        # every point replaced by a ring of radius pad: the hull is padded + rounded, and 1-2 flashes
+        # still give an outline (circle / capsule)
         for zone_id in colors:
-            members = centroids_yx[flash_zone_ids == zone_id]
+            members = points_xy[flash_zone_ids == zone_id]
             if not len(members):
                 continue
-            ring_points = (members[:, ::-1][:, None, :] + ring_xy[None]).reshape(-1, 2)  # (x, y)
+            ring_points = (members[:, None, :] + pad * unit_ring[None]).reshape(-1, 2)
             outline = ring_points[ConvexHull(ring_points).vertices]
             ax.fill(outline[:, 0], outline[:, 1], fill=False, edgecolor=colors[zone_id], linewidth=1.2)
-            top_x, top_y = outline[np.argmin(outline[:, 1])]  # image orientation: smallest y = top
+            top_x, top_y = outline[np.argmin(outline[:, 1])]  # y axis inverted: smallest y = top
             ax.text(top_x, top_y, str(zone_id), color=colors[zone_id], fontsize=9, fontweight="bold",
                     ha="center", va="bottom")
-        ax.set_xlim(0, shape[1])
-        ax.set_ylim(shape[0], 0)  # image orientation: y down
-        ax.set_aspect("equal")
-        ax.set_xlabel("z_peak_x (px)")
-        ax.set_ylabel("z_peak_y (px)")
-        ax.set_title(panel["title"])
+        if "distance" in panel:
+            ax.invert_yaxis()  # same label placement as the image panels
+            ax.set_xlabel("correlation map axis 1 (1 - r)")
+            ax.set_ylabel("correlation map axis 2 (1 - r)")
+            ax.set_aspect("equal", adjustable="datalim")  # equal 1 - r scale, limits widen to fill the panel
+        else:
+            ax.set_xlim(0, shape[1])
+            ax.set_ylim(shape[0], 0)  # image orientation: y down
+            ax.set_xlabel("z_peak_x (px)")
+            ax.set_ylabel("z_peak_y (px)")
+            ax.set_aspect("equal")
+        ax.set_box_aspect(shape[0] / shape[1])  # every panel the same size as the frame panel
+        ax.set_title(title)
     return fig

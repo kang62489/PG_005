@@ -8,7 +8,7 @@ Terms used in the code and docs, after the 2026-10-08 rename (branch `major_refa
 
 | Old | New | Meaning |
 |---|---|---|
-| hotspot | **flash** | One connected blob of above-threshold pixels in **one frame** (after mask cleanup; fragments within 75 px merged; blobs > 80 % of the frame dropped). |
+| hotspot | **flash** | One connected blob of above-threshold pixels in **one frame** (after mask cleanup; blobs > 80 % of the frame dropped; since 2026-10-22 same-frame blobs are not joined, `JOIN_SAME_FRAME = False`). |
 | compartment | **recur_zone** | A zone where flashes recur; the only zones counted in stats. |
 
 ### Spelling rules

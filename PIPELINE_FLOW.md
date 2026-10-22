@@ -31,15 +31,18 @@
 5. **Measure the response.** `RegionAnalyzer` finds flash clusters, measures their location and area, estimates the decay time, and computes flash flow for significant responses.
 6. **Export results.** `ResultsExporter` writes one recording record to `results.db`, including spike counts, reliability, flash and cluster measurements, decay time, and recording metadata. For a significant response, it also saves the median image stack as `median/*_MED.tif`, the bright/background masks as `categorized/*_CAT.tif`, a summary figure as `spatial/*_SPATIAL.png`, and a flow figure as `flow/*_FLOW.png`. These four files are skipped when no significant response is detected.
 
-For the analysis-list run, the pipeline also saves `spikes/<analysis_list_name>_cells.xlsx` and writes a **Region Analysis Statistics** block back into the analysis-list text file. It appends a `[SKIPPED]` explanation for a recording with no usable spike segments or no significant ACh detection.
+After all entries, the pipeline adds stats sheets (Summary / Spatial / Temporal / Flow pattern / Neurons / Skipped) to `{results_dir}/<analysis_list_name>_cells.xlsx`. The analysis-list file itself is never written to.
 
-## 4. Spontaneous flash analysis → `SRE_analysis.py`
+## 4. Spontaneous flash analysis → `permutation_test.py`, then `SRE_analysis.py`
 
 **Input:** `*_BIEXP_ALS.tif` stacks from a processing list. By default, it selects recordings marked **10X** in the recording database.
 
-1. `SREAnalyzer` estimates a background threshold from the stack's value histogram and detects flashes in each frame.
-2. It connects detections across frames into tracks, then groups tracks by correlated traces or spatial proximity.
-3. It maps those groups into zones and calculates zone size and event statistics.
-4. Under `results/spontaneous/`, it saves per-recording `*_ZONES.xlsx` and `*_ZONE_MAPS.tif`, `footprints/*_ZONES.npz`, and `mask/*_ZONE_MASK.tif` (skipped with `--no_mask`). It also saves `spontaneous_summary.xlsx` across recordings.
+1. **Size cutoff (once, on Saion).** `permutation_test.py` builds time-shifted surrogates of each recording and finds the smallest flash size that is bigger than chance: **th_small_obj**, saved in `results/permutation/{OBJ}/removal_suggestion.csv`. `SRE_analysis.py` reads each recording's own value.
+2. **Detect flashes.** `SREAnalyzer.detect()` fits the background of the stack's value histogram (threshold = peak + 2 σ), builds the cleaned flash mask (blobs smaller than th_small_obj removed) and labels every 8-connected blob of a frame as one flash. Same-frame blobs are not joined (`JOIN_SAME_FRAME = False`); blobs larger than 80 % of the frame are dropped.
+3. **Cluster by trace.** Each flash's footprint gives one trace (mean value over its pixels, every frame). `group_trace()` builds an average-linkage tree on 1 − r (Pearson) and cuts it at the h with the best mean silhouette (`classes/hierarchical_clustering.py`).
+4. **Zones.** `map("trace_corr")`: each cluster is one recur_zone (union of its flash footprints), with its event count, period and frequency.
+5. **Export** under `results/spontaneous/`: `{stem}_TRACE_CORR_ZONES.xlsx`, `{stem}_TRACE_CORR_ZONE_MAPS.tif`, `footprints/{stem}_FLASH_FOOTPRINTS.npz` + `{stem}_TRACE_CORR_ZONES.npz`, `mask/{stem}_FLASH_MASK.tif` (skipped with `--no_mask`), and `clustering/` (dendrogram, silhouette sweep, zones at the z peaks next to the correlation map).
+
+Method details: `docs/hierarchical_clustering.md`, `docs/permutation_test.md`.
 
 The main sequence is **raw TIFF → `img_proc.py` → `als_correct.py` → `ach_domain_analysis.py`**. `SRE_analysis.py` is a separate analysis route from the ALS-corrected TIFFs.

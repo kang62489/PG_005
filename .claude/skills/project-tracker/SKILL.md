@@ -26,6 +26,10 @@ User says:
 ### For wrap-up triggers
 1. Show that this skill is triggered.
 2. Check modified files and then summarize the changes
+   - Docs check: if a `.py` file was added, removed, renamed or moved, or a pipeline's flow / outputs changed, update
+     `docs/reference/PROJECT_SUMMARY.md`, `docs/reference/DEPENDENCY_DIAGRAM.md` and `PIPELINE_FLOW.md`; search
+     **all** markdown (`docs/**/*.md` incl. subfolders + root `*.md`) for the changed names / behaviour, not only
+     today's new terms. Dated logs and paper drafts get a dated note instead of a rewrite.
 3. Check current working plans (if any) and then summarize the progress
 4. Ask user to confirm TODOs via **interactive multi-select (AskUserQuestion)**
    - Derive TODOs from TODAY'S actual changes only — never copy carry-overs from old session logs blindly

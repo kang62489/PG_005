@@ -4,9 +4,10 @@ SRE_analysis.py  --  Spontaneous ACh flash -> zone analysis (10X, *_BIEXP_ALS.ti
   Step 1. Input            : proc list -> 10X recordings in rec_data.db with their *_BIEXP_ALS.tif (RecordingList;
                              GAUSS with --use_gauss, all OBJ with --all_obj)
   Step 2. Detection        : th_small_obj (removal_suggestion.csv, else REMOVAL_FALLBACK) + connect_radius
+                             (JOIN_SAME_FRAME False: 0, every blob its own flash)
                              -> SREAnalyzer.detect() -> footprints/{stem}_FLASH_FOOTPRINTS.npz
-  Step 3. Clustering       : z_peak tree and trace_corr tree, each cut at its best-silhouette h
-                             (sre_analyzer.CUT_RULES) -> map(method)
+  Step 3. Clustering       : trace_corr tree (1 - r, average linkage) cut at its best-silhouette h -> map(method)
+                             (z_peak tree kept, not run: CLUSTER_METHODS)
   Step 4. Characterization : striatum outline + axis labels from bd_{date}_{serial}.json (coverage: commented out)
   Step 5. Export           : per method {stem}_{METHOD}_ZONES.xlsx, footprints/{stem}_{METHOD}_ZONES.npz,
                              clustering/{stem}_{METHOD}_DENDROGRAM.png, {stem}_{METHOD}_ZONE_MAPS.tif
@@ -81,14 +82,24 @@ console = Console()
 #
 # ===========================================================================
 
-MAP_DPI = 120
+# --- Input -----------------------------------------------------------------
+TARGET_OBJ = "10X"  # recordings analyzed (--all_obj: all)
+GAUSS_SUFFIX = "_BIEXP_GAUSS.tif"  # input with --use_gauss (default: ALS_SUFFIX)
+
+# --- Detection -------------------------------------------------------------
+JOIN_SAME_FRAME = False  # True: same-frame blobs <= connect_radius apart joined; False: every blob its own flash
+                         # (connect_radius 0, the trees group same-frame blobs)
+
+# --- Clustering ------------------------------------------------------------
+CLUSTER_METHODS = ("trace_corr",)  # clusterings; each gets its own zones + {stem}_{METHOD}_* exports
+                                   # ("z_peak" kept in SREAnalyzer.group_z_peak, not run; add it here to run it)
+
+# --- Export ----------------------------------------------------------------
+MAP_DPI = 120  # dpi of the zone-map pages and clustering/ PNGs
 MAP_Z_MIN = 1.0  # zone-map gray range starts at background peak + this many sigmas (black)
 MAP_TITLE_WIDTH = 80  # characters per title line before the recur_zone list wraps (titles at ZONE_MAP_TITLE_FS)
 MAP_WORKERS_MAX = 16  # auto worker count for zone-map rendering = usable CPUs, capped here (--map_workers overrides)
 MAP_CHUNK_PAGES = 8  # frame pages per pool task (each task builds its own Figure once)
-CLUSTER_METHODS = ("z_peak", "trace_corr")  # clusterings; each gets its own zones + {stem}_{METHOD}_* exports
-TARGET_OBJ = "10X"  # recordings analyzed (--all_obj: all)
-GAUSS_SUFFIX = "_BIEXP_GAUSS.tif"  # input with --use_gauss (default: ALS_SUFFIX)
 
 
 # ===========================================================================
@@ -130,7 +141,10 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
     # class method: set_removal_suggestion() -- th_small_obj of every recording
     recordings = recording_list.set_removal_suggestion(recordings, results_dir)
     # class method: set_connect_radius() -- connect_radius of every recording, from its th_small_obj
+    # (JOIN_SAME_FRAME False: 0, every blob its own flash)
     recordings = recording_list.set_connect_radius(recordings)
+    if not JOIN_SAME_FRAME:
+        recordings = recordings.with_columns(pl.lit(0).alias("connect_radius"))
 
     # -----------------------------------------------------------------------
     # Characterization (set once, before the loop)
@@ -176,7 +190,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             del stack  # the analyzer keeps its float16 copy
 
         # class method: detect() -> analyzer.threshold, mask (flash mask), flashes + footprints
-        # (same-frame blobs <= connect_radius apart joined)
+        # (same-frame blobs <= connect_radius apart joined; connect_radius 0: none joined)
         analyzer.detect()
 
         # class method: save_flash_footprints() -- footprints/{stem}_FLASH_FOOTPRINTS.npz (all flashes; group_trace input)
@@ -186,14 +200,16 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
         # -------------------------------------------------------------------
         # Clustering
         # -------------------------------------------------------------------
-        # class method: group_z_peak() -- z peak (largest-z footprint pixel) Euclidean distance tree cut at the best silhouette
-        # (best-silhouette cut kept for the plots)
-        analyzer.group_z_peak()
-        # class method: group_trace() -- footprint traces from the npz, 1 - r (Pearson, zero lag) tree cut the same way
+        # class method: group_trace() -- footprint traces from the npz, 1 - r (Pearson, zero lag) tree cut at the best
+        # silhouette
         analyzer.group_trace(footprint_path)
+        # class method: group_z_peak() -- z peak (largest-z footprint pixel) Euclidean distance tree, same cut
+        # (+ acceleration elbow for the plots); kept, not run: add "z_peak" to CLUSTER_METHODS to run it
+        if "z_peak" in CLUSTER_METHODS:
+            analyzer.group_z_peak()
 
         # -------------------------------------------------------------------
-        # Export (both clusterings)
+        # Export (every clustering of CLUSTER_METHODS)
         # -------------------------------------------------------------------
         # class method: save_flashes() -- mask/{stem}_FLASH_MASK.tif, debug: {stem}_FLASHES.csv
         with timed("export mask tif / flashes csv"):
@@ -262,7 +278,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
             # lst_recur_zones.append(zone_stats.assign(recording=proc_stem, sensor=row["SENSOR"]))
 
         # Export. local fn: export_cluster_comparison() -- clustering/{stem}_SILHOUETTE.png / _CLUSTERS.png:
-        # z_peak tree | trace_corr tree side by side
+        # silhouette sweep + clusters at the z peaks | on the correlation map
         with timed("export silhouette / cluster comparison"):
             paths += export_cluster_comparison(analyzer, proc_stem, out_root / "clustering")
 
@@ -346,7 +362,7 @@ def run(proc_list_path: Path, results_dir: Path = Path("results"), sigma: float 
 # fn: open_map_pool, process pool that renders the zone-map pages for the whole run (None = in this process).
 # fn: _has_sweep, True if a method's tree has a silhouette sweep (>= 3 flashes).
 # fn: export_dendrogram, write clustering/{stem}_{METHOD}_DENDROGRAM.png.
-# fn: export_cluster_comparison, write clustering/{stem}_SILHOUETTE.png + _CLUSTERS.png (both trees side by side).
+# fn: export_cluster_comparison, write clustering/{stem}_SILHOUETTE.png + _CLUSTERS.png (CLUSTER_METHODS trees side by side).
 
 def map_workers_auto() -> int:
     """CPUs this process may use (the SLURM allocation on Linux, not the whole node), capped at MAP_WORKERS_MAX."""
@@ -387,10 +403,9 @@ def export_dendrogram(analyzer: SREAnalyzer, stem: str, out_dir: Path) -> list[P
 
 
 def export_cluster_comparison(analyzer: SREAnalyzer, stem: str, out_dir: Path) -> list[Path]:
-    """Both trees side by side (CLUSTER_METHODS order) -> clustering/{stem}_SILHOUETTE.png (silhouette sweeps, cut
-    used + the other cut marked) + {stem}_CLUSTERS.png (cluster scatters, zone-map colours; plus the scatter of the
-    other cut, which has no zones / zone maps: best silhouette, or the z_peak acceleration elbow); trees without a sweep
-    (< 3 flashes) are left out."""
+    """CLUSTER_METHODS trees (>= 3 flashes) side by side -> clustering/{stem}_SILHOUETTE.png (sweeps, cuts marked) +
+    {stem}_CLUSTERS.png (zone-map colours, at the z peaks + trace_corr correlation map; other cut without zone maps:
+    best silhouette or the z_peak acceleration elbow)."""
     methods = [method for method in CLUSTER_METHODS if _has_sweep(analyzer, method)]
     if not methods:
         return []
@@ -413,23 +428,22 @@ def export_cluster_comparison(analyzer: SREAnalyzer, stem: str, out_dir: Path) -
         sweeps.append({"sweep": clustering["sweep"], "cuts": cuts, "unit": unit,
                        "title": f"{method} tree: mean silhouette vs h"})
         cut_label = "" if cut_rule == "silhouette" else f", {cut_rule} cut"
-        scatters.append({
-            "centroids_yx": centroids_yx,
-            "flash_zone_ids": analyzer.flashes[f"cluster_{method}"].to_numpy() + 1,  # zone_id = cluster + 1
-            "colors": zone_colors(list(range(1, cut["n_clusters"] + 1))),  # = that method's zone-map colours
-            "title": f"{method} tree{cut_label}: {cut['n_clusters']} clusters\n(cut at h {cut['h']:g} {unit}, "
-                     f"silhouette {cut['silhouette']:.3f})",
-        })
+        cut_panels = [(analyzer.flashes[f"cluster_{method}"].to_numpy() + 1, cut,  # zone_id = cluster + 1
+                       f"{method} tree{cut_label}: {cut['n_clusters']} clusters\n(cut at h {cut['h']:g} {unit}, "
+                       f"silhouette {cut['silhouette']:.3f})")]
         if other:
             other_rule, other_cut, other_ids = other
             other_name = "best silhouette" if other_rule == "silhouette" else f"{other_rule} cut"
-            scatters.append({
-                "centroids_yx": centroids_yx,
-                "flash_zone_ids": other_ids + 1,
-                "colors": zone_colors(list(range(1, other_cut["n_clusters"] + 1))),
-                "title": f"{method} tree, {other_name}: {other_cut['n_clusters']} clusters (no zone maps)\n"
-                         f"(cut at h {other_cut['h']:g} {unit}, silhouette {other_cut['silhouette']:.3f})",
-            })
+            cut_panels.append((other_ids + 1, other_cut,
+                               f"{method} tree, {other_name}: {other_cut['n_clusters']} clusters (no zone maps)\n"
+                               f"(cut at h {other_cut['h']:g} {unit}, silhouette {other_cut['silhouette']:.3f})"))
+        for flash_zone_ids, panel_cut, title in cut_panels:
+            panel = {"centroids_yx": centroids_yx, "flash_zone_ids": flash_zone_ids,
+                     "colors": zone_colors(list(range(1, panel_cut["n_clusters"] + 1))),  # = zone-map colours
+                     "title": title}
+            scatters.append(panel)  # flashes at their z peaks
+            if "distance" in clustering:  # trace_corr: same clusters on the correlation map (dot distance ~ 1 - r)
+                scatters.append({**panel, "distance": clustering["distance"]})
     figures = {"SILHOUETTE": plot_silhouette_sweep(sweeps), "CLUSTERS": plot_cluster_scatter(
         scatters, (analyzer.height, analyzer.width))}
     paths = []

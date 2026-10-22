@@ -84,6 +84,10 @@ At 10X, 7.3–13.0 percentage points fewer flashes touch the frame edge than at 
 
 ### Grouping steps (`spontaneous_analysis.py`, `classes/sp_zone_analyzer.py`)
 
+> Note (2026-10-22): steps 2 and 4–9 below are the old grouping. `SRE_analysis.py` now keeps every blob as its own
+> flash and groups all flashes in one hierarchical clustering of trace 1 − r (average linkage, cut at the best mean
+> silhouette); see `docs/hierarchical_clustering.md` §12. This section is kept as drafted until the text is rewritten.
+
 1. **Detect flashes.** Threshold = background peak + 2σ of the ALS histogram. Mask cleanup drops blobs smaller than 5,000 px (4,000 px in the current `results/`). Blobs larger than 80 % of the frame are dropped (over-exposed first frames).
 2. **Consecutive frames → units.** A flash in frame n+1 joins a flash in frame n if its centroid lies inside n's circle (centroid → farthest pixel). A unit is one flash, or a chain of flashes over consecutive frames.
 3. **Traces.** Every flash's footprint is used as an ROI → one trace per flash.

@@ -59,7 +59,7 @@ TH_SMALL_OBJ = 5000           # px: default size removal; SRE_analysis.py passes
                               # th_small_obj_px from the permutation test (removal_suggestion.csv)
 MAX_FLASH_FRAC = 0.8          # frame fraction: drop larger flashes (over-exposed first frames)
 CONNECT_RADIUS = 25           # px: default same-frame join distance; SRE_analysis.py passes each recording's own
-                              # (sqrt(th_small_obj / pi) in 5 px steps)
+                              # (sqrt(th_small_obj / pi) in 5 px steps; 0 with JOIN_SAME_FRAME False: none joined)
 
 # --- Clustering (group) ---------------------------------------------------
 Z_PEAK_CUT_PX = np.arange(5, 505, 5)  # px: z_peak tree cut heights swept for the best mean silhouette
@@ -80,7 +80,7 @@ class SREAnalyzer:
         bg_center, bg_sigma, threshold, mask, flashes, footprints     (detect)
         flashes["cluster_{method}"], detections (= flashes),
         clusterings[method] = {"clusters", "cut", "cut_rule", "silhouette_cut", "silhouette_cluster_ids",
-                               "tree", "sweep"}    (group_z_peak / group_trace)
+                               "tree", "sweep"}    (group_z_peak / group_trace; trace_corr also "distance" = 1 - r)
         zone_method, zones (1 per cluster), zone_masks, zone_centroids, zone_stats   (map)
     """
 
@@ -119,13 +119,15 @@ class SREAnalyzer:
         with timed("detect mask (open/close/fill/size)"):
             self.mask = flash_mask(self.stack_f16, self.threshold, self.th_small_obj, self.cuda_available)
 
-        # per-frame flashes = 8-connected blobs, blobs <= connect_radius apart joined
+        # per-frame flashes = 8-connected blobs, blobs <= connect_radius apart joined (0: none joined)
         max_area = MAX_FLASH_FRAC * self.height * self.width
         with timed("detect label flashes"):
             self.flashes, self.footprints, giant = self.label_flashes(self.mask, self.stack_f16, max_area,
                                                                       self.connect_radius)
         self.detections = self.flashes  # zones / stats / maps read the flashes as "detections"
-        console.log(f"  {len(self.flashes)} flashes (same-frame blobs <= {self.connect_radius} px apart joined)")
+        join_text = (f"same-frame blobs <= {self.connect_radius} px apart joined" if self.connect_radius > 0
+                     else "independent blobs, none joined")
+        console.log(f"  {len(self.flashes)} flashes ({join_text})")
         if giant:
             console.log(f"  [yellow]{len(giant)} giant flash(s) dropped (> {MAX_FLASH_FRAC:.0%} of frame) "
                         f"in frames {[frame for frame, _ in giant]}[/yellow]")
@@ -133,7 +135,7 @@ class SREAnalyzer:
     @staticmethod
     def label_flashes(mask: np.ndarray, stack: np.ndarray, max_area: float,
                       connect_radius: float) -> tuple[pd.DataFrame, list, list[tuple[int, int]]]:
-        """Per frame: 8-connected blobs, blobs <= connect_radius apart joined, keep area <= max_area;
+        """Per frame: 8-connected blobs, blobs <= connect_radius apart joined (0: none), keep area <= max_area;
         joint_label unique over the recording. z peak = the footprint pixel of the largest z in its frame
         (z = (value - bg_center) / bg_sigma, so the largest value).
 
@@ -144,7 +146,7 @@ class SREAnalyzer:
         label_offset = 0
         for frame_id in range(mask.shape[0]):
             labeled_frame, n_frame_labels = ndimage.label(mask[frame_id], structure=np.ones((3, 3)))
-            if n_frame_labels > 1:
+            if n_frame_labels > 1 and connect_radius > 0:  # connect_radius 0: every blob is its own flash
                 labeled_frame = SREAnalyzer.join_close_blobs(labeled_frame, n_frame_labels, connect_radius)
             for label in np.unique(labeled_frame[labeled_frame > 0]):
                 coords = np.argwhere(labeled_frame == label)
@@ -221,7 +223,7 @@ class SREAnalyzer:
     def group_trace(self, footprint_path: Path) -> None:
         """Flash footprints (save_flash_footprints npz) -> trace = mean z-score over the footprint, every frame ->
         1 - r (Pearson, zero lag) -> HierarchicalClustering (cut per CUT_RULES: best-silhouette h) ->
-        flashes["cluster_trace_corr"] + clusterings["trace_corr"]."""
+        flashes["cluster_trace_corr"] + clusterings["trace_corr"] (+ "distance" = the 1 - r matrix)."""
         n = len(self.flashes)
         with timed("group  trace_corr traces + r + tree + silhouette sweep"):
             with np.load(footprint_path) as npz:
@@ -233,6 +235,7 @@ class SREAnalyzer:
             hc = HierarchicalClustering(distance, TRACE_CUT_1MR, cut_rule=CUT_RULES["trace_corr"])
             hc.run()
         self.store_clustering("trace_corr", hc)
+        self.clusterings["trace_corr"]["distance"] = distance  # for the correlation map of the clustering/ plots
 
     def store_clustering(self, method: str, hc: HierarchicalClustering) -> None:
         """flashes["cluster_{method}"] + clusterings[method] = {clusters, cut, cut_rule, silhouette_cut,

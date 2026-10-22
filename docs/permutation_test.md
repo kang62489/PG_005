@@ -181,6 +181,6 @@ sizes after blur + ALS.
   pixel-wise (0009: 5,967 vs 2,097 px; 0021: 1,334 vs 1,165 px; 0010: 2,178 vs 1,393 px).
 - `permutation_test.py` saves `{stem}_th_flash_sizes.npz`, `{stem}_surrogates.csv` (`sur_idx`,
   `largest_sur_flash_px`) and `removal_suggestion.csv` (`recording`, `th_small_obj_px`), not a p-value per th_flash.
-  `spontaneous_analysis.py` reads `<results_dir>/permutation/10X/removal_suggestion.csv` and uses each recording's own
+  `SRE_analysis.py` reads `<results_dir>/permutation/10X/removal_suggestion.csv` and uses each recording's own
   `th_small_obj_px` (recording not in the file -> median of the file, rounded up to 100 px).
 - Saion: `run_permutation_test_on_saion.slm`, one 10X recording per array task, pixel-wise, N = 200.

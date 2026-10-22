@@ -25,6 +25,9 @@ Centroid = mean (y, x) of the flash's footprint pixels. Exported as `{stem}_flas
 Pipeline now (2026-10-19): each recording's own th_small_obj (permutation test) and same-frame blobs joined
 within r = √(th_small_obj / π) (section 5), instead of 5,000 px and 75 px.
 
+Pipeline now (2026-10-22): **no joining** (`SRE_analysis.JOIN_SAME_FRAME = False`, connect_radius 0): every
+8-connected blob is its own flash; the trace_corr tree groups same-frame blobs (section 12).
+
 Mathematica: `Import["..._flash_centroids.csv", "Dataset", "HeaderLines" -> 1]`.
 
 ---
@@ -114,6 +117,9 @@ The silhouette is a separation score, **not a p-value**. Other measures, for ref
 ---
 
 ## 5. Why the connect radius r = √(th_small_obj / π)
+
+Not used since 2026-10-22 (`JOIN_SAME_FRAME = False`, section 12); kept here and in the code
+(`JOIN_SAME_FRAME = True`) as the old rule.
 
 Before clustering, same-frame blobs at most r apart are joined into one flash (`SRE_analysis.py` STEP 2,
 `set_connect_radius`).
@@ -291,6 +297,8 @@ Observations:
 
 How to justify h beyond "best silhouette per recording" (e.g. a fixed h across recordings, a physical size, or a
 surrogate comparison). 2026-10-19: elbow / acceleration tested (section 7); centroid tree → acceleration cut.
+2026-10-22: trace_corr tree is the only clustering run, cut at the best silhouette; a surrogate (permutation) h was
+tried and dropped (section 12.4).
 
 ---
 
@@ -315,3 +323,56 @@ surrogate comparison). 2026-10-19: elbow / acceleration tested (section 7); cent
 | `elbow_summary.csv`, `{stem}_ELBOW.png` | per tree: k and h of each rule; M(k) vs k with the three k marked |
 | `acceleration_cut.py` | detection + both trees cut at the acceleration k, pipeline exporters (its `acceleration/` outputs were deleted 2026-10-19; the pipeline run `output/test_accel_cut/` replaces them) |
 | `empty_stretch_figure.py`, `0009_EMPTY_STRETCH.png` | 0009 centroid tree with the empty stretches shaded |
+
+---
+
+## 12. Independent blobs, trace_corr as the clustering, correlation map (2026-10-22)
+
+### 12.1 Every blob its own flash
+
+`SRE_analysis.JOIN_SAME_FRAME = False` → connect_radius 0 → `SREAnalyzer.label_flashes` skips
+`join_close_blobs`. Same-frame blobs are left to the tree. Test: `output/test_sre_independent/`
+(`same_frame_pairs.py`, `{stem}_SAME_FRAME_PAIRS.csv`).
+
+Same-frame blob pairs, "touching" = edge gap ≤ the old connect radius; random = chance that 2 random flashes share a
+cluster:
+
+| recording | flashes | pairs touching / far | z_peak same cluster: touching / far / random | trace_corr: touching / far / random |
+|---|---|---|---|---|
+| 2025_12_15-0012 | 242 (185 joined) | 58 / 54 | 86% / 78% / 33% | 86% / 78% / 26% |
+| 2025_06_11-0004 | 597 | 76 / 85 | 99% / 85% / 85% | 49% / 7% / 19% |
+| 2025_11_13-0012 | 46 | 4 / 4 | 100% / 0% / 39% | 100% / 0% / 32% |
+| 2025_11_08-0028 | 150 | 1 / 1 | 0% / 0% / 27% | 0% / 0% / 19% |
+
+- z_peak tree at the best silhouette: only 2–4 clusters (h 235–495 px), so "same cluster" means "same big region".
+- trace_corr is the only tree that separates touching from far pairs (0004: 49% vs 7%), but it splits about half of
+  the touching pairs.
+
+### 12.2 trace_corr is the clustering
+
+Kang (2026-10-22): trace_corr + average linkage + best silhouette is the clustering of `SRE_analysis.py`.
+`CLUSTER_METHODS = ("trace_corr",)`; `SREAnalyzer.group_z_peak` is kept but not run (add `"z_peak"` to run it).
+Pearson r stays (Spearman ranks would let the ~1,200 baseline frames outweigh the few flash frames).
+
+| recording | flashes | best h (1 − r) | zones | mean silhouette |
+|---|---|---|---|---|
+| 2025_12_15-0012 | 242 | 0.70 | 10 | 0.540 |
+| 2025_06_11-0004 | 597 | 0.36 | 14 | 0.799 |
+| 2025_11_13-0012 | 46 | 0.48 | 6 | 0.736 |
+| 2025_11_08-0028 | 150 | 0.26 | 7 | 0.780 |
+
+Test: `output/test_sre_trace_default/`.
+
+### 12.3 Correlation map in `{stem}_CLUSTERS.png`
+
+Left panel: trace_corr zones at the flashes' z peaks (where they are). Right panel: the same zones on the
+**correlation map** = classical MDS of the 1 − r matrix (`plot_results.correlation_map_xy`): dot distance ≈ 1 − r.
+The title gives how much of the distance structure the 2 axes keep (0012: 60%, 0004: 61%); clusters far apart on the
+map are far apart, overlapping ones may not be. The exact matrix (sorted 1 − r heatmap) was previewed and not added.
+
+### 12.4 Permutation h: tried, dropped
+
+Surrogates: each flash trace circularly shifted by its own random lag (keeps the trace, breaks the timing between
+flashes), 200 surrogates; h = the closest surrogate pair. Result: h ≈ 0 (0004: 596 clusters of 597 flashes),
+because 2 flashes get the same lag about 1 / 1,199 of the time and a same-site pair then stays r ≈ 1. Kang dropped
+the permutation h; the best silhouette stays.

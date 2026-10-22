@@ -199,7 +199,7 @@ After the first analysis, 13 recordings were removed by hand:
 
 #### 4.3c ⚠️ One dataset for both spontaneous and evoked
 
-The same dataset is used for `spontaneous_analysis.py` and the following `ach_domain_analysis.py`.
+The same dataset is used for `SRE_analysis.py` and the following `ach_domain_analysis.py`.
 
 **Why:** at the moment of picking, the plan was to compare **evoked** ACh release events with **spontaneous** ones, so both kinds were picked together.
 
@@ -291,7 +291,7 @@ Step 4.5 (ALS correction) gives the second type of pre-processed files, named wi
 
 📂 Stored in `/bucket/WickensU/Kang/Cluster/proc_tiffs`.
 
-**The ALS files are the main pre-processed files** used by the following `spontaneous_analysis.py` and `ach_domain_analysis.py`.
+**The ALS files are the main pre-processed files** used by the following `SRE_analysis.py` and `ach_domain_analysis.py`.
 
 ---
 

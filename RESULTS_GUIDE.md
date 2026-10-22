@@ -12,6 +12,10 @@ Terms in *italics* are explained in [Key terms](#2-key-terms).
 
 ### Claim 1 — Spontaneous ACh forms local zones that cover the striatum, but not in phase
 
+> Note (2026-10-22): the numbers and files below come from the old `spontaneous_analysis.py` run (saion job
+> 4734460). `SRE_analysis.py` now forms zones by trace-correlation clustering (`PIPELINE_FLOW.md` §4); the formal
+> re-run of `results/spontaneous/` is still to do.
+
 **What we see:**
 - 70 / 105 recordings (10X) have spontaneous *zones* — 1,330 zones in total.
 - Median per recording: 15 zones, zone area ~102,700 µm², one event every ~9 s (0.11 Hz).
